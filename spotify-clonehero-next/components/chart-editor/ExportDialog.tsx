@@ -1,6 +1,6 @@
 'use client';
 
-import {useState, useCallback} from 'react';
+import {useState, useCallback, useEffect, useRef} from 'react';
 import {
   AlertTriangle,
   Download,
@@ -9,6 +9,12 @@ import {
   Package,
 } from 'lucide-react';
 import {toast} from 'sonner';
+import {
+  parseChartAndIni,
+  scanChart,
+  type FolderIssueType,
+  type ScannedChart,
+} from '@eliwhite/scan-chart';
 
 import {Button} from '@/components/ui/button';
 import {
@@ -35,6 +41,7 @@ import {
   chartPackageFileName,
   packageChartFiles,
   transcodeAudioFilesToOpus,
+  type ChartPackageMetadata,
   type PackageFormat,
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
@@ -58,6 +65,158 @@ function declaredDifficulties(
     }
   }
   return declared;
+}
+
+/** The `ChartPackageMetadata` `assembleChartFiles` stamps onto the exported
+ * chart, built from the read-only identity props plus the song-details
+ * dialog's `iniMetadata`. Shared by the actual export and the issue-preview
+ * scan below so both see the same metadata the download will carry. */
+function buildCleanMetadata(args: {
+  songName: string;
+  artistName: string | undefined;
+  charterName: string | undefined;
+  iniMetadata: SongIniMetadataValue | undefined;
+}): ChartPackageMetadata {
+  const {songName, artistName, charterName, iniMetadata} = args;
+  return {
+    name: songName.trim() || 'Untitled',
+    artist: (artistName ?? '').trim(),
+    charter: (charterName ?? '').trim(),
+    ...(iniMetadata
+      ? {
+          album: iniMetadata.album,
+          genre: iniMetadata.genre,
+          year: iniMetadata.year,
+          difficulties: declaredDifficulties(iniMetadata),
+        }
+      : {}),
+  };
+}
+
+/** One of the three sources `assembleChartFiles` accepts, resolved from
+ * whichever the host supplied — `getChartFile` wins (only it can honour the
+ * chart-file format select), then the live document, then `.chart` text. */
+type ChartSource =
+  | {chartFile: {fileName: string; data: Uint8Array}}
+  | {chartDoc: ChartDocument}
+  | {chartText: string};
+
+async function resolveChartSource(args: {
+  getChartFile: ExportDialogProps['getChartFile'];
+  chartDoc: ChartDocument | undefined;
+  getChartText: ExportDialogProps['getChartText'];
+  chartFileFormat: ChartFileFormat;
+}): Promise<ChartSource | null> {
+  const {getChartFile, chartDoc, getChartText, chartFileFormat} = args;
+  if (getChartFile) {
+    return {chartFile: await getChartFile({format: chartFileFormat})};
+  }
+  if (chartDoc) return {chartDoc};
+  if (getChartText) return {chartText: await getChartText()};
+  return null;
+}
+
+/** Everything the host has to produce before a package can be assembled. */
+interface ExportInputs {
+  chartSource: ChartSource;
+  audioFiles: AudioSource[];
+  extraAssets: AssetFile[];
+}
+
+/**
+ * The chart, its audio and its passthrough assets.
+ *
+ * A missing chart source is the one fatal case; audio and assets are warned
+ * about and left empty, so a chart with an unreadable stem still exports.
+ */
+async function collectExportInputs(args: {
+  getChartFile: ExportDialogProps['getChartFile'];
+  chartDoc: ChartDocument | undefined;
+  getChartText: ExportDialogProps['getChartText'];
+  chartFileFormat: ChartFileFormat;
+  getAudioSources: ExportDialogProps['getAudioSources'];
+  includeStems: boolean;
+  getExtraAssets: ExportDialogProps['getExtraAssets'];
+}): Promise<ExportInputs> {
+  const chartSource = await resolveChartSource(args);
+  if (!chartSource) {
+    throw new Error(
+      'ExportDialog requires getChartFile, chartDoc or getChartText',
+    );
+  }
+
+  let audioFiles: AudioSource[] = [];
+  if (args.getAudioSources) {
+    try {
+      audioFiles = await args.getAudioSources({
+        includeStems: args.includeStems,
+      });
+    } catch (err) {
+      console.warn('Failed to get audio sources:', err);
+    }
+  }
+
+  let extraAssets: AssetFile[] = [];
+  if (args.getExtraAssets) {
+    try {
+      extraAssets = await args.getExtraAssets();
+    } catch (err) {
+      console.warn('Failed to get extra assets:', err);
+    }
+  }
+
+  return {chartSource, audioFiles, extraAssets};
+}
+
+// ---------------------------------------------------------------------------
+// Chart-checker issues
+// ---------------------------------------------------------------------------
+
+/** `folderIssues` too common/unactionable to be worth flagging: every drum
+ * transcription and most in-progress edits ship without album art, so
+ * reporting it on every export would drown out real problems. Mirrors the
+ * tolerance `lib/chart-export/__tests__/package-validation.test.ts` already
+ * applies when asserting a packaged chart is clean. */
+const BENIGN_FOLDER_ISSUES = new Set<FolderIssueType>(['noAlbumArt']);
+
+/** Bulleted issues are capped at this many lines; past that a "+N more"
+ * summary line takes over so a chart with dozens of small issues (e.g. one
+ * per difficulty) doesn't turn the dialog into a wall of text. */
+const MAX_VISIBLE_ISSUES = 8;
+
+export interface ExportIssueSummary {
+  /** Human-readable, deduplicated issue descriptions, in folder → metadata →
+   * chart order, capped to `MAX_VISIBLE_ISSUES`. */
+  lines: string[];
+  /** Total distinct issues found, before the cap. */
+  totalCount: number;
+}
+
+/**
+ * Turn a `ScannedChart`'s three issue channels into the dialog's bulleted
+ * list. All three channels already carry a scan-chart-authored
+ * `description`, so no separate human-readable mapping is needed here.
+ * Duplicate descriptions collapse to one line — a chart-wide problem (e.g. a
+ * missing name) shouldn't repeat once per difficulty.
+ */
+export function summarizeScanIssues(scanned: ScannedChart): ExportIssueSummary {
+  const descriptions: string[] = [];
+  for (const issue of scanned.folderIssues) {
+    if (BENIGN_FOLDER_ISSUES.has(issue.folderIssue)) continue;
+    descriptions.push(issue.description);
+  }
+  for (const issue of scanned.metadataIssues) {
+    descriptions.push(issue.description);
+  }
+  for (const issue of scanned.notesData?.chartIssues ?? []) {
+    descriptions.push(issue.description);
+  }
+
+  const unique = Array.from(new Set(descriptions));
+  return {
+    lines: unique.slice(0, MAX_VISIBLE_ISSUES),
+    totalCount: unique.length,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,50 +390,108 @@ export default function ExportDialog({
     [sourceChartFormat],
   );
 
+  /**
+   * The host's inputs, fetched at most once per dialog open per stem choice.
+   *
+   * The issue preview below and the export itself need exactly the same
+   * three things, and producing them is the expensive part: on a project with
+   * added leading silence `getAudioSources` re-encodes every audio file, so
+   * fetching them twice would encode the whole song twice for one download.
+   * Keyed by the two controls that change what they are, and dropped when the
+   * dialog closes so the next open sees the current chart.
+   */
+  const inputsRef = useRef<{key: string; inputs: Promise<ExportInputs>} | null>(
+    null,
+  );
+  const stemChoice = showStemChoice ? includeStems : true;
+  const loadExportInputs = useCallback((): Promise<ExportInputs> => {
+    const key = `${chartFileFormat}|${stemChoice}`;
+    const cached = inputsRef.current;
+    if (cached?.key === key) return cached.inputs;
+    const inputs = collectExportInputs({
+      getChartFile,
+      chartDoc,
+      getChartText,
+      chartFileFormat,
+      getAudioSources,
+      includeStems: stemChoice,
+      getExtraAssets,
+    });
+    inputsRef.current = {key, inputs};
+    return inputs;
+  }, [
+    chartDoc,
+    chartFileFormat,
+    getAudioSources,
+    getChartFile,
+    getChartText,
+    getExtraAssets,
+    stemChoice,
+  ]);
+
+  useEffect(() => {
+    if (!open) inputsRef.current = null;
+  }, [open]);
+
+  // Chart-checker issues: what scan-chart would report about this package.
+  // Purely informational (the export buttons stay enabled either way), so
+  // this runs once per dialog open rather than on every keystroke in the
+  // song-details dialog — `open` is the only dependency that re-triggers it.
+  const [issueSummary, setIssueSummary] = useState<ExportIssueSummary | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    (async () => {
+      if (!cancelled) setIssueSummary(null);
+      try {
+        const {chartSource, audioFiles, extraAssets} = await loadExportInputs();
+
+        // No Opus transcode here — the real audio bytes are already a
+        // recognizable, decodable audio format, so scan-chart's audio
+        // folder-issue checks read them the same either way, and skipping
+        // the encode keeps this preview cheap.
+        const fileEntries = assembleChartFiles({
+          ...chartSource,
+          metadata: buildCleanMetadata({
+            songName,
+            artistName,
+            charterName,
+            iniMetadata,
+          }),
+          audioSources: audioFiles,
+          extraAssets,
+        });
+        const parseResult = parseChartAndIni(fileEntries);
+        const scanned = scanChart(fileEntries, parseResult, {
+          includeMd5: false,
+          includeBTrack: false,
+        });
+        if (!cancelled) setIssueSummary(summarizeScanIssues(scanned));
+      } catch (err) {
+        console.warn('Could not check chart for issues:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const handleExport = useCallback(
     async (packageFormat: PackageFormat) => {
       setExportingFormat(packageFormat);
       try {
-        // 1. Get the chart. getChartFile wins (it is the only source that can
-        // honour the chart-file format select), then the live document, then
-        // the `.chart` text.
-        const chartSource = getChartFile
-          ? {chartFile: await getChartFile({format: chartFileFormat})}
-          : chartDoc
-            ? {chartDoc}
-            : getChartText
-              ? {chartText: await getChartText()}
-              : null;
-        if (!chartSource) {
-          throw new Error(
-            'ExportDialog requires getChartFile, chartDoc or getChartText',
-          );
-        }
+        // 1. The chart, its audio and its passthrough assets — the same three
+        //    the issue preview above already resolved, so this is normally a
+        //    cache hit rather than a second read and re-encode.
+        const {chartSource, audioFiles, extraAssets} = await loadExportInputs();
 
-        // 2. Collect audio sources. When the page offers a stem choice, honor
-        //    the toggle; otherwise include whatever audio it provides.
-        let audioFiles: AudioSource[] = [];
-        if (getAudioSources) {
-          try {
-            audioFiles = await getAudioSources({
-              includeStems: showStemChoice ? includeStems : true,
-            });
-          } catch (err) {
-            console.warn('Failed to get audio sources:', err);
-          }
-        }
-
-        // 3. Assemble notes.chart + song.ini + audio (+ any passthrough
-        //    assets from an existing chart package) into a flat file list.
-        let extraAssets: AssetFile[] = [];
-        if (getExtraAssets) {
-          try {
-            extraAssets = await getExtraAssets();
-          } catch (err) {
-            console.warn('Failed to get extra assets:', err);
-          }
-        }
-        // 3a. Normalize all audio to Opus before assembly. Some pages provide
+        // 2. Normalize all audio to Opus before assembly. Some pages provide
         //     already-encoded `.opus` (stem path), others provide wav/mp3/ogg
         //     (original-file path, `/chart-editor`) or carry secondary audio in the
         //     passthrough assets — transcode any non-Opus audio and rename it to
@@ -291,19 +508,12 @@ export default function ExportDialog({
             ? Math.max(audioDurationMs ?? 0, extraAssetDurationMs ?? 0)
             : undefined;
 
-        const cleanMetadata = {
-          name: songName.trim() || 'Untitled',
-          artist: (artistName ?? '').trim(),
-          charter: (charterName ?? '').trim(),
-          ...(iniMetadata
-            ? {
-                album: iniMetadata.album,
-                genre: iniMetadata.genre,
-                year: iniMetadata.year,
-                difficulties: declaredDifficulties(iniMetadata),
-              }
-            : {}),
-        };
+        const cleanMetadata = buildCleanMetadata({
+          songName,
+          artistName,
+          charterName,
+          iniMetadata,
+        });
         const fileEntries = assembleChartFiles({
           ...chartSource,
           metadata: cleanMetadata,
@@ -312,10 +522,10 @@ export default function ExportDialog({
           ...(songLengthMs != null ? {songLengthMs} : {}),
         });
 
-        // 4. Package as ZIP or SNG
+        // 3. Package as ZIP or SNG
         const {blob, extension} = packageChartFiles(fileEntries, packageFormat);
 
-        // 5. Trigger browser download, named `Artist - Song (Charter)`
+        // 4. Trigger browser download, named `Artist - Song (Charter)`
         downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
 
         const audioNote =
@@ -332,20 +542,7 @@ export default function ExportDialog({
         setExportingFormat(null);
       }
     },
-    [
-      songName,
-      artistName,
-      charterName,
-      iniMetadata,
-      chartFileFormat,
-      includeStems,
-      getChartText,
-      getChartFile,
-      chartDoc,
-      getAudioSources,
-      showStemChoice,
-      getExtraAssets,
-    ],
+    [songName, artistName, charterName, iniMetadata, loadExportInputs],
   );
 
   return (
@@ -425,6 +622,30 @@ export default function ExportDialog({
                     : 'The original uploaded audio is included instead.'}
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* Chart-checker issues: informational only, doesn't block either
+              export button. Nothing renders while it's still computing or
+              once it comes back clean. */}
+          {issueSummary && issueSummary.totalCount > 0 && (
+            <div className="rounded-md border border-amber-600/30 bg-amber-600/5 p-3 text-xs text-amber-700 dark:text-amber-500">
+              <p className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {issueSummary.totalCount === 1
+                  ? '1 issue found in this chart:'
+                  : `${issueSummary.totalCount} issues found in this chart:`}
+              </p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-6">
+                {issueSummary.lines.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+              {issueSummary.totalCount > issueSummary.lines.length && (
+                <p className="mt-1 pl-6 text-amber-700/70 dark:text-amber-500/70">
+                  +{issueSummary.totalCount - issueSummary.lines.length} more
+                </p>
+              )}
             </div>
           )}
 
