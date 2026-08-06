@@ -58,18 +58,20 @@ function mount(overrides: Partial<Parameters<typeof TapTempoPopover>[0]> = {}) {
   const transport = new FakeTransport();
   const onAccept = jest.fn();
   const onCancel = jest.fn();
+  const setClickSuppressed = jest.fn();
   const view = render(
     <TapTempoPopover
       anchorTick={3840}
       anchorMs={4000}
       anchorLabel="40.1"
       audioManager={transport}
+      setClickSuppressed={setClickSuppressed}
       onAccept={onAccept}
       onCancel={onCancel}
       {...overrides}
     />,
   );
-  return {transport, onAccept, onCancel, ...view};
+  return {transport, onAccept, onCancel, setClickSuppressed, ...view};
 }
 
 const pad = () => screen.getByRole('button', {name: /Tap here/});
@@ -244,5 +246,15 @@ describe('TapTempoPopover transport', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('TapTempoPopover click suppression', () => {
+  it('silences the click for the session and releases it on unmount', () => {
+    const {setClickSuppressed, unmount} = mount();
+    expect(setClickSuppressed).toHaveBeenCalledWith(true);
+
+    unmount();
+    expect(setClickSuppressed).toHaveBeenLastCalledWith(false);
   });
 });

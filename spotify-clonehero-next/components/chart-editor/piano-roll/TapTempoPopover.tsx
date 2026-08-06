@@ -39,6 +39,8 @@ export interface TapTempoPopoverProps {
   /** `bar.beat` at the anchor, shown so the target is legible before Accept. */
   anchorLabel: string;
   audioManager: TapTempoTransport;
+  /** Holds the click silent for the length of the session. */
+  setClickSuppressed: (suppressed: boolean) => void;
   /** Called with the fitted BPM, full precision. */
   onAccept: (bpm: number) => void;
   onCancel: () => void;
@@ -69,6 +71,7 @@ export default function TapTempoPopover({
   anchorMs,
   anchorLabel,
   audioManager,
+  setClickSuppressed,
   onAccept,
   onCancel,
 }: TapTempoPopoverProps) {
@@ -91,6 +94,15 @@ export default function TapTempoPopover({
   useEffect(() => {
     padRef.current?.focus();
   }, []);
+
+  // The user taps along to the song, so the click would be playing the very
+  // grid they are here to replace. Held silent for the whole session and
+  // released however the session ends, including an unmount from the popover
+  // being dismissed rather than accepted or cancelled.
+  useEffect(() => {
+    setClickSuppressed(true);
+    return () => setClickSuppressed(false);
+  }, [setClickSuppressed]);
 
   useEffect(() => {
     const poll = window.setInterval(() => {

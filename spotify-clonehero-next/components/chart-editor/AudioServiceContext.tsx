@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -57,6 +58,7 @@ class AudioService {
   #current: AudioManager | null = null;
   #listeners = new Set<() => void>();
   #padAudioAhead: PadAudioAhead | null = null;
+  #clickSuppressed = false;
   readonly ref: RefObject<AudioManager | null>;
 
   constructor() {
@@ -82,6 +84,14 @@ class AudioService {
    *  Deliberately not a subscription: callers read it when a run starts. */
   getPadAudioAhead = (): PadAudioAhead | null => this.#padAudioAhead;
 
+  setClickSuppressed = (suppressed: boolean): void => {
+    if (this.#clickSuppressed === suppressed) return;
+    this.#clickSuppressed = suppressed;
+    for (const listener of this.#listeners) listener();
+  };
+
+  getClickSuppressed = (): boolean => this.#clickSuppressed;
+
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -97,6 +107,16 @@ export interface AudioServiceContextValue {
   setPadAudioAhead: (padAudioAhead: PadAudioAhead | null) => void;
   /** Reads the host's current {@link PadAudioAhead}. */
   getPadAudioAhead: () => PadAudioAhead | null;
+  /**
+   * Silences the click while a tool needs the song alone. Tap tempo is the
+   * one caller: the user taps along to the music, so a click playing the
+   * grid they are trying to replace would be the thing they hear.
+   *
+   * Suppression is a separate axis from the mixer's own mute, so the row's
+   * M toggle is not flipped underneath the user and their setting comes
+   * back when the tool closes.
+   */
+  setClickSuppressed: (suppressed: boolean) => void;
 }
 
 const AudioServiceContext = createContext<AudioService | null>(null);
@@ -134,6 +154,7 @@ export function useAudioServiceContext(): AudioServiceContextValue {
       setAudioManager: service.setAudioManager,
       setPadAudioAhead: service.setPadAudioAhead,
       getPadAudioAhead: service.getPadAudioAhead,
+      setClickSuppressed: service.setClickSuppressed,
     }),
     [service],
   );
@@ -167,4 +188,37 @@ export function useAudioManager(): AudioManager | null {
     service.getAudioManager,
     service.getAudioManager,
   );
+}
+
+/**
+ * Whether a tool is currently holding the click silent. The mixer reads this
+ * so there is one writer of the click's gain: suppression changes what the
+ * mixer resolves rather than reaching past it to the AudioManager, which is
+ * what keeps the row's own mute state intact underneath.
+ *
+ * Returns false outside an `AudioServiceProvider`, so a sidebar mounted
+ * without a page's audio behaves as if nothing is suppressing.
+ */
+export function useClickSuppressed(): boolean {
+  const service = useContext(AudioServiceContext);
+  return useSyncExternalStore(
+    useCallback(
+      (onChange: () => void) => service?.subscribe(onChange) ?? (() => {}),
+      [service],
+    ),
+    () => service?.getClickSuppressed() ?? false,
+    () => false,
+  );
+}
+
+/**
+ * Setter for {@link useClickSuppressed}, or a no-op outside an
+ * `AudioServiceProvider`. Optional for the same reason
+ * `usePadAudioAheadReader` is: the piano roll mounts in capability-gate and
+ * unit tests that have no page audio, and holding the click silent is a
+ * courtesy rather than something those surfaces need to provide.
+ */
+export function useSetClickSuppressed(): (suppressed: boolean) => void {
+  const service = useContext(AudioServiceContext);
+  return useMemo(() => service?.setClickSuppressed ?? (() => {}), [service]);
 }

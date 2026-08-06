@@ -184,6 +184,7 @@ import {
 } from './notes';
 import {buildBeatGrid, barBeatAtTick} from './scene';
 import TapTempoPopover from './TapTempoPopover';
+import {useSetClickSuppressed} from '../AudioServiceContext';
 import {
   laneAtY,
   marqueeBounds,
@@ -628,6 +629,10 @@ export default function PianoRollTimeline({
   // localStorage under one key shared across every host page. Lazily read
   // once on mount (not during SSR — `loadPanelHeight` falls back to the
   // default when there's no `window`).
+  // Tap tempo holds the click silent while a session is open; the mixer is
+  // what applies it, so this only publishes the intent.
+  const setClickSuppressed = useSetClickSuppressed();
+
   const [panelHeight, setPanelHeight] = useState(() => loadPanelHeight());
 
   const viewRef = useRef<
@@ -4251,6 +4256,7 @@ export default function PianoRollTimeline({
                   anchorMs={tapMenu.anchorMs}
                   anchorLabel={tapMenu.anchorLabel}
                   audioManager={audioManager}
+                  setClickSuppressed={setClickSuppressed}
                   onAccept={bpm => {
                     executeCommand(
                       new AddBPMCommand(

@@ -36,6 +36,7 @@ import {toast} from 'sonner';
 
 import type {AudioManager} from '@/lib/preview/audioManager';
 import {CLICK_TRACK_NAME} from '@/lib/preview/clickTrack';
+import {useClickSuppressed} from '../AudioServiceContext';
 import {
   decodeAudio,
   interleaveAudioBuffer,
@@ -234,11 +235,18 @@ export default function StemsMixer({
   // AudioManager plays and how each row draws itself.
   const {anySolo, resolved} = useMemo(() => resolveMixer(rows), [rows]);
 
+  // A tool can hold the click silent while it runs (tap tempo, so the user
+  // hears the song rather than the grid they are replacing). It is applied
+  // here rather than by the tool itself so this effect stays the only writer
+  // of a track's gain, and so the row's own mute state survives untouched.
+  const clickSuppressed = useClickSuppressed();
+
   useEffect(() => {
     for (const [name, row] of Object.entries(resolved)) {
-      audioManager.setVolume(name, row.volume);
+      const suppressed = clickSuppressed && name === CLICK_TRACK_NAME;
+      audioManager.setVolume(name, suppressed ? 0 : row.volume);
     }
-  }, [audioManager, resolved]);
+  }, [audioManager, resolved, clickSuppressed]);
 
   const orderedNames = [
     ...trackNames.filter(name => name !== CLICK_TRACK_NAME),
