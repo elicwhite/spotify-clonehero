@@ -18,7 +18,7 @@ import EditorHeaderRow from './EditorHeaderRow';
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
 import ExportDialog from './ExportDialog';
-import SongMetadataDialog from './SongMetadataDialog';
+import SongMetadataDialog, {type AlbumArtSlot} from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
 import type {StemsMixerHostProps} from './sidebar/StemsMixer';
@@ -141,6 +141,10 @@ export interface ChartEditorProps {
    * round-trip them (chart-flow feature). Omitted by pages with none.
    */
   getExtraAssets?: (() => Promise<AssetFile[]>) | undefined;
+  /** The Song Details dialog's album art slot: the art the chart ships now,
+   * and how to store a change. Omitted by a host with nowhere to keep the
+   * bytes, which hides the field. */
+  albumArt?: AlbumArtSlot | undefined;
   /** Preselects the export dialog's package format (e.g. to match an
    * existing chart package's original format). */
   defaultExportFormat?: 'zip' | 'sng' | undefined;
@@ -243,6 +247,7 @@ export default function ChartEditor({
   getChartFile,
   getAudioSources,
   getExtraAssets,
+  albumArt,
   defaultExportFormat,
   sourceChartFormat,
   chartFormatSelectable,
@@ -379,6 +384,7 @@ export default function ChartEditor({
           onSave={handleMetadataSave}
           chart={chart}
           currentDrumStamp={currentDrumStamp}
+          albumArt={albumArt}
         />
       )}
 

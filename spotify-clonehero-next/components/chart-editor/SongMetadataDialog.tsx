@@ -25,6 +25,9 @@ import {
 } from '@/lib/chart-difficulty';
 
 import type {SongIniMetadataValue} from '@/lib/chart-editor-core';
+import type {AlbumArtFile} from '@/lib/album-art';
+
+import AlbumArtField from './AlbumArtField';
 
 import SongMetadataFields, {
   DifficultyRow,
@@ -69,6 +72,19 @@ interface SongMetadataDialogProps {
    *  against `value.drumDifficultyStamp` to spot a stored intensity that was
    *  chosen for an earlier version of the chart. */
   currentDrumStamp?: string | undefined;
+  /** The album art slot. Omitted by a host with nowhere to store the bytes,
+   *  which hides the field entirely rather than offering an edit that
+   *  wouldn't survive. */
+  albumArt?: AlbumArtSlot | undefined;
+}
+
+/** Album art as the dialog sees it: what the chart ships now, and how to
+ *  change it. The bytes live outside `song.ini`, so they travel beside
+ *  `SongIniMetadataValue` rather than inside it. */
+export interface AlbumArtSlot {
+  current: AlbumArtFile | null;
+  /** Persist normalized art, or `null` to remove it. Runs on Save. */
+  onChange: (art: AlbumArtFile | null) => void | Promise<void>;
 }
 
 /**
@@ -87,9 +103,15 @@ export default function SongMetadataDialog({
   onSave,
   chart,
   currentDrumStamp,
+  albumArt,
 }: SongMetadataDialogProps) {
   const [draft, setDraft] = useState<SongIniMetadataValue>(value);
   const [isSaving, setIsSaving] = useState(false);
+  /** Pending art edit: `undefined` means untouched, so Save writes nothing
+   *  and a chart whose art this dialog never mentioned keeps it. */
+  const [artDraft, setArtDraft] = useState<AlbumArtFile | null | undefined>(
+    undefined,
+  );
 
   // Seed the form from the chart on every open, so a cancelled edit is
   // discarded and anything the host changed meanwhile is picked up. `open` is
@@ -99,7 +121,10 @@ export default function SongMetadataDialog({
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setDraft(value);
+    if (open) {
+      setDraft(value);
+      setArtDraft(undefined);
+    }
   }
 
   const fields = useMemo(() => difficultyFieldsForChart(chart), [chart]);
@@ -191,6 +216,11 @@ export default function SongMetadataDialog({
         genre: draft.genre.trim(),
         year: draft.year.trim(),
       });
+      // Art is stored outside `song.ini`, so it commits as its own step —
+      // and only when this dialog actually changed it.
+      if (albumArt && artDraft !== undefined) {
+        await albumArt.onChange(artDraft);
+      }
       onOpenChange(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to save';
@@ -198,7 +228,7 @@ export default function SongMetadataDialog({
     } finally {
       setIsSaving(false);
     }
-  }, [draft, onSave, onOpenChange]);
+  }, [draft, onSave, onOpenChange, albumArt, artDraft]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,6 +252,14 @@ export default function SongMetadataDialog({
             onChange={setDraft}
             idPrefix="song-details"
           />
+          {albumArt && (
+            <AlbumArtField
+              id="song-details-album-art"
+              value={artDraft === undefined ? albumArt.current : artDraft}
+              onChange={setArtDraft}
+              disabled={isSaving}
+            />
+          )}
         </div>
 
         {fields.length > 0 && (

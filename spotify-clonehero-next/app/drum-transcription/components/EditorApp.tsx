@@ -5,6 +5,12 @@ import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {
+  isAlbumArtFileName,
+  withAlbumArt,
+  type AlbumArtFile,
+} from '@/lib/album-art';
+
+import {
   getProject,
   readProjectBinary,
   writeProjectBinary,
@@ -18,6 +24,7 @@ import {
   readSongOpus,
   readOriginalAudio,
   readProjectAssets,
+  writeProjectAssets,
   readPackageInfo,
   type ProjectMetadata,
   type AudioStorageMeta,
@@ -170,6 +177,12 @@ export default function EditorApp({
   // Phase 5). Merged into `paddedAudioStems` below, so adding one triggers
   // `usePaddedAudio`'s stem-list rebuild the same way an anchor change does.
   const [userAddedStems, setUserAddedStems] = useState<AudioStemInput[]>([]);
+
+  // The chart's album art, read from (and written back into) the project's
+  // passthrough assets. null while loading and for a chart without art —
+  // the field renders the same "no art yet" state for both, and there is
+  // nothing a user could do differently in between.
+  const [albumArt, setAlbumArt] = useState<AlbumArtFile | null>(null);
 
   // Build the save function for auto-save
   const saveFn = useCallback(async () => {
@@ -709,6 +722,37 @@ export default function EditorApp({
     return readProjectAssets(projectId);
   }, [projectId]);
 
+  // Album art rides in the same passthrough assets export round-trips, so
+  // both reading and writing it go through that one list rather than a
+  // storage path of its own.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const assets = await readProjectAssets(projectId);
+      const art = assets.find(a => isAlbumArtFileName(a.fileName)) ?? null;
+      if (!cancelled) setAlbumArt(art);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const handleAlbumArtChange = useCallback(
+    async (art: AlbumArtFile | null) => {
+      // Re-read rather than trusting a cached list: an export or an import
+      // may have touched the assets since this component mounted.
+      const assets = await readProjectAssets(projectId);
+      await writeProjectAssets(projectId, withAlbumArt(assets, art));
+      setAlbumArt(art);
+    },
+    [projectId],
+  );
+
+  const albumArtSlot = useMemo(
+    () => ({current: albumArt, onChange: handleAlbumArtChange}),
+    [albumArt, handleAlbumArtChange],
+  );
+
   if (loadingState === 'loading') {
     return (
       <div className="flex flex-col items-center justify-center flex-1 gap-4">
@@ -754,6 +798,7 @@ export default function EditorApp({
       chartFormatSelectable
       getAudioSources={getAudioSources}
       getExtraAssets={getExtraAssets}
+      albumArt={albumArtSlot}
       defaultExportFormat={
         packageSourceFormat === 'sng'
           ? 'sng'

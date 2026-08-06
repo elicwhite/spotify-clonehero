@@ -936,13 +936,27 @@ async function getAssetsDir(
  * Stores passthrough files from an existing chart package verbatim (e.g.
  * album art, video, secondary audio) — everything besides the chart/ini
  * files and the single primary audio file used for transcription, which are
- * stored via their own dedicated paths. A no-op when `files` is empty.
+ * stored via their own dedicated paths.
+ *
+ * `files` is the project's WHOLE asset list, not an addition to it: anything
+ * previously stored and now absent is deleted, and the manifest is replaced.
+ * That is what lets a caller remove an asset (swapping album art, say) by
+ * passing the list without it, instead of leaving orphaned bytes in OPFS.
+ * Passing `[]` therefore clears the project's assets.
  */
 export async function writeProjectAssets(
   projectId: string,
   files: {fileName: string; data: Uint8Array}[],
 ): Promise<void> {
-  if (files.length === 0) return;
+  const keep = new Set(files.map(f => f.fileName));
+  let previous: string[] = [];
+  try {
+    previous = await readProjectJSON<string[]>(projectId, ASSETS_MANIFEST_FILE);
+  } catch {
+    // No manifest yet: nothing was stored, so nothing needs removing.
+  }
+  if (files.length === 0 && previous.length === 0) return;
+
   const assetsDir = await getAssetsDir(projectId, {create: true});
   for (const file of files) {
     const handle = await assetsDir.getFileHandle(file.fileName, {
@@ -951,6 +965,15 @@ export async function writeProjectAssets(
     const writable = await handle.createWritable();
     await writable.write(file.data as Uint8Array<ArrayBuffer>);
     await writable.close();
+  }
+  for (const fileName of previous) {
+    if (keep.has(fileName)) continue;
+    try {
+      await assetsDir.removeEntry(fileName);
+    } catch {
+      // Already gone, or never written — the manifest below is what makes
+      // it invisible either way.
+    }
   }
   await writeProjectJSON(
     projectId,
