@@ -18,7 +18,7 @@
  */
 
 import '@testing-library/jest-dom';
-import {act, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useEffect} from 'react';
 import PianoRollTimeline from '../PianoRollTimeline';
 import {
@@ -740,13 +740,13 @@ describe('Tap tempo (tempo-lane menu → in-place tap tool)', () => {
     expect(screen.getByTestId('tap-tempo-popover')).toBeInTheDocument();
   });
 
-  it('closes the popover on any other tempo-lane item', async () => {
+  it('closes the popover on an item that runs an action', async () => {
     const canvas = await mountPanel();
     act(() => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Add tempo marker here'}).click();
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
     });
     expect(screen.queryByText('Tap tempo…')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();
@@ -793,5 +793,274 @@ describe('Tap tempo (tempo-lane menu → in-place tap tool)', () => {
       );
     });
     expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();
+  });
+});
+
+describe('Tempo-lane "Add tempo marker here"', () => {
+  function tempos() {
+    return latest!.state.chartDoc!.parsedChart.tempos;
+  }
+
+  /** `[first, last]` tempo-lane x whose menu is the given marker's own, so a
+   *  test can locate a marker on screen the way the pointer does. */
+  function markerHitRange(
+    canvas: HTMLCanvasElement,
+    label: RegExp,
+  ): [number, number] {
+    let first = -1;
+    let last = -1;
+    for (let x = 0; x <= 780; x += 1) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      if (!screen.queryByText(label)) continue;
+      if (first < 0) first = x;
+      last = x;
+    }
+    return [first, last];
+  }
+
+  /**
+   * The panel's px-per-ms, measured through the lane rather than read out of
+   * the component: the view starts at the song's left edge, so the centre of
+   * the fixture's 2000 ms marker's hit band is that ms in pixels.
+   */
+  function measurePxPerMs(canvas: HTMLCanvasElement): number {
+    const [first, last] = markerHitRange(canvas, /Delete tempo marker \(140/);
+    expect(first).toBeGreaterThanOrEqual(0);
+    return (first + last) / 2 / 2000;
+  }
+
+  function addAt(canvas: HTMLCanvasElement, x: number) {
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+    });
+    const item = screen.getByRole('button', {name: 'Add tempo marker here'});
+    expect(item).not.toBeDisabled();
+    act(() => {
+      item.click();
+    });
+  }
+
+  it('lands on the tick under the pointer, not the nearest beat', async () => {
+    const canvas = await mountPanel();
+    const pxPerMs = measurePxPerMs(canvas);
+    act(() => {
+      latest!.dispatch({type: 'SET_GRID_DIVISION', division: 8});
+    });
+
+    // Tick 3120 is an eighth that is not a beat: 1920 + 2.5 beats of the
+    // fixture's 140 BPM segment. Resolving to the nearest beat would land on
+    // 2880 or 3360 instead, a full eighth away in either direction.
+    const targetTick = 3120;
+    const targetMs = 2000 + ((targetTick - 1920) * 60000) / (140 * 480);
+    addAt(canvas, Math.round(targetMs * pxPerMs));
+
+    expect(tempos().map(t => t.tick)).toContain(targetTick);
+  });
+
+  it('inherits the tempo in effect at the tick', async () => {
+    const canvas = await mountPanel();
+    const pxPerMs = measurePxPerMs(canvas);
+
+    // Inside the fixture's opening 120 BPM segment, and inside its 140 one.
+    addAt(canvas, Math.round(1000 * pxPerMs));
+    addAt(canvas, Math.round(3000 * pxPerMs));
+
+    const added = tempos().filter(t => t.tick !== 0 && t.tick !== 1920);
+    expect(added).toHaveLength(2);
+    expect(added[0].beatsPerMinute).toBe(120);
+    expect(added[1].beatsPerMinute).toBe(140);
+  });
+
+  it('neither deletes nor alters any existing marker', async () => {
+    const canvas = await mountPanel();
+    const pxPerMs = measurePxPerMs(canvas);
+    const before = tempos().map(t => ({
+      tick: t.tick,
+      bpm: t.beatsPerMinute,
+      ms: t.msTime,
+    }));
+
+    addAt(canvas, Math.round(3000 * pxPerMs));
+
+    const after = tempos();
+    // Every marker that was there is still there, at its own tick, carrying
+    // its own BPM, at its own audio position — the insert is mapping-neutral.
+    for (const marker of before) {
+      const kept = after.find(t => t.tick === marker.tick);
+      expect(kept?.beatsPerMinute).toBe(marker.bpm);
+      expect(kept?.msTime).toBeCloseTo(marker.ms, 6);
+    }
+    expect(after).toHaveLength(before.length + 1);
+
+    // And one undo puts the lane back exactly as it was.
+    const entry =
+      latest!.state.undoEntries[latest!.state.undoEntries.length - 1];
+    act(() => {
+      latest!.dispatch({type: 'UNDO', chartDoc: entry.doc});
+    });
+    expect(
+      tempos().map(t => ({tick: t.tick, bpm: t.beatsPerMinute, ms: t.msTime})),
+    ).toEqual(before);
+  });
+
+  it('offers nothing to add where a marker already sits', async () => {
+    const canvas = await mountPanel();
+    const pxPerMs = measurePxPerMs(canvas);
+    addAt(canvas, Math.round(3000 * pxPerMs));
+    const count = tempos().length;
+
+    // The same gesture again: the tick now carries a marker, so the item is
+    // dead rather than replacing what is there.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {
+        x: Math.round(3000 * pxPerMs),
+        y: TEMPO_LANE.y,
+        button: 2,
+      });
+    });
+    const again = screen.queryByRole('button', {
+      name: 'Add tempo marker here',
+    });
+    // Either the pointer is now inside the new marker's own menu (which has
+    // no add item at all), or the item is present and disabled.
+    if (again) expect(again).toBeDisabled();
+    expect(tempos()).toHaveLength(count);
+  });
+});
+
+describe('Set tempo value (tempo-lane marker menu → in-place field)', () => {
+  const field = () => screen.getByLabelText('BPM') as HTMLInputElement;
+
+  function typeBpm(text: string) {
+    fireEvent.change(field(), {target: {value: text}});
+  }
+
+  function commit() {
+    fireEvent.keyDown(field(), {key: 'Enter'});
+  }
+
+  function tempos() {
+    return latest!.state.chartDoc!.parsedChart.tempos;
+  }
+
+  /** Open the field on the fixture's 140 BPM marker, found the way a user
+   *  finds it: by right-clicking until the lane offers that marker's menu. */
+  function openFieldOnMarker(canvas: HTMLCanvasElement) {
+    for (let x = 0; x <= 780; x += 1) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      if (screen.queryByText('Set tempo value (140.0 BPM)…')) {
+        act(() => {
+          screen.getByRole('button', {name: /Set tempo value/}).click();
+        });
+        return;
+      }
+    }
+    throw new Error('no marker menu found in the tempo lane');
+  }
+
+  it('is offered on a marker and never on empty lane', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    // The empty-lane menu adds a marker outright; typing a value is a thing
+    // you do to a marker that already exists.
+    expect(screen.getByText('Add tempo marker here')).toBeInTheDocument();
+    expect(screen.queryByText(/Set tempo value/)).not.toBeInTheDocument();
+
+    openFieldOnMarker(canvas);
+    expect(screen.getByTestId('bpm-value-popover')).toBeInTheDocument();
+    // The action list is gone: the field took its place at the same anchor.
+    expect(screen.queryByText(/Delete tempo marker/)).not.toBeInTheDocument();
+  });
+
+  it('retypes the marker from its own value, one undo away', async () => {
+    const canvas = await mountPanel();
+    const before = tempos().map(t => t.tick);
+    openFieldOnMarker(canvas);
+    expect(field()).toHaveValue('140.0');
+
+    typeBpm('155.5');
+    commit();
+
+    expect(tempos().find(t => t.tick === 1920)?.beatsPerMinute).toBeCloseTo(
+      155.5,
+      6,
+    );
+    // Retyping a value moves no marker: the same markers, at the same ticks.
+    expect(tempos().map(t => t.tick)).toEqual(before);
+    expect(screen.queryByTestId('bpm-value-popover')).not.toBeInTheDocument();
+
+    const entry =
+      latest!.state.undoEntries[latest!.state.undoEntries.length - 1];
+    act(() => {
+      latest!.dispatch({type: 'UNDO', chartDoc: entry.doc});
+    });
+    expect(tempos().find(t => t.tick === 1920)?.beatsPerMinute).toBe(140);
+  });
+
+  it('refuses a tempo that would stop or wreck chart time', async () => {
+    const canvas = await mountPanel();
+    openFieldOnMarker(canvas);
+
+    for (const bad of ['0', '-90', '4000', 'fast', '']) {
+      typeBpm(bad);
+      expect(screen.getByRole('button', {name: 'Set'})).toBeDisabled();
+      commit();
+    }
+    // Still open, still on the original value, nothing committed.
+    expect(screen.getByTestId('bpm-value-popover')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(tempos().find(t => t.tick === 1920)?.beatsPerMinute).toBe(140);
+    expect(latest!.state.undoEntries).toHaveLength(0);
+  });
+
+  it('leaves the marker untouched when cancelled or escaped', async () => {
+    const canvas = await mountPanel();
+    const before = tempos().map(t => ({
+      tick: t.tick,
+      bpm: t.beatsPerMinute,
+    }));
+
+    openFieldOnMarker(canvas);
+    typeBpm('200');
+    act(() => {
+      screen.getByRole('button', {name: 'Cancel'}).click();
+    });
+    expect(screen.queryByTestId('bpm-value-popover')).not.toBeInTheDocument();
+    expect(tempos().map(t => ({tick: t.tick, bpm: t.beatsPerMinute}))).toEqual(
+      before,
+    );
+
+    openFieldOnMarker(canvas);
+    typeBpm('200');
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+      );
+    });
+    expect(screen.queryByTestId('bpm-value-popover')).not.toBeInTheDocument();
+    expect(tempos().map(t => ({tick: t.tick, bpm: t.beatsPerMinute}))).toEqual(
+      before,
+    );
+    expect(latest!.state.undoEntries).toHaveLength(0);
+  });
+
+  it('survives a click on the canvas while the field is open', async () => {
+    const canvas = await mountPanel();
+    openFieldOnMarker(canvas);
+    typeBpm('96.5');
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: 400, y: 100});
+      fireAt(canvas, 'pointerup', {x: 400, y: 100});
+    });
+
+    expect(screen.getByTestId('bpm-value-popover')).toBeInTheDocument();
+    expect(field()).toHaveValue('96.5');
   });
 });

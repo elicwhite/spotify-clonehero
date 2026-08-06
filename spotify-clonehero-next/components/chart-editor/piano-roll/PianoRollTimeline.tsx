@@ -183,6 +183,7 @@ import {
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick} from './scene';
+import BpmValuePopover from './BpmValuePopover';
 import TapTempoPopover from './TapTempoPopover';
 import {useSetClickSuppressed} from '../AudioServiceContext';
 import {
@@ -366,8 +367,14 @@ type PointerMode =
 /** One entry in a right-click context menu (§10). */
 type MenuItem = ContextMenuItem;
 
-/** What an open popover shows: the usual action list, or the tap-tempo tool,
- *  which replaces the list in place so it keeps the right-click's position. */
+/** What an open popover shows: the usual action list, or one of the tempo
+ *  lane's entry tools (tap tempo, typed BPM), which replace the list in place
+ *  so they keep the right-click's position.
+ *
+ *  `clientX`/`clientY` are viewport coordinates of the gesture: both tools are
+ *  taller than an action list and the panel is a short `overflow-hidden` box,
+ *  so they anchor in the viewport instead of inside the panel, which would
+ *  clip them. */
 type MenuContent =
   | {kind: 'items'; items: MenuItem[]}
   | {
@@ -375,10 +382,16 @@ type MenuContent =
       anchorTick: number;
       anchorMs: number;
       anchorLabel: string;
-      /** Viewport coordinates of the gesture. The tap tool is several times
-       *  taller than an action list and the panel is a short
-       *  `overflow-hidden` box, so it anchors in the viewport instead of
-       *  inside the panel, which would clip it. */
+      clientX: number;
+      clientY: number;
+    }
+  | {
+      kind: 'bpm';
+      /** Tick of the existing marker being retyped. */
+      anchorTick: number;
+      anchorLabel: string;
+      /** The marker's current BPM, which the field starts at. */
+      initialBpm: number;
       clientX: number;
       clientY: number;
     };
@@ -542,13 +555,17 @@ export default function PianoRollTimeline({
       setMenu(items.length ? {x, y, content: {kind: 'items', items}} : null),
     [],
   );
-  // A tap session holds up to minutes of work, so it is not dismissed by a
-  // stray pointerdown the way an action list is: Escape and Cancel close it.
-  const closeUnlessTapping = useCallback(
-    () => setMenu(open => (open?.content.kind === 'tap' ? open : null)),
+  // A tap session holds up to minutes of work and a BPM field holds a
+  // half-typed number, so neither is dismissed by a stray pointerdown the way
+  // an action list is: Escape and Cancel close them.
+  const closeUnlessEntering = useCallback(
+    () => setMenu(open => (open?.content.kind === 'items' ? null : open)),
     [],
   );
   const tapMenu = menu?.content.kind === 'tap' ? menu.content : null;
+  const bpmMenu = menu?.content.kind === 'bpm' ? menu.content : null;
+  /** Whichever entry tool is up, for the popover's shared viewport anchoring. */
+  const entryMenu = tapMenu ?? bpmMenu;
 
   // -- Inline text editor: the lyrics row's "Edit lyric…"/"Add lyric…" and
   // the section strip's rename/add all open a small positioned <input> over
@@ -1952,9 +1969,10 @@ export default function PianoRollTimeline({
       if (stacked && point.rawX < STACKED_GUTTER_W) return;
       const x = point.x;
 
-      // Any new pointer interaction dismisses an open menu (§10), except a tap
-      // session, which only Escape and its own Cancel close.
-      closeUnlessTapping();
+      // Any new pointer interaction dismisses an open menu (§10), except the
+      // tempo lane's entry tools, which only Escape and their own Cancel
+      // close.
+      closeUnlessEntering();
 
       // Scrub zones (ruler + waveform) keep their existing behavior, except a
       // hit on a section flag (ruler only) which begins a potential drag
@@ -2296,7 +2314,7 @@ export default function PianoRollTimeline({
       audioManager,
       beginMarquee,
       capabilities,
-      closeUnlessTapping,
+      closeUnlessEntering,
       dispatch,
       executeCommand,
       laneGeometry,
@@ -3277,6 +3295,35 @@ export default function PianoRollTimeline({
         },
       });
 
+      // Typed BPM entry, the other half of the tap tool: same in-place swap,
+      // same anchor tick, same command. Offered only on a marker that already
+      // exists — a tempo value is a property of a marker, so the way to get a
+      // new one is to add it (which inherits the governing tempo) and then set
+      // its value.
+      const bpmItem = (anchorTick: number, initialBpm: number): MenuItem => ({
+        label: `Set tempo value (${initialBpm.toFixed(1)} BPM)…`,
+        disabled: !capabilities.showEditingControls,
+        onSelect: () => {
+          const {bar, beat} = barBeatAtTick(anchorTick, scene.beats);
+          const rect = containerRef.current?.getBoundingClientRect();
+          setMenu(open =>
+            open === null
+              ? open
+              : {
+                  ...open,
+                  content: {
+                    kind: 'bpm',
+                    anchorTick,
+                    anchorLabel: `${bar}.${beat}`,
+                    initialBpm,
+                    clientX: (rect?.left ?? 0) + open.x,
+                    clientY: (rect?.top ?? 0) + open.y,
+                  },
+                },
+          );
+        },
+      });
+
       // An authored signature chip under the pointer is the only place the
       // remove item appears: the hit test reads the very chips the lane
       // painted, so it can never offer to remove a marker that isn't there.
@@ -3306,6 +3353,7 @@ export default function PianoRollTimeline({
         return [
           ...octaveItems,
           tapItem(marker.tick),
+          bpmItem(marker.tick, marker.bpm),
           {
             label: `Delete tempo marker (${marker.bpm.toFixed(1)} BPM)`,
             disabled: k === 0, // marker 0 is the immovable song-start anchor
@@ -3320,24 +3368,25 @@ export default function PianoRollTimeline({
           },
         ];
       }
-      // Empty lane, at the nearest beat.
+      // Empty lane. The beat items (rephase, tap) speak in beats, so they
+      // resolve to the nearest one.
       const beatTick = nearestBeatTick(scene.beats, view, x);
+      // The tick under the pointer, per the current grid setting: where every
+      // "…here" item on this lane places, and the fallback for a lane with no
+      // beat grid to resolve against.
+      const pointerTick = Math.max(0, snappedTickAt(x));
       // With no beat grid there is nothing to anchor the structural items to,
-      // but a tap still has somewhere to land: the snapped tick under the
-      // pointer, the same fallback `downbeatTick` uses below.
+      // but a tap still has somewhere to land.
       if (beatTick === null) {
-        return [...octaveItems, tapItem(Math.max(0, snappedTickAt(x)))];
+        return [...octaveItems, tapItem(pointerTick)];
       }
-      const hasMarker = scene.tempos.some(t => t.tick === beatTick);
+      const hasMarker = scene.tempos.some(t => t.tick === pointerTick);
       const isDownbeat = editStateRef.current.downbeatFlags.downbeats.some(
         d => d.tick === beatTick,
       );
-      // The downbeat goes exactly where the grid setting puts it, not on the
-      // nearest quarter: on 1/16 snap a bar line can land on a sixteenth.
-      const downbeatTick = Math.max(0, snappedTickAt(x));
       const chart = editStateRef.current.chartDoc?.parsedChart;
       const downbeatPlan = chart
-        ? planDownbeatAt(chart.timeSignatures, chart.resolution, downbeatTick)
+        ? planDownbeatAt(chart.timeSignatures, chart.resolution, pointerTick)
         : null;
       // PRIMARY (QA round-1 / 0061 §6): the expected fix for a mis-phased
       // grid is a whole-song rephase — the phase error is global, not local.
@@ -3357,14 +3406,25 @@ export default function PianoRollTimeline({
             ),
         },
         {
+          // Placed at the pointer's tick, not the nearest beat: a beat can be
+          // half a beat away from the click, which is far enough to drop the
+          // new marker on top of one the pointer deliberately steered clear
+          // of — within `TEMPO_MARKER_HIT_RADIUS` the lane hands out that
+          // marker's own menu instead of this one, so the two would paint
+          // over each other and the older one would look deleted.
+          //
+          // The BPM is the one already governing this tick, so the mapping is
+          // unchanged until the marker is dragged or its value retyped.
           label: 'Add tempo marker here',
           disabled: hasMarker,
-          onSelect: () => executeCommand(new AddTempoMarkerCommand(beatTick)),
+          onSelect: () =>
+            executeCommand(new AddTempoMarkerCommand(pointerTick)),
         },
         {
           // One capability, one item: a bar line starts here, the measure
           // before it is rewritten to end here, and every later bar line
-          // counts from here.
+          // counts from here. On 1/16 snap a bar line can land on a
+          // sixteenth — the pointer's tick, not the nearest quarter.
           label: 'Make this a downbeat',
           // Tick 0 always starts a bar, and a target already on a bar line
           // with its own signature has nothing to place.
@@ -3373,7 +3433,7 @@ export default function PianoRollTimeline({
             if (!downbeatPlan) return;
             commitBarLinePlan(
               downbeatPlan,
-              new PlaceDownbeatCommand(downbeatTick),
+              new PlaceDownbeatCommand(pointerTick),
             );
           },
         },
@@ -3992,12 +4052,13 @@ export default function PianoRollTimeline({
   }, [menu, cancelInFlightGesture]);
 
   // The outside-click half of dismissal is the plain shared one; only Escape
-  // needs this panel's tier logic above. A tap session is exempt: it can hold
-  // a minute of tapping, and `useDismissOnOutsidePointerDown` arms a
-  // `{once: true}` listener behind a timer, so a rule that depended on the tap
-  // count would re-arm click-away dismissal every time Reset changed it.
+  // needs this panel's tier logic above. The tempo lane's entry tools are
+  // exempt: a tap session can hold a minute of tapping and a BPM field holds a
+  // half-typed number, and `useDismissOnOutsidePointerDown` arms a
+  // `{once: true}` listener behind a timer, so a rule that depended on their
+  // contents would re-arm click-away dismissal on every change.
   useDismissOnOutsidePointerDown(
-    menu !== null && menu.content.kind !== 'tap',
+    menu !== null && menu.content.kind === 'items',
     closeMenu,
   );
 
@@ -4241,16 +4302,33 @@ export default function PianoRollTimeline({
         <div ref={overlayRef} className="contents">
           {menu && (
             <ContextMenuPopover
-              x={tapMenu ? tapMenu.clientX : menu.x}
-              y={tapMenu ? tapMenu.clientY : menu.y}
-              anchor={tapMenu ? 'fixed' : 'absolute'}
+              x={entryMenu ? entryMenu.clientX : menu.x}
+              y={entryMenu ? entryMenu.clientY : menu.y}
+              anchor={entryMenu ? 'fixed' : 'absolute'}
               items={
                 menu.content.kind === 'items' ? menu.content.items : undefined
               }
-              // "Tap tempo…" swaps the popover's contents instead of running an
-              // action, so it is the one item that must not close the popover.
-              onAfterSelect={closeUnlessTapping}>
-              {tapMenu ? (
+              // The tempo lane's entry tools swap the popover's contents
+              // instead of running an action, so they are the items that must
+              // not close the popover.
+              onAfterSelect={closeUnlessEntering}>
+              {bpmMenu ? (
+                <BpmValuePopover
+                  initialBpm={bpmMenu.initialBpm}
+                  anchorLabel={bpmMenu.anchorLabel}
+                  onCommit={bpm => {
+                    executeCommand(
+                      new AddBPMCommand(
+                        bpmMenu.anchorTick,
+                        bpm,
+                        editStateRef.current.tempoGlueMode,
+                      ),
+                    );
+                    setMenu(null);
+                  }}
+                  onCancel={closeMenu}
+                />
+              ) : tapMenu ? (
                 <TapTempoPopover
                   anchorTick={tapMenu.anchorTick}
                   anchorMs={tapMenu.anchorMs}
