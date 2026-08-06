@@ -17,6 +17,7 @@
  */
 
 import {writeFile, readJsonFile, readTextFile} from '@/lib/fileSystemHelpers';
+import {isAlbumArtFileName} from '@/lib/album-art';
 import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from './types';
@@ -585,6 +586,116 @@ export function createOpfsProjectStore(
     return files;
   }
 
+  /**
+   * The package files that are neither the chart nor audio — album art,
+   * video, background images, anything else that shipped with the folder.
+   *
+   * These are export passthroughs: the chart is re-serialized from the live
+   * document and `song.ini` is rebuilt from the metadata form, so both are
+   * excluded here rather than round-tripped stale. Audio has its own path
+   * (`loadAudioFiles`).
+   */
+  async function loadPassthroughAssets(
+    projectId: string,
+  ): Promise<{fileName: string; data: Uint8Array}[]> {
+    const dir = await getProjectDir(projectId);
+    const files: {fileName: string; data: Uint8Array}[] = [];
+    for (const entry of await readManifest(dir)) {
+      if (entry.storedIn !== 'root') continue;
+      const lower = entry.fileName.toLowerCase();
+      if (lower === 'notes.chart' || lower === 'notes.mid') continue;
+      if (lower === 'song.ini') continue;
+      try {
+        const handle = await dir.getFileHandle(entry.fileName);
+        const file = await handle.getFile();
+        files.push({
+          fileName: entry.fileName,
+          data: new Uint8Array(await file.arrayBuffer()),
+        });
+      } catch {
+        console.warn(
+          `${namespace} export: could not read asset "${entry.fileName}"`,
+        );
+      }
+    }
+    return files;
+  }
+
+  /** The project's original-files manifest, or `[]` when it has none. */
+  async function readManifest(
+    dir: FileSystemDirectoryHandle,
+  ): Promise<OriginalFileEntry[]> {
+    try {
+      const handle = await dir.getFileHandle(ORIGINAL_FILES_MANIFEST);
+      return (await readJsonFile(handle)) as OriginalFileEntry[];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The project's album art, or null when it ships none.
+   *
+   * Read through the manifest rather than by probing for `album.jpg`: the
+   * manifest is what `loadFilesForExport` walks, so a cover it doesn't list
+   * wouldn't reach the package anyway.
+   */
+  async function readAlbumArt(
+    projectId: string,
+  ): Promise<{fileName: string; data: Uint8Array} | null> {
+    const dir = await getProjectDir(projectId);
+    const entry = (await readManifest(dir)).find(e =>
+      isAlbumArtFileName(e.fileName),
+    );
+    if (!entry) return null;
+    try {
+      const handle = await dir.getFileHandle(entry.fileName);
+      const file = await handle.getFile();
+      return {
+        fileName: entry.fileName,
+        data: new Uint8Array(await file.arrayBuffer()),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Replace the project's album art, or remove it when `art` is null.
+   *
+   * Every file name scan-chart reads as album art is dropped first, so a
+   * project that already carried `album.png` can't end up exporting two
+   * covers (`multipleAlbumArt`).
+   */
+  async function writeAlbumArt(
+    projectId: string,
+    art: {fileName: string; data: Uint8Array} | null,
+  ): Promise<void> {
+    const dir = await getProjectDir(projectId);
+    const manifest = await readManifest(dir);
+
+    for (const entry of manifest) {
+      if (!isAlbumArtFileName(entry.fileName)) continue;
+      try {
+        await dir.removeEntry(entry.fileName);
+      } catch {
+        // Listed but already gone; dropping it from the manifest is enough.
+      }
+    }
+    const next = manifest.filter(e => !isAlbumArtFileName(e.fileName));
+
+    if (art) {
+      const handle = await dir.getFileHandle(art.fileName, {create: true});
+      await writeFile(handle, art.data);
+      next.push({fileName: art.fileName, storedIn: 'root'});
+    }
+
+    const manifestHandle = await dir.getFileHandle(ORIGINAL_FILES_MANIFEST, {
+      create: true,
+    });
+    await writeFile(manifestHandle, JSON.stringify(next));
+  }
+
   return {
     createProject,
     listProjects,
@@ -599,6 +710,9 @@ export function createOpfsProjectStore(
     writeEditedChart,
     loadAudioFiles,
     loadFilesForExport,
+    loadPassthroughAssets,
+    readAlbumArt,
+    writeAlbumArt,
   };
 }
 

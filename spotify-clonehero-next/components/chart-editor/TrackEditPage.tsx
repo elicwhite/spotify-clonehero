@@ -43,6 +43,7 @@ import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {AudioServiceProvider} from './AudioServiceContext';
 import {trackKeyId, type EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
+import type {AlbumArtFile} from '@/lib/album-art';
 import type {AudioSource} from './ExportDialog';
 import {chartDocToChartText, useChartPackageEditor} from './chartPackage';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
@@ -805,6 +806,45 @@ function TrackEditEditor({
     stemFingerprint: storedStemFingerprint,
   });
 
+  // The chart's album art, read from (and written back into) the project's
+  // original-files manifest — the same list `loadFilesForExport` walks, so
+  // art added here reaches the exported package by the existing route.
+  const [albumArt, setAlbumArt] = useState<AlbumArtFile | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void store
+      .readAlbumArt(projectId)
+      .then(art => {
+        if (!cancelled) setAlbumArt(art);
+      })
+      .catch(err => console.warn('Could not read album art:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, store]);
+
+  const handleAlbumArtChange = useCallback(
+    async (art: AlbumArtFile | null) => {
+      await store.writeAlbumArt(projectId, art);
+      setAlbumArt(art);
+    },
+    [projectId, store],
+  );
+
+  const albumArtSlot = useMemo(
+    () => ({current: albumArt, onChange: handleAlbumArtChange}),
+    [albumArt, handleAlbumArtChange],
+  );
+
+  // Everything the package shipped that isn't the chart or its audio —
+  // album art, video, background art — passed through to the export
+  // untouched. Without this an export silently drops them.
+  const getExtraAssets = useCallback(
+    () => store.loadPassthroughAssets(projectId),
+    [projectId, store],
+  );
+
   // Persist a fingerprint the stem probe had to compute, so every later load
   // of this project reads the stem cache directly instead of mixing the
   // package down and hashing it again.
@@ -1026,6 +1066,8 @@ function TrackEditEditor({
         onMetadataChange={handleMetadataChange}
         getChartText={chartPackage.getChartText}
         getAudioSources={getAudioSources}
+        getExtraAssets={getExtraAssets}
+        albumArt={albumArtSlot}
         chartAssist={chartAssist}
         stemsMixer={{
           stemOrigins: paddedStems,

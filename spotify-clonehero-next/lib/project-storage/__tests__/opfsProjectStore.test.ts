@@ -209,4 +209,125 @@ describe('createOpfsProjectStore', () => {
       expect(renamed.createdAt).toBe(meta.createdAt);
     });
   });
+
+  describe('album art and passthrough assets', () => {
+    /** A package with a cover, a video and the usual chart/audio/ini. */
+    async function makePackage(
+      store: ReturnType<typeof createOpfsProjectStore>,
+    ) {
+      return store.createProject({
+        name: 'Song',
+        artist: 'Artist',
+        charter: 'Charter',
+        durationSeconds: 60,
+        sourceFormat: 'sng',
+        originalName: 'song.sng',
+        chartText: '[Song]\n{\n}\n',
+        audioFiles: [{fileName: 'song.ogg', data: new Uint8Array([1])}],
+        allFiles: [
+          {fileName: 'notes.chart', data: new Uint8Array([9])},
+          {fileName: 'song.ogg', data: new Uint8Array([1])},
+          {fileName: 'song.ini', data: new Uint8Array([5])},
+          {fileName: 'album.png', data: new Uint8Array([7])},
+          {fileName: 'video.mp4', data: new Uint8Array([8])},
+        ],
+      });
+    }
+
+    it('reads the cover a package shipped with', async () => {
+      const store = createOpfsProjectStore('art-test');
+      const meta = await makePackage(store);
+
+      const art = await store.readAlbumArt(meta.id);
+      expect(art).toEqual({
+        fileName: 'album.png',
+        data: new Uint8Array([7]),
+      });
+    });
+
+    it('has no cover to read on a package that shipped none', async () => {
+      const store = createOpfsProjectStore('art-test');
+      const meta = await store.createProject({
+        name: 'Song',
+        artist: 'Artist',
+        charter: 'Charter',
+        durationSeconds: 60,
+        sourceFormat: 'sng',
+        originalName: 'song.sng',
+        chartText: '[Song]\n{\n}\n',
+        audioFiles: [],
+        allFiles: [{fileName: 'notes.chart', data: new Uint8Array([9])}],
+      });
+      expect(await store.readAlbumArt(meta.id)).toBeNull();
+    });
+
+    it('replaces a cover under a different name rather than keeping both', async () => {
+      const store = createOpfsProjectStore('art-test');
+      const meta = await makePackage(store);
+
+      await store.writeAlbumArt(meta.id, {
+        fileName: 'album.jpg',
+        data: new Uint8Array([42]),
+      });
+
+      expect(await store.readAlbumArt(meta.id)).toEqual({
+        fileName: 'album.jpg',
+        data: new Uint8Array([42]),
+      });
+      // A package carrying album.png AND album.jpg would raise
+      // scan-chart's multipleAlbumArt, so the old name must be gone.
+      const assets = await store.loadPassthroughAssets(meta.id);
+      expect(assets.map(a => a.fileName).sort()).toEqual([
+        'album.jpg',
+        'video.mp4',
+      ]);
+    });
+
+    it('removes the cover and leaves everything else alone', async () => {
+      const store = createOpfsProjectStore('art-test');
+      const meta = await makePackage(store);
+
+      await store.writeAlbumArt(meta.id, null);
+
+      expect(await store.readAlbumArt(meta.id)).toBeNull();
+      expect(
+        (await store.loadPassthroughAssets(meta.id)).map(a => a.fileName),
+      ).toEqual(['video.mp4']);
+    });
+
+    it('adds a cover to a package that had none', async () => {
+      const store = createOpfsProjectStore('art-test');
+      const meta = await store.createProject({
+        name: 'Song',
+        artist: 'Artist',
+        charter: 'Charter',
+        durationSeconds: 60,
+        sourceFormat: 'sng',
+        originalName: 'song.sng',
+        chartText: '[Song]\n{\n}\n',
+        audioFiles: [],
+        allFiles: [{fileName: 'notes.chart', data: new Uint8Array([9])}],
+      });
+
+      await store.writeAlbumArt(meta.id, {
+        fileName: 'album.jpg',
+        data: new Uint8Array([42]),
+      });
+      expect(await store.readAlbumArt(meta.id)).not.toBeNull();
+    });
+
+    it('passes through art and video, but never the chart, ini or audio', async () => {
+      // The chart is re-serialized from the live document and song.ini is
+      // rebuilt from the metadata form, so round-tripping the stored copies
+      // would ship a stale pair. Audio has its own export path.
+      const store = createOpfsProjectStore('art-test');
+      const meta = await makePackage(store);
+
+      expect(
+        (await store.loadPassthroughAssets(meta.id))
+          .map(a => a.fileName)
+          .sort(),
+      ).toEqual(['album.png', 'video.mp4']);
+    });
+  });
 });

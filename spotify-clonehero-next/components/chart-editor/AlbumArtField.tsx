@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {ImageIcon, Loader2, Upload, X} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
@@ -35,25 +35,30 @@ export interface AlbumArtFieldProps {
 /**
  * An object URL for `art`, revoked when the art changes or unmounts.
  *
- * Made during render rather than in an effect: the URL is derived from the
- * bytes, and routing it through state would render one frame with no image
- * every time the art changes. The effect exists only to revoke.
+ * Both the create and the revoke live in the effect, and the URL reaches
+ * render through state. Deriving it during render instead — with only the
+ * revoke in an effect — leaves a dead URL behind: React remounts effects
+ * (Strict Mode does it on every mount), so the cleanup revokes a URL that
+ * the memo, its dependencies unchanged, will not make again. That renders
+ * as a broken image. Tying the URL's whole lifetime to the effect is what
+ * makes a remount re-create it.
  */
 function useArtPreview(art: AlbumArtFile | null): string | null {
-  const url = useMemo(() => {
-    if (!art) return null;
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!art) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUrl(null);
+      return;
+    }
     // Copy into a fresh buffer: the caller's Uint8Array may be a view onto a
     // larger buffer, and Blob would otherwise take the whole thing.
-    return URL.createObjectURL(
+    const objectUrl = URL.createObjectURL(
       new Blob([art.data.slice().buffer as ArrayBuffer], {type: 'image/jpeg'}),
     );
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
   }, [art]);
-
-  useEffect(() => {
-    if (!url) return;
-    return () => URL.revokeObjectURL(url);
-  }, [url]);
-
   return url;
 }
 

@@ -17,10 +17,7 @@ import {
   readChartForEditing,
   type ChartDocument,
 } from '@/lib/chart-edit';
-import {
-  readSongIniMetadata,
-  withSongIniFields,
-} from '@/lib/chart-editor-core';
+import {readSongIniMetadata, withSongIniFields} from '@/lib/chart-editor-core';
 
 import {createOpfsProjectStore} from '../opfsProjectStore';
 
