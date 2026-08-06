@@ -5,6 +5,7 @@ import {Upload, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
+import DropZoneShell, {OrDivider} from './DropZoneShell';
 import {
   readChartDirectory,
   readZipFile,
@@ -106,25 +107,21 @@ export default function ChartDropZone({
 
   return (
     <div className={cn('space-y-3', className)}>
-      {/* Drop zone for .zip/.sng files */}
-      <div
+      <DropZoneShell
+        icon={<Upload className="h-8 w-8" />}
+        label={
+          isLoading
+            ? 'Reading files...'
+            : 'Drop a .zip or .sng file here, or click to browse'
+        }
+        isDragging={isDragging}
+        inert={Boolean(disabled) || isLoading}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onClick={() => !disabled && !isLoading && fileInputRef.current?.click()}
-        className={cn(
-          'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
-          isDragging
-            ? 'border-primary bg-primary/5'
-            : 'border-border hover:border-muted-foreground/50',
-          (disabled || isLoading) && 'opacity-50 cursor-not-allowed',
-        )}>
-        <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          {isLoading
-            ? 'Reading files...'
-            : 'Drop a .zip or .sng file here, or click to browse'}
-        </p>
+        onClick={() => {
+          if (!disabled && !isLoading) fileInputRef.current?.click();
+        }}>
         <input
           ref={fileInputRef}
           type="file"
@@ -132,19 +129,20 @@ export default function ChartDropZone({
           onChange={handleFileInput}
           className="hidden"
         />
-      </div>
+      </DropZoneShell>
+
+      <OrDivider />
 
       {/* Folder picker. Surfaces equal weight to the dropzone because
           folder selection is, in practice, the more common entrypoint
           users expect. */}
       <Button
         variant="outline"
-        size="sm"
         onClick={handlePickFolder}
         disabled={disabled || isLoading}
         className="w-full">
         <FolderOpen className="h-4 w-4 mr-2" />
-        Or select a chart folder
+        Select a chart folder
       </Button>
     </div>
   );

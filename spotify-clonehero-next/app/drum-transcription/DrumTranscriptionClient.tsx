@@ -10,13 +10,7 @@ import {
 } from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
-import {
-  AlertTriangle,
-  Loader2,
-  ArrowLeft,
-  FolderOpen,
-  Trash2,
-} from 'lucide-react';
+import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {
   Card,
@@ -26,31 +20,21 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import SourcePicker from './components/SourcePicker';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {readChart} from '@/lib/chart-edit';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
+import {pickPrimaryAudioFile} from '@/lib/audio/pickPrimaryAudioFile';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
-import EditorApp from './components/EditorApp';
-import {ChartEditorProvider} from '@/components/chart-editor/ChartEditorContext';
-import {AudioServiceProvider} from '@/components/chart-editor/AudioServiceContext';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
+import ProjectList from '@/components/project-list/ProjectList';
+import type {SongMetadataValue} from '@/lib/chart-editor-core';
+import {getProject} from '@/lib/drum-transcription/storage/opfs';
 import {
-  listProjects,
-  getProject,
-  deleteProject,
-  type ProjectSummary,
-} from '@/lib/drum-transcription/storage/opfs';
+  deleteProject as deleteProjectRecord,
+  listProjects as listProjectRecords,
+  renameProject as renameProjectRecord,
+} from '@/lib/project-storage/projects';
+import type {ProjectRecord} from '@/lib/project-storage/types';
 import {
   transcribeDrumsTask,
   type TranscribeDrumsRun,
@@ -60,7 +44,6 @@ import {
   useAssistRunnerControls,
 } from '@/components/assist/useAssistRunner';
 import {isAbortError} from '@/lib/workers/abortable-worker';
-import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 
 // Browser capabilities are static for the page lifetime, so the subscribe
 // function is a no-op. The server can't answer, so getServerSnapshot returns
@@ -101,7 +84,7 @@ function DrumTranscriptionInner() {
   const router = useRouter();
   const projectId = searchParams.get('project');
 
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
   // Tracks whether we've completed at least one listProjects() call.
   // Used to derive loadingProjects below, so the effect doesn't need
   // to flip a loading flag synchronously before kicking off the fetch.
@@ -134,9 +117,6 @@ function DrumTranscriptionInner() {
     !!projectId &&
     projectCheck?.projectId === projectId &&
     projectCheck.needsProcessing;
-
-  // Delete confirmation state
-  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
 
   /**
    * Runs one `transcribe-drums` task on the page's runner and owns the
@@ -192,22 +172,28 @@ function DrumTranscriptionInner() {
     [runner],
   );
 
-  // When projectId is set via URL, check if the project needs pipeline work
-  // before rendering EditorApp (which would show a generic spinner and fail
-  // because chart files don't exist yet for incomplete projects).
+  // When projectId is set via URL, check whether the project needs pipeline
+  // work. This route owns the pipeline and is the app's only resume path;
+  // once a project has a chart, `/chart-editor` is where it is edited, so a
+  // ready project is handed straight over. The two routes' redirect
+  // conditions are exact complements, so they cannot bounce a user back and
+  // forth.
   useEffect(() => {
     if (!projectId) return;
 
     let cancelled = false;
 
     async function checkProjectStage() {
+      const openInEditor = () => {
+        if (!cancelled) router.replace(`/chart-editor?project=${projectId!}`);
+      };
       try {
         const meta = await getProject(projectId!);
         if (cancelled) return;
 
         if (meta.stage === 'editing' || meta.stage === 'exported') {
-          // Project is ready for the editor
           setProjectCheck({projectId: projectId!, needsProcessing: false});
+          openInEditor();
           return;
         }
 
@@ -220,12 +206,14 @@ function DrumTranscriptionInner() {
           onSuccess: () => {
             if (cancelled) return;
             setProjectCheck({projectId: projectId!, needsProcessing: false});
+            openInEditor();
           },
         });
       } catch {
         if (cancelled) return;
-        // Can't load metadata — let EditorApp handle the error
+        // Can't load metadata — let the editor report what it finds.
         setProjectCheck({projectId: projectId!, needsProcessing: false});
+        openInEditor();
       }
     }
 
@@ -233,7 +221,7 @@ function DrumTranscriptionInner() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, startRun]);
+  }, [projectId, router, startRun]);
 
   // Load project list when no project is selected and not processing.
   // All state writes happen in promise callbacks (post-await), so the
@@ -244,10 +232,12 @@ function DrumTranscriptionInner() {
     if (!shouldLoadProjects) return;
 
     let cancelled = false;
-    listProjects()
+    // This page shows only the projects it started. `/chart-editor` is the
+    // list that shows everything.
+    listProjectRecords()
       .then(result => {
         if (!cancelled) {
-          setProjects(result);
+          setProjects(result.filter(r => r.origin === 'drum-transcription'));
           setProjectsLoaded(true);
         }
       })
@@ -262,8 +252,10 @@ function DrumTranscriptionInner() {
     };
   }, [shouldLoadProjects]);
 
+  // `/chart-editor` is where every project is edited, whichever entrypoint
+  // created it. `push` (not `replace`) so Back returns here.
   const openEditor = useCallback(
-    (id: string) => router.push(`/drum-transcription?project=${id}`),
+    (id: string) => router.push(`/chart-editor?project=${id}`),
     [router],
   );
 
@@ -290,12 +282,8 @@ function DrumTranscriptionInner() {
         if (audioFiles.length === 0) {
           throw new Error('No audio files found in the chart package.');
         }
-        // The primary song audio: the largest audio file, which is the
-        // full mix in nearly every real chart package (stems, when present,
-        // are smaller partial mixes).
-        const primary = audioFiles.reduce((a, b) =>
-          b.data.length > a.data.length ? b : a,
-        );
+        // The primary song audio: the full mix, by size.
+        const primary = pickPrimaryAudioFile(audioFiles)!;
         const primaryAudioFile = new File(
           [primary.data as BlobPart],
           primary.fileName,
@@ -342,27 +330,19 @@ function DrumTranscriptionInner() {
     [openEditor, startRun],
   );
 
-  // Handle selecting an existing project
+  // Handle selecting an existing project. A project whose pipeline never
+  // finished is resumed here first; a finished one opens in the editor.
   const handleSelectProject = useCallback(
-    async (id: string) => {
-      try {
-        const meta = await getProject(id);
-
-        // If project is already in editing stage, go straight to editor
-        if (meta.stage === 'editing' || meta.stage === 'exported') {
-          openEditor(id);
-          return;
-        }
-
-        await startRun({
-          title: `Processing: ${meta.name}`,
-          run: {kind: 'resume', projectId: id},
-          onSuccess: openEditor,
-        });
-      } catch {
-        // If we can't even load the project metadata, just try the editor
-        openEditor(id);
+    async (record: ProjectRecord) => {
+      if (record.ready) {
+        openEditor(record.id);
+        return;
       }
+      await startRun({
+        title: `Processing: ${record.name}`,
+        run: {kind: 'resume', projectId: record.id},
+        onSuccess: openEditor,
+      });
     },
     [openEditor, startRun],
   );
@@ -402,19 +382,29 @@ function DrumTranscriptionInner() {
     router.push('/drum-transcription');
   }, [router]);
 
-  const handleDeleteProject = useCallback(async () => {
-    if (!deleteTarget) return;
+  const handleDeleteProject = useCallback(async (record: ProjectRecord) => {
     try {
-      await deleteProject(deleteTarget.id);
-      setProjects(prev => prev.filter(p => p.id !== deleteTarget.id));
-      toast.success(`Deleted "${deleteTarget.name}"`);
+      await deleteProjectRecord(record.id);
+      setProjects(prev => prev.filter(p => p.id !== record.id));
+      toast.success(`Deleted "${record.name}"`);
     } catch (err) {
       console.error('Failed to delete project:', err);
       toast.error('Failed to delete project');
-    } finally {
-      setDeleteTarget(null);
     }
-  }, [deleteTarget]);
+  }, []);
+
+  const handleRenameProject = useCallback(
+    async (record: ProjectRecord, identity: SongMetadataValue) => {
+      try {
+        const updated = await renameProjectRecord(record.id, identity);
+        setProjects(prev => prev.map(p => (p.id === record.id ? updated : p)));
+      } catch (err) {
+        console.error('Failed to rename project:', err);
+        toast.error('Failed to rename project');
+      }
+    },
+    [],
+  );
 
   // Capability check -- block access if a required browser feature is missing.
   const missingCapabilities: {name: string; reason: string}[] = [];
@@ -524,25 +514,12 @@ function DrumTranscriptionInner() {
       );
     }
 
+    // A ready project is edited on `/chart-editor`; this branch is the
+    // moment between that decision and the navigation landing.
     return (
-      <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
-        <div className="px-4 py-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleBackToProjects}
-            className="gap-1">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Projects
-          </Button>
-        </div>
-        <AudioServiceProvider>
-          <AssistRunnerProvider>
-            <ChartEditorProvider activeScope={DEFAULT_DRUMS_EXPERT_SCOPE}>
-              <EditorApp projectId={projectId} showRegenerate />
-            </ChartEditorProvider>
-          </AssistRunnerProvider>
-        </AudioServiceProvider>
+      <div className="flex flex-col items-center justify-center flex-1 gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Opening editor...</p>
       </div>
     );
   }
@@ -570,15 +547,8 @@ function DrumTranscriptionInner() {
         disabled={isProcessing}
       />
 
-      {/* Existing projects */}
-      {loadingProjects && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading projects...
-        </div>
-      )}
-
-      {!loadingProjects && projects.length > 0 && (
+      {/* Projects started from this page. `/chart-editor` lists them all. */}
+      {(loadingProjects || projects.length > 0) && (
         <Card className="w-full">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -590,34 +560,14 @@ function DrumTranscriptionInner() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {projects.map(project => (
-                <div
-                  key={project.id}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-accent/50 transition-colors">
-                  <button
-                    onClick={() => handleSelectProject(project.id)}
-                    className="flex-1 text-left min-w-0">
-                    <p className="text-sm font-medium">{project.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatStage(project.stage)} &middot; Updated{' '}
-                      {new Date(project.updatedAt).toLocaleDateString()}
-                    </p>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-2 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setDeleteTarget(project);
-                    }}>
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Delete {project.name}</span>
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <ProjectList
+              records={projects}
+              pageOrigin="drum-transcription"
+              loading={loadingProjects}
+              onOpen={record => void handleSelectProject(record)}
+              onRename={handleRenameProject}
+              onDelete={handleDeleteProject}
+            />
           </CardContent>
         </Card>
       )}
@@ -628,30 +578,6 @@ function DrumTranscriptionInner() {
           server.
         </p>
       </div>
-
-      {/* Delete confirmation dialog */}
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={open => {
-          if (!open) setDeleteTarget(null);
-        }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this project on this website.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteProject}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -662,26 +588,6 @@ interface PipelineRunRequest {
   title: string;
   run: TranscribeDrumsRun;
   onSuccess: (projectId: string) => void;
-}
-
-/**
- * Format a project stage for display.
- */
-function formatStage(stage: string): string {
-  switch (stage) {
-    case 'uploaded':
-      return 'Uploaded (processing needed)';
-    case 'separating':
-      return 'Separating stems...';
-    case 'transcribing':
-      return 'Transcribing drums...';
-    case 'editing':
-      return 'Ready to edit';
-    case 'exported':
-      return 'Exported';
-    default:
-      return stage;
-  }
 }
 
 export default function DrumTranscriptionClient() {

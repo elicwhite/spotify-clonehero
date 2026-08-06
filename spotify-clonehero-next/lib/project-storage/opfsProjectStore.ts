@@ -19,6 +19,7 @@
 import {writeFile, readJsonFile, readTextFile} from '@/lib/fileSystemHelpers';
 import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
+import type {ProjectOrigin} from './types';
 
 const METADATA_FILE = 'metadata.json';
 const AUDIO_DIR = 'audio';
@@ -60,14 +61,33 @@ export interface ProjectMetadata {
    * reload. Absent on projects saved before anything recorded provenance.
    */
   assistProvenance?: AssistProvenance | null | undefined;
+  /**
+   * Which entrypoint created this project. Absent on projects written before
+   * the field existed; a reader treats that as `'chart-editor'`, which is
+   * what every project in this layout was until now.
+   */
+  origin?: ProjectOrigin | undefined;
+  /**
+   * Whether the project's `audio/` directory holds anything. False only for a
+   * chart created with no audio that has not been given any yet. Absent means
+   * true: every project written before the field existed was created from a
+   * package that had audio.
+   */
+  hasAudio?: boolean | undefined;
 }
 
 export interface ProjectSummary {
   id: string;
   name: string;
   artist: string;
+  charter: string;
   createdAt: string;
   updatedAt: string;
+  durationSeconds: number;
+  /** The namespace whose directory this project was found in. */
+  namespace: string;
+  origin?: ProjectOrigin | undefined;
+  hasAudio?: boolean | undefined;
 }
 
 /** Entry in the original-files manifest for re-export. */
@@ -188,6 +208,8 @@ export function createOpfsProjectStore(
     audioFiles: {fileName: string; data: Uint8Array}[];
     /** All original files from the package (for re-export manifest). */
     allFiles: {fileName: string; data: Uint8Array}[];
+    /** Which entrypoint is creating this project. Defaults to the editor's own. */
+    origin?: ProjectOrigin | undefined;
   }): Promise<ProjectMetadata> {
     const id = generateId();
     const now = new Date().toISOString();
@@ -202,6 +224,8 @@ export function createOpfsProjectStore(
       sourceFormat: opts.sourceFormat,
       originalName: opts.originalName,
       sngMetadata: opts.sngMetadata,
+      origin: opts.origin ?? 'chart-editor',
+      hasAudio: opts.audioFiles.length > 0,
     };
 
     const dir = await getProjectDir(id, {create: true});
@@ -285,8 +309,13 @@ export function createOpfsProjectStore(
               id: metadata.id,
               name: metadata.name,
               artist: metadata.artist,
+              charter: metadata.charter,
               createdAt: metadata.createdAt,
               updatedAt: metadata.updatedAt,
+              durationSeconds: metadata.durationSeconds,
+              namespace: nsName,
+              origin: metadata.origin,
+              hasAudio: metadata.hasAudio,
             });
           } catch {
             console.warn(
@@ -306,6 +335,23 @@ export function createOpfsProjectStore(
       // Namespace directory doesn't exist yet — no projects
       return [];
     }
+  }
+
+  /**
+   * The namespace whose directory actually holds `projectId` — this store's
+   * own, or one of the legacy ones it adopts. Throws when no namespace has
+   * it, the same as every other read here.
+   */
+  async function namespaceOf(projectId: string): Promise<string> {
+    for (const {name, dir} of await getReadableNamespaceDirs()) {
+      try {
+        await openProjectDir(dir, projectId);
+        return name;
+      } catch {
+        // Not in this namespace.
+      }
+    }
+    throw new Error(`Project "${projectId}" not found`);
   }
 
   /**
@@ -542,12 +588,14 @@ export function createOpfsProjectStore(
   return {
     createProject,
     listProjects,
+    namespaceOf,
     getProject,
     updateProject,
     deleteProject,
     readChartText,
     readSongIni,
     writeSongIni,
+    writeAudioFiles,
     writeEditedChart,
     loadAudioFiles,
     loadFilesForExport,

@@ -50,6 +50,7 @@ import {
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
 import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
+import type {ProjectOrigin} from '@/lib/project-storage/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -88,6 +89,12 @@ export interface ProjectMetadata {
    *  `name` instead, and self-heal the next time song details are saved. */
   artist?: string | undefined;
   charter?: string | undefined;
+  /**
+   * Which entrypoint created this project. Absent on projects written before
+   * the field existed; a reader treats that as `'drum-transcription'`, which
+   * is what every project in this layout was until now.
+   */
+  origin?: ProjectOrigin | undefined;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   /** Duration of the original audio in seconds, set after decode */
@@ -155,8 +162,12 @@ export type ProjectStage =
 export interface ProjectSummary {
   id: string;
   name: string;
+  artist?: string | undefined;
+  charter?: string | undefined;
+  origin?: ProjectOrigin | undefined;
   createdAt: string;
   updatedAt: string;
+  durationSeconds: number | null;
   stage: ProjectStage;
 }
 
@@ -217,6 +228,7 @@ export async function createProject(name: string): Promise<ProjectMetadata> {
   const metadata: ProjectMetadata = {
     id,
     name,
+    origin: 'drum-transcription',
     createdAt: now,
     updatedAt: now,
     durationSeconds: null,
@@ -250,8 +262,12 @@ export async function listProjects(): Promise<ProjectSummary[]> {
       summaries.push({
         id: metadata.id,
         name: metadata.name,
+        artist: metadata.artist,
+        charter: metadata.charter,
+        origin: metadata.origin,
         createdAt: metadata.createdAt,
         updatedAt: metadata.updatedAt,
+        durationSeconds: metadata.durationSeconds,
         stage: metadata.stage,
       });
     } catch {

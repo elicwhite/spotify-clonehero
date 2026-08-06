@@ -67,11 +67,31 @@ export interface StemsMixerHostProps {
    * `pcm` is always interleaved 44.1 kHz stereo (what `decodeAudio` +
    * `interleaveAudioBuffer` produce, whatever the dropped file was). A host
    * whose `PaddedAudioMeta` says otherwise must reject the stem rather than
-   * WAV-encode this data under a header that misdescribes it.
+   * WAV-encode this data under a header that misdescribes it. A host with no
+   * `PaddedAudioMeta` at all has nothing to conflict with: the file it
+   * accepts is what establishes the project's audio format.
+   *
+   * `file` carries the dropped bytes verbatim, for a host that persists them
+   * — re-encoding the decoded PCM would turn a 4 MB mp3 into a ~50 MB WAV.
+   *
+   * A host that persists returns a promise, and a multi-file drop awaits it
+   * before offering the next file, so two files dropped together cannot both
+   * write the project's first audio file.
    */
   onAddStem?:
-    | ((input: {name: string; pcm: Float32Array; origin: 'user-added'}) => void)
+    | ((input: {
+        name: string;
+        pcm: Float32Array;
+        origin: 'user-added';
+        file: {fileName: string; data: Uint8Array};
+      }) => void | Promise<void>)
     | undefined;
+  /**
+   * The project has no audio at all. The drop target becomes the section's
+   * body rather than a footer under a list of stems, and the click starts
+   * audible, since it is the only thing there is to hear.
+   */
+  emptyState?: boolean | undefined;
   /** Track names an in-flight assist run has locked (e.g. `'drums'` during a
    *  drum-transcription re-run). Locked rows keep their current values but
    *  disable their slider/mute/solo controls; unrelated rows, and the rest
@@ -144,11 +164,12 @@ function uniqueStemName(base: string, existing: ReadonlySet<string>): string {
 function seedRows(
   trackNames: readonly string[],
   prev: Record<string, MixerRowState>,
+  silentProject: boolean,
 ): Record<string, MixerRowState> {
   const next: Record<string, MixerRowState> = {};
   for (const name of trackNames) {
     next[name] = prev[name] ?? {
-      volume: defaultVolumeFor(name),
+      volume: defaultVolumeFor(name, {silentProject}),
       mute: false,
       solo: false,
     };
@@ -161,10 +182,11 @@ export default function StemsMixer({
   stemOrigins,
   onAddStem,
   lockedTrackNames,
+  emptyState = false,
 }: StemsMixerProps) {
   const trackNames = audioManager.trackNames;
   const [rows, setRows] = useState<Record<string, MixerRowState>>(() =>
-    seedRows(trackNames, {}),
+    seedRows(trackNames, {}, emptyState),
   );
   const [dragOver, setDragOver] = useState(false);
 
@@ -185,7 +207,7 @@ export default function StemsMixer({
   const pendingStemNamesRef = useRef<string[]>([]);
   if (seededForAudioManager !== audioManager) {
     setSeededForAudioManager(audioManager);
-    setRows(prev => seedRows(trackNames, prev));
+    setRows(prev => seedRows(trackNames, prev, emptyState));
   }
 
   // The rebuild landed: every pending name is now a real track name.
@@ -230,12 +252,28 @@ export default function StemsMixer({
         new Set([...trackNames, ...pendingStemNamesRef.current]),
       );
       pendingStemNamesRef.current.push(name);
-      onAddStem({name, pcm, origin: 'user-added'});
-      toast.success(`Added stem "${name}"`);
+      await onAddStem({
+        name,
+        pcm,
+        origin: 'user-added',
+        file: {fileName: file.name, data: new Uint8Array(buffer)},
+      });
+      // On a project with no audio the host stores this file as the song
+      // itself, not as a stem beside one, so the row it becomes is named
+      // after the mix rather than after the file.
+      toast.success(
+        emptyState ? `Added audio "${file.name}"` : `Added stem "${name}"`,
+      );
     } catch (err) {
       console.error('Failed to add stem from dropped file:', err);
       toast.error('Could not read that audio file');
     }
+  };
+
+  /** Adds every dropped audio file, one after another, so the uniquifier
+   *  sees each name before the next one is chosen. */
+  const addStemsFromFiles = async (files: readonly File[]) => {
+    for (const file of files) await addStemFromFile(file);
   };
 
   // One stem per pick: each added stem needs its own uniquified name and its
@@ -260,6 +298,10 @@ export default function StemsMixer({
   };
 
   if (trackNames.length === 0) return null;
+
+  const dropTargetLabel = emptyState
+    ? 'Drop an audio file here to add it to this chart'
+    : 'Drop an audio file to add a stem';
 
   return (
     <div className={cn(SIDEBAR_SECTION_CLASS, 'space-y-1.5')}>
@@ -297,7 +339,11 @@ export default function StemsMixer({
               aiSeparated={!isClick && origin === 'ai-separated'}
               locked={locked}
               onVolumeChange={v => updateRow(name, {volume: v})}
-              onReset={() => updateRow(name, {volume: defaultVolumeFor(name)})}
+              onReset={() =>
+                updateRow(name, {
+                  volume: defaultVolumeFor(name, {silentProject: emptyState}),
+                })
+              }
               onToggleMute={() => updateRow(name, {mute: !row.mute})}
               onToggleSolo={
                 isClick ? undefined : () => updateRow(name, {solo: !row.solo})
@@ -311,7 +357,7 @@ export default function StemsMixer({
         <div
           role="button"
           tabIndex={0}
-          aria-label="Drop an audio file to add a stem"
+          aria-label={dropTargetLabel}
           onDragOver={e => {
             e.preventDefault();
             setDragOver(true);
@@ -320,8 +366,8 @@ export default function StemsMixer({
           onDrop={e => {
             e.preventDefault();
             setDragOver(false);
-            const file = e.dataTransfer.files[0];
-            if (file) void addStemFromFile(file);
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) void addStemsFromFiles(files);
           }}
           onClick={() => void pickStemFile()}
           onKeyDown={e => {
@@ -331,13 +377,14 @@ export default function StemsMixer({
             }
           }}
           className={cn(
-            'flex h-7 items-center justify-center gap-1.5 rounded-md border border-dashed text-[12px] text-muted-foreground transition-colors cursor-pointer',
+            'flex items-center justify-center gap-1.5 rounded-md border border-dashed text-[12px] text-muted-foreground transition-colors cursor-pointer',
+            emptyState ? 'h-16 px-2 text-center' : 'h-7',
             dragOver
               ? 'border-primary text-primary bg-primary/5'
               : 'hover:border-primary/60 hover:text-foreground',
           )}>
-          <Upload className="h-3 w-3" />
-          Drop an audio file to add a stem
+          <Upload className="h-3 w-3 shrink-0" />
+          {dropTargetLabel}
         </div>
       )}
     </div>

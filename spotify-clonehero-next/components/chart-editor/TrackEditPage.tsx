@@ -9,14 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
-import {
-  Loader2,
-  AlertCircle,
-  FolderOpen,
-  Trash2,
-  ArrowLeft,
-  Music,
-} from 'lucide-react';
+import {Loader2, AlertCircle, ArrowLeft, FilePlus} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {
@@ -26,17 +19,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
+import {OrDivider} from '@/components/chart-picker/DropZoneShell';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {
@@ -73,9 +57,27 @@ import {
 import {useSeparatedStems} from './hooks/useSeparatedStems';
 import {
   createOpfsProjectStore,
-  type ProjectSummary,
   type ProjectMetadata,
 } from '@/lib/project-storage/opfsProjectStore';
+import {
+  chartPackageStore,
+  createBlankProject,
+  deleteProject as deleteProjectRecord,
+  findProject,
+  listProjects as listProjectRecords,
+  renameProject,
+} from '@/lib/project-storage/projects';
+import type {ProjectRecord} from '@/lib/project-storage/types';
+import {attachAudioToProject} from '@/lib/project-storage/attachAudio';
+import {
+  BLANK_CHART_ARTIST,
+  BLANK_CHART_NAME,
+  DEFAULT_BLANK_SONG_LENGTH_MS,
+} from '@/lib/project-storage/blankChart';
+import ProjectList from '@/components/project-list/ProjectList';
+import AudioDropZone, {
+  type DroppedAudio,
+} from '@/components/project-list/AudioDropZone';
 
 /**
  * Message shown for a chart with nothing this editor can open: no guitar,
@@ -96,15 +98,8 @@ export const NO_SUPPORTED_TRACK_MESSAGE =
  * editing (`readChartForEditing`, so cymbal edits round-trip).
  */
 export interface TrackEditPageConfig {
-  /** OPFS namespace for this page's projects, and its route path. */
-  namespace: string;
+  /** This page's route path. */
   route: string;
-  /**
-   * Namespaces written by routes that have since been folded into this one.
-   * Their projects stay listable and editable in place; new projects are
-   * always written to `namespace`.
-   */
-  legacyNamespaces?: readonly string[];
   /** Scope the editor starts in (instrument/difficulty pair to edit). */
   defaultScope: EditorScope;
   pageTitle: string;
@@ -116,6 +111,13 @@ export interface TrackEditPageConfig {
   leftPanelChildren?: ReactNode;
   /** Use the shared multi-track piano roll for this editor route. */
   stackedPianoRoll?: boolean;
+  /**
+   * Editor host for a project whose directory uses the drum-transcription
+   * layout. Supplied by the route rather than imported here, so opening a
+   * chart package never pulls the transcription pipeline into the bundle.
+   * Omitted, such a project reports that this page cannot open it.
+   */
+  renderTranscriptionEditor?: ((projectId: string) => ReactNode) | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,22 +153,9 @@ export default function TrackEditPage(config: TrackEditPageConfig) {
 type PageState = 'load' | 'loading-chart' | 'edit';
 
 function TrackEditInner({config}: {config: TrackEditPageConfig}) {
-  const {
-    namespace,
-    route,
-    pageTitle,
-    pageDescription,
-    dropZoneId,
-    legacyNamespaces,
-  } = config;
+  const {route, pageTitle, pageDescription, dropZoneId} = config;
 
-  const store = useMemo(
-    () =>
-      createOpfsProjectStore(namespace, {
-        legacyNamespaces: legacyNamespaces ?? [],
-      }),
-    [namespace, legacyNamespaces],
-  );
+  const store = useMemo(() => chartPackageStore(), []);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -176,14 +165,25 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     projectId ? 'loading-chart' : 'load',
   );
 
-  // Project list for the load screen
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  // Every project in every namespace, for the load screen.
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
   // projectsLoaded starts false and stays true once we've completed a
   // listProjects() call. loadingProjects is derived from it so the
   // effect below doesn't need to flip a loading flag synchronously.
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const loadingProjects = pageState === 'load' && !projectsLoaded;
-  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+
+  // The outcome of resolving the URL's project, tagged with the id it was
+  // resolved for. Tagging is what makes "still resolving" derivable rather
+  // than a second flag the effect has to set synchronously.
+  const [resolved, setResolved] = useState<{
+    projectId: string;
+    record: ProjectRecord | null;
+    error: string | null;
+  } | null>(null);
+  const resolvedForUrl = resolved?.projectId === projectId ? resolved : null;
+  const openRecord = resolvedForUrl?.record ?? null;
+  const resolveError = resolvedForUrl?.error ?? null;
 
   // Load project list when showing the load screen. All state writes
   // happen in the promise callback, so the effect body itself does no
@@ -192,8 +192,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     if (pageState !== 'load') return;
 
     let cancelled = false;
-    store
-      .listProjects()
+    listProjectRecords()
       .then(list => {
         if (!cancelled) {
           setProjects(list);
@@ -201,13 +200,56 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         }
       })
       .catch(err => {
-        console.warn(`Failed to load ${namespace} projects:`, err);
+        console.warn('Failed to load projects:', err);
         if (!cancelled) setProjectsLoaded(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [pageState, store, namespace]);
+  }, [pageState]);
+
+  // Resolve the URL's project to a record, and decide who opens it. A
+  // project whose pipeline has not produced a chart yet is not openable
+  // here: `/drum-transcription` owns the pipeline UI and the only resume
+  // path, so it is handed back there. Every state write happens in a promise
+  // callback, so the effect body itself does no synchronous setState.
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    findProject(projectId)
+      .then(record => {
+        if (cancelled) return;
+        if (!record) {
+          setResolved({
+            projectId,
+            record: null,
+            error: `Project "${projectId}" was not found.`,
+          });
+          return;
+        }
+        if (!record.ready) {
+          setResolved({projectId, record: null, error: null});
+          router.replace(`/drum-transcription?project=${record.id}`);
+          return;
+        }
+        setResolved({projectId, record, error: null});
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.error('Failed to resolve project:', err);
+        setResolved({
+          projectId,
+          record: null,
+          error: 'Could not open that project.',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `router` is deliberately not a dependency: its identity is not
+    // guaranteed stable, and this must resolve once per project id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   // Handle chart loaded from drop zone (new project)
   const handleChartLoaded = useCallback(
@@ -280,29 +322,92 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     [router, store, route],
   );
 
-  // Handle opening an existing project
+  // Handle opening an existing project. A project still mid-pipeline goes to
+  // the route that owns the pipeline instead.
   const handleOpenProject = useCallback(
-    (id: string) => {
+    (record: ProjectRecord) => {
       setPageState('loading-chart');
-      router.push(`${route}?project=${id}`);
+      router.push(
+        record.ready
+          ? `${route}?project=${record.id}`
+          : `/drum-transcription?project=${record.id}`,
+      );
     },
     [router, route],
   );
 
-  // Handle deleting a project
-  const handleDeleteProject = useCallback(async () => {
-    if (!deleteTarget) return;
+  const handleDeleteProject = useCallback(async (record: ProjectRecord) => {
     try {
-      await store.deleteProject(deleteTarget.id);
-      setProjects(prev => prev.filter(p => p.id !== deleteTarget.id));
-      toast.success(`Deleted "${deleteTarget.name}"`);
+      await deleteProjectRecord(record.id);
+      setProjects(prev => prev.filter(p => p.id !== record.id));
+      toast.success(`Deleted "${record.name}"`);
     } catch (err) {
       toast.error('Failed to delete project');
       console.error(err);
-    } finally {
-      setDeleteTarget(null);
     }
-  }, [deleteTarget, store]);
+  }, []);
+
+  const handleRenameProject = useCallback(
+    async (record: ProjectRecord, identity: SongMetadataValue) => {
+      try {
+        const updated = await renameProject(record.id, identity);
+        setProjects(prev => prev.map(p => (p.id === record.id ? updated : p)));
+      } catch (err) {
+        toast.error('Failed to rename project');
+        console.error(err);
+      }
+    },
+    [],
+  );
+
+  /**
+   * Start a chart from a song: a blank chart with the audio already attached,
+   * named after the file. The song name is a better guess than the
+   * placeholder and the user can correct it in song details; nothing else is
+   * inferred from the audio, since aligning notes to a song is the editor's
+   * job, not the landing page's.
+   */
+  const handleCreateChartFromAudio = useCallback(
+    async ({fileName, data, durationSeconds}: DroppedAudio) => {
+      setPageState('loading-chart');
+      try {
+        const record = await createBlankProject({
+          name: fileName.replace(/\.[^.]+$/, '') || BLANK_CHART_NAME,
+          artist: BLANK_CHART_ARTIST,
+          songLengthMs: Math.round(durationSeconds * 1000),
+        });
+        await attachAudioToProject({
+          store,
+          projectId: record.id,
+          files: [{fileName, data}],
+          durationSeconds,
+        });
+        router.push(`${route}?project=${record.id}`);
+      } catch (err) {
+        toast.error('Failed to create the chart');
+        console.error(err);
+        setPageState('load');
+      }
+    },
+    [route, router, store],
+  );
+
+  // Starting a chart asks nothing up front: it opens on placeholder identity
+  // the song-details dialog can replace whenever the user gets to it.
+  const handleCreateBlankChart = useCallback(async () => {
+    setPageState('loading-chart');
+    try {
+      const record = await createBlankProject({
+        name: BLANK_CHART_NAME,
+        artist: BLANK_CHART_ARTIST,
+      });
+      router.push(`${route}?project=${record.id}`);
+    } catch (err) {
+      toast.error('Failed to create the chart');
+      console.error(err);
+      setPageState('load');
+    }
+  }, [route, router]);
 
   // Handle going back to load screen
   const handleBack = useCallback(() => {
@@ -310,13 +415,46 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     router.push(route);
   }, [router, route]);
 
-  // If there's a project ID in the URL, show the editor
-  if (projectId && (pageState === 'loading-chart' || pageState === 'edit')) {
+  // A project in the URL: resolve it, then mount whichever host its layout
+  // calls for.
+  if (projectId) {
+    if (resolveError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen gap-4">
+          <AlertCircle className="h-10 w-10 text-destructive" />
+          <p className="text-sm text-destructive">{resolveError}</p>
+          <Button variant="outline" size="sm" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to projects
+          </Button>
+        </div>
+      );
+    }
+    if (!openRecord) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (openRecord.layout === 'drum-transcription') {
+      const host = config.renderTranscriptionEditor?.(openRecord.id);
+      if (host) return <>{host}</>;
+      return (
+        <div className="flex flex-col items-center justify-center h-screen gap-4">
+          <AlertCircle className="h-10 w-10 text-destructive" />
+          <p className="text-sm text-destructive">
+            This page cannot open a drum transcription project.
+          </p>
+        </div>
+      );
+    }
     return (
       <TrackEditEditor
         config={config}
         store={store}
-        projectId={projectId}
+        projectId={openRecord.id}
+        hasAudio={openRecord.hasAudio}
         onBack={handleBack}
         onReady={() => setPageState('edit')}
       />
@@ -334,24 +472,49 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           </p>
         </header>
 
-        {/* Drop zone for loading a chart */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Load a Chart</CardTitle>
-            <CardDescription>
-              Drop a .sng or .zip file, or select a chart folder.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartDropZone
-              onLoaded={handleChartLoaded}
-              id={dropZoneId}
-              disabled={pageState === 'loading-chart'}
-            />
-          </CardContent>
-        </Card>
+        {/* Two ways in, given the same shape and the same weight: open a
+         *  chart somebody already wrote, or start one of your own. */}
+        <div className="mb-8 grid gap-4 md:grid-cols-2">
+          <Card className="flex flex-col">
+            <CardHeader>
+              <CardTitle>Load a Chart</CardTitle>
+              <CardDescription>Open a chart you already have.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1">
+              <ChartDropZone
+                onLoaded={handleChartLoaded}
+                id={dropZoneId}
+                disabled={pageState === 'loading-chart'}
+              />
+            </CardContent>
+          </Card>
 
-        {/* Recent projects from OPFS */}
+          <Card className="flex flex-col">
+            <CardHeader>
+              <CardTitle>Create a Chart</CardTitle>
+              <CardDescription>
+                Start from a song, or from an empty chart.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 space-y-3">
+              <AudioDropZone
+                onDropped={handleCreateChartFromAudio}
+                disabled={pageState === 'loading-chart'}
+              />
+              <OrDivider />
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={pageState === 'loading-chart'}
+                onClick={handleCreateBlankChart}>
+                <FilePlus className="h-4 w-4 mr-2" />
+                Start from scratch
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Every project in every namespace */}
         {(projects.length > 0 || loadingProjects) && (
           <Card>
             <CardHeader>
@@ -361,50 +524,14 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {loadingProjects ? (
-                <div className="flex items-center gap-2 py-4">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-muted-foreground">
-                    Loading projects...
-                  </span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {projects.map(project => (
-                    <div
-                      key={project.id}
-                      className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <Music className="h-5 w-5 text-muted-foreground shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {project.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {project.artist} &middot;{' '}
-                            {new Date(project.updatedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenProject(project.id)}>
-                          <FolderOpen className="h-4 w-4 mr-1" />
-                          Open
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteTarget(project)}>
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ProjectList
+                records={projects}
+                pageOrigin="chart-editor"
+                loading={loadingProjects}
+                onOpen={handleOpenProject}
+                onRename={handleRenameProject}
+                onDelete={handleDeleteProject}
+              />
             </CardContent>
           </Card>
         )}
@@ -417,29 +544,6 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           </div>
         )}
       </div>
-
-      {/* Delete confirmation dialog */}
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={open => {
-          if (!open) setDeleteTarget(null);
-        }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete project?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;
-              and all its data from your browser. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteProject}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </main>
   );
 }
@@ -452,6 +556,9 @@ interface TrackEditEditorProps {
   config: TrackEditPageConfig;
   store: ReturnType<typeof createOpfsProjectStore>;
   projectId: string;
+  /** Whether this project's `audio/` directory holds anything. False skips
+   *  the audio load entirely and plays the chart against the click alone. */
+  hasAudio: boolean;
   onBack: () => void;
   onReady: () => void;
 }
@@ -462,6 +569,7 @@ function TrackEditEditor({
   config,
   store,
   projectId,
+  hasAudio: initialHasAudio,
   onBack,
   onReady,
 }: TrackEditEditorProps) {
@@ -478,6 +586,9 @@ function TrackEditEditor({
   const [packageAudio, setPackageAudio] = useState<DecodedPackageAudio | null>(
     null,
   );
+  // Whether the project has audio right now. Starts from the record and
+  // flips the moment a dropped file is attached, without a reload.
+  const [hasAudio, setHasAudio] = useState(initialHasAudio);
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
@@ -597,24 +708,29 @@ function TrackEditEditor({
           });
         }
 
-        // 5. Load audio files from OPFS
-        setLoadingStep('Loading audio...');
-        const audioFiles = await store.loadAudioFiles(projectId);
-        if (cancelled) return;
+        // 5. Load audio files from OPFS. A chart created with no audio has
+        // none to load; `usePaddedAudio` builds a click-only manager
+        // spanning the chart's own `song_length` instead.
+        if (meta.hasAudio ?? true) {
+          setLoadingStep('Loading audio...');
+          const audioFiles = await store.loadAudioFiles(projectId);
+          if (cancelled) return;
 
-        if (audioFiles.length === 0) {
-          throw new Error('No audio files found in project storage');
+          if (audioFiles.length === 0) {
+            throw new Error('No audio files found in project storage');
+          }
+
+          // 6. Decode the package's audio into ORIGINAL (unpadded) PCM.
+          // `usePaddedAudio` builds the AudioManager from it (full mix +
+          // stems + the synthesized click, chart delay applied) once the
+          // chart doc below lands, and rebuilds it whenever the chart's
+          // `audioAnchor` or the stem list changes.
+          setLoadingStep('Preparing audio playback...');
+          const decodedAudio = await decodeChartPackageAudio(audioFiles);
+          if (cancelled) return;
+          setPackageAudio(decodedAudio);
         }
-
-        // 6. Decode the package's audio into ORIGINAL (unpadded) PCM.
-        // `usePaddedAudio` builds the AudioManager from it (full mix +
-        // stems + the synthesized click, chart delay applied) once the
-        // chart doc below lands, and rebuilds it whenever the chart's
-        // `audioAnchor` or the stem list changes.
-        setLoadingStep('Preparing audio playback...');
-        const decodedAudio = await decodeChartPackageAudio(audioFiles);
-        if (cancelled) return;
-        setPackageAudio(decodedAudio);
+        setHasAudio(meta.hasAudio ?? true);
 
         // 7. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
@@ -720,6 +836,14 @@ function TrackEditEditor({
     () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
     [dispatch],
   );
+  // With no audio, the chart's own `song.ini` length is what the transport,
+  // the click track and the beat grid span.
+  const songLengthMs = state.chartDoc?.parsedChart.metadata.song_length;
+  const silentDurationSeconds = hasAudio
+    ? undefined
+    : songLengthMs && songLengthMs > 0
+      ? songLengthMs / 1000
+      : DEFAULT_BLANK_SONG_LENGTH_MS / 1000;
   const {
     audioManager,
     fullMixPcm: paddedFullMixPcm,
@@ -735,6 +859,7 @@ function TrackEditEditor({
     // not a "song" row playing guitar.
     fullMixName: packageAudio?.fullMixName ?? 'song',
     stems,
+    silentDurationSeconds,
     onSongEnded,
   });
 
@@ -764,12 +889,19 @@ function TrackEditEditor({
    * action is honest here.
    */
   const chartAssist = useMemo(
-    () => ({
-      ...chartPackage.chartAssist,
-      audioSampleRate: PACKAGE_AUDIO_META.sampleRate,
-      audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
-    }),
-    [chartPackage.chartAssist, audioRebuilding],
+    () =>
+      hasAudio
+        ? {
+            ...chartPackage.chartAssist,
+            audioSampleRate: PACKAGE_AUDIO_META.sampleRate,
+            audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
+          }
+        : // With no audio there is nothing for the audio-backed cards to run
+          // on, so they are withheld rather than offered and failed. Every
+          // card in the section needs audio, so the section is simply absent
+          // until a file is attached.
+          {},
+    [chartPackage.chartAssist, audioRebuilding, hasAudio],
   );
 
   // The song-details dialog has already written its edit into the chart doc,
@@ -786,6 +918,60 @@ function TrackEditEditor({
       setProjectMeta(updated);
     },
     [projectId, store],
+  );
+
+  /**
+   * A file dropped on the Stems section. The bytes are persisted into the
+   * project's `audio/` directory, then the whole audio load is re-run from
+   * disk: that is what decides which file is the full mix and what every
+   * stem is called, so re-running it is what keeps the live mixer and the
+   * stored project describing the same thing.
+   *
+   * A chart that had no audio also gains a real length: `song_length` is
+   * rewritten from the decoded audio so the beat grid, the transport and the
+   * exported ini stop reporting the blank chart's placeholder. Note ticks are
+   * untouched — attaching audio does not move a note, and nothing here tries
+   * to align an existing chart to a song it was not written against.
+   */
+  const handleAddStem = useCallback(
+    async (input: {file: {fileName: string; data: Uint8Array}}) => {
+      try {
+        await attachAudioToProject({
+          store,
+          projectId,
+          files: [input.file],
+        });
+        const audioFiles = await store.loadAudioFiles(projectId);
+        const decoded = await decodeChartPackageAudio(audioFiles);
+        const durationSeconds =
+          decoded.fullMixPcm.length /
+          PACKAGE_AUDIO_META.channels /
+          PACKAGE_AUDIO_META.sampleRate;
+        await store.updateProject(projectId, {durationSeconds});
+        setProjectMeta(prev => (prev ? {...prev, durationSeconds} : prev));
+        setPackageAudio(decoded);
+        if (!hasAudio && state.chartDoc) {
+          dispatch({
+            type: 'SET_CHART_METADATA',
+            chartDoc: {
+              ...state.chartDoc,
+              parsedChart: {
+                ...state.chartDoc.parsedChart,
+                metadata: {
+                  ...state.chartDoc.parsedChart.metadata,
+                  song_length: Math.round(durationSeconds * 1000),
+                },
+              },
+            },
+          });
+        }
+        setHasAudio(true);
+      } catch (err) {
+        console.error('Failed to attach audio:', err);
+        toast.error('Could not add that audio file to the project');
+      }
+    },
+    [dispatch, hasAudio, projectId, state.chartDoc, store],
   );
 
   // Loading state
@@ -841,7 +1027,11 @@ function TrackEditEditor({
         getChartText={chartPackage.getChartText}
         getAudioSources={getAudioSources}
         chartAssist={chartAssist}
-        stemsMixer={{stemOrigins: paddedStems}}
+        stemsMixer={{
+          stemOrigins: paddedStems,
+          onAddStem: input => void handleAddStem(input),
+          emptyState: !hasAudio,
+        }}
         headerExtra={headerExtra}
         leftPanelChildren={leftPanelChildren}
         stackedPianoRoll={stackedPianoRoll}

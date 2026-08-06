@@ -486,7 +486,8 @@ export default function EditorApp({
         toast.error('This project’s audio format cannot take added stems');
         return;
       }
-      setUserAddedStems(prev => [...prev, input]);
+      const {name, pcm, origin} = input;
+      setUserAddedStems(prev => [...prev, {name, pcm, origin}]);
     },
     [audioMeta],
   );

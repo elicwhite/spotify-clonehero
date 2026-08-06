@@ -149,6 +149,7 @@ const PROJECT_AUDIO_BYTE: Record<string, number> = {proj1: 1, proj2: 9};
 jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
   createOpfsProjectStore: jest.fn(() => ({
     listProjects: jest.fn(async () => []),
+    namespaceOf: jest.fn(async () => 'chart-editor'),
     getProject: jest.fn(async () => ({
       id: currentProjectId,
       name: 'Test Song',

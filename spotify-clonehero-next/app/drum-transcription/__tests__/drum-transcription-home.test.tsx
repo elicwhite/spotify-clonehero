@@ -42,9 +42,10 @@ globals['AudioEncoder'] ??= class {};
 globals['AudioData'] ??= class {};
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 let searchParams = new URLSearchParams();
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({push: mockPush}),
+  useRouter: () => ({push: mockPush, replace: mockReplace}),
   useSearchParams: () => searchParams,
 }));
 
@@ -178,7 +179,7 @@ describe('/drum-transcription upload flow', () => {
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith(
-        expect.stringContaining('/drum-transcription?project='),
+        expect.stringContaining('/chart-editor?project='),
       ),
     );
   });
@@ -273,7 +274,7 @@ describe('/drum-transcription upload flow', () => {
 
     await waitFor(() =>
       expect(mockPush).toHaveBeenCalledWith(
-        `/drum-transcription?project=${projectId}`,
+        `/chart-editor?project=${projectId}`,
       ),
     );
     expect(mockOpfs.__projects.size).toBe(1);
@@ -324,7 +325,12 @@ describe('/drum-transcription resume from ?project=', () => {
       ),
     );
     expect(mockTempo).toHaveBeenCalledTimes(1);
-    // Resuming happens in place; the page never navigates itself.
-    expect(mockPush).not.toHaveBeenCalled();
+    // Resuming happens here, and the finished project is handed to the
+    // editor route that owns editing.
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith(
+        '/chart-editor?project=proj-interrupted',
+      ),
+    );
   });
 });
