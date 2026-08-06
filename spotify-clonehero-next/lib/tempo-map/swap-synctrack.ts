@@ -59,6 +59,19 @@ export interface SwapSynctrackOptions {
    *    audio-anchored hand-edit remap.
    */
   sectionPolicy?: 'preserve' | 'snap-whole-note';
+  /**
+   * Drop a tempo marker whose BPM equals its predecessor's.
+   *
+   * `true` (default) suits predictor output, which emits one tempo per beat
+   * and would otherwise fill an editor with markers that change nothing.
+   *
+   * `false` suits a hand-authored grid, where a same-BPM marker is
+   * deliberate: "Add tempo marker here" inherits the BPM already governing
+   * that tick precisely so that inserting it changes no note's timing, and
+   * the marker exists to be dragged or retyped afterwards. Collapsing those
+   * deletes the user's work on the next audio-glue edit.
+   */
+  collapseSameBpm?: boolean;
 }
 
 function reTickEvent<T extends {tick: number; msTime: number}>(
@@ -98,6 +111,7 @@ export function swapSynctrack(
   const quantize = options.quantizeNotes ?? false;
   const snapToleranceMs = options.snapToleranceMs ?? DEFAULT_SNAP_TOLERANCE_MS;
   const sectionPolicy = options.sectionPolicy ?? 'preserve';
+  const collapseSameBpm = options.collapseSameBpm ?? true;
 
   // Exact (un-quantized) re-tick: preserves every note's audio time to the
   // nearest tick. Used for the quantizeNotes=false path (unchanged) and as
@@ -182,12 +196,15 @@ export function swapSynctrack(
     tempoByTick.set(t.tick, t);
   }
   const dedupTempos = [...tempoByTick.values()].sort((a, b) => a.tick - b.tick);
-  // Collapse consecutive same-BPM runs (the predictor emits one tempo per
-  // beat; stable regions would otherwise be visual clutter in editors).
+  // Collapse consecutive same-BPM runs, per `collapseSameBpm`.
   const newTempos: typeof dedupTempos = [];
   for (const t of dedupTempos) {
     const prev = newTempos[newTempos.length - 1];
-    if (prev && Math.abs(prev.beatsPerMinute - t.beatsPerMinute) < BPM_EPS)
+    if (
+      collapseSameBpm &&
+      prev &&
+      Math.abs(prev.beatsPerMinute - t.beatsPerMinute) < BPM_EPS
+    )
       continue;
     newTempos.push(t);
   }

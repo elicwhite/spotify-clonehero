@@ -168,6 +168,27 @@ describe('MoveTempoMarkerCommand', () => {
 });
 
 describe('AddTempoMarkerCommand', () => {
+  // The authoring loop the tempo lane prescribes: drop mapping-neutral
+  // markers, then retype one. Every marker added this way is same-BPM as its
+  // predecessor by construction, so a KEEP-MS remap that collapses same-BPM
+  // runs would delete the rest of the user's grid on the first retype.
+  it('survives a later retype of another marker (audio glue)', () => {
+    const withMarkers = new AddTempoMarkerCommand(2880).execute(
+      new AddTempoMarkerCommand(960).execute(fixture()),
+    );
+    expect(withMarkers.parsedChart.tempos.map(t => t.tick)).toEqual([
+      0, 960, 1920, 2880,
+    ]);
+
+    const after = new AddBPMCommand(960, 100, 'audio').execute(withMarkers);
+    expect(after.parsedChart.tempos.map(t => t.tick)).toEqual([
+      0, 960, 1920, 2880,
+    ]);
+    expect(
+      after.parsedChart.tempos.find(t => t.tick === 960)?.beatsPerMinute,
+    ).toBeCloseTo(100, 3);
+  });
+
   it('adds a marker on the current tempo line without moving notes', () => {
     const before = fixture();
     const beforeNotes = drumNotes(before);

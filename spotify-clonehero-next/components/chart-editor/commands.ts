@@ -50,6 +50,7 @@ import {
   quantizeBpm,
   synctrackFromChart,
   remapKeepMs,
+  type RemapKeepMsOptions,
   applyMarkerMoveBpms,
   makeChartTiming,
   applyEventTiming,
@@ -794,6 +795,18 @@ export class ToggleKickCommand implements EditCommand {
  * restore is the safe inverse (plan 0061 Risks), matching the other tempo
  * commands.
  */
+/**
+ * KEEP-MS remap settings shared by every hand tempo edit.
+ *
+ * `swapSynctrack` collapses same-BPM runs by default, which is right for the
+ * predictor's one-tempo-per-beat output. In an authored grid a same-BPM
+ * marker is deliberate — "Add tempo marker here" inherits the governing BPM
+ * so that inserting it retimes nothing, and the marker is there to be dragged
+ * or retyped later. Left on, the next audio-glue edit anywhere in the song
+ * silently deletes every one of them.
+ */
+const HAND_EDIT_REMAP: RemapKeepMsOptions = {collapseSameBpm: false};
+
 export class AddBPMCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = KIND.tempo;
@@ -826,7 +839,9 @@ export class AddBPMCommand implements EditCommand {
     // KEEP-MS: the cloned notes still carry their pre-edit msTime (nothing has
     // retimed them), so swapSynctrack re-ticks them onto the corrected grid.
     // The audio anchor is audio-relative too: keep its ms, recompute its tick.
-    return refreshAnchorKeepMs(remapKeepMs(cloned, synctrackFromChart(chart)));
+    return refreshAnchorKeepMs(
+      remapKeepMs(cloned, synctrackFromChart(chart), HAND_EDIT_REMAP),
+    );
   }
 }
 
@@ -964,7 +979,11 @@ export class MoveTempoMarkerCommand implements EditCommand {
     // KEEP-MS: the cloned notes still carry their pre-edit msTime (nothing has
     // retimed them), so swapSynctrack re-ticks them onto the corrected grid.
     return refreshAnchorKeepMs(
-      remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart)),
+      remapKeepMs(
+        cloned,
+        synctrackFromChart(cloned.parsedChart),
+        HAND_EDIT_REMAP,
+      ),
     );
   }
 }
@@ -1047,7 +1066,11 @@ export class DeleteTempoMarkerCommand implements EditCommand {
       return refreshAnchorKeepTick(cloned);
     }
     return refreshAnchorKeepMs(
-      remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart)),
+      remapKeepMs(
+        cloned,
+        synctrackFromChart(cloned.parsedChart),
+        HAND_EDIT_REMAP,
+      ),
     );
   }
 }
@@ -1099,7 +1122,11 @@ export class DeleteTempoMarkersCommand implements EditCommand {
       return refreshAnchorKeepTick(cloned);
     }
     return refreshAnchorKeepMs(
-      remapKeepMs(cloned, synctrackFromChart(cloned.parsedChart)),
+      remapKeepMs(
+        cloned,
+        synctrackFromChart(cloned.parsedChart),
+        HAND_EDIT_REMAP,
+      ),
     );
   }
 }

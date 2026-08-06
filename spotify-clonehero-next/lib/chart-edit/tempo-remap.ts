@@ -212,6 +212,13 @@ export function nudgeNoteCollisions(groups: NoteEvent[][]): NoteEvent[][] {
 export interface RemapKeepMsOptions {
   /** Abstain band forwarded to `swapSynctrack` (see its docs). */
   snapToleranceMs?: number;
+  /**
+   * Forwarded to `swapSynctrack`. Defaults to `true` (its default) for the
+   * re-prediction path, whose input is one tempo per beat. A hand edit passes
+   * `false`: a mapping-neutral marker in an authored grid is deliberate, and
+   * collapsing it deletes the user's work.
+   */
+  collapseSameBpm?: boolean;
 }
 
 /**
@@ -238,6 +245,9 @@ export function remapKeepMs(
     sectionPolicy: 'snap-whole-note',
     ...(options.snapToleranceMs !== undefined
       ? {snapToleranceMs: options.snapToleranceMs}
+      : {}),
+    ...(options.collapseSameBpm !== undefined
+      ? {collapseSameBpm: options.collapseSameBpm}
       : {}),
   });
 

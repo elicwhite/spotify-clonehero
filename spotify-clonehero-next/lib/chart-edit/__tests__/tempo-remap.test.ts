@@ -325,6 +325,36 @@ describe('remapKeepMs', () => {
     return remapKeepMs(changed, synctrackFromChart(changed.parsedChart));
   }
 
+  // A hand-authored grid carries mapping-neutral markers on purpose: "Add
+  // tempo marker here" inherits the governing BPM, so the marker is
+  // same-BPM as its predecessor by construction and exists to be dragged or
+  // retyped later. `swapSynctrack` collapses same-BPM runs to keep the
+  // predictor's one-tempo-per-beat output readable, which would eat exactly
+  // those markers on the next hand edit.
+  it('keeps mapping-neutral markers when collapseSameBpm is off', () => {
+    const doc = makeDoc();
+    const authored = cloneWithTempos(doc, [
+      {tick: 0, beatsPerMinute: 120, msTime: 0},
+      {tick: 960, beatsPerMinute: 120, msTime: 0},
+      {tick: 1920, beatsPerMinute: 140, msTime: 0},
+      {tick: 2880, beatsPerMinute: 140, msTime: 0},
+    ]);
+    const sync = synctrackFromChart(authored.parsedChart);
+
+    // The predictor default: a same-BPM marker changes no mapping, so it is
+    // dropped as clutter.
+    expect(
+      remapKeepMs(authored, sync).parsedChart.tempos.map(t => t.tick),
+    ).toEqual([0, 1920]);
+
+    // What every hand edit passes.
+    expect(
+      remapKeepMs(authored, sync, {
+        collapseSameBpm: false,
+      }).parsedChart.tempos.map(t => t.tick),
+    ).toEqual([0, 960, 1920, 2880]);
+  });
+
   it('preserves every note audio time within the abstain band', () => {
     const doc = makeDoc();
     const before = flatNotes(doc).map(n => ({type: n.type, msTime: n.msTime}));
