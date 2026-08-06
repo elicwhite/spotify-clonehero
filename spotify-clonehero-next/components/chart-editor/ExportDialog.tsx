@@ -33,7 +33,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {Label} from '@/components/ui/label';
-import {Switch} from '@/components/ui/switch';
 import {cn} from '@/lib/utils';
 
 import {
@@ -279,20 +278,14 @@ interface ExportDialogProps {
   /**
    * Provides audio sources to include in the package.
    *
-   * Receives the user's stem preference: when `includeStems` is true the page
-   * should return separated stems (e.g. `drums.wav` + accompaniment
-   * `song.wav`); when false it should return the original un-separated audio as
-   * a single `song.wav`. Pages without separated stems may ignore the flag.
+   * Always called with `includeStems: false`: the package ships the original
+   * un-separated audio as a single `song.wav`. The flag is still on the
+   * signature because the hosts implement both branches, and a real
+   * separated-stems export would use the other one.
    */
   getAudioSources?:
     | ((options: {includeStems: boolean}) => Promise<AudioSource[]>)
     | undefined;
-  /**
-   * Whether the audio can be exported either as separated stems or as the
-   * original file. When true the dialog shows an "Include stems?" toggle;
-   * when false the audio is always included as-is. Default: false.
-   */
-  showStemChoice?: boolean | undefined;
   /**
    * Provides passthrough asset files (e.g. album art, video, secondary
    * audio) to append verbatim to the package — used by the chart-flow
@@ -364,7 +357,6 @@ export default function ExportDialog({
   getChartFile,
   chartDoc,
   getAudioSources,
-  showStemChoice = false,
   getExtraAssets,
   defaultFormat,
   sourceChartFormat,
@@ -372,18 +364,17 @@ export default function ExportDialog({
   iniMetadata,
 }: ExportDialogProps) {
   const [open, setOpen] = useState(false);
-  const [includeStems, setIncludeStems] = useState(true);
   const [exportingFormat, setExportingFormat] = useState<PackageFormat | null>(
     null,
   );
   const [chartFileFormat, setChartFileFormat] = useState<ChartFileFormat>(
-    sourceChartFormat ?? 'chart',
+    sourceChartFormat ?? 'mid',
   );
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (next) {
-        setChartFileFormat(sourceChartFormat ?? 'chart');
+        setChartFileFormat(sourceChartFormat ?? 'mid');
       }
       setOpen(next);
     },
@@ -403,7 +394,10 @@ export default function ExportDialog({
   const inputsRef = useRef<{key: string; inputs: Promise<ExportInputs>} | null>(
     null,
   );
-  const stemChoice = showStemChoice ? includeStems : true;
+  // Export always ships the original audio. The stems toggle is gone: what
+  // it offered was the uploaded song plus a duplicated drum stem, not a real
+  // separation, so it promised more than it delivered.
+  const stemChoice = false;
   const loadExportInputs = useCallback((): Promise<ExportInputs> => {
     const key = `${chartFileFormat}|${stemChoice}`;
     const cached = inputsRef.current;
@@ -600,27 +594,6 @@ export default function ExportDialog({
                     )}
                   </p>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* Stems vs. original audio */}
-          {getAudioSources && showStemChoice && (
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="include-stems" className="text-right pt-1">
-                Include stems?
-              </Label>
-              <div className="col-span-3 space-y-1">
-                <Switch
-                  id="include-stems"
-                  checked={includeStems}
-                  onCheckedChange={setIncludeStems}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {includeStems
-                    ? 'Separated drums and accompaniment stems are included.'
-                    : 'The original uploaded audio is included instead.'}
-                </p>
               </div>
             </div>
           )}

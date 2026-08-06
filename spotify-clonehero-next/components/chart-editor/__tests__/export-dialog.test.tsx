@@ -200,17 +200,31 @@ test('hides the chart-file-format control unless the caller opts in', async () =
   expect(screen.getByLabelText(/chart file/i)).toBeInTheDocument();
 });
 
-test('shows the stem toggle only when the caller offers a stem choice', async () => {
+test('offers no stem choice: the package always ships the original audio', async () => {
+  const getAudioSources = jest.fn(async () => []);
   render(
     <ExportDialog
       songName="Song"
       getChartText={async () => '.chart text'}
-      getAudioSources={async () => []}
-      showStemChoice
+      getAudioSources={getAudioSources}
     />,
   );
   await openDialog();
-  expect(screen.getByLabelText(/include stems/i)).toBeInTheDocument();
+  expect(screen.queryByLabelText(/include stems/i)).not.toBeInTheDocument();
+  await waitFor(() => expect(getAudioSources).toHaveBeenCalled());
+  expect(getAudioSources).toHaveBeenCalledWith({includeStems: false});
+});
+
+test('defaults the chart file to .mid when the project has no source format', async () => {
+  render(
+    <ExportDialog
+      songName="Song"
+      getChartText={async () => '.chart text'}
+      chartFormatSelectable
+    />,
+  );
+  await openDialog();
+  expect(screen.getByLabelText(/chart file/i)).toHaveTextContent(/.mid/i);
 });
 
 test('badges the button matching defaultFormat as recommended', async () => {

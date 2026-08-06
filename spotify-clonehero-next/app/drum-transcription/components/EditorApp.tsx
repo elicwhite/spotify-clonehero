@@ -753,7 +753,6 @@ export default function EditorApp({
       sourceChartFormat={packageSourceFormat ? chart.format : undefined}
       chartFormatSelectable
       getAudioSources={getAudioSources}
-      showStemChoice
       getExtraAssets={getExtraAssets}
       defaultExportFormat={
         packageSourceFormat === 'sng'

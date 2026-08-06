@@ -136,11 +136,6 @@ export interface ChartEditorProps {
     | ((options: {includeStems: boolean}) => Promise<AudioSource[]>)
     | undefined;
   /**
-   * Whether the export can bundle either separated stems or the original
-   * audio. Enables the "Include stems?" toggle in the export dialog.
-   */
-  showStemChoice?: boolean | undefined;
-  /**
    * Callback to provide passthrough asset files (e.g. album art, video,
    * secondary audio) recovered from an existing chart package, so export can
    * round-trip them (chart-flow feature). Omitted by pages with none.
@@ -247,7 +242,6 @@ export default function ChartEditor({
   getChartText,
   getChartFile,
   getAudioSources,
-  showStemChoice,
   getExtraAssets,
   defaultExportFormat,
   sourceChartFormat,
@@ -367,7 +361,6 @@ export default function ChartEditor({
                 getChartFile={getChartFile}
                 chartDoc={state.chartDoc ?? undefined}
                 getAudioSources={getAudioSources}
-                showStemChoice={showStemChoice}
                 getExtraAssets={getExtraAssets}
                 defaultFormat={defaultExportFormat}
                 sourceChartFormat={sourceChartFormat}
