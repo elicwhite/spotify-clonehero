@@ -19,11 +19,14 @@ import {useCallback, useMemo} from 'react';
 import {chartDocToFolderFiles} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
-import {AudioManager} from '@/lib/preview/audioManager';
+import {
+  AudioManager,
+  type AudioSource as AudioManagerSource,
+} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   CLICK_TRACK_NAME,
-  generateBeatClickTrackWav,
+  generateBeatClickTrackSamples,
 } from '@/lib/preview/clickTrack';
 import {mixStemsToAudioBuffer} from '@/lib/audio-pipeline/lyrics-audio';
 import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
@@ -102,15 +105,15 @@ export async function prepareChartPackageAudio(options: {
   }
 
   const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
-  const stems: Files = [...audioFiles];
+  const stems: AudioManagerSource[] = [...audioFiles];
   if (durationSeconds > 0) {
     try {
-      const clickWav = await generateBeatClickTrackWav(
+      const clickPcm = await generateBeatClickTrackSamples(
         chartDoc.parsedChart,
         durationSeconds * 1000,
         chartDelayMs,
       );
-      stems.push({fileName: `${CLICK_TRACK_NAME}.wav`, data: clickWav});
+      stems.push({fileName: `${CLICK_TRACK_NAME}.wav`, pcm: clickPcm});
     } catch (err) {
       // Click track is a nice-to-have — don't fail the whole load if
       // synthesis fails.

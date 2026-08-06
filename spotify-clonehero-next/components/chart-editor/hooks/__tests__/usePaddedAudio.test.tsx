@@ -49,7 +49,7 @@ class FakeAudioManager {
   resume = jest.fn(async () => {});
   seekToChartTime = jest.fn(async () => {});
   setChartDelay = jest.fn();
-  replaceTrack = jest.fn(async (_trackName: string, _data: Uint8Array) => {});
+  replaceTrack = jest.fn(async (_trackName: string, _pcm: unknown) => {});
   #volumes = new Map<string, number>();
   setVolume = jest.fn((trackName: string, volume: number) => {
     this.#volumes.set(trackName, volume);
@@ -67,18 +67,18 @@ class FakeAudioManager {
   }
 }
 
-// jsdom has no OfflineAudioContext; `generateBeatClickTrackWav` (used inside
+// jsdom has no OfflineAudioContext; `generateBeatClickTrackSamples` (used inside
 // `buildPaddedAudioManager` to synthesize the click stem) needs one. The
 // click stem's actual content isn't under test here, so stub that one export
 // out; the rest of the module, `clickTrackSignature` included, is pure and
 // stays real.
-const clickWavCalls: Array<[unknown, number, number]> = [];
+const clickRenderCalls: Array<[unknown, number, number]> = [];
 jest.mock('../../../../lib/preview/clickTrack', () => ({
   ...jest.requireActual('../../../../lib/preview/clickTrack'),
-  generateBeatClickTrackWav: jest.fn(
+  generateBeatClickTrackSamples: jest.fn(
     async (chart: unknown, durationMs: number, chartDelayMs: number) => {
-      clickWavCalls.push([chart, durationMs, chartDelayMs]);
-      return new Uint8Array(4);
+      clickRenderCalls.push([chart, durationMs, chartDelayMs]);
+      return {samples: new Float32Array(4), sampleRate: 8000};
     },
   ),
 }));
@@ -775,7 +775,7 @@ describe('usePaddedAudio — the click track follows the tempo map', () => {
   }
 
   beforeEach(() => {
-    clickWavCalls.length = 0;
+    clickRenderCalls.length = 0;
     lastCapturedFiles = [];
   });
 
@@ -783,8 +783,8 @@ describe('usePaddedAudio — the click track follows the tempo map', () => {
     const {result, rerender} = renderWithDoc(docWithBpm(120));
     await waitFor(() => expect(result.current.audioManager).not.toBeNull());
     const manager = result.current.audioManager as unknown as FakeAudioManager;
-    expect(clickWavCalls).toHaveLength(1);
-    const builtDurationMs = clickWavCalls[0][1];
+    expect(clickRenderCalls).toHaveLength(1);
+    const builtDurationMs = clickRenderCalls[0][1];
 
     rerender({chartDoc: docWithBpm(150)});
     await waitFor(() => expect(manager.replaceTrack).toHaveBeenCalled());
@@ -795,10 +795,10 @@ describe('usePaddedAudio — the click track follows the tempo map', () => {
       manager as unknown as typeof result.current.audioManager,
     );
     expect(manager.replaceTrack.mock.calls[0][0]).toBe('click');
-    expect(clickWavCalls).toHaveLength(2);
+    expect(clickRenderCalls).toHaveLength(2);
     // Re-rendered over exactly the span the build used — deriving it again
     // would leave the signature unable to settle.
-    expect(clickWavCalls[1][1]).toBe(builtDurationMs);
+    expect(clickRenderCalls[1][1]).toBe(builtDurationMs);
   });
 
   it('leaves the click alone when the map is unchanged by value', async () => {
@@ -813,7 +813,7 @@ describe('usePaddedAudio — the click track follows the tempo map', () => {
     });
 
     expect(manager.replaceTrack).not.toHaveBeenCalled();
-    expect(clickWavCalls).toHaveLength(1);
+    expect(clickRenderCalls).toHaveLength(1);
   });
 
   it('installs only the newest map when tempo edits arrive in a burst', async () => {
@@ -831,7 +831,7 @@ describe('usePaddedAudio — the click track follows the tempo map', () => {
     });
 
     expect(manager.replaceTrack).toHaveBeenCalledTimes(1);
-    expect(clickWavCalls.at(-1)?.[0]).toMatchObject({
+    expect(clickRenderCalls.at(-1)?.[0]).toMatchObject({
       tempos: [expect.objectContaining({beatsPerMinute: 150})],
     });
   });

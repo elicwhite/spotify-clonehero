@@ -39,15 +39,19 @@ import {cn} from '@/lib/utils';
 import {track as trackEvent} from '@/lib/analytics/track';
 import SheetMusic from './SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {AudioManager, PracticeModeConfig} from '@/lib/preview/audioManager';
+import {
+  AudioManager,
+  PracticeModeConfig,
+  type AudioSource,
+} from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import PlaybackBar from './PlaybackBar';
 import {formatTimeMs} from './formatTime';
 import Image from 'next/image';
 import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
 import SongHeader from '@/components/chart-detail/SongHeader';
-import {generateClickTrackFromMeasures} from './generateClickTrack';
-import type {ClickVolumes} from './generateClickTrack';
+import {activeClickVoices, generateClickVoicePcm} from './generateClickTrack';
+import type {ClickVoice, ClickVolumes} from './generateClickTrack';
 import convertToVexFlow from './convertToVexflow';
 import debounce from 'debounce';
 import wholeNote from '@/public/assets/svgs/whole-note.svg';
@@ -478,15 +482,24 @@ export default function Renderer({
     wasPlaying: false,
   });
 
-  // Latest practice-mode and tempo values, read by the audio-manager
-  // creation effect at init time only. Held in refs so updates don't
-  // rebuild the AudioManager.
+  // Latest practice-mode, tempo and click-mix values, read by the
+  // audio-manager creation effect at init time only. Held in refs so updates
+  // don't rebuild the AudioManager. Rebuilding closes the AudioContext,
+  // reloads the SoundTouch worklet and re-decodes every stem, which is not
+  // something a fader drag may do on every pointer move.
   const practiceModeRef = useRef(practiceMode);
   const tempoRef = useRef(tempo);
+  const clickMixRef = useRef({playClickTrack, masterClickVolume, clickVolumes});
   useEffect(() => {
     practiceModeRef.current = practiceMode;
     tempoRef.current = tempo;
-  }, [practiceMode, tempo]);
+    clickMixRef.current = {playClickTrack, masterClickVolume, clickVolumes};
+  }, [practiceMode, tempo, playClickTrack, masterClickVolume, clickVolumes]);
+
+  // Which click voices the live AudioManager has buffers for, in buffer
+  // order. A fader inside this set is a gain write; one that leaves or joins
+  // it needs new buffers (see the click-mix effect below).
+  const clickVoicesRef = useRef<ClickVoice[]>([]);
 
   // Persist settings whenever they change
   useEffect(() => {
@@ -534,18 +547,24 @@ export default function Renderer({
     let cancelled = false;
     let createdAudioManager: AudioManager | null = null;
     async function run() {
-      const clickTrack = await generateClickTrackFromMeasures(
+      // Only the voices the user can currently hear get a buffer; a voice at
+      // zero would be a full-song buffer of silence.
+      const clickMix = clickMixRef.current;
+      const voices = activeClickVoices(clickMix.clickVolumes);
+      const clickPcm = await generateClickVoicePcm(
         measures,
-        clickVolumes,
+        voices,
         chartDelayMs,
       );
       if (cancelled) return;
-      const files = [
+      // Every `click_*` file joins one `click` track, so the subdivisions
+      // share a fader and each keeps its own buffer gain.
+      const files: AudioSource[] = [
         ...audioFiles,
-        {
-          fileName: 'click.mp3',
-          data: clickTrack,
-        },
+        ...clickPcm.map((pcm, index) => ({
+          fileName: `click_${index}.wav`,
+          pcm,
+        })),
       ];
       const audioManager = new AudioManager(files, () => {
         setIsPlaying(false);
@@ -623,7 +642,18 @@ export default function Renderer({
           return;
         }
         audioManager.setChartDelay(chartDelayMs / 1000);
-        audioManager.setVolume('click', playClickTrack ? masterClickVolume : 0);
+        voices.forEach((voice, index) =>
+          audioManager.setBufferGain(
+            'click',
+            index,
+            clickMix.clickVolumes[voice],
+          ),
+        );
+        clickVoicesRef.current = voices;
+        audioManager.setVolume(
+          'click',
+          clickMix.playClickTrack ? clickMix.masterClickVolume : 0,
+        );
         audioManagerRef.current = audioManager;
         setAudioManager(audioManager);
         window['am'] = audioManager;
@@ -672,15 +702,51 @@ export default function Renderer({
       audioManagerRef.current = null;
       setAudioManager(null);
     };
-  }, [
-    audioFiles,
-    measures,
-    clickVolumes,
-    playClickTrack,
-    masterClickVolume,
-    chartDelayMs,
-    toAudioPracticeMode,
-  ]);
+  }, [audioFiles, measures, chartDelayMs, toAudioPracticeMode]);
+
+  // Click levels are live gain writes, never a rebuild: the voices are
+  // rendered at unit amplitude and each owns a buffer gain inside the single
+  // `click` track, and `setBufferGain` is linear, so a level reproduces
+  // exactly the amplitude the renderer used to bake in.
+  //
+  // Switching a voice ON is the one case with no buffer to turn up. That
+  // re-renders the click and swaps that ONE track; every other stem keeps
+  // playing from its decoded buffer and the playhead does not move.
+  useEffect(() => {
+    const audioManager = audioManagerRef.current;
+    if (!audioManager) return;
+
+    const voices = activeClickVoices(clickVolumes);
+    const gains = voices.map(voice => clickVolumes[voice]);
+    const live = clickVoicesRef.current;
+    if (
+      voices.length === live.length &&
+      voices.every((voice, index) => voice === live[index])
+    ) {
+      voices.forEach((voice, index) =>
+        audioManager.setBufferGain('click', index, clickVolumes[voice]),
+      );
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const pcm = await generateClickVoicePcm(measures, voices, chartDelayMs);
+        if (cancelled || audioManagerRef.current !== audioManager) return;
+        await audioManager.replaceTrack('click', pcm, gains);
+        if (cancelled || audioManagerRef.current !== audioManager) return;
+        clickVoicesRef.current = voices;
+      } catch (err) {
+        // The click is a practice aid: a failed re-render leaves the previous
+        // one playing rather than taking the page down.
+        console.warn('Could not update the click track:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clickVolumes, measures, chartDelayMs, audioManager]);
 
   // Apply practice mode changes to the existing audio manager without recreating it
   useEffect(() => {

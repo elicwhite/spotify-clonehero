@@ -25,12 +25,12 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
-import {AudioManager} from '@/lib/preview/audioManager';
+import {AudioManager, type AudioSource} from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {
   CLICK_TRACK_NAME,
   clickTrackSignature,
-  generateBeatClickTrackWav,
+  generateBeatClickTrackSamples,
 } from '@/lib/preview/clickTrack';
 import {padAndEncodeTracks} from '@/lib/audio/pad-encode-client';
 import type {PadEncodedTrack} from '@/lib/audio/pad-encode';
@@ -240,7 +240,7 @@ export async function buildPaddedAudioManager(
       createWorker,
     }));
 
-  const audioFiles: {fileName: string; data: Uint8Array}[] = [];
+  const audioFiles: AudioSource[] = [];
   for (const track of encoded) {
     audioFiles.push({fileName: `${track.name}.wav`, data: track.wav});
   }
@@ -264,12 +264,12 @@ export async function buildPaddedAudioManager(
   const durationMs = paddedFullMixPcm
     ? (paddedFullMixPcm.length / meta.channels / meta.sampleRate) * 1000
     : silentDurationSeconds * 1000;
-  const clickWav = await generateBeatClickTrackWav(
+  const clickPcm = await generateBeatClickTrackSamples(
     chartDoc.parsedChart,
     durationMs,
     chartDelayMs,
   );
-  audioFiles.push({fileName: `${CLICK_TRACK_NAME}.wav`, data: clickWav});
+  audioFiles.push({fileName: `${CLICK_TRACK_NAME}.wav`, pcm: clickPcm});
 
   const audioManager = new AudioManager(audioFiles, onSongEnded);
   await audioManager.ready;
@@ -612,12 +612,11 @@ export function usePaddedAudio({
   // It re-renders the click stem ALONE and swaps that one track
   // (`replaceTrack`), never the manager: a manager swap re-decodes every
   // stem of the song and stalls the editor, which would make tempo editing
-  // unusable. Rendering an 8 kHz mono click over a four-minute song is a
-  // few milliseconds of arithmetic plus the decode, which the browser does
-  // off-thread — nowhere near the per-sample, whole-song work that sends
-  // padding into `pad-encode-worker`. It also cannot move: the click's two
-  // oscillator samples come from an `OfflineAudioContext`, which a worker
-  // doesn't have.
+  // unusable. Rendering an 8 kHz mono click over a four-minute song is a few
+  // milliseconds of arithmetic: the samples go to `replaceTrack` as PCM, so
+  // there is no WAV encode and no decode. It also cannot move: the click's
+  // two oscillator samples come from an `OfflineAudioContext`, which a worker
+  // doesn't have (and which is cached, so it runs once per session).
   //
   // Playback is not interrupted and the playhead does not move: the
   // replaced track restarts at the current position while everything else
@@ -639,7 +638,7 @@ export function usePaddedAudio({
     const token = ++clickTokenRef.current;
     (async () => {
       try {
-        const wav = await generateBeatClickTrackWav(
+        const pcm = await generateBeatClickTrackSamples(
           chartDoc.parsedChart,
           live.durationMs,
           chartDelayMs,
@@ -647,7 +646,7 @@ export function usePaddedAudio({
         if (token !== clickTokenRef.current || !mountedRef.current) return;
         if (clickRef.current?.manager !== audioManager) return;
         audioManager.setChartDelay(chartDelayMs / 1000);
-        await audioManager.replaceTrack(CLICK_TRACK_NAME, wav);
+        await audioManager.replaceTrack(CLICK_TRACK_NAME, pcm);
       } catch (err) {
         // The click is a charting aid: a failed re-render leaves the
         // previous one playing rather than taking the editor down.

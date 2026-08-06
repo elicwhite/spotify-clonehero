@@ -1,5 +1,4 @@
 import {getBasename} from '../src-shared/utils';
-import {Files} from './chorus-chart-processing';
 import {
   evaluateLoop,
   isUsableLoopRegion,
@@ -8,8 +7,8 @@ import {
 } from './loopRegion';
 
 type GroupedFile = {
-  fileName: string;
-  datas: Uint8Array[];
+  trackName: string;
+  sources: AudioSource[];
 }[];
 
 export interface PracticeModeConfig {
@@ -33,6 +32,38 @@ interface ActiveLoop extends LoopRegion {
 
 export interface TempoConfig {
   tempo: number; // 0.25 to 4.0 (0.25x to 4x speed)
+}
+
+/**
+ * Mono PCM plus the rate it was rendered at, for audio this app synthesizes
+ * rather than decodes. Handing these straight to {@link AudioManager.replaceTrack}
+ * skips a WAV encode and a `decodeAudioData` that only ever existed to get
+ * synthesized samples back into an `AudioBuffer` they started next to.
+ */
+export interface TrackPcm {
+  samples: Float32Array;
+  sampleRate: number;
+}
+
+/**
+ * One file's worth of audio for {@link AudioManager}: either encoded bytes to
+ * decode, or samples this app synthesized and therefore never has to encode.
+ * `Files` is assignable, so callers with real audio pass it unchanged.
+ */
+export type AudioSource =
+  | {fileName: string; data: Uint8Array}
+  | {fileName: string; pcm: TrackPcm};
+
+/**
+ * The track a file plays under. Files that share one name mix into a single
+ * `AudioTrack`, which is what gives them one fader and one set of per-buffer
+ * gains: every `drums_N.ogg` is one kit, and the click's per-subdivision
+ * voices are one metronome.
+ */
+function trackNameForFile(fileName: string): string {
+  if (fileName.includes('drums')) return 'drums';
+  if (fileName.includes('click')) return 'click';
+  return getBasename(fileName);
 }
 
 export class AudioManager {
@@ -86,7 +117,7 @@ export class AudioManager {
 
   ready: Promise<void>;
 
-  constructor(audioFiles: Files, onSongEnded: () => void) {
+  constructor(audioFiles: readonly AudioSource[], onSongEnded: () => void) {
     this.#onSongEnded = onSongEnded;
     this.#context = new (window.AudioContext || window['webkitAudioContext'])();
     window['ctx'] = this.#context;
@@ -105,7 +136,7 @@ export class AudioManager {
     });
   }
 
-  async #createTracks(audioFiles: Files) {
+  async #createTracks(audioFiles: readonly AudioSource[]) {
     // Initialize SoundTouch worklet first
     await this.#initializeSoundTouchWorklet();
 
@@ -114,50 +145,27 @@ export class AudioManager {
     // would connect nodes on a closed context.
     if (this.#destroyed) return;
 
-    // Every file whose name contains `drums` (drums_1.ogg, drums_2.ogg, ...)
-    // plays as one `drums` track. The group is created only when such a file
-    // exists, so a package without drums audio has no empty `drums` track
-    // that UI built from `trackNames` would offer as a phantom control.
+    // Files that map to the same track name (see `trackNameForFile`) become
+    // one track, in the order they were passed. A group is created only when
+    // such a file exists, so a package without drums audio has no empty
+    // `drums` track that UI built from `trackNames` would offer as a phantom
+    // control.
     const groupedFiles: GroupedFile = audioFiles.reduce((acc, file) => {
-      const isDrums = file.fileName.includes('drums');
-      if (isDrums) {
-        const drumGroup = acc.find(group => group.fileName === 'drums');
-        if (drumGroup) {
-          drumGroup.datas.push(file.data);
-        } else {
-          acc.push({fileName: 'drums', datas: [file.data]});
-        }
+      const trackName = trackNameForFile(file.fileName);
+      const group = acc.find(g => g.trackName === trackName);
+      if (group) {
+        group.sources.push(file);
       } else {
-        acc.push({fileName: file.fileName, datas: [file.data]});
+        acc.push({trackName, sources: [file]});
       }
       return acc;
     }, [] as GroupedFile);
 
     await Promise.all(
       groupedFiles.map(async group => {
-        const trackName = getBasename(group.fileName);
-        const arrayBuffers = group.datas;
+        const trackName = group.trackName;
         const decodedAudioBuffers = await Promise.all(
-          arrayBuffers.map(async arrayBuffer => {
-            const bufferCopy = arrayBuffer.slice(0).buffer;
-            let decodedAudioBuffer: AudioBuffer;
-            try {
-              decodedAudioBuffer = await this.#context.decodeAudioData(
-                bufferCopy as ArrayBuffer,
-              );
-            } catch {
-              try {
-                const decode = await import('audio-decode');
-                decodedAudioBuffer = await decode.default(
-                  bufferCopy as ArrayBuffer,
-                );
-              } catch {
-                console.error('Could not decode audio');
-                return;
-              }
-            }
-            return decodedAudioBuffer;
-          }),
+          group.sources.map(source => this.#toAudioBuffer(source)),
         );
         const filteredAudioBuffers = decodedAudioBuffers.filter(
           Boolean,
@@ -175,6 +183,36 @@ export class AudioManager {
         );
       }),
     );
+  }
+
+  /** Synthesized samples straight into an `AudioBuffer`; encoded bytes through
+   *  the platform decoder, falling back to `audio-decode` for formats it
+   *  refuses. `undefined` when nothing could decode it. */
+  async #toAudioBuffer(source: AudioSource): Promise<AudioBuffer | undefined> {
+    if ('pcm' in source) return this.#pcmToBuffer(source.pcm);
+
+    const bufferCopy = source.data.slice(0).buffer as ArrayBuffer;
+    try {
+      return await this.#context.decodeAudioData(bufferCopy);
+    } catch {
+      try {
+        const decode = await import('audio-decode');
+        return await decode.default(bufferCopy);
+      } catch {
+        console.error('Could not decode audio');
+        return undefined;
+      }
+    }
+  }
+
+  #pcmToBuffer({samples, sampleRate}: TrackPcm): AudioBuffer {
+    const buffer = this.#context.createBuffer(
+      1,
+      Math.max(1, samples.length),
+      sampleRate,
+    );
+    buffer.getChannelData(0).set(samples);
+    return buffer;
   }
 
   async #initializeSoundTouchWorklet() {
@@ -396,7 +434,23 @@ export class AudioManager {
   }
 
   /**
-   * Swap one track's audio for freshly encoded bytes, leaving every other
+   * The gain applied to one buffer of a multi-buffer track, on top of the
+   * track's own volume. This is how the click's per-subdivision faders move
+   * without re-rendering: each subdivision is a buffer in the one `click`
+   * track, rendered at unit amplitude.
+   *
+   * Linear, deliberately: it replaces amplitude a caller would otherwise have
+   * baked into the samples, and baked-in amplitude is linear. The track's
+   * `volume` keeps its own x-squared curve and multiplies this.
+   *
+   * A no-op on an unknown track or buffer index.
+   */
+  setBufferGain(trackName: string, index: number, gain: number) {
+    this.#tracks[trackName]?.setBufferGain(index, gain);
+  }
+
+  /**
+   * Swap one track's audio for freshly rendered samples, leaving every other
    * track playing untouched: the same AudioContext, the same SoundTouch
    * worklet, the same volume, and the same playhead.
    *
@@ -406,22 +460,29 @@ export class AudioManager {
    * AudioContext, reload the worklet and re-decode every stem of the song —
    * seconds of work to change one 8 kHz mono track.
    *
+   * `bufferGains` sets the new buffers' per-buffer gains (see
+   * {@link setBufferGain}) as they are created, so a replacement that changes
+   * the buffer layout never plays a frame at the wrong balance.
+   *
    * A no-op on an unknown track name: a caller keeping a derived track in
    * step shouldn't have to know whether this manager was built with one.
    */
-  async replaceTrack(trackName: string, data: Uint8Array): Promise<void> {
+  async replaceTrack(
+    trackName: string,
+    pcm: TrackPcm | TrackPcm[],
+    bufferGains?: number[],
+  ): Promise<void> {
     await this.ready;
     if (this.#destroyed) return;
     const existing = this.#tracks[trackName];
     if (!existing) return;
 
-    const buffer = data.slice(0).buffer as ArrayBuffer;
-    const decoded = await this.#context.decodeAudioData(buffer);
-    if (this.#destroyed || this.#tracks[trackName] !== existing) return;
+    const buffers = (Array.isArray(pcm) ? pcm : [pcm]).map(one =>
+      this.#pcmToBuffer(one),
+    );
 
     // Read the playhead BEFORE swapping: the new source has to start where
-    // the old one was, or the click would sit a decode's worth of time
-    // behind the music.
+    // the old one was, or the click would sit behind the music.
     const volume = existing.volume;
     const resumeAt = this.#rawCurrentTime;
     const wasStarted = this.#isInitialized;
@@ -429,11 +490,12 @@ export class AudioManager {
     existing.destroy();
     const track = new AudioTrack(
       this.#context,
-      [decoded],
+      buffers,
       this.#handleTrackEnded.bind(this),
       this.#soundTouchWorklet,
     );
     track.setTempo(this.#tempoConfig.tempo);
+    bufferGains?.forEach((gain, index) => track.setBufferGain(index, gain));
     track.volume = volume;
     this.#tracks[trackName] = track;
     if (wasStarted) track.start(this.#context.currentTime, resumeAt);
@@ -834,6 +896,13 @@ class AudioTrack {
 
   #volume: number = 0;
 
+  /**
+   * A linear multiplier per buffer, applied on top of the track volume. `1`
+   * unless a caller sets one: a track built from several buffers is one fader
+   * to the mixer, and these are the balance between its parts.
+   */
+  #bufferGains: number[] = [];
+
   constructor(
     context: AudioContext,
     audioBuffers: AudioBuffer[],
@@ -848,6 +917,7 @@ class AudioTrack {
     this.#gainNodes = new Array(audioBuffers.length)
       .fill(null)
       .map(() => this.#context.createGain());
+    this.#bufferGains = new Array(audioBuffers.length).fill(1);
     this.#routeGains();
 
     this.#duration = Math.max(
@@ -911,15 +981,25 @@ class AudioTrack {
 
   set volume(newVolume: number) {
     this.#volume = newVolume;
-    this.#gainNodes.forEach(gainNode => {
-      // Let's use an x*x curve (x-squared) since simple linear (x) does not
-      // sound as good.
-      // Taken from https://webaudioapi.com/samples/volume/
-      gainNode.gain.setValueAtTime(
-        (newVolume * newVolume) / 2,
-        this.#context.currentTime,
-      );
-    });
+    this.#gainNodes.forEach((_, index) => this.#applyGain(index));
+  }
+
+  /** Set one buffer's linear balance within this track. */
+  setBufferGain(index: number, gain: number) {
+    if (index < 0 || index >= this.#gainNodes.length) return;
+    this.#bufferGains[index] = gain;
+    this.#applyGain(index);
+  }
+
+  #applyGain(index: number): void {
+    // The track volume uses an x*x curve (x-squared) since simple linear (x)
+    // does not sound as good. Taken from
+    // https://webaudioapi.com/samples/volume/. The per-buffer gain is linear
+    // on top of it, matching amplitude baked into samples.
+    this.#gainNodes[index].gain.setValueAtTime(
+      ((this.#volume * this.#volume) / 2) * this.#bufferGains[index],
+      this.#context.currentTime,
+    );
   }
 
   // Tempo control methods

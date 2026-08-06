@@ -4,19 +4,21 @@
  * track, the chart-editor's single-volume click stem).
  *
  * Two layers:
- * - Low-level primitives (`generateClickSample`, `mixSamples`, `float32ToWav`)
- *   — oscillator-based click synthesis and PCM→WAV encoding, independent of
- *   how click times are computed.
- * - `buildBeatClickEvents` / `generateBeatClickTrackWav` — a tempo-map +
+ * - Low-level primitives (`generateClickSample`, `mixSamples`) —
+ *   oscillator-based click synthesis, independent of how click times are
+ *   computed.
+ * - `buildBeatClickEvents` / `generateBeatClickTrackSamples` — a tempo-map +
  *   time-signature-driven click schedule (one event per beat, accented on
  *   the first beat of each measure), for callers that only have the chart's
  *   tempo map (no VexFlow measure layout).
  */
 
+import type {TrackPcm} from './audioManager';
+
 /**
  * The `AudioManager` track name the synthesized click plays under. Callers
- * register it as `${CLICK_TRACK_NAME}.wav` (AudioManager derives the track
- * name from the file's basename) and address its volume by this name.
+ * register it as `${CLICK_TRACK_NAME}.wav` (AudioManager routes any file whose
+ * name contains `click` here) and address its volume by this name.
  */
 export const CLICK_TRACK_NAME = 'click';
 
@@ -41,10 +43,46 @@ export interface BeatClickEvent {
 }
 
 /**
+ * Rendered click samples, keyed by every argument that shapes one. A click is
+ * a pure function of its four parameters, and a page re-renders its click
+ * track whenever the tempo map or a fader moves, so without this each of those
+ * builds and renders a fresh `OfflineAudioContext` for a few hundred samples
+ * that are already known.
+ *
+ * Holds the promise rather than the result so concurrent callers (the four
+ * subdivision voices render in parallel) share one render.
+ */
+const clickSampleCache = new Map<string, Promise<Float32Array>>();
+
+/**
  * Generates a click sample using an oscillator with a quick attack/release
- * envelope.
+ * envelope. Loudness is baked in LINEARLY: at `volume` 0.5 the samples are
+ * half amplitude.
+ *
+ * Cached — callers get a fresh copy each call and may mutate it freely.
  */
 export async function generateClickSample(
+  frequency: number,
+  durationSec: number,
+  sampleRate: number,
+  volume: number,
+): Promise<Float32Array> {
+  const key = `${frequency}|${durationSec}|${sampleRate}|${volume}`;
+  let pending = clickSampleCache.get(key);
+  if (!pending) {
+    pending = renderClickSample(frequency, durationSec, sampleRate, volume);
+    clickSampleCache.set(key, pending);
+  }
+  try {
+    return (await pending).slice();
+  } catch (err) {
+    // A failed render must not poison the cache for every later caller.
+    clickSampleCache.delete(key);
+    throw err;
+  }
+}
+
+async function renderClickSample(
   frequency: number,
   durationSec: number,
   sampleRate: number,
@@ -90,69 +128,6 @@ export function mixSamples(
       target[targetIndex] += source[i];
     }
   }
-}
-
-/**
- * Converts a mono Float32Array of PCM samples into a 16-bit PCM WAV file
- * stored in a Uint8Array.
- */
-export function float32ToWav(
-  samples: Float32Array,
-  sampleRate: number,
-): Uint8Array {
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = samples.length * blockAlign;
-  const headerSize = 44;
-  const totalSize = headerSize + dataSize;
-
-  const buffer = new ArrayBuffer(totalSize);
-  const view = new DataView(buffer);
-  let offset = 0;
-
-  function writeString(s: string) {
-    for (let i = 0; i < s.length; i++) {
-      view.setUint8(offset++, s.charCodeAt(i));
-    }
-  }
-
-  function writeUint32(value: number) {
-    view.setUint32(offset, value, true);
-    offset += 4;
-  }
-
-  function writeUint16(value: number) {
-    view.setUint16(offset, value, true);
-    offset += 2;
-  }
-
-  writeString('RIFF');
-  writeUint32(totalSize - 8);
-  writeString('WAVE');
-
-  writeString('fmt ');
-  writeUint32(16);
-  writeUint16(1);
-  writeUint16(numChannels);
-  writeUint32(sampleRate);
-  writeUint32(byteRate);
-  writeUint16(blockAlign);
-  writeUint16(bitsPerSample);
-
-  writeString('data');
-  writeUint32(dataSize);
-
-  for (let i = 0; i < samples.length; i++) {
-    let s = samples[i];
-    s = Math.max(-1, Math.min(1, s));
-    const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
-    view.setInt16(offset, int16, true);
-    offset += 2;
-  }
-
-  return new Uint8Array(buffer);
 }
 
 /** Converts a tick position to ms using a sorted tempo map. */
@@ -232,13 +207,13 @@ export function buildBeatClickEvents({
 }
 
 /**
- * Generates a click track WAV (mono, 8kHz) covering `durationMs` of
+ * Generates click track samples (mono, 8kHz) covering `durationMs` of
  * audio-track-relative time, with one click per beat (accented downbeats),
  * derived from the chart's tempo map and time signatures. Loudness is not
  * baked in — the caller controls volume in real time via
  * `AudioManager.setVolume(CLICK_TRACK_NAME, ...)`, matching every other stem.
  */
-export async function generateBeatClickTrackWav(
+export async function generateBeatClickTrackSamples(
   chart: {
     tempos: TempoMapEntry[];
     timeSignatures: TimeSignatureEntry[];
@@ -246,11 +221,11 @@ export async function generateBeatClickTrackWav(
   },
   durationMs: number,
   chartDelayMs: number = 0,
-): Promise<Uint8Array> {
+): Promise<TrackPcm> {
   const sampleRate = 8000;
   const clickDurationSec = 0.05;
   const totalSamples = Math.max(1, Math.ceil((sampleRate * durationMs) / 1000));
-  const trackBuffer = new Float32Array(totalSamples);
+  const samples = new Float32Array(totalSamples);
 
   const [accentSample, normalSample] = await Promise.all([
     generateClickSample(1000, clickDurationSec, sampleRate, 1.0),
@@ -267,15 +242,15 @@ export async function generateBeatClickTrackWav(
 
   for (const event of events) {
     const index = Math.floor((event.timeMs / 1000) * sampleRate);
-    mixSamples(trackBuffer, event.accent ? accentSample : normalSample, index);
+    mixSamples(samples, event.accent ? accentSample : normalSample, index);
   }
 
-  return float32ToWav(trackBuffer, sampleRate);
+  return {samples, sampleRate};
 }
 
 /**
- * A value identity for everything {@link generateBeatClickTrackWav} reads.
- * Two calls with equal signatures produce byte-identical WAVs, so a caller
+ * A value identity for everything {@link generateBeatClickTrackSamples} reads.
+ * Two calls with equal signatures produce identical samples, so a caller
  * holding a click track can tell "the tempo map moved, this click is now
  * wrong" from "the chart changed in some way the click doesn't care about"
  * without regenerating to find out.

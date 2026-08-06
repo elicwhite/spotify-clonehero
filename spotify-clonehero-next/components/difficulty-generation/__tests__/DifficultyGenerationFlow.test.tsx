@@ -85,7 +85,10 @@ jest.mock('../../../lib/preview/audioManager', () => ({
 }));
 jest.mock('../../../lib/preview/clickTrack', () => ({
   CLICK_TRACK_NAME: 'click',
-  generateBeatClickTrackWav: jest.fn(async () => new Uint8Array([0])),
+  generateBeatClickTrackSamples: jest.fn(async () => ({
+    samples: new Float32Array(1),
+    sampleRate: 8000,
+  })),
 }));
 
 class FakeAudioContext {

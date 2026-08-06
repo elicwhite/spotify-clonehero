@@ -63,11 +63,32 @@ export class FakeAudioContext {
   createBufferSource() {
     return new FakeAudioBufferSource() as unknown as AudioBufferSourceNode;
   }
+  /** Every gain node handed out, in creation order, so tests can read the
+   *  levels a track applied without reaching into private fields. */
+  createdGains: FakeGainNode[] = [];
   createGain() {
-    return new FakeGainNode() as unknown as GainNode;
+    const node = new FakeGainNode();
+    this.createdGains.push(node);
+    return node as unknown as GainNode;
   }
   decodeAudioData(_buf: ArrayBuffer): Promise<AudioBuffer> {
     return Promise.resolve({duration: 60, length: 60} as AudioBuffer);
+  }
+  createBuffer(
+    numberOfChannels: number,
+    length: number,
+    sampleRate: number,
+  ): AudioBuffer {
+    const channels = new Array(numberOfChannels)
+      .fill(null)
+      .map(() => new Float32Array(length));
+    return {
+      numberOfChannels,
+      length,
+      sampleRate,
+      duration: length / sampleRate,
+      getChannelData: (channel: number) => channels[channel],
+    } as unknown as AudioBuffer;
   }
   resume(): Promise<void> {
     this.state = 'running';

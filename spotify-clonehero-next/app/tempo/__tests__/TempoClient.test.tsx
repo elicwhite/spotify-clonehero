@@ -55,7 +55,10 @@ jest.mock('../../../components/chart-editor/TransportControls', () => ({
 // pure and stays real.
 jest.mock('../../../lib/preview/clickTrack', () => ({
   ...jest.requireActual('../../../lib/preview/clickTrack'),
-  generateBeatClickTrackWav: jest.fn(async () => new Uint8Array([0])),
+  generateBeatClickTrackSamples: jest.fn(async () => ({
+    samples: new Float32Array(1),
+    sampleRate: 8000,
+  })),
 }));
 
 const audioManagers: {
