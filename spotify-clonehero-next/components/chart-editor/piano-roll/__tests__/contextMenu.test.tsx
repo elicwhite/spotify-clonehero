@@ -116,6 +116,8 @@ function stubAudioManager(): AudioManager {
     getTrackPcm: () => null,
     seekToChartTime: () => {},
     playChartTime: () => {},
+    pause: () => {},
+    getCurrentTempo: () => 1,
   } as unknown as AudioManager;
 }
 
@@ -655,5 +657,141 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     expect(
       screen.getByRole('button', {name: /Make this beat 1 \(rephase song\)/}),
     ).toBeDisabled();
+  });
+});
+
+describe('Tap tempo (tempo-lane menu → in-place tap tool)', () => {
+  /** Keydown with a controlled input timestamp: the fit reads
+   *  `event.timeStamp`, which jsdom stamps with "now" for every synthetic
+   *  event. */
+  function tapKey(timeStamp: number) {
+    const event = new KeyboardEvent('keydown', {
+      key: 'k',
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, 'timeStamp', {value: timeStamp});
+    act(() => {
+      window.dispatchEvent(event);
+    });
+  }
+
+  /** Four taps 400 ms apart: 150 BPM, and enough to enable Accept. The
+   *  fixture's own markers are 120 and 140, so 150 is unambiguous. */
+  function tapFourAt150() {
+    for (let i = 0; i < 4; i++) tapKey(1000 + i * 400);
+  }
+
+  function openTapTool(canvas: HTMLCanvasElement, x = TEMPO_LANE.x) {
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Tap tempo…'}).click();
+    });
+    return screen.getByTestId('tap-tempo-popover');
+  }
+
+  /** Lowest tempo-lane x that hits a drawn tempo marker, or -1. */
+  function findMarkerHitX(canvas: HTMLCanvasElement): number {
+    for (let x = 0; x <= 780; x += 1) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      if (screen.queryByText(/Delete tempo marker/)) return x;
+    }
+    return -1;
+  }
+
+  it('offers the tap tool on empty lane, on a marker and on a signature chip', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    expect(screen.getByText('Tap tempo…')).toBeInTheDocument();
+
+    const markerX = findMarkerHitX(canvas);
+    expect(markerX).toBeGreaterThanOrEqual(0);
+    expect(screen.getByText('Tap tempo…')).toBeInTheDocument();
+
+    // Place a bar line so the lane paints an authored signature chip.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+    });
+    const chipX = findTsChipHitX(canvas);
+    expect(chipX).toBeGreaterThan(0);
+    expect(screen.getByText('Tap tempo…')).toBeInTheDocument();
+  });
+
+  it('replaces the menu in place and survives a click on the canvas', async () => {
+    const canvas = await mountPanel();
+    openTapTool(canvas);
+
+    // The action list is gone; the tool took its place at the same anchor.
+    expect(screen.queryByText('Add tempo marker here')).not.toBeInTheDocument();
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: 400, y: 100});
+      fireAt(canvas, 'pointerup', {x: 400, y: 100});
+    });
+    expect(screen.getByTestId('tap-tempo-popover')).toBeInTheDocument();
+  });
+
+  it('closes the popover on any other tempo-lane item', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Add tempo marker here'}).click();
+    });
+    expect(screen.queryByText('Tap tempo…')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();
+  });
+
+  it('writes the tapped BPM at the anchor tick on Accept', async () => {
+    const canvas = await mountPanel();
+    const before = latest!.state.chartDoc!.parsedChart.tempos.map(t => t.tick);
+    openTapTool(canvas);
+    tapFourAt150();
+
+    act(() => {
+      screen.getByRole('button', {name: 'Accept'}).click();
+    });
+
+    const after = latest!.state.chartDoc!.parsedChart.tempos;
+    const tapped = after.filter(t => Math.abs(t.beatsPerMinute - 150) < 0.01);
+    expect(tapped).toHaveLength(1);
+    expect(before).not.toContain(tapped[0].tick);
+    expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();
+  });
+
+  it('leaves the tempo map alone on Cancel', async () => {
+    const canvas = await mountPanel();
+    const before = latest!.state.chartDoc!.parsedChart.tempos;
+    openTapTool(canvas);
+    tapFourAt150();
+
+    act(() => {
+      screen.getByRole('button', {name: 'Cancel'}).click();
+    });
+
+    expect(latest!.state.chartDoc!.parsedChart.tempos).toEqual(before);
+    expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();
+  });
+
+  it('closes on Escape without clearing the selection hotkey path', async () => {
+    const canvas = await mountPanel();
+    openTapTool(canvas);
+    tapFourAt150();
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+      );
+    });
+    expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();
   });
 });

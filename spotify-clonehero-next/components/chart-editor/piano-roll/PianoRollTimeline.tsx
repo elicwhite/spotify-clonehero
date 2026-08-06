@@ -125,6 +125,7 @@ import {availableTrackKeys} from '@/lib/chart-editor-core/trackInventory';
 import {toast} from 'sonner';
 import {useExecuteCommand} from '../hooks/useEditCommands';
 import {
+  AddBPMCommand,
   AddNoteCommand,
   AddTempoMarkerCommand,
   BatchCommand,
@@ -173,6 +174,7 @@ import {
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick} from './scene';
+import TapTempoPopover from './TapTempoPopover';
 import {
   laneAtY,
   marqueeBounds,
@@ -303,12 +305,29 @@ type PointerMode =
 /** One entry in a right-click context menu (§10). */
 type MenuItem = ContextMenuItem;
 
+/** What an open popover shows: the usual action list, or the tap-tempo tool,
+ *  which replaces the list in place so it keeps the right-click's position. */
+type MenuContent =
+  | {kind: 'items'; items: MenuItem[]}
+  | {
+      kind: 'tap';
+      anchorTick: number;
+      anchorMs: number;
+      anchorLabel: string;
+      /** Viewport coordinates of the gesture. The tap tool is several times
+       *  taller than an action list and the panel is a short
+       *  `overflow-hidden` box, so it anchors in the viewport instead of
+       *  inside the panel, which would clip it. */
+      clientX: number;
+      clientY: number;
+    };
+
 /** Open context-menu state (note lane or tempo lane, §7/§8/§10).
  *  `x`/`y` are canvas-local, matching the popover's `absolute` anchor. */
 interface MenuState {
   x: number;
   y: number;
-  items: MenuItem[];
+  content: MenuContent;
 }
 
 /** Inline text editor overlay state: a small positioned `<input>` rendered
@@ -449,11 +468,26 @@ export default function PianoRollTimeline({
   const stackedTopCanvasRef = useRef<HTMLCanvasElement>(null);
   const stackedRowsCanvasRef = useRef<HTMLCanvasElement>(null);
   const stackedWaveCanvasRef = useRef<HTMLCanvasElement>(null);
-  const stackedRowsScrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  /** The popover subtree, which the container's wheel listener must not eat:
+   *  a clipped context menu scrolls itself. */
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  /** Open an action-list popover, or nothing when there is nothing to offer. */
+  const openItemsMenu = useCallback(
+    (x: number, y: number, items: MenuItem[]) =>
+      setMenu(items.length ? {x, y, content: {kind: 'items', items}} : null),
+    [],
+  );
+  // A tap session holds up to minutes of work, so it is not dismissed by a
+  // stray pointerdown the way an action list is: Escape and Cancel close it.
+  const closeUnlessTapping = useCallback(
+    () => setMenu(open => (open?.content.kind === 'tap' ? open : null)),
+    [],
+  );
+  const tapMenu = menu?.content.kind === 'tap' ? menu.content : null;
 
   // -- Inline text editor: the lyrics row's "Edit lyric…"/"Add lyric…" and
   // the section strip's rename/add all open a small positioned <input> over
@@ -1717,36 +1751,39 @@ export default function PianoRollTimeline({
     [audioManager, viewportWidth],
   );
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLElement>) => {
-      const rawX = e.nativeEvent.offsetX;
-      if (applyWheel(rawX, e.deltaX, e.deltaY, e.shiftKey)) {
-        e.preventDefault();
-      }
-    },
-    [applyWheel],
-  );
-
+  // One non-passive capture listener on the container covers every canvas and
+  // the stacked rows' scroll box. React attaches `wheel` listeners passively,
+  // in both phases, so a React `onWheel`/`onWheelCapture` cannot
+  // `preventDefault()` — it logs "Unable to preventDefault inside passive
+  // event listener invocation" and the page scrolls anyway. Capture on the
+  // ancestor is also the only place that can prevent the default *before* the
+  // `overflow-auto` rows box consumes the wheel as a native scroll.
   useEffect(() => {
-    const viewport = stackedRowsScrollRef.current;
-    if (!viewport) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     const onWheel = (event: WheelEvent) => {
-      const rect = viewport.getBoundingClientRect();
+      // The context menu and the tap tool render inside this container and
+      // scroll themselves when `computeContextMenuPlacement` clips them, so an
+      // ancestor listener must leave their wheel events alone. `applyWheel`
+      // cannot make this call: it returns true (→ preventDefault) even with no
+      // scene.
+      const target = event.target;
+      if (target instanceof Node && overlayRef.current?.contains(target)) {
+        return;
+      }
+      const rect = container.getBoundingClientRect();
       const rawX = event.clientX - rect.left;
       if (!applyWheel(rawX, event.deltaX, event.deltaY, event.shiftKey)) return;
       event.preventDefault();
-      event.stopPropagation();
     };
-    viewport.addEventListener('wheel', onWheel, {
+    container.addEventListener('wheel', onWheel, {
       capture: true,
       passive: false,
     });
     return () =>
-      viewport.removeEventListener('wheel', onWheel, {
-        capture: true,
-      });
-  }, [applyWheel, stackedPianoRoll]);
+      container.removeEventListener('wheel', onWheel, {capture: true});
+  }, [applyWheel]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1769,8 +1806,9 @@ export default function PianoRollTimeline({
       if (stacked && point.rawX < STACKED_GUTTER_W) return;
       const x = point.x;
 
-      // Any new pointer interaction dismisses an open menu (§10).
-      setMenu(null);
+      // Any new pointer interaction dismisses an open menu (§10), except a tap
+      // session, which only Escape and its own Cancel close.
+      closeUnlessTapping();
 
       // Scrub zones (ruler + waveform) keep their existing behavior, except a
       // hit on a section flag (ruler only) which begins a potential drag
@@ -2981,13 +3019,13 @@ export default function PianoRollTimeline({
     (x: number, y: number) => {
       const currentScene = sceneRef.current;
       if (!currentScene) return;
-      setMenu({
+      openItemsMenu(
         x,
         y,
         // Every chartable track, not just the ones currently listed in the
         // stacked view — otherwise a track hidden via this same menu could
         // never be checked back on from here.
-        items: currentScene.allTrackKeys.map(key => {
+        currentScene.allTrackKeys.map(key => {
           const visible = editStateRef.current.visibleTrackKeys.has(
             trackKeyId(key),
           );
@@ -3002,9 +3040,9 @@ export default function PianoRollTimeline({
               }),
           };
         }),
-      });
+      );
     },
-    [dispatch],
+    [dispatch, openItemsMenu],
   );
 
   /**
@@ -3056,6 +3094,37 @@ export default function PianoRollTimeline({
         },
       ];
 
+      // Tap tempo replaces this menu's contents in place rather than opening
+      // its own surface, so the tool sits exactly where the right-click was
+      // and the anchor never has to travel across the app.
+      const tapItem = (anchorTick: number): MenuItem => ({
+        label: 'Tap tempo…',
+        disabled: !canStructuralNow,
+        onSelect: () => {
+          const {bar, beat} = barBeatAtTick(anchorTick, scene.beats);
+          const rect = containerRef.current?.getBoundingClientRect();
+          setMenu(open =>
+            open === null
+              ? open
+              : {
+                  ...open,
+                  content: {
+                    kind: 'tap',
+                    anchorTick,
+                    anchorMs: tickToMs(
+                      anchorTick,
+                      scene.timedTempos,
+                      scene.resolution,
+                    ),
+                    anchorLabel: `${bar}.${beat}`,
+                    clientX: (rect?.left ?? 0) + open.x,
+                    clientY: (rect?.top ?? 0) + open.y,
+                  },
+                },
+          );
+        },
+      });
+
       // An authored signature chip under the pointer is the only place the
       // remove item appears: the hit test reads the very chips the lane
       // painted, so it can never offer to remove a marker that isn't there.
@@ -3069,6 +3138,7 @@ export default function PianoRollTimeline({
         const chip = scene.timeSignatures[tsIndex];
         return [
           ...octaveItems,
+          tapItem(chip.tick),
           {
             label: `Remove time signature change (${chip.label})`,
             danger: true,
@@ -3083,6 +3153,7 @@ export default function PianoRollTimeline({
         const marker = scene.tempos[k];
         return [
           ...octaveItems,
+          tapItem(marker.tick),
           {
             label: `Delete tempo marker (${marker.bpm.toFixed(1)} BPM)`,
             disabled: k === 0, // marker 0 is the immovable song-start anchor
@@ -3099,7 +3170,12 @@ export default function PianoRollTimeline({
       }
       // Empty lane, at the nearest beat.
       const beatTick = nearestBeatTick(scene.beats, view, x);
-      if (beatTick === null) return octaveItems;
+      // With no beat grid there is nothing to anchor the structural items to,
+      // but a tap still has somewhere to land: the snapped tick under the
+      // pointer, the same fallback `downbeatTick` uses below.
+      if (beatTick === null) {
+        return [...octaveItems, tapItem(Math.max(0, snappedTickAt(x)))];
+      }
       const hasMarker = scene.tempos.some(t => t.tick === beatTick);
       const isDownbeat = editStateRef.current.downbeatFlags.downbeats.some(
         d => d.tick === beatTick,
@@ -3119,6 +3195,7 @@ export default function PianoRollTimeline({
       // way through rather than being mis-phased from the start.
       return [
         ...octaveItems,
+        tapItem(beatTick),
         {
           label: 'Make this beat 1 (rephase song)',
           disabled: isDownbeat,
@@ -3592,14 +3669,14 @@ export default function PianoRollTimeline({
         const items = loopItems.length
           ? loopItems
           : buildSectionMenu(x, y, scene);
-        setMenu(items.length ? {x: menuX, y: menuY, items} : null);
+        openItemsMenu(menuX, menuY, items);
         return;
       }
 
       // Lyrics row (Round 2 §2/§4/§5): directly under the ruler now.
       if (y > RULER_H && y < g.tempoTop) {
         const items = buildLyricsMenu(x, y, scene);
-        setMenu(items.length ? {x: menuX, y: menuY, items} : null);
+        openItemsMenu(menuX, menuY, items);
         return;
       }
 
@@ -3607,7 +3684,7 @@ export default function PianoRollTimeline({
       // add/delete markers, mark/unmark downbeats.
       if (y < g.laneTop) {
         const items = buildTempoMenu(x, scene);
-        setMenu(items.length ? {x: menuX, y: menuY, items} : null);
+        openItemsMenu(menuX, menuY, items);
         return;
       }
 
@@ -3617,7 +3694,7 @@ export default function PianoRollTimeline({
         // Open above the pointer so the list doesn't spill past the panel's
         // bottom edge.
         const top = Math.max(4, menuY - items.length * 30 - 6);
-        setMenu(items.length ? {x: menuX, y: top, items} : null);
+        openItemsMenu(menuX, top, items);
         return;
       }
 
@@ -3659,7 +3736,7 @@ export default function PianoRollTimeline({
         noteTrackKey ?? null,
       );
       if (insert) items.push(insert);
-      setMenu(items.length ? {x: menuX, y: menuY, items} : null);
+      openItemsMenu(menuX, menuY, items);
     },
     [
       buildInsertNoteItem,
@@ -3671,6 +3748,7 @@ export default function PianoRollTimeline({
       buildTempoMenu,
       capabilities,
       laneGeometry,
+      openItemsMenu,
       openStackedViewMenu,
       panelGeometry,
       pickAt,
@@ -3762,8 +3840,14 @@ export default function PianoRollTimeline({
   }, [menu, cancelInFlightGesture]);
 
   // The outside-click half of dismissal is the plain shared one; only Escape
-  // needs this panel's tier logic above.
-  useDismissOnOutsidePointerDown(menu !== null, closeMenu);
+  // needs this panel's tier logic above. A tap session is exempt: it can hold
+  // a minute of tapping, and `useDismissOnOutsidePointerDown` arms a
+  // `{once: true}` listener behind a timer, so a rule that depended on the tap
+  // count would re-arm click-away dismissal every time Reset changed it.
+  useDismissOnOutsidePointerDown(
+    menu !== null && menu.content.kind !== 'tap',
+    closeMenu,
+  );
 
   // -- Structural tempo correction control (61-7) ----------------------------
   // The preview state is DERIVED from the one store: a structural candidate is
@@ -3917,7 +4001,6 @@ export default function PianoRollTimeline({
               data-piano-roll-region="top"
               className="block w-full shrink-0"
               style={{height: stackedSharedHeight}}
-              onWheel={handleWheel}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={endPointer}
@@ -3925,10 +4008,7 @@ export default function PianoRollTimeline({
               onPointerLeave={handlePointerLeave}
               onContextMenu={handleContextMenu}
             />
-            <div
-              ref={stackedRowsScrollRef}
-              className="no-scrollbar min-h-0 flex-1 overflow-auto"
-              onWheelCapture={handleWheel}>
+            <div className="no-scrollbar min-h-0 flex-1 overflow-auto">
               <canvas
                 ref={stackedRowsCanvasRef}
                 data-piano-roll-region="rows"
@@ -3947,7 +4027,6 @@ export default function PianoRollTimeline({
               data-piano-roll-region="waveform"
               className="block w-full shrink-0"
               style={{height: WAVE_ROW_H}}
-              onWheel={handleWheel}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={endPointer}
@@ -3961,7 +4040,6 @@ export default function PianoRollTimeline({
           <canvas
             ref={canvasRef}
             className="block w-full"
-            onWheel={handleWheel}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={endPointer}
@@ -4005,14 +4083,43 @@ export default function PianoRollTimeline({
             </button>
           </div>
         )}
-        {menu && (
-          <ContextMenuPopover
-            x={menu.x}
-            y={menu.y}
-            items={menu.items}
-            onAfterSelect={closeMenu}
-          />
-        )}
+        {/* `display: contents` keeps the popover's absolute positioning
+            anchored to the container while giving the wheel listener above a
+            subtree to bail on. */}
+        <div ref={overlayRef} className="contents">
+          {menu && (
+            <ContextMenuPopover
+              x={tapMenu ? tapMenu.clientX : menu.x}
+              y={tapMenu ? tapMenu.clientY : menu.y}
+              anchor={tapMenu ? 'fixed' : 'absolute'}
+              items={
+                menu.content.kind === 'items' ? menu.content.items : undefined
+              }
+              // "Tap tempo…" swaps the popover's contents instead of running an
+              // action, so it is the one item that must not close the popover.
+              onAfterSelect={closeUnlessTapping}>
+              {tapMenu ? (
+                <TapTempoPopover
+                  anchorTick={tapMenu.anchorTick}
+                  anchorMs={tapMenu.anchorMs}
+                  anchorLabel={tapMenu.anchorLabel}
+                  audioManager={audioManager}
+                  onAccept={bpm => {
+                    executeCommand(
+                      new AddBPMCommand(
+                        tapMenu.anchorTick,
+                        bpm,
+                        editStateRef.current.tempoGlueMode,
+                      ),
+                    );
+                    setMenu(null);
+                  }}
+                  onCancel={closeMenu}
+                />
+              ) : undefined}
+            </ContextMenuPopover>
+          )}
+        </div>
         {/* Lyrics row inline text editor (Round 2 §2): "Edit lyric…" / "Add
             lyric…" position a small `<input>` over the canvas rather than a
             modal. Enter commits; Escape cancels; blur also commits (so the

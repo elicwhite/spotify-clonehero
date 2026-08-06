@@ -77,7 +77,7 @@ export interface ContextMenuPopoverProps {
    *  `'fixed'` positions in the viewport. Default `'absolute'`. */
   anchor?: 'absolute' | 'fixed';
   minWidthPx?: number;
-  items?: ContextMenuItem[];
+  items?: ContextMenuItem[] | undefined;
   /**
    * Rendered instead of `items` — for a step that replaces the list in the
    * same popover, such as an inline confirm.
