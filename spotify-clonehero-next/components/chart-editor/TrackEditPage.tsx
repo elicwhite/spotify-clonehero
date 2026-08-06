@@ -816,7 +816,6 @@ function TrackEditEditor({
         artistName={projectMeta?.artist}
         charterName={projectMeta?.charter}
         onMetadataChange={handleMetadataChange}
-        dirty={state.dirty}
         getChartText={chartPackage.getChartText}
         getAudioSources={getAudioSources}
         chartAssist={chartAssist}

@@ -730,7 +730,6 @@ export default function EditorApp({
       artistName={chart.metadata.artist || undefined}
       charterName={chart.metadata.charter || undefined}
       onMetadataChange={handleMetadataChange}
-      dirty={state.dirty}
       getChartFile={getChartFile}
       sourceChartFormat={packageSourceFormat ? chart.format : undefined}
       chartFormatSelectable

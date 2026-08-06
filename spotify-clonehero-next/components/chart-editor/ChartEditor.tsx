@@ -91,8 +91,6 @@ export interface ChartEditorProps {
   onMetadataChange?:
     | ((meta: SongIniMetadataValue) => void | Promise<void>)
     | undefined;
-  /** Whether the chart has unsaved changes. */
-  dirty?: boolean | undefined;
   /**
    * Hide the editor's built-in top bar (song info + Export). Pages that
    * already render their own header above the editor (e.g. add-lyrics)
@@ -203,13 +201,11 @@ function SongIdentity({
   songName,
   artistName,
   charterName,
-  dirty,
   children,
 }: {
   songName: string;
   artistName?: string | undefined;
   charterName?: string | undefined;
-  dirty?: boolean | undefined;
   children?: ReactNode;
 }) {
   return (
@@ -223,9 +219,6 @@ function SongIdentity({
         {charterName && `Charted by ${charterName}`}
       </span>
       {children}
-      {dirty && (
-        <span className="text-[10px] text-amber-400 shrink-0">Unsaved</span>
-      )}
     </div>
   );
 }
@@ -246,7 +239,6 @@ export default function ChartEditor({
   artistName,
   charterName,
   onMetadataChange,
-  dirty,
   hideHeader,
   headerExtra,
   leftPanelChildren,
@@ -348,8 +340,7 @@ export default function ChartEditor({
               <SongIdentity
                 songName={songName}
                 artistName={artistName}
-                charterName={charterName}
-                dirty={dirty}>
+                charterName={charterName}>
                 <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
               </SongIdentity>
             </button>
@@ -359,7 +350,6 @@ export default function ChartEditor({
                 songName={songName}
                 artistName={artistName}
                 charterName={charterName}
-                dirty={dirty}
               />
             </div>
           )}

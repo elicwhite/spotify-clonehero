@@ -857,7 +857,6 @@ function TempoEditor({
         durationSeconds={durationSeconds}
         sections={chart.sections}
         songName={`${result.name} (retempo)`}
-        dirty={state.dirty}
         // Only the leading-silence card: this page IS tempo-map generation,
         // so a Tempo map card here would be a second door to what the page
         // already does, and it is not project-backed, so the drum/lyrics

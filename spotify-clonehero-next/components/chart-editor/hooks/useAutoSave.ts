@@ -1,70 +1,52 @@
 'use client';
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 import {useChartEditorContext} from '../ChartEditorContext';
 
-/** Default auto-save interval in milliseconds. */
-const DEFAULT_INTERVAL_MS = 30_000;
-
-/** Configuration for auto-save behavior. */
-export interface AutoSaveConfig {
-  /** Interval between auto-save attempts in milliseconds. Defaults to 30s. */
-  intervalMs?: number;
-}
-
 /**
- * Auto-saves the chart periodically and on page visibility changes / unload.
+ * Saves the chart as soon as an edit lands, and again on tab hide / unload.
+ *
+ * There is no interval and no debounce: an edit is a discrete command, so the
+ * document goes dirty once per edit rather than once per animation frame, and
+ * writing immediately is what lets the editor have no unsaved state to warn
+ * about. Concurrent saves are coalesced rather than queued: a save that lands
+ * while one is in flight is picked up by the effect re-running once the first
+ * finishes, so a burst of edits collapses into at most one follow-up write.
  *
  * The actual save logic is provided by the caller via the `saveFn` callback,
  * keeping this hook independent of any specific storage backend (OPFS, etc.).
  *
  * @param saveFn - The function to call when saving. Should persist the chart
  *                 and any other page-specific data. Must return a Promise.
- *                 Pass `null` to disable auto-save.
- * @param config - Optional configuration for auto-save behavior.
+ *                 Pass `null` to disable saving.
  * @returns A `save` function for manual triggering (Ctrl+S).
  */
-export function useAutoSave(
-  saveFn: (() => Promise<void>) | null,
-  config?: AutoSaveConfig,
-) {
+export function useAutoSave(saveFn: (() => Promise<void>) | null) {
   const {state, dispatch} = useChartEditorContext();
   const savingRef = useRef(false);
-  // lastSaveTime is state (not a ref) because it's exposed in the
-  // returned object and consumers use it to render "Last saved 3s
-  // ago"-style UI — that UI needs to update when the timestamp
-  // changes, which only happens if the value flows through React state.
-  const [lastSaveTime, setLastSaveTime] = useState<number>(0);
-  const intervalMs = config?.intervalMs ?? DEFAULT_INTERVAL_MS;
 
   const save = useCallback(async () => {
     if (!saveFn || !state.chartDoc || savingRef.current) return;
-    if (!state.dirty && lastSaveTime > 0) return;
+    if (!state.dirty) return;
 
     savingRef.current = true;
     try {
       await saveFn();
-      setLastSaveTime(Date.now());
       dispatch({type: 'MARK_SAVED'});
     } catch (err) {
-      console.error('Auto-save failed:', err);
+      console.error('Save failed:', err);
     } finally {
       savingRef.current = false;
     }
-  }, [saveFn, state.chartDoc, state.dirty, lastSaveTime, dispatch]);
+  }, [saveFn, state.chartDoc, state.dirty, dispatch]);
 
-  // Periodic auto-save timer
+  // Save the moment the document goes dirty. `savingRef` inside `save` makes
+  // a re-entrant call a no-op, and this effect re-runs when that save clears
+  // `dirty`, so edits made mid-save are written by the next pass.
   useEffect(() => {
-    if (!saveFn) return;
-
-    const interval = setInterval(() => {
-      if (state.dirty) {
-        save();
-      }
-    }, intervalMs);
-
-    return () => clearInterval(interval);
-  }, [saveFn, state.dirty, save, intervalMs]);
+    if (!saveFn || !state.dirty) return;
+    void save();
+  }, [saveFn, state.dirty, save]);
 
   // Save on visibility change (tab switch)
   useEffect(() => {
@@ -87,9 +69,10 @@ export function useAutoSave(
 
     function handleBeforeUnload() {
       if (state.dirty && state.chartDoc) {
-        // Synchronous save attempt via sendBeacon is not available for OPFS.
-        // Best effort: start the async save. The page may close before it completes
-        // but the periodic auto-save should have already covered most changes.
+        // A synchronous save is not available for OPFS, so this is best
+        // effort. It rarely has anything to do: an edit is written as it
+        // lands, so the only window this covers is a close during the one
+        // write already in flight.
         save();
       }
     }
@@ -98,8 +81,5 @@ export function useAutoSave(
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [saveFn, state.dirty, state.chartDoc, save]);
 
-  return {
-    save,
-    lastSaveTime,
-  };
+  return {save};
 }

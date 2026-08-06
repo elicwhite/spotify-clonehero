@@ -95,4 +95,4 @@ export {
 // Hooks
 export {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 export {useEditorKeyboard} from './hooks/useEditorKeyboard';
-export {useAutoSave, type AutoSaveConfig} from './hooks/useAutoSave';
+export {useAutoSave} from './hooks/useAutoSave';

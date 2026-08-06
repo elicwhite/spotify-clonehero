@@ -518,7 +518,6 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
         songName={candidate.meta.name}
         artistName={candidate.meta.artist}
         charterName={candidate.meta.charter}
-        dirty={state.dirty}
         // This route is matrix-driven and lands with four tracks visible,
         // so the piano roll stacks one row per visible track rather than
         // following `activeScope`'s single track.
