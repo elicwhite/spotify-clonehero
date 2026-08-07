@@ -19,26 +19,10 @@ import {TrustLine} from '@/components/landing/TrustLine';
 
 import {EditPassCanvas} from './EditPassCanvas';
 import {
-  COMPARISON_FAMILY_ROWS,
+  COMPARISON_ROWS,
   DATA_DISCLAIMER,
-  METRICS,
-  MODEL_CHECKPOINT,
+  GENERATED_TEMPO_MAP_ROWS,
 } from './metrics';
-
-/**
- * An ADTOF comparison cell awaiting its figure. A fresh measurement on the
- * same songs was requested (drum-to-chart
- * docs/requests/2026-08-06-landing-page-comparison-data.md); the cells fill
- * in when that run lands.
- */
-function PendingCell() {
-  return (
-    <span className="font-mono text-muted-foreground">
-      <span aria-hidden="true">—</span>
-      <span className="sr-only">pending measurement</span>
-    </span>
-  );
-}
 
 /** A named third-party project, linked from the copy that mentions it. */
 function ExternalLink({href, children}: {href: string; children: ReactNode}) {
@@ -177,89 +161,118 @@ export function DrumTranscriptionLanding({toolEntry}: {toolEntry: ReactNode}) {
 
         <LandingSection
           title="How many edits"
-          intro="Edits per note counts the work a draft leaves you: every note you add, delete, move to another lane, or move to another position, divided by the number of notes in the finished chart. Lower is fewer edits. Hover or focus a figure to see the script behind it.">
-          <div className="space-y-10">
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">
-                By part of the kit
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[30rem] border-collapse text-sm">
-                  <caption className="sr-only">
-                    Edits per note by part of the kit for this tool, ADTOF, and
-                    Octave. ADTOF cells are pending measurement.
-                  </caption>
-                  <thead>
-                    <tr className="border-b border-border">
+          intro="Edits per 100 notes counts the work a draft leaves you: every note you add, delete, move to another lane, or move to another position. Lower is fewer edits. Hover or focus a figure to see the measurement behind it.">
+          <div className="space-y-3">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              This tool can start with an existing tempo map or make one from
+              the audio.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[30rem] border-collapse text-sm">
+                <caption className="sr-only">
+                  Edits per 100 notes for this tool, ADTOF, and Octave when
+                  starting with an existing tempo map or starting from audio.
+                </caption>
+                <thead>
+                  <tr className="border-b border-border">
+                    <th
+                      scope="col"
+                      className="py-2 pr-4 text-left font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
+                      Part of the kit
+                    </th>
+                    {['This tool', 'ADTOF', 'Octave'].map(head => (
                       <th
+                        key={head}
                         scope="col"
-                        className="py-2 pr-4 text-left font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
-                        Part of the kit
+                        className="py-2 pl-4 text-right font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
+                        {head}
                       </th>
-                      {['This tool', 'ADTOF', 'Octave'].map(head => (
-                        <th
-                          key={head}
-                          scope="col"
-                          className="py-2 pl-4 text-right font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
-                          {head}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-border/60">
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="border-b border-border/60">
+                  <tr className="border-b border-border/60 bg-muted/40">
+                    <th
+                      scope="rowgroup"
+                      colSpan={4}
+                      className="py-2 text-left text-xs font-medium text-foreground">
+                      With an existing tempo map
+                    </th>
+                  </tr>
+                  {COMPARISON_ROWS.map((row, index) => (
+                    <tr
+                      key={row.family}
+                      className="border-b border-border/60 last:border-b-0">
                       <th
                         scope="row"
-                        className="py-2 pr-4 text-left font-normal text-foreground">
-                        Whole chart
+                        className={
+                          index === 0
+                            ? 'py-2 pr-4 text-left font-medium text-foreground'
+                            : 'py-2 pr-4 text-left font-normal text-muted-foreground'
+                        }>
+                        {row.family}
                       </th>
                       <td className="py-2 pl-4 text-right">
-                        <StatCell metric={METRICS.comparisonOverallOurs} />
+                        <StatCell metric={row.ours} />
                       </td>
                       <td className="py-2 pl-4 text-right">
-                        <PendingCell />
+                        <StatCell metric={row.adtof} />
                       </td>
                       <td className="py-2 pl-4 text-right">
-                        <StatCell metric={METRICS.comparisonOverallOctave} />
+                        <StatCell metric={row.octave} />
                       </td>
                     </tr>
-                    {COMPARISON_FAMILY_ROWS.map(row => (
-                      <tr
-                        key={row.family}
-                        className="border-b border-border/60 last:border-b-0">
-                        <th
-                          scope="row"
-                          className="py-2 pr-4 text-left font-normal text-muted-foreground">
-                          {row.family}
-                        </th>
-                        <td className="py-2 pl-4 text-right font-mono tabular-nums text-foreground">
-                          {row.ours}
-                        </td>
-                        <td className="py-2 pl-4 text-right">
-                          <PendingCell />
-                        </td>
-                        <td className="py-2 pl-4 text-right font-mono tabular-nums text-foreground">
-                          {row.octave}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground">
-                <ExternalLink href="https://github.com/mzehren/adtof">
-                  ADTOF
-                </ExternalLink>{' '}
-                is a leading open-source drum transcription model, but doesn't
-                distinguish toms and cymbals.{' '}
-                <ExternalLink href="https://octavestudio.tools/">
-                  Octave
-                </ExternalLink>{' '}
-                is a published audio-to-chart system.
-              </p>
-            </section>
-
+                  ))}
+                </tbody>
+                <tbody>
+                  <tr className="border-b border-border/60 bg-muted/40">
+                    <th
+                      scope="rowgroup"
+                      colSpan={4}
+                      className="py-2 text-left text-xs font-medium text-foreground">
+                      Starting from audio
+                    </th>
+                  </tr>
+                  {GENERATED_TEMPO_MAP_ROWS.map((row, index) => (
+                    <tr
+                      key={row.family}
+                      className="border-b border-border/60 last:border-b-0">
+                      <th
+                        scope="row"
+                        className={
+                          index === 0
+                            ? 'py-2 pr-4 text-left font-medium text-foreground'
+                            : 'py-2 pr-4 text-left font-normal text-muted-foreground'
+                        }>
+                        {row.family}
+                      </th>
+                      <td className="py-2 pl-4 text-right">
+                        <StatCell metric={row.ours} />
+                      </td>
+                      <td className="py-2 pl-4 text-right">
+                        <StatCell metric={row.adtof} />
+                      </td>
+                      <td className="py-2 pl-4 text-right">
+                        <StatCell metric={row.octave} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground">
+              <ExternalLink href="https://github.com/mzehren/adtof">
+                ADTOF
+              </ExternalLink>{' '}
+              predicts five drum classes against this tool&rsquo;s eight-lane
+              output. It doesn&rsquo;t identify which tom or which cymbal.{' '}
+              <ExternalLink href="https://octavestudio.tools/">
+                Octave
+              </ExternalLink>{' '}
+              is a published audio-to-chart system.
+            </p>
+
+            <p className="max-w-2xl pt-7 font-mono text-[11px] leading-relaxed text-muted-foreground">
               {DATA_DISCLAIMER}
             </p>
           </div>

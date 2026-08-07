@@ -140,9 +140,7 @@ const PREDICTED_SYNCTRACK: Synctrack = {
  *  browser's file picker does. The input itself is visually hidden (a styled
  *  "Browse Files" button opens it), so it is reached by type. */
 function uploadAudio(container: HTMLElement): void {
-  fireEvent.click(
-    screen.getByRole('button', {name: /pick a song file/i}),
-  );
+  fireEvent.click(screen.getByRole('button', {name: /pick a song file/i}));
   const input = container.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error('no file input rendered');
   const file = new File([new Uint8Array([1, 2, 3, 4])], 'song.mp3', {
@@ -169,6 +167,13 @@ describe('/drum-transcription upload flow', () => {
     await screen.findByRole('button', {
       name: /pick a song file/i,
     });
+    expect(
+      screen.getByText(
+        /predicts five drum classes against this tool’s eight-lane output/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('With an existing tempo map')).toBeInTheDocument();
+    expect(screen.getByText('Starting from audio')).toBeInTheDocument();
 
     uploadAudio(container);
 
