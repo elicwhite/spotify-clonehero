@@ -219,8 +219,11 @@ describe('SongMetadataDialog', () => {
     const {onSave} = renderDialog(drumChart(), {}, 'stamp-now');
 
     fireEvent.keyDown(screen.getByLabelText('Pro Drums'), {key: 'Enter'});
+    // Awaited outside the `act` below: `findBy*` polls with act disabled, so
+    // the listbox's own mount-time updates would warn if it ran inside one.
+    const option = await screen.findByRole('option', {name: '4'});
     await act(async () => {
-      fireEvent.click(await screen.findByRole('option', {name: '4'}));
+      fireEvent.click(option);
     });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', {name: 'Save'}));

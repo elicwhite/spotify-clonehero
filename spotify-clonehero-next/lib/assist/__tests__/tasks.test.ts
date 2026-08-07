@@ -760,5 +760,7 @@ describe('generateTempoMapTask', () => {
 
     const result = await runPromise;
     expect(result.synctrack).toEqual(expected);
-  });
+    // Runs the real KS-warp/REACH solve twice (once for `expected`, once
+    // through the task), which takes several seconds on a real fixture.
+  }, 60_000);
 });

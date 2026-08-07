@@ -18,6 +18,7 @@
 import '@testing-library/jest-dom';
 import {useEffect, useRef} from 'react';
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -224,10 +225,21 @@ function renderChartAssist(
   );
 }
 
+/**
+ * A card's action handler awaits `prepareInput()` before it reaches the
+ * runner, so the run's first state update lands a microtask *after* the
+ * click — outside the `act()` that `fireEvent` wraps around it. Flushing
+ * that turn inside `act` keeps the update in one.
+ */
+async function settle() {
+  await act(async () => {});
+}
+
 /** Clicks a card's action and confirms any confirmation dialog it raises. */
-function clickAndConfirm(name: RegExp, confirmName: RegExp) {
+async function clickAndConfirm(name: RegExp, confirmName: RegExp) {
   fireEvent.click(screen.getByRole('button', {name}));
   fireEvent.click(screen.getByRole('button', {name: confirmName}));
+  await settle();
 }
 
 beforeEach(() => {
@@ -438,12 +450,13 @@ describe('ChartAssist leading-silence recommendation', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('adding leading silence does not flag the drum transcription stale', () => {
+  it('adding leading silence does not flag the drum transcription stale', async () => {
     // The whole grid shifts by one fixed pad and the drums shift with it, so
     // nothing landed on a different beat — flagging staleness here would be
     // a false alarm on a routine action.
     renderChartAssist(makeDocWithFreshProvenance());
     fireEvent.click(screen.getByRole('button', {name: /add leading silence/i}));
+    await settle();
     expect(
       screen.queryByText(/tempo grid changed after transcription/i),
     ).not.toBeInTheDocument();
@@ -602,7 +615,7 @@ describe('ChartAssist inline run', () => {
   it('Run expands the Drum transcription card into a step list, keeps siblings interactive, applies the result, and clears staleness', async () => {
     renderChartAssist(makeDocWithFreshProvenance());
 
-    clickAndConfirm(/^run$/i, /^run$/i);
+    await clickAndConfirm(/^run$/i, /^run$/i);
 
     await waitFor(() =>
       expect(
@@ -620,16 +633,18 @@ describe('ChartAssist inline run', () => {
 
     expect(capturedTranscribe).not.toBeNull();
     const resolution = 480;
-    capturedTranscribe!.resolve({
-      notes: [
-        {tick: 0, type: noteTypes.kick},
-        {tick: 480, type: noteTypes.redDrum},
-      ],
-      sync: {
-        resolution,
-        tempos: [{tick: 0, beatsPerMinute: 150}],
-        timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
-      },
+    await act(async () => {
+      capturedTranscribe!.resolve({
+        notes: [
+          {tick: 0, type: noteTypes.kick},
+          {tick: 480, type: noteTypes.redDrum},
+        ],
+        sync: {
+          resolution,
+          tempos: [{tick: 0, beatsPerMinute: 150}],
+          timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
+        },
+      });
     });
 
     await waitFor(() =>
@@ -656,20 +671,23 @@ describe('ChartAssist inline run', () => {
     });
 
     fireEvent.click(screen.getByRole('button', {name: /generate tempo map/i}));
+    await settle();
 
     await waitFor(() => expect(capturedTempo).not.toBeNull());
     await waitFor(() =>
       expect(screen.getByText(/building the tempo map/i)).toBeInTheDocument(),
     );
 
-    capturedTempo!.resolve({
-      synctrack: {
-        origin_ms: 0,
-        tempos: [{ms: 0, bpm: 128}],
-        timeSignatures: [{ms: 0, numerator: 4, denominator: 4}],
-      },
-      meterStats: null,
-      drumOnsetOffsetMs: null,
+    await act(async () => {
+      capturedTempo!.resolve({
+        synctrack: {
+          origin_ms: 0,
+          tempos: [{ms: 0, bpm: 128}],
+          timeSignatures: [{ms: 0, numerator: 4, denominator: 4}],
+        },
+        meterStats: null,
+        drumOnsetOffsetMs: null,
+      });
     });
 
     // Tempo edit invalidates the (fresh) drum transcription, per Design C —
@@ -704,15 +722,17 @@ describe('ChartAssist inline run', () => {
       screen.queryByText(/tempo grid changed after transcription/i),
     ).not.toBeInTheDocument();
 
-    clickAndConfirm(/^run$/i, /^run$/i);
+    await clickAndConfirm(/^run$/i, /^run$/i);
     await waitFor(() => expect(capturedTranscribe).not.toBeNull());
-    capturedTranscribe!.resolve({
-      notes: [{tick: 0, type: noteTypes.kick}],
-      sync: {
-        resolution: 480,
-        tempos: [{tick: 0, beatsPerMinute: 150}],
-        timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
-      },
+    await act(async () => {
+      capturedTranscribe!.resolve({
+        notes: [{tick: 0, type: noteTypes.kick}],
+        sync: {
+          resolution: 480,
+          tempos: [{tick: 0, beatsPerMinute: 150}],
+          timeSignatures: [{tick: 0, numerator: 4, denominator: 4}],
+        },
+      });
     });
     await waitFor(() =>
       expect(
@@ -729,7 +749,7 @@ describe('ChartAssist inline run', () => {
   it('cancel shows "Cancelled." inline and applies nothing', async () => {
     renderChartAssist(makeDocWithFreshProvenance());
 
-    clickAndConfirm(/^run$/i, /^run$/i);
+    await clickAndConfirm(/^run$/i, /^run$/i);
     await waitFor(() =>
       expect(
         screen.getByRole('list', {name: /progress steps/i}),

@@ -56,8 +56,16 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+/**
+ * Opening the dialog kicks off the issue-check effect, which assembles and
+ * scans the chart across several awaits before calling `setIssueCheck`.
+ * Settling it here keeps that update inside an `act()` instead of landing on
+ * whatever the test happens to be awaiting next.
+ */
 async function openDialog() {
-  fireEvent.click(screen.getByRole('button', {name: /export/i}));
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', {name: /export/i}));
+  });
 }
 
 test('drops the metadata inputs and the format dropdown', async () => {
