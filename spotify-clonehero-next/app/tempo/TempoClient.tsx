@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /tempo — browser tempo & time-signature mapper.
+ * /tempo — browser tempo mapper.
  *
  * Pick a standalone audio file or an existing chart (folder / .sng / .zip).
  * The page isolates the drums, finds beats on the full mix and the drum stem,
@@ -424,9 +424,9 @@ export default function TempoClient({
           <Card className="w-full">
             <CardHeader>
               <CardDescription>
-                Detects a song’s tempo and time signature right in your browser.
-                Start from a song file to get a fresh chart, or from an existing
-                chart to rebuild its tempo map without moving any notes.
+                Builds a tempo map and beat grid in your browser. Start from a
+                song file to get a fresh chart, or from an existing chart to
+                rebuild its tempo map without moving any notes.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

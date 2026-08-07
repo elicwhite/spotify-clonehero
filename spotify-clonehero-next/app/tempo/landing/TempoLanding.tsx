@@ -13,10 +13,25 @@ import {Button} from '@/components/ui/button';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import {Eyebrow} from '@/components/landing/Eyebrow';
 import {LandingSection} from '@/components/landing/Section';
+import {StatCell} from '@/components/landing/StatChip';
 import {StepFlow} from '@/components/landing/StepFlow';
 import {TrustLine} from '@/components/landing/TrustLine';
 
 import {BeatGridCanvas} from './BeatGridCanvas';
+import {TEMPO_COMPARISON_DISCLAIMER, TEMPO_COMPARISON_ROWS} from './metrics';
+
+/** A named third-party project, linked from the copy that mentions it. */
+function ExternalLink({href, children}: {href: string; children: ReactNode}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="text-foreground underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      {children}
+    </a>
+  );
+}
 
 const STEPS: {Icon: LucideIcon; label: string; desc: string}[] = [
   {
@@ -97,6 +112,66 @@ export function TempoLanding({toolEntry}: {toolEntry: ReactNode}) {
           title="When it works, and when it doesn't"
           intro="A song that stays in 4/4 usually gets a map you can work with, even when the tempo speeds up, slows down, or drifts. A song that changes meter or sits in odd time should be tempo mapped by hand.">
           {null}
+        </LandingSection>
+
+        <LandingSection
+          title="How it scores"
+          intro="Each generated tempo map was checked against the tempo map in the original chart.">
+          <div className="space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[32rem] border-collapse text-sm">
+                <caption className="sr-only">
+                  Tempo-map measurements for this tool and ConvertHero on 367
+                  songs.
+                </caption>
+                <thead>
+                  <tr className="border-b border-border">
+                    <th
+                      scope="col"
+                      className="py-2 pr-4 text-left font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
+                      Measurement
+                    </th>
+                    {['This tool', 'ConvertHero'].map(head => (
+                      <th
+                        key={head}
+                        scope="col"
+                        className="py-2 pl-4 text-right font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
+                        {head}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {TEMPO_COMPARISON_ROWS.map(row => (
+                    <tr
+                      key={row.measurement}
+                      className="border-b border-border/60 last:border-b-0">
+                      <th
+                        scope="row"
+                        className="py-2 pr-4 text-left font-normal text-foreground">
+                        {row.measurement}
+                      </th>
+                      <td className="py-2 pl-4 text-right">
+                        <StatCell metric={row.ours} />
+                      </td>
+                      <td className="py-2 pl-4 text-right">
+                        <StatCell metric={row.convertHero} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground">
+              <ExternalLink href="https://github.com/Dirtmigurt/ConvertHero">
+                ConvertHero
+              </ExternalLink>{' '}
+              is an open-source automatic chart tempo-mapping tool.
+            </p>
+            <p className="max-w-2xl pt-7 font-mono text-[11px] leading-relaxed text-muted-foreground">
+              {TEMPO_COMPARISON_DISCLAIMER}
+            </p>
+          </div>
         </LandingSection>
 
         <LandingSection

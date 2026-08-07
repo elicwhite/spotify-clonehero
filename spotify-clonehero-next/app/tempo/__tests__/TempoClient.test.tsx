@@ -246,6 +246,14 @@ describe('TempoClient', () => {
     await waitFor(() =>
       expect(screen.getByText('Pick a song file')).toBeInTheDocument(),
     );
+    expect(screen.getByText('How it scores')).toBeInTheDocument();
+    expect(screen.getByRole('link', {name: 'ConvertHero'})).toHaveAttribute(
+      'href',
+      'https://github.com/Dirtmigurt/ConvertHero',
+    );
+    expect(
+      screen.getByText('Downbeats correctly identified within 30 ms'),
+    ).toBeInTheDocument();
     await pickAudioFile();
 
     // The engine's own planned steps for generate-tempo-map, not any
