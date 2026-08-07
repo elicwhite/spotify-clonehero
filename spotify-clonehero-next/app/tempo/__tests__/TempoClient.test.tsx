@@ -221,9 +221,12 @@ async function pickAudioFile(name = 'song.mp3') {
   const file = new File([new Uint8Array([1, 2, 3, 4])], name, {
     type: 'audio/mpeg',
   });
+  // The picker is two-step: the audio button reveals the file input.
+  fireEvent.click(screen.getByRole('button', {name: /pick a song file/i}));
   const input = document.querySelector(
     'input[type="file"]',
-  ) as HTMLInputElement;
+  ) as HTMLInputElement | null;
+  if (!input) throw new Error('no file input rendered');
   await act(async () => {
     fireEvent.change(input, {target: {files: [file]}});
   });
@@ -285,7 +288,6 @@ describe('TempoClient', () => {
   });
 
   it('lands in the results editor on success, with the drum stem picked up as a stem', async () => {
-    const bytes = new Uint8Array([1, 2, 3, 4]);
     // Nothing is seeded into the stem cache: the drum stem the results view
     // plays is the one the run itself returned, not a main-thread re-read.
     const drums = {
@@ -298,13 +300,7 @@ describe('TempoClient', () => {
       expect(screen.getByText('Pick a song file')).toBeInTheDocument(),
     );
 
-    const file = new File([bytes], 'song.mp3', {type: 'audio/mpeg'});
-    const input = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(input, {target: {files: [file]}});
-    });
+    await pickAudioFile();
 
     await waitFor(() => expect(fakeWorker).not.toBeNull());
     fakeWorker!.emit({type: 'result', result: fakePipelineResult(drums)});

@@ -141,7 +141,7 @@ const PREDICTED_SYNCTRACK: Synctrack = {
  *  "Browse Files" button opens it), so it is reached by type. */
 function uploadAudio(container: HTMLElement): void {
   fireEvent.click(
-    screen.getByRole('button', {name: /just a song \(create a new chart\)/i}),
+    screen.getByRole('button', {name: /pick a song file/i}),
   );
   const input = container.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error('no file input rendered');
@@ -167,7 +167,7 @@ describe('/drum-transcription upload flow', () => {
   it('renders the engine step list and opens the editor when the run finishes', async () => {
     const {container} = render(<DrumTranscriptionClient />);
     await screen.findByRole('button', {
-      name: /just a song \(create a new chart\)/i,
+      name: /pick a song file/i,
     });
 
     uploadAudio(container);
@@ -187,7 +187,7 @@ describe('/drum-transcription upload flow', () => {
   it('names the stages it shares with a resumed run identically', async () => {
     const {container} = render(<DrumTranscriptionClient />);
     await screen.findByRole('button', {
-      name: /just a song \(create a new chart\)/i,
+      name: /pick a song file/i,
     });
 
     uploadAudio(container);
@@ -226,7 +226,7 @@ describe('/drum-transcription upload flow', () => {
 
     const {container} = render(<DrumTranscriptionClient />);
     await screen.findByRole('button', {
-      name: /just a song \(create a new chart\)/i,
+      name: /pick a song file/i,
     });
 
     uploadAudio(container);
@@ -238,7 +238,7 @@ describe('/drum-transcription upload flow', () => {
     expect(tempoSignal?.aborted).toBe(true);
     expect(
       await screen.findByRole('button', {
-        name: /just a song \(create a new chart\)/i,
+        name: /pick a song file/i,
       }),
     ).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
@@ -257,7 +257,7 @@ describe('/drum-transcription upload flow', () => {
 
     const {container} = render(<DrumTranscriptionClient />);
     await screen.findByRole('button', {
-      name: /just a song \(create a new chart\)/i,
+      name: /pick a song file/i,
     });
 
     uploadAudio(container);
