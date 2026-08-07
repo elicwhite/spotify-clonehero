@@ -14,13 +14,11 @@
  * separated in an earlier session are on the mixer from the start) and again
  * the moment a run that can separate succeeds.
  *
- * Cost discipline: the cache key is a hash of the project's audio bytes, and
- * a multi-file package has to be MIXED DOWN to produce those bytes at all.
- * So the key is treated as project state, persisted by the host the first
- * time it is computed: a project that carries one is probed with a direct
- * cache read, and a project that carries none has never had anything
- * separated, so it is not probed at all. The hash is paid exactly once, right
- * after a separating run — which just spent minutes on inference.
+ * The cache key is project state when already known, but old projects and
+ * projects created by another entrypoint may have cached stems without that
+ * metadata link. On open, the editor resolves the key from the project's
+ * canonical audio bytes, persists it, and probes the cache. This makes cache
+ * contents authoritative regardless of which entrypoint created the project.
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
@@ -114,9 +112,8 @@ export function useSeparatedStems({
 
   /**
    * Reads back whatever the cache holds for this project and publishes it.
-   * `mayComputeFingerprint` is what separates the two callers: the mount
-   * probe only reads a fingerprint the project already carries, while the
-   * post-run probe may pay to compute one.
+   * `mayComputeFingerprint` remains explicit so callers can choose whether a
+   * missing key should be resolved before probing.
    *
    * Silent on every failure: a missing/corrupt cache entry simply means
    * there is no separated stem to show.
@@ -177,13 +174,13 @@ export function useSeparatedStems({
     [packageAudio, loadAssistAudio, storedFingerprint, onFingerprintResolved],
   );
 
-  // Probe once the project's own audio is decoded, so stems separated in an
-  // earlier session are on the mixer from the start. Every state write
-  // happens inside the async closure (never synchronously in an effect
-  // body), so a throw can't block the host's render.
+  // Probe once the project's own audio is decoded, resolving and persisting a
+  // missing fingerprint. That catches cached stems regardless of which route
+  // created the project. Every state write happens inside the async closure
+  // (never synchronously in an effect body), so a throw can't block render.
   useEffect(() => {
     (async () => {
-      await probe(false);
+      await probe(true);
     })();
   }, [probe]);
 

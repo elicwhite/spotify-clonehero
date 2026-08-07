@@ -37,6 +37,7 @@ import type {ProjectOrigin, ProjectRecord} from '@/lib/project-storage/types';
 const ORIGIN_LABEL: Record<ProjectOrigin, string> = {
   'chart-editor': 'Chart editor',
   'drum-transcription': 'Drum transcription',
+  tempo: 'Tempo mapper',
 };
 
 export interface ProjectListProps {

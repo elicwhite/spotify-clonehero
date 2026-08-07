@@ -211,6 +211,8 @@ export function createOpfsProjectStore(
     allFiles: {fileName: string; data: Uint8Array}[];
     /** Which entrypoint is creating this project. Defaults to the editor's own. */
     origin?: ProjectOrigin | undefined;
+    /** Existing separated-stem cache entry to attach to the new project. */
+    stemFingerprint?: string | undefined;
   }): Promise<ProjectMetadata> {
     const id = generateId();
     const now = new Date().toISOString();
@@ -227,6 +229,7 @@ export function createOpfsProjectStore(
       sngMetadata: opts.sngMetadata,
       origin: opts.origin ?? 'chart-editor',
       hasAudio: opts.audioFiles.length > 0,
+      stemFingerprint: opts.stemFingerprint,
     };
 
     const dir = await getProjectDir(id, {create: true});

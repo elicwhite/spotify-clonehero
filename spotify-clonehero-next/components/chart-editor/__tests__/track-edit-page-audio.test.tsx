@@ -258,6 +258,30 @@ beforeEach(() => {
 });
 
 describe('/chart-editor Stems list', () => {
+  it('loads an existing cached stem even when the project has no stored fingerprint', async () => {
+    cachedDrumStem = {
+      left: new Float32Array([0.1, 0.2]),
+      right: new Float32Array([0.3, 0.4]),
+    };
+    cachedDrumFingerprint = 'fingerprint-1';
+
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    const drumsRow = await screen.findByTestId('stem-row-drums');
+    expect(
+      within(drumsRow).getByLabelText('AI-separated stem'),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockUpdateProject).toHaveBeenCalledWith('proj1', {
+        stemFingerprint: 'fingerprint-1',
+      }),
+    );
+  });
+
   it('lists the package’s own audio, and adds a separated stem badged AI-separated once an assist run produces one', async () => {
     render(
       <TooltipProvider>

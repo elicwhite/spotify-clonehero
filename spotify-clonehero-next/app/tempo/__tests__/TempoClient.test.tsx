@@ -19,6 +19,11 @@ import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 
 import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
 
+const mockRouterPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({push: mockRouterPush}),
+}));
+
 // jest.mock's first argument is resolved directly (not alias-rewritten), so
 // mocks below use relative paths to the same files the `@/...` imports
 // elsewhere resolve to — same convention as lib/assist/__tests__/tasks.test.ts.
@@ -98,6 +103,7 @@ import type {
   PipelineRunRequest,
 } from '@/lib/tempo-map/types';
 import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
+import {chartPackageStore} from '@/lib/project-storage/projects';
 import TempoClient from '../TempoClient';
 
 const mockDecode = decodeAndResampleTo44k as jest.Mock;
@@ -234,6 +240,7 @@ async function pickAudioFile(name = 'song.mp3') {
 
 beforeEach(() => {
   fakeWorker = null;
+  mockRouterPush.mockReset();
   audioManagers.length = 0;
   mockDecode.mockReset().mockResolvedValue(fakeAudioBuffer());
   mockMerge.mockReset().mockResolvedValue(fakeAudioBuffer());
@@ -295,9 +302,7 @@ describe('TempoClient', () => {
     expect(audioManagers).toHaveLength(0);
   });
 
-  it('lands in the results editor on success, with the drum stem picked up as a stem', async () => {
-    // Nothing is seeded into the stem cache: the drum stem the results view
-    // plays is the one the run itself returned, not a main-thread re-read.
+  it('saves the generated map as a project and opens it in /chart-editor', async () => {
     const drums = {
       left: new Float32Array([0.1, 0.2]),
       right: new Float32Array([0.3, 0.4]),
@@ -313,21 +318,21 @@ describe('TempoClient', () => {
     await waitFor(() => expect(fakeWorker).not.toBeNull());
     fakeWorker!.emit({type: 'result', result: fakePipelineResult(drums)});
 
-    expect(
-      await screen.findByRole('button', {name: 'Start over'}),
-    ).toBeInTheDocument();
-    // The AudioManager builds once with just the full mix, then rebuilds
-    // once the drum stem is decoded and picked up as a named stem — assert
-    // on whichever build (there may be more than one) ends up carrying it.
-    await waitFor(() =>
-      expect(audioManagers.some(m => m.trackNames.includes('drums.wav'))).toBe(
-        true,
-      ),
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledTimes(1));
+    const destination = mockRouterPush.mock.calls[0][0] as string;
+    expect(destination).toMatch(/^\/chart-editor\?project=/);
+
+    const projectId = new URLSearchParams(destination.split('?')[1]).get(
+      'project',
     );
-    const latest = audioManagers[audioManagers.length - 1];
-    expect(latest.trackNames).toEqual(
-      expect.arrayContaining(['song.wav', 'drums.wav', 'click.wav']),
+    expect(projectId).not.toBeNull();
+    const project = await chartPackageStore().getProject(projectId!);
+    expect(project.origin).toBe('tempo');
+    expect(project.stemFingerprint).toBe(fakeWorker!.posted[0].fingerprint);
+    expect(await chartPackageStore().readChartText(projectId!)).toContain(
+      '[SyncTrack]',
     );
+    expect(screen.queryByRole('button', {name: 'Start over'})).toBeNull();
   });
 
   it('reports a failed run in place, with a way back to the picker', async () => {
