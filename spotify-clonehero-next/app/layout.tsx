@@ -1,5 +1,6 @@
 import './globals.css';
 import type {Metadata} from 'next';
+import {JetBrains_Mono as FontMono} from 'next/font/google';
 import ContextProviders from './ContextProviders';
 import {cn} from '@/lib/utils';
 import {Toaster} from 'sonner';
@@ -9,6 +10,13 @@ import WebMCPInit from './WebMCPInit';
 import WebMCPTools from './WebMCPTools';
 import {getSiteUrl} from '@/lib/site-url';
 import RegionAwareAnalytics from './RegionAwareAnalytics';
+
+// The measurement voice on the landing pages: eyebrows, stat values,
+// provenance, stage numbers. Wired into Tailwind's `font-mono`.
+const fontMono = FontMono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+});
 
 const SITE_DESCRIPTION =
   'Tools for finding, viewing, and working with Clone Hero charts: find songs you know from Spotify, view drum charts as sheet music, add lyrics to charts, and more — all in your browser.';
@@ -41,6 +49,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       <body
         className={cn(
           'bg-background flex flex-col h-screen font-sans antialiased',
+          fontMono.variable,
         )}>
         <ContextProviders>
           {/* `SiteNav` is passed in, not imported by `SiteHeader`: the

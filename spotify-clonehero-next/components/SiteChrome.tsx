@@ -11,13 +11,18 @@ import {cn} from '@/lib/utils';
  * that mounts `ChartEditor` somewhere in its tree, either directly or via a
  * picker/upload screen that precedes it. These routes get the compact site
  * header instead of the full site nav.
+ *
+ * `/drum-transcription` and `/tempo` are not on this list: both are landing
+ * pages, and landing pages carry the regular site nav (owner feedback,
+ * 2026-08-06). `/tempo` does mount `ChartEditor` once a song has been
+ * mapped, so it trades the compact header on that screen for the regular
+ * header on its landing screen; the route check is by pathname, so the two
+ * cannot differ within one route.
  */
 const EDITOR_ROUTES = [
   '/chart-editor',
   '/drum-difficulties',
   '/guitar-difficulties',
-  '/drum-transcription',
-  '/tempo',
   '/add-lyrics',
   '/preview',
 ] as const;

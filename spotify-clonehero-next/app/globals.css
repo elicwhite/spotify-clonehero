@@ -183,6 +183,39 @@
   }
 }
 
+@layer components {
+  /* -------------------------------------------------------------------
+   * Landing-page drum-lane palette
+   * -------------------------------------------------------------------
+   * The five Clone Hero drum-lane gem colors, the only illustrative colors
+   * the tool landing pages use. They are scoped to `.landing-lanes` (the
+   * landing page root) so nothing else in the app can pick them up by
+   * accident, and they are read at runtime by the hero canvas via
+   * getComputedStyle so it tracks the theme.
+   *
+   * The dark values are the gem colors as they appear on a highway. The
+   * light values are darkened just enough to hold contrast on a white
+   * background; they are the same hues.
+   */
+  .landing-lanes {
+    --lane-kick: #d9700f;
+    --lane-red: #cc3438;
+    --lane-yellow: #b8860b;
+    --lane-blue: #2f6fe0;
+    --lane-green: #2f8f4e;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .landing-lanes {
+      --lane-kick: #ff9a3d;
+      --lane-red: #e5484d;
+      --lane-yellow: #f5c531;
+      --lane-blue: #4c8dff;
+      --lane-green: #46c46b;
+    }
+  }
+}
+
 @layer utilities {
   /* Scroll without a scrollbar gutter. The piano roll's stacked-rows viewport
      scrolls by wheel/trackpad only and has no room for a bar over the lane

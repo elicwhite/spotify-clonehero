@@ -41,6 +41,9 @@ export default function DropZoneShell({
 }: DropZoneShellProps) {
   return (
     <div
+      // Claims its own drops so an enclosing SectionDropZone leaves this box
+      // alone rather than handling the same drop a second time.
+      data-nested-dropzone=""
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

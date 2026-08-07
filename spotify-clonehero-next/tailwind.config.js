@@ -17,6 +17,18 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        // `--font-mono` is set by next/font in app/layout.tsx. `sans` is left
+        // at Tailwind's default stack on purpose: remapping it would change
+        // the typeface of every existing page.
+        mono: [
+          'var(--font-mono)',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'monospace',
+        ],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

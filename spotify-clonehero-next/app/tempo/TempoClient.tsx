@@ -11,7 +11,7 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {FolderSearch, Music} from 'lucide-react';
+import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
 
 import {
   defaultIniChartModifiers,
@@ -62,6 +62,10 @@ import type {
   SourceFormat,
 } from '@/components/chart-picker/chart-file-readers';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
+import SectionDropZone from '@/components/landing/SectionDropZone';
+import AudioUploader from '@/app/drum-transcription/components/AudioUploader';
+
+import {TempoLanding} from './landing/TempoLanding';
 
 import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
 import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
@@ -214,13 +218,12 @@ export default function TempoClient({
 }: TempoClientProps = {}) {
   const [webGPU, setWebGPU] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<
-    'pick' | 'pick-chart' | 'processing' | 'results'
+    'pick' | 'pick-audio' | 'pick-chart' | 'processing' | 'results'
   >('pick');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResultState | null>(null);
   const [variant, setVariant] = useState<Variant>('new');
 
-  const audioInputRef = useRef<HTMLInputElement>(null);
   /** Set by Cancel while the page is still reading/decoding the input, before
    *  the run exists for the runner to abort. Checked once that work is done,
    *  so Cancel in that window really does return to the picker. */
@@ -365,14 +368,15 @@ export default function TempoClient({
   // ---------- render ----------
   if (webGPU === false) {
     return (
-      <main className="min-h-[60vh] flex items-center justify-center p-6">
+      <main className="flex flex-1 items-center justify-center p-6">
         <Card className="max-w-lg">
           <CardHeader>
             <CardTitle>Your browser can’t run this tool</CardTitle>
             <CardDescription>
-              Tempo mapping runs AI models on your graphics card using WebGPU,
-              which this browser doesn’t support. Try a recent version of Chrome
-              or Edge on a computer.
+              Tempo mapping runs a separation model, a beat-tracking model, and
+              a transcription model on your graphics card using WebGPU, which
+              this browser doesn’t support. Try a recent version of Chrome or
+              Edge on a computer.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -382,7 +386,7 @@ export default function TempoClient({
 
   if (phase === 'processing') {
     return (
-      <main className="min-h-[80vh] flex items-center justify-center p-6">
+      <main className="flex flex-1 items-center justify-center p-6">
         <ConnectedProcessingView
           store={assistStore}
           taskKey={task.key}
@@ -407,75 +411,91 @@ export default function TempoClient({
     );
   }
 
-  // pick / pick-chart
+  // pick / pick-audio / pick-chart: the landing page, whose action area is
+  // this screen's own entry controls. The whole card is also a drop target,
+  // so a song, a .zip/.sng or a chart folder can be dragged in from any of
+  // those sub-states without clicking through to a picker first.
   return (
-    <main className="min-h-[80vh] flex items-center justify-center p-6">
-      <Card className="w-full max-w-xl">
-        <CardHeader>
-          <CardTitle>Tempo Mapper</CardTitle>
-          <CardDescription>
-            Detects a song’s tempo and time signature right in your browser.
-            Start from a song file to get a fresh chart, or from an existing
-            chart to rebuild its tempo map without moving any notes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {phase === 'pick' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                className="h-28 flex flex-col gap-2"
-                onClick={() => audioInputRef.current?.click()}>
-                <Music className="h-6 w-6" />
-                <span>Pick a song file</span>
-                <span className="text-xs text-muted-foreground font-normal">
-                  mp3, ogg, opus, wav, flac…
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-28 flex flex-col gap-2"
-                onClick={() => setPhase('pick-chart')}>
-                <FolderSearch className="h-6 w-6" />
-                <span>Use an existing chart</span>
-                <span className="text-xs text-muted-foreground font-normal">
-                  chart folder, .sng, or .zip
-                </span>
-              </Button>
-              <input
-                ref={audioInputRef}
-                type="file"
-                accept="audio/*,.opus,.ogg,.mp3,.wav,.flac,.m4a"
-                className="hidden"
-                onChange={e => {
-                  const f = e.target.files?.[0];
-                  if (f) process({kind: 'audio', file: f});
-                  e.target.value = '';
-                }}
-              />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <ChartDropZone
-                id="tempo-chart-picker"
-                onLoaded={loaded => process({kind: 'chart', loaded})}
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPhase('pick')}>
-                ← Back
-              </Button>
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Everything runs on your computer — nothing is uploaded. The first
-            run downloads two AI models (about 420 MB total) that are then saved
-            in your browser.
-          </p>
-        </CardContent>
-      </Card>
-    </main>
+    <TempoLanding
+      toolEntry={
+        <SectionDropZone
+          onAudioFile={file => process({kind: 'audio', file})}
+          onChartLoaded={loaded => process({kind: 'chart', loaded})}>
+          <Card className="w-full">
+            <CardHeader>
+              <CardDescription>
+                Detects a song’s tempo and time signature right in your browser.
+                Start from a song file to get a fresh chart, or from an existing
+                chart to rebuild its tempo map without moving any notes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {phase === 'pick' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Button
+                    variant="outline"
+                    className="h-28 flex flex-col gap-2"
+                    onClick={() => setPhase('pick-audio')}>
+                    <Music className="h-6 w-6" />
+                    <span>Pick a song file</span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      mp3, ogg, opus, wav, flac…
+                    </span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-28 flex flex-col gap-2"
+                    onClick={() => setPhase('pick-chart')}>
+                    <FolderSearch className="h-6 w-6" />
+                    <span>Use an existing chart</span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      chart folder, .sng, or .zip
+                    </span>
+                  </Button>
+                </div>
+              )}
+              {phase === 'pick-audio' && (
+                <div className="space-y-3">
+                  <AudioUploader
+                    onFileSelected={file => process({kind: 'audio', file})}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPhase('pick')}
+                    className="gap-1">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                </div>
+              )}
+              {phase === 'pick-chart' && (
+                <div className="space-y-3">
+                  <ChartDropZone
+                    id="tempo-chart-picker"
+                    onLoaded={loaded => process({kind: 'chart', loaded})}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPhase('pick')}
+                    className="gap-1">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Everything runs on your computer. Nothing is uploaded. The first
+                run downloads about 515 MB of models: the drum separator, the
+                beat tracker, and the transcription model whose drum hits the
+                map is fitted to.
+              </p>
+            </CardContent>
+          </Card>
+        </SectionDropZone>
+      }
+    />
   );
 }
 

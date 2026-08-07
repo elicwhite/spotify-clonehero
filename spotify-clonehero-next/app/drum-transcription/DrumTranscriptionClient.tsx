@@ -20,7 +20,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
+import SectionDropZone from '@/components/landing/SectionDropZone';
 import SourcePicker from './components/SourcePicker';
+import {DrumTranscriptionLanding} from './landing/DrumTranscriptionLanding';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
 import {readChart} from '@/lib/chart-edit';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
@@ -524,61 +526,71 @@ function DrumTranscriptionInner() {
     );
   }
 
-  // No project selected -- show upload + project list
+  // No project selected -- the landing page, whose action area is this
+  // screen's own entry controls (source picker + the projects it started).
   return (
-    <div className="flex flex-col items-center justify-center flex-1 w-full max-w-2xl gap-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Drum Transcription
-        </h1>
-        <p className="text-muted-foreground">
-          Upload a song to separate stems, transcribe drums, and edit the chart
-          in a Clone Hero highway editor.
-        </p>
-      </div>
+    <DrumTranscriptionLanding
+      toolEntry={
+        <>
+          {/* Either/or entry point: audio-only (unchanged) vs an existing chart
+              package, whose SyncTrack/audio drive transcription (chart-flow
+              feature). Wrapped in a Card to match /tempo's entry-card shape. */}
+          <SectionDropZone
+            onAudioFile={handleStartPipeline}
+            onChartLoaded={handleChartPackageLoaded}
+            disabled={isProcessing}>
+            <Card className="w-full">
+              <CardHeader>
+                <CardDescription>
+                  Predicts drum notes from the audio, right in your browser. An
+                  existing chart&rsquo;s tempo map is used instead of a
+                  predicted one, which avoids most note-position errors.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <SourcePicker
+                  onFileSelected={handleStartPipeline}
+                  onChartLoaded={handleChartPackageLoaded}
+                  chartFlowError={chartFlowError}
+                  disabled={isProcessing}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Everything runs on your computer. Nothing is uploaded. The
+                  first run downloads about 515 MB of models: the drum
+                  separator, the transcription model, and the beat tracker used
+                  to build the tempo map.
+                </p>
+              </CardContent>
+            </Card>
+          </SectionDropZone>
 
-      {/* Either/or entry point: audio-only (unchanged) vs an existing chart
-          package, whose SyncTrack/audio drive transcription (chart-flow
-          feature). */}
-      <SourcePicker
-        onFileSelected={handleStartPipeline}
-        onChartLoaded={handleChartPackageLoaded}
-        chartFlowError={chartFlowError}
-        disabled={isProcessing}
-      />
-
-      {/* Projects started from this page. `/chart-editor` lists them all. */}
-      {(loadingProjects || projects.length > 0) && (
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FolderOpen className="h-5 w-5" />
-              Existing Projects
-            </CardTitle>
-            <CardDescription>
-              Open a previously created project.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ProjectList
-              records={projects}
-              pageOrigin="drum-transcription"
-              loading={loadingProjects}
-              onOpen={record => void handleSelectProject(record)}
-              onRename={handleRenameProject}
-              onDelete={handleDeleteProject}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="text-center text-xs text-muted-foreground space-y-1">
-        <p>
-          Everything runs locally in your browser. No audio is uploaded to any
-          server.
-        </p>
-      </div>
-    </div>
+          {/* Projects started from this page. `/chart-editor` lists them all. */}
+          {(loadingProjects || projects.length > 0) && (
+            <Card className="w-full">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FolderOpen className="h-5 w-5" />
+                  Existing Projects
+                </CardTitle>
+                <CardDescription>
+                  Open a previously created project.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProjectList
+                  records={projects}
+                  pageOrigin="drum-transcription"
+                  loading={loadingProjects}
+                  onOpen={record => void handleSelectProject(record)}
+                  onRename={handleRenameProject}
+                  onDelete={handleDeleteProject}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </>
+      }
+    />
   );
 }
 

@@ -1,8 +1,7 @@
 'use client';
 
 import {useState} from 'react';
-import {ArrowLeft, FolderOpen} from 'lucide-react';
-import {Card, CardContent} from '@/components/ui/card';
+import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
@@ -36,35 +35,39 @@ export default function SourcePicker({
 
   if (mode === null) {
     return (
-      <Card className="w-full">
-        <CardContent className="pt-6 flex flex-col items-center gap-3">
-          <p className="text-sm text-muted-foreground text-center">
-            Have a chart already? Reuse its tempo map instead of predicting one
-            from scratch — this measurably improves note placement.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 w-full">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setMode('audio')}>
-              Just a song (create a new chart)
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setMode('chart')}>
-              <FolderOpen className="h-4 w-4 mr-2" />
-              Use an existing chart
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-3 w-full sm:grid-cols-2">
+        <Button
+          variant="outline"
+          className="h-28 flex flex-col gap-2"
+          onClick={() => setMode('audio')}>
+          <Music className="h-6 w-6" />
+          <span>Pick a song file</span>
+          <span className="text-xs text-muted-foreground font-normal">
+            mp3, wav, flac…
+          </span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-28 flex flex-col gap-2"
+          onClick={() => setMode('chart')}>
+          <FolderSearch className="h-6 w-6" />
+          <span>Use an existing chart</span>
+          <span className="text-xs text-muted-foreground font-normal">
+            chart folder, .sng, or .zip
+          </span>
+        </Button>
+      </div>
     );
   }
 
   if (mode === 'audio') {
     return (
-      <div className="w-full space-y-2">
+      <div className="w-full space-y-3">
+        <p className="text-xs text-muted-foreground text-center">
+          Grid source: <strong>predicted</strong>. The tempo map is estimated
+          from the audio.
+        </p>
+        <AudioUploader onFileSelected={onFileSelected} />
         <Button
           variant="ghost"
           size="sm"
@@ -73,41 +76,32 @@ export default function SourcePicker({
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <p className="text-xs text-muted-foreground text-center">
-          Grid source: <strong>predicted</strong> — the tempo map is estimated
-          from the audio.
-        </p>
-        <AudioUploader onFileSelected={onFileSelected} />
       </div>
     );
   }
 
   return (
-    <Card className="w-full">
-      <CardContent className="pt-6 space-y-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setMode(null)}
-          className="gap-1">
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <p className="text-xs text-muted-foreground text-center">
-          Grid source: <strong>provided</strong> — notes will be snapped to this
-          chart&apos;s own tempo map, not a predicted one.
-        </p>
-        <ChartDropZone
-          onLoaded={onChartLoaded}
-          id="drum-transcription-chart"
-          disabled={disabled ?? false}
-        />
-        {chartFlowError && (
-          <p className="text-xs text-destructive text-center">
-            {chartFlowError}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div className="w-full space-y-3">
+      <p className="text-xs text-muted-foreground text-center">
+        Grid source: <strong>provided</strong>. Notes are snapped to this
+        chart&apos;s own tempo map rather than a predicted one.
+      </p>
+      <ChartDropZone
+        onLoaded={onChartLoaded}
+        id="drum-transcription-chart"
+        disabled={disabled ?? false}
+      />
+      {chartFlowError && (
+        <p className="text-xs text-destructive text-center">{chartFlowError}</p>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setMode(null)}
+        className="gap-1">
+        <ArrowLeft className="h-4 w-4" />
+        Back
+      </Button>
+    </div>
   );
 }

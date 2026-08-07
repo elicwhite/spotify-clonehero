@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tempo-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "spotify-clonehero-next", "dev"],
+      "port": 3000
+    }
+  ]
+}

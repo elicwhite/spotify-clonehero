@@ -78,6 +78,9 @@ export default function AudioUploader({onFileSelected}: AudioUploaderProps) {
     <Card className="w-full">
       <CardContent className="pt-6">
         <div
+          // Claims its own drops so an enclosing SectionDropZone leaves this
+          // box alone (including its "please select an audio file" error).
+          data-nested-dropzone=""
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
