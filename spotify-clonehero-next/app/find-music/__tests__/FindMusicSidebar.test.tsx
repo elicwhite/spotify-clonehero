@@ -5,6 +5,16 @@
 import '@testing-library/jest-dom';
 import {fireEvent, render, screen, within} from '@testing-library/react';
 
+jest.mock('next/link', () => ({
+  __esModule: true,
+  default: ({
+    children,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a {...props}>{children}</a>
+  ),
+}));
+
 import FindMusicSidebar, {
   type FindMusicSidebarProps,
 } from '../FindMusicSidebar';
@@ -61,10 +71,17 @@ describe('FindMusicSidebar', () => {
       screen.getByLabelText('Navigation, filters and sources'),
     ).toHaveClass('max-h-[40vh]', '[contain:paint]', 'lg:max-h-full');
 
-    expect(screen.getByRole('button', {name: /your music/i})).toHaveAttribute(
+    expect(screen.getByRole('link', {name: /your music/i})).toHaveAttribute(
       'aria-current',
       'page',
     );
+    expect(screen.getByRole('link', {name: /your music/i})).toHaveAttribute(
+      'href',
+      '/find-music',
+    );
+    expect(
+      screen.getByRole('link', {name: /recommendations/i}),
+    ).toHaveAttribute('href', '/find-music/recommendations');
     expect(screen.getByText('3,783')).toBeInTheDocument();
     expect(screen.getByText('1,200')).toBeInTheDocument();
     expect(screen.getByText('more from artists you play')).toBeInTheDocument();
@@ -86,9 +103,9 @@ describe('FindMusicSidebar', () => {
       }),
     ).toHaveAttribute('href', 'https://www.spotify.com/us/account/privacy/');
 
-    fireEvent.click(screen.getByRole('button', {name: /recommendations/i}));
+    fireEvent.click(screen.getByRole('link', {name: /recommendations/i}));
     expect(onViewChange).toHaveBeenCalledWith('radar');
-    fireEvent.click(screen.getByRole('button', {name: /your music/i}));
+    fireEvent.click(screen.getByRole('link', {name: /your music/i}));
     expect(onViewChange).toHaveBeenLastCalledWith('music');
   });
 

@@ -1,5 +1,3 @@
-import FindMusicClient from './FindMusicClient';
-
 export const metadata = {
   title: 'Find Music',
   description:
@@ -7,5 +5,5 @@ export const metadata = {
 };
 
 export default function FindMusicPage() {
-  return <FindMusicClient />;
+  return null;
 }

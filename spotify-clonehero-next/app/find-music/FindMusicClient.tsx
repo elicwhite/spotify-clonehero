@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Menu, Sparkles} from 'lucide-react';
+import {usePathname} from 'next/navigation';
 import {toast} from 'sonner';
 import type {User} from '@supabase/supabase-js';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
@@ -32,6 +33,7 @@ import {
   saveFindMusicFilters,
 } from './filterPersistence';
 import {getFindMusicSongs, getFindMusicStats, getRadarSongs} from './queries';
+import {FIND_MUSIC_RECOMMENDATIONS_PATH, findMusicPathForView} from './routes';
 import {
   type FindMusicFilters,
   type FindMusicSong,
@@ -56,12 +58,12 @@ const EMPTY_STATS: FindMusicStats = {
 };
 
 export default function FindMusicClient() {
+  const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [hasSpotify, setHasSpotify] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [view, setView] = useState<FindMusicView>('music');
   const [filters, setFilters] = useState<FindMusicFilters>(freshEmptyFilters);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [stats, setStats] = useState(EMPTY_STATS);
@@ -81,6 +83,9 @@ export default function FindMusicClient() {
   const activeControllersRef = useRef<AbortController[]>([]);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const refreshAgainRef = useRef(false);
+
+  const view: FindMusicView =
+    pathname === FIND_MUSIC_RECOMMENDATIONS_PATH ? 'radar' : 'music';
 
   const [spotifyProgress, refreshSpotifyLibrary] = useSpotifyLibraryUpdate();
   const [chorusProgress, refreshChorusIndex] = useChorusChartDb(true);
@@ -271,7 +276,8 @@ export default function FindMusicClient() {
   }, []);
 
   const connectSpotify = useCallback(async () => {
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/find-music')}`;
+    const currentFindMusicPath = findMusicPathForView(view);
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(currentFindMusicPath)}`;
     const result = user
       ? await supabase.auth.linkIdentity({
           provider: 'spotify',
@@ -286,7 +292,7 @@ export default function FindMusicClient() {
       return;
     }
     if (result.data?.url) window.location.href = result.data.url;
-  }, [supabase, user]);
+  }, [supabase, user, view]);
 
   const runHistoryRefresh = useCallback(async () => {
     if (!('showDirectoryPicker' in window)) {
@@ -476,6 +482,10 @@ export default function FindMusicClient() {
     setFilters(freshEmptyFilters());
   }, []);
 
+  const closeMobileSidebar = useCallback(() => {
+    setMobileSidebarOpen(false);
+  }, []);
+
   return (
     <SupportedBrowserWarning>
       <div
@@ -506,10 +516,7 @@ export default function FindMusicClient() {
                 <FindMusicSidebar
                   variant="drawer"
                   view={view}
-                  onViewChange={nextView => {
-                    setView(nextView);
-                    setMobileSidebarOpen(false);
-                  }}
+                  onViewChange={closeMobileSidebar}
                   filters={filters}
                   onFiltersChange={setFilters}
                   onClearFilters={clearFilters}
@@ -547,7 +554,7 @@ export default function FindMusicClient() {
             className="hidden min-h-0 lg:block">
             <FindMusicSidebar
               view={view}
-              onViewChange={setView}
+              onViewChange={closeMobileSidebar}
               filters={filters}
               onFiltersChange={setFilters}
               onClearFilters={clearFilters}

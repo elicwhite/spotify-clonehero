@@ -1,6 +1,7 @@
 'use client';
 
 import {useState} from 'react';
+import Link from 'next/link';
 import {
   FolderOpen,
   ExternalLink,
@@ -25,6 +26,7 @@ import {
   type FindMusicView,
   type SourceStatus,
 } from './types';
+import {FIND_MUSIC_PATH, FIND_MUSIC_RECOMMENDATIONS_PATH} from './routes';
 
 export interface FindMusicSidebarProps {
   variant?: 'responsive' | 'drawer';
@@ -276,8 +278,8 @@ export default function FindMusicSidebar({
         <h2 className={sectionHeadingClass}>Browse</h2>
         <nav aria-label="Browse">
           <div className="space-y-1">
-            <button
-              type="button"
+            <Link
+              href={FIND_MUSIC_PATH}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 view === 'music' &&
@@ -295,9 +297,9 @@ export default function FindMusicSidebar({
               <span className="text-[11.5px] font-normal tabular-nums text-muted-foreground">
                 {formatCount(musicCount)}
               </span>
-            </button>
-            <button
-              type="button"
+            </Link>
+            <Link
+              href={FIND_MUSIC_RECOMMENDATIONS_PATH}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 view === 'radar' &&
@@ -315,7 +317,7 @@ export default function FindMusicSidebar({
               <span className="text-[11.5px] font-normal tabular-nums text-muted-foreground">
                 {formatCount(radarCount)}
               </span>
-            </button>
+            </Link>
           </div>
         </nav>
       </section>

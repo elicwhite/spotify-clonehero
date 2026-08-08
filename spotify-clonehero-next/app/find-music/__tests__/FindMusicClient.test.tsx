@@ -19,6 +19,11 @@ import type {
 } from '../types';
 import {FIND_MUSIC_FILTERS_STORAGE_KEY} from '../filterPersistence';
 
+let mockPathname = '/find-music';
+jest.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+}));
+
 jest.mock('../../SupportedBrowserWarning', () => ({
   __esModule: true,
   default: ({children}: {children: React.ReactNode}) => <>{children}</>,
@@ -72,6 +77,7 @@ jest.mock('../FindMusicSidebar', () => ({
   __esModule: true,
   default: ({
     musicCount,
+    view,
     filters,
     onFiltersChange,
     onViewChange,
@@ -81,6 +87,7 @@ jest.mock('../FindMusicSidebar', () => ({
     chorusStatus,
   }: {
     musicCount: number;
+    view: 'music' | 'radar';
     filters: FindMusicFilters;
     onFiltersChange: (filters: FindMusicFilters) => void;
     onViewChange: (view: 'music' | 'radar') => void;
@@ -91,6 +98,7 @@ jest.mock('../FindMusicSidebar', () => ({
   }) => (
     <aside
       data-testid="sidebar"
+      data-view={view}
       data-filter-query={filters.query}
       data-history-phase={historyStatus.phase}
       data-library-phase={libraryStatus.phase}
@@ -104,6 +112,9 @@ jest.mock('../FindMusicSidebar', () => ({
       </button>
       <button type="button" onClick={() => onViewChange('radar')}>
         Choose recommendations
+      </button>
+      <button type="button" onClick={() => onViewChange('music')}>
+        Choose your music
       </button>
     </aside>
   ),
@@ -172,9 +183,37 @@ function song(key: string, name: string): FindMusicSong {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPathname = '/find-music';
   window.localStorage.clear();
   mockGetFindMusicStats.mockResolvedValue(stats);
   mockGetRadarSongs.mockResolvedValue([]);
+});
+
+it('keeps the loaded snapshot warm while the route changes', async () => {
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  const rendered = render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+  expect(screen.getByTestId('sidebar')).toHaveAttribute('data-view', 'music');
+  await waitFor(() => expect(mockGetFindMusicSongs).toHaveBeenCalledTimes(2));
+
+  const queryCounts = {
+    songs: mockGetFindMusicSongs.mock.calls.length,
+    radar: mockGetRadarSongs.mock.calls.length,
+    stats: mockGetFindMusicStats.mock.calls.length,
+    chorusRefreshes: mockRefreshChorus.mock.calls.length,
+  };
+
+  mockPathname = '/find-music/recommendations';
+  rendered.rerender(<FindMusicClient />);
+  expect(screen.getByTestId('sidebar')).toHaveAttribute('data-view', 'radar');
+  expect(screen.getByTestId('music-table')).toHaveTextContent('Alpha');
+
+  expect(mockGetFindMusicSongs).toHaveBeenCalledTimes(queryCounts.songs);
+  expect(mockGetRadarSongs).toHaveBeenCalledTimes(queryCounts.radar);
+  expect(mockGetFindMusicStats).toHaveBeenCalledTimes(queryCounts.stats);
+  expect(mockRefreshChorus).toHaveBeenCalledTimes(queryCounts.chorusRefreshes);
 });
 
 it('restores filters from local storage and persists subsequent changes', async () => {
