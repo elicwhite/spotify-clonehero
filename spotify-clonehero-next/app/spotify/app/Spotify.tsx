@@ -1,6 +1,7 @@
 'use client';
 
-import {Suspense, useCallback, useEffect, useState} from 'react';
+import {Suspense, useCallback, useEffect, useRef, useState} from 'react';
+import * as Sentry from '@sentry/nextjs';
 import SpotifyTableDownloader, {
   SpotifyChartData,
   SpotifyPlaysRecommendations,
@@ -15,7 +16,8 @@ import {SignInWithSpotifyCard} from './SignInWithSpotifyCard';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
 import {
   getLocalScanWarning,
-  tryScanForInstalledCharts,
+  scanInstalledCharts,
+  tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
 import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
 import {toast} from 'sonner';
@@ -97,6 +99,7 @@ export default function Spotify() {
 type Status = {
   status:
     | 'not-started'
+    | 'selecting'
     | 'scanning'
     | 'done-scanning'
     | 'fetching-spotify-data'
@@ -118,7 +121,7 @@ export function LoggedIn() {
     true /* force database */,
   );
 
-  const [started, setStarted] = useState(false);
+  const runInProgress = useRef(false);
 
   // Dev-only opt-in mock loader. Read both the URL and localStorage at
   // mount via a useState lazy initializer so there's no effect → setState
@@ -137,90 +140,80 @@ export function LoggedIn() {
   });
 
   const calculate = useCallback(async () => {
-    const abortController = new AbortController();
+    if (runInProgress.current) return;
+    runInProgress.current = true;
+    setStatus({status: 'selecting', songsCounted: 0});
 
-    setStarted(true);
-
-    const updateSpotifyLibraryPromise = updateSpotifyLibrary(abortController, {
-      concurrency: 3,
-    });
-
-    const chorusChartsPromise = fetchChorusCharts(abortController);
-
-    setStatus({status: 'scanning', songsCounted: 0});
-
+    let abortController: AbortController | null = null;
     try {
-      const scanResult = await tryScanForInstalledCharts(count => {
-        setStatus(prevStatus => ({
-          ...prevStatus,
-          songsCounted: count,
-        }));
-      });
-      if (scanResult == null) {
+      const songsDirectory = await tryGetSongsDirectoryHandle();
+      if (!songsDirectory) {
         toast.info('Directory picker canceled');
         setStatus({status: 'not-started', songsCounted: 0});
         return;
       }
+
+      abortController = new AbortController();
+      setStatus({status: 'scanning', songsCounted: 0});
+
+      const updateSpotifyLibraryPromise = updateSpotifyLibrary(
+        abortController,
+        {concurrency: 3},
+      );
+      const chorusChartsPromise = fetchChorusCharts(abortController);
+      const scanPromise = scanInstalledCharts(songsDirectory, count => {
+        if (abortController?.signal.aborted) return;
+        setStatus(prevStatus => ({...prevStatus, songsCounted: count}));
+      });
+
+      const [scanResult, , spotifyResult] = await Promise.all([
+        scanPromise,
+        chorusChartsPromise,
+        updateSpotifyLibraryPromise,
+      ]);
       if (scanResult.status === 'partial') {
         toast.warning(getLocalScanWarning(scanResult.issues.length));
       }
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
-    } catch (err) {
-      toast.error('Error scanning local charts', {duration: 8000});
-      setStatus({
-        status: 'not-started',
-        songsCounted: 0,
-      });
-      throw err;
-    }
-
-    try {
-      const [, spotifyResult] = await Promise.all([
-        chorusChartsPromise,
-        updateSpotifyLibraryPromise,
-      ]);
       if (spotifyResult.status === 'unauthenticated') {
         toast.info('Reconnect Spotify to refresh your library');
       } else if (spotifyResult.status === 'unavailable') {
         toast.info('Spotify is unavailable here');
       }
+
+      setStatus(prevStatus => ({...prevStatus, status: 'done'}));
     } catch (error) {
-      setStarted(false);
+      abortController?.abort();
       setStatus({status: 'not-started', songsCounted: 0});
       toast.error(
-        error instanceof Error ? error.message : 'Spotify refresh failed',
+        error instanceof Error ? error.message : 'Library refresh failed',
       );
-      return;
+      Sentry.captureException(error);
+    } finally {
+      runInProgress.current = false;
     }
-
-    setStatus(prevStatus => ({
-      ...prevStatus,
-      status: 'done',
-    }));
   }, [fetchChorusCharts, updateSpotifyLibrary]);
 
   return (
     <>
-      {!started && <ScanLocalFoldersCTACard onClick={calculate} />}
+      {status.status === 'not-started' && (
+        <ScanLocalFoldersCTACard onClick={calculate} />
+      )}
 
-      {started &&
-        !(
-          spotifyLibraryProgress.updateStatus === 'complete' &&
-          status.status === 'done'
-        ) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {useMockLoader ? (
-              <SpotifyLoaderMock />
-            ) : (
-              <SpotifyLoaderCard progress={spotifyLibraryProgress} />
-            )}
-            <div className="space-y-4">
-              <LocalScanLoaderCard count={status.songsCounted} />
-              <UpdateChorusLoaderCard progress={chorusChartProgress} />
-            </div>
+      {status.status !== 'not-started' && status.status !== 'done' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {useMockLoader ? (
+            <SpotifyLoaderMock />
+          ) : (
+            <SpotifyLoaderCard progress={spotifyLibraryProgress} />
+          )}
+          <div className="space-y-4">
+            <LocalScanLoaderCard count={status.songsCounted} />
+            <UpdateChorusLoaderCard progress={chorusChartProgress} />
           </div>
-        )}
+        </div>
+      )}
 
       {status.status === 'done' && (
         <Suspense fallback={<div>Loading...</div>}>

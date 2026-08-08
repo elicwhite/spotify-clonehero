@@ -1,12 +1,15 @@
 'use client';
 
-import {Suspense, useCallback, useEffect, useState} from 'react';
+import {Suspense, useCallback, useEffect, useRef, useState} from 'react';
+import * as Sentry from '@sentry/nextjs';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
 import {
   getLocalScanWarning,
-  tryScanForInstalledCharts,
+  scanInstalledCharts,
+  tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
 import {
+  type ArtistTrackPlays,
   getSpotifyDumpArtistTrackPlays,
   tryProcessSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
@@ -126,6 +129,7 @@ export default function Page() {
 type Status = {
   status:
     | 'not-started'
+    | 'selecting'
     | 'scanning'
     | 'done-scanning'
     | 'processing-spotify-dump'
@@ -135,7 +139,53 @@ type Status = {
   songsCounted: number;
 };
 
-function SpotifyHistory({authenticated}: {authenticated: boolean}) {
+type SpotifyHistoryInputs =
+  | {status: 'canceled'}
+  | {
+      status: 'ready';
+      songsDirectory: FileSystemDirectoryHandle;
+      history:
+        | {source: 'cache'; plays: ArtistTrackPlays}
+        | {source: 'directory'; handle: FileSystemDirectoryHandle};
+    };
+
+function isDirectoryPickerCancellation(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'AbortError' || error.name === 'NotAllowedError')
+  );
+}
+
+async function getSpotifyHistoryInputs(): Promise<SpotifyHistoryInputs> {
+  const cachedHistory = await getSpotifyDumpArtistTrackPlays();
+  let history: Extract<SpotifyHistoryInputs, {status: 'ready'}>['history'];
+  if (cachedHistory != null) {
+    history = {source: 'cache', plays: cachedHistory};
+  } else {
+    alert(
+      'Select the folder containing your extracted Spotify Extended Streaming History',
+    );
+    try {
+      history = {
+        source: 'directory',
+        handle: await window.showDirectoryPicker({id: 'spotify-dump'}),
+      };
+    } catch (error) {
+      if (isDirectoryPickerCancellation(error)) {
+        return {status: 'canceled'};
+      }
+      throw error;
+    }
+  }
+
+  const songsDirectory = await tryGetSongsDirectoryHandle();
+  if (!songsDirectory) {
+    return {status: 'canceled'};
+  }
+  return {status: 'ready', songsDirectory, history};
+}
+
+export function SpotifyHistory({authenticated}: {authenticated: boolean}) {
   const [songs, setSongs] = useState<SpotifyPlaysRecommendations[] | null>(
     null,
   );
@@ -144,158 +194,96 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     songsCounted: 0,
   });
   const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb(true);
+  const runInProgress = useRef(false);
 
   const handler = useCallback(async () => {
-    const abortController = new AbortController();
+    if (runInProgress.current) return;
+    runInProgress.current = true;
+    setStatus({status: 'selecting', songsCounted: 0});
 
-    // Kick off everything that can start without a user-gesture decision:
-    //  - chorus fetch (depends on local DB; triggers init on first call)
-    //  - local scan (independent — it'll prompt for the songs directory)
-    //  - spotify-dump cache check (DB + OPFS read; result decides whether
-    //    we need to prompt the user for a Spotify directory)
-    // None of these block each other: the cache check runs concurrently
-    // with the scan's parse-sng work and the chorus network round-trip.
-    const chorusChartsPromise = fetchChorusCharts(abortController);
-    const cachedSpotifyPromise = getSpotifyDumpArtistTrackPlays();
-
-    setStatus({status: 'scanning', songsCounted: 0});
-    const scanPromise = tryScanForInstalledCharts(count => {
-      setStatus(prevStatus => ({
-        ...prevStatus,
-        songsCounted: count,
-      }));
-    });
-
-    let artistTrackPlays = await cachedSpotifyPromise;
-    let spotifyDataHandle;
-    if (artistTrackPlays == null) {
-      alert(
-        'Select the folder containing your extracted Spotify Extended Streaming History',
-      );
-      try {
-        spotifyDataHandle = await window.showDirectoryPicker({
-          id: 'spotify-dump',
-        });
-      } catch (error) {
-        if (
-          !(
-            error instanceof DOMException &&
-            (error.name === 'AbortError' || error.name === 'NotAllowedError')
-          )
-        ) {
-          scanPromise.catch(() => {});
-          throw error;
-        }
-        toast.info('Directory picker canceled');
-        abortController.abort();
-        // Drain the in-flight scan so its rejection (if any) doesn't surface
-        // as an unhandled-promise warning.
-        scanPromise.catch(() => {});
-        return;
-      }
-    }
-
-    const spotifyDumpPromise = (async () => {
-      if (artistTrackPlays != null) {
-        return {status: 'imported' as const, plays: artistTrackPlays};
-      }
-      if (spotifyDataHandle == null) {
-        throw new Error('Spotify data handle is null');
-      }
-      return await tryProcessSpotifyDump(spotifyDataHandle);
-    })();
-
+    let abortController: AbortController | null = null;
     try {
-      const scanResult = await scanPromise;
-      if (scanResult == null) {
+      const inputs = await getSpotifyHistoryInputs();
+      if (inputs.status === 'canceled') {
         toast.info('Directory picker canceled');
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-        abortController.abort();
+        setStatus({status: 'not-started', songsCounted: 0});
         return;
       }
+
+      abortController = new AbortController();
+      setStatus({status: 'scanning', songsCounted: 0});
+
+      const chorusChartsPromise = fetchChorusCharts(abortController);
+      const scanPromise = scanInstalledCharts(inputs.songsDirectory, count => {
+        if (abortController?.signal.aborted) return;
+        setStatus(prevStatus => ({...prevStatus, songsCounted: count}));
+      });
+      const spotifyDumpPromise =
+        inputs.history.source === 'cache'
+          ? Promise.resolve({
+              status: 'imported' as const,
+              plays: inputs.history.plays,
+            })
+          : tryProcessSpotifyDump(inputs.history.handle);
+
+      const [spotifyDumpResult, , scanResult] = await Promise.all([
+        spotifyDumpPromise,
+        chorusChartsPromise,
+        scanPromise,
+      ]);
       if (scanResult.status === 'partial') {
         toast.warning(getLocalScanWarning(scanResult.issues.length));
       }
-      setStatus(prevStatus => ({
-        ...prevStatus,
-        status: 'done-scanning',
-      }));
+      setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
-    } catch (err) {
-      toast.error('Error scanning local charts', {duration: 8000});
-      setStatus({
-        status: 'not-started',
-        songsCounted: 0,
-      });
-      throw err;
-    }
 
-    // Wait for parallel tasks to finish
-    try {
-      const [spotifyDumpResult] = await Promise.all([
-        spotifyDumpPromise,
-        chorusChartsPromise,
-      ]);
       if (spotifyDumpResult.status === 'invalid-selection') {
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
+        setStatus({status: 'not-started', songsCounted: 0});
         toast.error(spotifyDumpResult.message, {duration: 8000});
         return;
       }
-      artistTrackPlays = spotifyDumpResult.plays;
-    } catch (err) {
-      setStatus({
-        status: 'not-started',
-        songsCounted: 0,
-      });
-      if (err instanceof Error) {
-        toast.error(err.message, {duration: 8000});
+
+      setStatus(prevStatus => ({...prevStatus, status: 'finding-matches'}));
+      await pause();
+
+      const data = await getHistoryData();
+
+      const results: SpotifyPlaysRecommendations[] = data.map(item => ({
+        artist: item.artist,
+        song: item.song,
+        playCount: item.play_count,
+        matchingCharts: (
+          item.matching_charts as unknown as PickedChorusCharts[]
+        ).map(
+          (chart): SpotifyChartData => ({
+            ...chart,
+            albumArtMd5: chart.album_art_md5 ?? '',
+            hasVideoBackground: chart.has_video_background === 1,
+            isInstalled: chart.isInstalled === 1,
+            isSongInstalled: item.is_any_local_chart_installed === 1,
+            modifiedTime: chart.modified_time,
+            file: `https://files.enchor.us/${chart.md5}.sng`,
+          }),
+        ),
+        playlistMemberships: item.playlist_memberships,
+      }));
+
+      setStatus(prevStatus => ({...prevStatus, status: 'done'}));
+
+      if (results.length > 0) {
+        setSongs(results);
+        console.log(results);
       }
-      return;
-    }
-
-    // Query matches from the database
-    setStatus(prevStatus => ({
-      ...prevStatus,
-      status: 'finding-matches',
-    }));
-    await pause();
-
-    const data = await getHistoryData();
-
-    const results: SpotifyPlaysRecommendations[] = data.map(item => ({
-      artist: item.artist,
-      song: item.song,
-      playCount: item.play_count,
-      matchingCharts: (
-        item.matching_charts as unknown as PickedChorusCharts[]
-      ).map(
-        (chart): SpotifyChartData => ({
-          ...chart,
-          albumArtMd5: chart.album_art_md5 ?? '',
-          hasVideoBackground: chart.has_video_background === 1,
-          isInstalled: chart.isInstalled === 1,
-          isSongInstalled: item.is_any_local_chart_installed === 1,
-          modifiedTime: chart.modified_time,
-          file: `https://files.enchor.us/${chart.md5}.sng`,
-        }),
-      ),
-      playlistMemberships: item.playlist_memberships,
-    }));
-
-    setStatus(prevStatus => ({
-      ...prevStatus,
-      status: 'done',
-    }));
-
-    if (results.length > 0) {
-      setSongs(results);
-      console.log(results);
+    } catch (error) {
+      abortController?.abort();
+      setStatus({status: 'not-started', songsCounted: 0});
+      toast.error(
+        error instanceof Error ? error.message : 'Spotify history scan failed',
+        {duration: 8000},
+      );
+      Sentry.captureException(error);
+    } finally {
+      runInProgress.current = false;
     }
   }, [fetchChorusCharts]);
 

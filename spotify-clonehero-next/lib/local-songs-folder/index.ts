@@ -84,7 +84,7 @@ export async function getCachedSongsDirectoryHandle(): Promise<FileSystemDirecto
   return handle;
 }
 
-async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+export async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
   if (currentSongDirectoryCache) {
     return currentSongDirectoryCache;
   }
@@ -115,12 +115,19 @@ export function getLocalScanWarning(issueCount: number) {
 export async function tryScanForInstalledCharts(
   onProgress: (count: number) => void = () => {},
 ): Promise<InstalledChartsResponse | null> {
-  const root = await navigator.storage.getDirectory();
-
   const handle = await tryGetSongsDirectoryHandle();
   if (!handle) {
     return null;
   }
+
+  return await scanInstalledCharts(handle, onProgress);
+}
+
+export async function scanInstalledCharts(
+  handle: FileSystemDirectoryHandle,
+  onProgress: (count: number) => void = () => {},
+): Promise<InstalledChartsResponse> {
+  const root = await navigator.storage.getDirectory();
 
   // Coalesce per-chart progress ticks so the caller's React setState doesn't
   // re-render ~15k times during a full library scan.
