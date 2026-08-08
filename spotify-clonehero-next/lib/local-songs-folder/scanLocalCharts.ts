@@ -44,15 +44,26 @@ export type SongAccumulator = {
   };
 };
 
+export type LocalChartScanIssue = {
+  kind: 'directory' | 'song-ini' | 'sng';
+  path: string;
+  message: string;
+};
+
+export type LocalChartScanResult = {
+  issues: LocalChartScanIssue[];
+};
+
 export default async function scanLocalCharts(
   directoryHandle: FileSystemDirectoryHandle,
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
-) {
+): Promise<LocalChartScanResult> {
   // Every entry in this directory handle should be a song, or folder of songs
 
   const limit = pLimit(SCAN_CONCURRENCY);
   const entries = await listEntries(directoryHandle);
+  const issues: LocalChartScanIssue[] = [];
 
   await Promise.all(
     entries.map(([, subHandle]) => {
@@ -63,6 +74,8 @@ export default async function scanLocalCharts(
           accumulator,
           callbackPerSong,
           limit,
+          `${directoryHandle.name}/${subHandle.name}`,
+          issues,
         );
       }
       if (
@@ -75,11 +88,15 @@ export default async function scanLocalCharts(
           accumulator,
           callbackPerSong,
           limit,
+          `${directoryHandle.name}/${subHandle.name}`,
+          issues,
         );
       }
       return undefined;
     }),
   );
+
+  return {issues};
 }
 
 async function scanLocalChartsDirectory(
@@ -88,6 +105,8 @@ async function scanLocalChartsDirectory(
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
   limit: LimitFunction,
+  path: string,
+  issues: LocalChartScanIssue[],
 ) {
   // Run listEntries + song.ini parse atomically inside one limit slot. This
   // bounds total in-flight FS-Access ops to ~`limit` instead of fanning out
@@ -109,11 +128,13 @@ async function scanLocalChartsDirectory(
     try {
       entries = await listEntries(currentDirectoryHandle);
     } catch (e) {
-      const error = new Error(
-        `Error scanning directory ${parentDirectoryHandle.name}/${currentDirectoryHandle.name}`,
-        {cause: e},
+      reportScanIssue(
+        issues,
+        'directory',
+        path,
+        `Could not list chart directory ${path}`,
+        e,
       );
-      console.warn(error.message, e);
       return null;
     }
 
@@ -143,14 +164,23 @@ async function scanLocalChartsDirectory(
           // @ts-ignore Assuming JSON matches TypeScript
           songIniData = values.iniObject?.song || values.iniObject?.Song;
           songIniMTime = file.lastModified;
-        } catch {
-          console.log(
-            'Could not scan song.ini of',
-            currentDirectoryHandle.name,
+        } catch (error) {
+          reportScanIssue(
+            issues,
+            'song-ini',
+            `${path}/song.ini`,
+            `Could not parse ${path}/song.ini`,
+            error,
           );
         }
-      } catch {
-        // getFile failed — skip this directory's chart but still recurse.
+      } catch (error) {
+        reportScanIssue(
+          issues,
+          'song-ini',
+          `${path}/song.ini`,
+          `Could not read ${path}/song.ini`,
+          error,
+        );
       }
     }
 
@@ -201,6 +231,8 @@ async function scanLocalChartsDirectory(
         accumulator,
         callbackPerSong,
         limit,
+        `${path}/${sub.name}`,
+        issues,
       ),
     ),
     ...result.sngFiles.map(sng =>
@@ -210,6 +242,8 @@ async function scanLocalChartsDirectory(
         accumulator,
         callbackPerSong,
         limit,
+        `${path}/${sng.name}`,
+        issues,
       ),
     ),
   ]);
@@ -221,6 +255,8 @@ async function scanLocalSngFile(
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
   limit: LimitFunction,
+  path: string,
+  issues: LocalChartScanIssue[],
 ) {
   await limit(() =>
     scanLocalSngFileInner(
@@ -228,6 +264,8 @@ async function scanLocalSngFile(
       fileHandle,
       accumulator,
       callbackPerSong,
+      path,
+      issues,
     ),
   );
 }
@@ -237,6 +275,8 @@ async function scanLocalSngFileInner(
   fileHandle: FileSystemFileHandle,
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
+  path: string,
+  issues: LocalChartScanIssue[],
 ) {
   const file = await fileHandle.getFile();
   let metadata: {[key: string]: string};
@@ -244,11 +284,13 @@ async function scanLocalSngFileInner(
   try {
     metadata = await readSongIni(file.stream());
   } catch (e) {
-    const error = new Error(
-      `Error scanning sng file ${parentDirectoryHandle.name}/${fileHandle.name}`,
-      {cause: e},
+    reportScanIssue(
+      issues,
+      'sng',
+      path,
+      `Could not read SNG metadata from ${path}`,
+      e,
     );
-    console.warn(error.message, e);
     return;
   }
 
@@ -280,6 +322,17 @@ async function scanLocalSngFileInner(
 
   accumulator.push(chart);
   callbackPerSong();
+}
+
+function reportScanIssue(
+  issues: LocalChartScanIssue[],
+  kind: LocalChartScanIssue['kind'],
+  path: string,
+  message: string,
+  error: unknown,
+) {
+  console.warn(message, error);
+  issues.push({kind, path, message});
 }
 
 function convertValues(songIniData: SongIniData): SongIniData {

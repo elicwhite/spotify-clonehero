@@ -97,20 +97,6 @@ async function fetchAccessToken(): Promise<ProtectedAccessToken | null> {
   return json as ProtectedAccessToken;
 }
 
-export async function withSpotifyAvailabilityFallback<T>(
-  request: () => Promise<T>,
-  fallback: T,
-): Promise<T> {
-  try {
-    return await request();
-  } catch (error) {
-    if (error instanceof SpotifyUnavailableError) {
-      return fallback;
-    }
-    throw error;
-  }
-}
-
 let cachedSharedSdk: SpotifyApi | null = null;
 
 export async function getSpotifySdk(): Promise<SpotifyApi | null> {

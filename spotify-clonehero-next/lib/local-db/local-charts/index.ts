@@ -5,9 +5,10 @@ import {normalizeStrForMatching} from '../normalize';
 const UPSERT_BATCH_SIZE = 50;
 const DELETE_CHUNK_SIZE = 500;
 
-export async function upsertLocalCharts(charts: SongAccumulator[]) {
-  if (charts.length === 0) return;
-
+export async function upsertLocalCharts(
+  charts: SongAccumulator[],
+  options: {pruneMissing: boolean},
+) {
   const db = await getLocalDb();
   const updatedAt = new Date().toISOString();
 
@@ -31,7 +32,7 @@ export async function upsertLocalCharts(charts: SongAccumulator[]) {
     for (const row of existing) {
       const key = makeKey(row.artist, row.song, row.charter);
       const c = incoming.get(key);
-      if (c == null) {
+      if (c == null && options.pruneMissing) {
         if (row.id != null) removedIds.push(row.id);
       } else if (c.modifiedTime === row.modified_time) {
         // Unchanged — no need to rewrite the row.

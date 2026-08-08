@@ -2,7 +2,6 @@ import {
   MyResponseValidator,
   SpotifyUnavailableError,
   getSpotifySdk,
-  withSpotifyAvailabilityFallback,
 } from '@/lib/spotify-sdk/ClientInstance';
 
 describe('Spotify client expected outcomes', () => {
@@ -37,17 +36,15 @@ describe('Spotify client expected outcomes', () => {
     );
   });
 
-  it('uses a local fallback only for country unavailability', async () => {
-    await expect(
-      withSpotifyAvailabilityFallback(async () => {
-        throw new SpotifyUnavailableError();
-      }, []),
-    ).resolves.toEqual([]);
+  it('keeps other authorization failures actionable', async () => {
+    const validator = new MyResponseValidator();
+    const response = {
+      status: 403,
+      text: async () => 'Insufficient client scope',
+    } as Response;
 
-    await expect(
-      withSpotifyAvailabilityFallback(async () => {
-        throw new Error('Insufficient client scope');
-      }, []),
-    ).rejects.toThrow('Insufficient client scope');
+    await expect(validator.validateResponse(response)).rejects.toThrow(
+      'Insufficient client scope',
+    );
   });
 });

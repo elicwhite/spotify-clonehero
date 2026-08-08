@@ -2,6 +2,7 @@
 
 import {act, renderHook, waitFor} from '@testing-library/react';
 import {useSpotifyLibraryUpdate} from '../SpotifyFetching';
+import {SpotifyUnavailableError} from '../ClientInstance';
 
 const mockGetSpotifySdk = jest.fn();
 const mockGetKeyval = jest.fn();
@@ -15,12 +16,17 @@ const mockDeleteMissingPlaylists = jest.fn<Promise<void>, [string[]]>(
   async () => undefined,
 );
 const mockGetPlaylistTracks = jest.fn(async () => ({}));
+const mockUpsertAlbums = jest.fn<Promise<void>, [unknown[]]>(
+  async () => undefined,
+);
+const mockUpsertPlaylists = jest.fn<Promise<void>, [unknown[]]>(
+  async () => undefined,
+);
 
 jest.mock('../ClientInstance', () => ({
   RateLimitError: class RateLimitError extends Error {},
+  SpotifyUnavailableError: class SpotifyUnavailableError extends Error {},
   getSpotifySdk: () => mockGetSpotifySdk(),
-  withSpotifyAvailabilityFallback: async <T,>(request: () => Promise<T>) =>
-    request(),
 }));
 
 jest.mock('idb-keyval', () => ({
@@ -39,8 +45,8 @@ jest.mock('../../local-db/spotify', () => ({
   getPlaylistMetadataMapBySnapshot: jest.fn(async () => ({})),
   getPlaylistTracksBySnapshot: () => mockGetPlaylistTracks(),
   replaceAlbumTracks: jest.fn(async () => undefined),
-  upsertAlbums: jest.fn(async () => undefined),
-  upsertPlaylists: jest.fn(async () => undefined),
+  upsertAlbums: (albums: unknown[]) => mockUpsertAlbums(albums),
+  upsertPlaylists: (playlists: unknown[]) => mockUpsertPlaylists(playlists),
 }));
 
 jest.mock('../../local-db/client', () => ({
@@ -88,6 +94,31 @@ function createSdk(
     playlists: {getPlaylistItems: jest.fn()},
     albums: {tracks: jest.fn()},
   };
+}
+
+function mockCachedLibrary() {
+  mockGetKeyval.mockImplementation(async key => {
+    if (key === 'playlistMetadata') {
+      return {
+        'cached-snapshot': {
+          id: 'cached-playlist',
+          name: 'Cached playlist',
+          externalUrl: 'https://open.spotify.com/playlist/cached',
+          total: 1,
+          owner: {displayName: 'Listener', externalUrl: ''},
+          collaborative: false,
+        },
+      };
+    }
+    if (key === 'playlistTracks') {
+      return {
+        'cached-snapshot': [
+          {id: 'cached-track', name: 'Cached track', artists: ['Artist']},
+        ],
+      };
+    }
+    return {};
+  });
 }
 
 describe('useSpotifyLibraryUpdate async contract', () => {
@@ -154,10 +185,13 @@ describe('useSpotifyLibraryUpdate async contract', () => {
     ]);
     expect(result.current[0].updateStatus).toBe('complete');
     expect(library).toMatchObject({
-      playlistMetadata: {
-        'snapshot-1': {id: 'playlist-1', name: 'Road Trip'},
+      status: 'refreshed',
+      library: {
+        playlistMetadata: {
+          'snapshot-1': {id: 'playlist-1', name: 'Road Trip'},
+        },
+        albumMetadata: {},
       },
-      albumMetadata: {},
     });
   });
 
@@ -169,6 +203,118 @@ describe('useSpotifyLibraryUpdate async contract', () => {
 
     const refreshPromise = result.current[1](new AbortController(), {});
 
-    await expect(refreshPromise).rejects.toThrow('token endpoint failed');
+    await act(async () => {
+      await expect(refreshPromise).rejects.toThrow('token endpoint failed');
+    });
+    expect(result.current[0].updateStatus).toBe('error');
+  });
+
+  it('does not persist or prune when authentication is missing', async () => {
+    mockGetSpotifySdk.mockResolvedValue(null);
+    mockCachedLibrary();
+
+    const {result} = renderHook(() => useSpotifyLibraryUpdate());
+    await waitFor(() =>
+      expect(result.current[0].playlists['cached-snapshot']).toBeDefined(),
+    );
+
+    let refreshResult;
+    await act(async () => {
+      refreshResult = await result.current[1](new AbortController(), {});
+    });
+
+    expect(refreshResult).toEqual({status: 'unauthenticated'});
+    expect(result.current[0].updateStatus).toBe('complete');
+    expect(result.current[0].playlists['cached-snapshot']).toBeDefined();
+    expect(mockUpsertPlaylists).not.toHaveBeenCalled();
+    expect(mockUpsertAlbums).not.toHaveBeenCalled();
+    expect(mockDeleteMissingPlaylists).not.toHaveBeenCalled();
+    expect(mockDeleteMissingAlbums).not.toHaveBeenCalled();
+  });
+
+  it('preserves cached progress and storage when Spotify is unavailable', async () => {
+    const playlistsPage = deferred<{
+      total: number;
+      items: Array<Record<string, unknown>>;
+    }>();
+    mockGetSpotifySdk.mockResolvedValue(createSdk(playlistsPage.promise));
+    mockCachedLibrary();
+
+    const {result} = renderHook(() => useSpotifyLibraryUpdate());
+    await waitFor(() =>
+      expect(result.current[0].playlists['cached-snapshot']).toBeDefined(),
+    );
+
+    let refreshPromise!: ReturnType<(typeof result.current)[1]>;
+    act(() => {
+      refreshPromise = result.current[1](new AbortController(), {});
+    });
+    await waitFor(() =>
+      expect(result.current[0].updateStatus).toBe('fetching'),
+    );
+
+    let refreshResult;
+    await act(async () => {
+      playlistsPage.reject(new SpotifyUnavailableError());
+      refreshResult = await refreshPromise;
+    });
+
+    expect(refreshResult).toEqual({status: 'unavailable'});
+    expect(result.current[0].updateStatus).toBe('complete');
+    expect(result.current[0].playlists['cached-snapshot']).toBeDefined();
+    expect(mockSetKeyval).not.toHaveBeenCalled();
+    expect(mockUpsertPlaylists).not.toHaveBeenCalled();
+    expect(mockUpsertAlbums).not.toHaveBeenCalled();
+    expect(mockDeleteMissingPlaylists).not.toHaveBeenCalled();
+    expect(mockDeleteMissingAlbums).not.toHaveBeenCalled();
+  });
+
+  it('does not prune caches when Spotify becomes unavailable during track loading', async () => {
+    const sdk = createSdk(
+      Promise.resolve({
+        total: 1,
+        items: [
+          {
+            id: 'playlist-1',
+            snapshot_id: 'snapshot-1',
+            name: 'Road Trip',
+            collaborative: false,
+            external_urls: {spotify: 'https://open.spotify.com/playlist/1'},
+            owner: {
+              display_name: 'Listener',
+              external_urls: {spotify: 'https://open.spotify.com/user/1'},
+            },
+            tracks: {total: 1},
+          },
+        ],
+      }),
+    );
+    sdk.playlists.getPlaylistItems.mockRejectedValue(
+      new SpotifyUnavailableError(),
+    );
+    mockGetSpotifySdk.mockResolvedValue(sdk);
+    mockCachedLibrary();
+
+    const {result} = renderHook(() => useSpotifyLibraryUpdate());
+    await waitFor(() =>
+      expect(result.current[0].playlists['cached-snapshot']).toBeDefined(),
+    );
+
+    let refreshResult;
+    await act(async () => {
+      refreshResult = await result.current[1](new AbortController(), {});
+    });
+
+    expect(refreshResult).toEqual({status: 'unavailable'});
+    expect(mockDeleteMissingPlaylists).not.toHaveBeenCalled();
+    expect(mockDeleteMissingAlbums).not.toHaveBeenCalled();
+
+    const playlistTrackWrites = mockSetKeyval.mock.calls.filter(
+      ([key]) => key === 'playlistTracks',
+    );
+    expect(playlistTrackWrites.length).toBeGreaterThan(0);
+    for (const [, cache] of playlistTrackWrites) {
+      expect(cache).toHaveProperty('cached-snapshot');
+    }
   });
 });

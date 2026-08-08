@@ -1,8 +1,8 @@
 import {useCallback, useEffect, useState} from 'react';
 import {
   RateLimitError,
+  SpotifyUnavailableError,
   getSpotifySdk,
-  withSpotifyAvailabilityFallback,
 } from './ClientInstance';
 import {
   PlaylistedTrack,
@@ -388,12 +388,17 @@ export type SpotifyLibrary = SpotifyLibraryMetadata & {
   albumTracks: CacheAlbumTracks;
 };
 
+export type SpotifyLibraryRefreshResult =
+  | {status: 'refreshed'; library: SpotifyLibrary}
+  | {status: 'unauthenticated'}
+  | {status: 'unavailable'};
+
 export function useSpotifyLibraryUpdate(): [
   progress: SpotifyLibraryUpdateProgress,
   run: (
     abort: AbortController,
     options: {concurrency?: number},
-  ) => Promise<SpotifyLibrary>,
+  ) => Promise<SpotifyLibraryRefreshResult>,
 ] {
   const [progress, setProgress] = useState<SpotifyLibraryUpdateProgress>({
     playlists: {},
@@ -525,22 +530,16 @@ export function useSpotifyLibraryUpdate(): [
     (
       abortController: AbortController,
       options: {concurrency?: number},
-    ): Promise<SpotifyLibrary> => {
-      return (async () => {
+    ): Promise<SpotifyLibraryRefreshResult> => {
+      return (async (): Promise<SpotifyLibraryRefreshResult> => {
         const sdk = await getSpotifySdk();
         if (sdk == null) {
-          setProgress({
-            playlists: {},
-            albums: {},
+          setProgress(progress => ({
+            ...progress,
             rateLimitCountdown: null,
-            updateStatus: 'idle',
-          });
-          return {
-            playlistMetadata: {},
-            albumMetadata: {},
-            playlistTracks: {},
-            albumTracks: {},
-          };
+            updateStatus: 'complete',
+          }));
+          return {status: 'unauthenticated'};
         }
 
         const [cachedPlaylistsTracks, cachedAlbumsTracks] = await Promise.all([
@@ -729,6 +728,9 @@ export function useSpotifyLibraryUpdate(): [
                   cachedLen,
                 );
               } catch (e) {
+                if (e instanceof SpotifyUnavailableError) {
+                  throw e;
+                }
                 console.error('Error resuming playlist', p.id, e);
                 setProgress(prev => ({
                   ...prev,
@@ -860,6 +862,9 @@ export function useSpotifyLibraryUpdate(): [
                 0,
               );
             } catch (e) {
+              if (e instanceof SpotifyUnavailableError) {
+                throw e;
+              }
               console.error('Error fetching playlist', p.id, e);
               setProgress(prev => ({
                 ...prev,
@@ -965,6 +970,9 @@ export function useSpotifyLibraryUpdate(): [
                 })),
               );
             } catch (e) {
+              if (e instanceof SpotifyUnavailableError) {
+                throw e;
+              }
               console.error('Error fetching album tracks', albumId, e);
               setProgress(prev => ({
                 ...prev,
@@ -1015,12 +1023,30 @@ export function useSpotifyLibraryUpdate(): [
         }));
 
         return {
-          playlistMetadata,
-          albumMetadata,
-          playlistTracks: newPlaylistCache,
-          albumTracks: newAlbumCache,
+          status: 'refreshed',
+          library: {
+            playlistMetadata,
+            albumMetadata,
+            playlistTracks: newPlaylistCache,
+            albumTracks: newAlbumCache,
+          },
         };
-      })();
+      })().catch(error => {
+        if (error instanceof SpotifyUnavailableError) {
+          setProgress(progress => ({
+            ...progress,
+            rateLimitCountdown: null,
+            updateStatus: 'complete',
+          }));
+          return {status: 'unavailable'};
+        }
+        setProgress(progress => ({
+          ...progress,
+          rateLimitCountdown: null,
+          updateStatus: 'error',
+        }));
+        throw error;
+      });
     },
     [],
   );
@@ -1032,8 +1058,8 @@ export async function getSpotifyLibraryMetadata(
   sdk: SpotifyApi,
 ): Promise<SpotifyLibraryMetadata> {
   const [playlists, savedAlbums] = await Promise.all([
-    withSpotifyAvailabilityFallback(() => getAllPlaylists(sdk), []),
-    withSpotifyAvailabilityFallback(() => getAllSavedAlbums(sdk), []),
+    getAllPlaylists(sdk),
+    getAllSavedAlbums(sdk),
   ]);
   const playlistMetadata = playlists.reduce((acc: PlaylistMetadata, p) => {
     const snapshot: string = p.snapshot_id;

@@ -103,7 +103,7 @@ type Status = {
   songsCounted: number;
 };
 
-function LoggedIn() {
+export function LoggedIn() {
   const [status, setStatus] = useState<Status>({
     status: 'not-started',
     songsCounted: 0,
@@ -169,7 +169,24 @@ function LoggedIn() {
       throw err;
     }
 
-    await Promise.all([chorusChartsPromise, updateSpotifyLibraryPromise]);
+    try {
+      const [, spotifyResult] = await Promise.all([
+        chorusChartsPromise,
+        updateSpotifyLibraryPromise,
+      ]);
+      if (spotifyResult.status === 'unauthenticated') {
+        toast.info('Reconnect Spotify to refresh your library');
+      } else if (spotifyResult.status === 'unavailable') {
+        toast.info('Spotify is unavailable here');
+      }
+    } catch (error) {
+      setStarted(false);
+      setStatus({status: 'not-started', songsCounted: 0});
+      toast.error(
+        error instanceof Error ? error.message : 'Spotify refresh failed',
+      );
+      return;
+    }
 
     setStatus(prevStatus => ({
       ...prevStatus,

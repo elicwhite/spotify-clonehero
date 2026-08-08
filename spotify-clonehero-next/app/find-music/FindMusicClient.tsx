@@ -350,7 +350,15 @@ export default function FindMusicClient() {
     const controller = new AbortController();
     activeControllersRef.current.push(controller);
     try {
-      await refreshSpotifyLibrary(controller, {concurrency: 3});
+      const result = await refreshSpotifyLibrary(controller, {concurrency: 3});
+      if (result.status === 'unauthenticated') {
+        toast.info('Reconnect Spotify to refresh your library');
+        return;
+      }
+      if (result.status === 'unavailable') {
+        toast.info('Spotify is unavailable here');
+        return;
+      }
       await stageSnapshot();
     } catch (error) {
       if (!controller.signal.aborted) {
