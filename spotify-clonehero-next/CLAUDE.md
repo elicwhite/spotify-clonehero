@@ -42,6 +42,22 @@ build/runtime errors, and logs.
 bridge (it auto-discovers the running dev server). Start `pnpm dev`, then the
 agent can call the tools above.
 
+## Sentry (production errors)
+
+Production errors are reported to the Sentry organization
+`clone-hero-chart-tools`, project `frontend`. The shared `.mcp.json` connects
+Claude Code to Sentry's official remote MCP service so agents can inspect
+issues, events, traces, and releases while debugging.
+
+On the first Claude Code session after cloning or changing `.mcp.json`:
+
+1. Approve the project-scoped `sentry` MCP server when prompted.
+2. Run `/mcp`, select `sentry`, and complete the Sentry OAuth login.
+
+Authentication is stored by Claude Code and must not be committed. When asking
+Claude to investigate production errors, scope searches to organization
+`clone-hero-chart-tools` and project `frontend` unless the task says otherwise.
+
 ## Drum Transcription Feature
 
 Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU) → transcribe drums via ADTOF model (ONNX + WebGPU) → edit on a Clone Hero highway (like Moonscraper) → export as .zip or .sng.
