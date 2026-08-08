@@ -733,11 +733,15 @@ function DownloadButton({
 
     try {
       updateDownloadState('downloading');
-      await downloadSong(artist, song, charter, url, {
+      const result = await downloadSong(artist, song, charter, url, {
         asSng: true,
         source,
         md5,
       });
+      if (result == null) {
+        updateDownloadState('not-downloading');
+        return;
+      }
     } catch (err) {
       console.log('Error while downloading', artist, song, charter, url, err);
       updateDownloadState('failed');

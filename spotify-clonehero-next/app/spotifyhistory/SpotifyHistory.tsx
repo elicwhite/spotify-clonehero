@@ -2,10 +2,10 @@
 
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
-import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
 import {
   getSpotifyDumpArtistTrackPlays,
-  processSpotifyDump,
+  tryProcessSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
 import SpotifyTableDownloader, {
   PickedSpotifyPlaylists,
@@ -156,7 +156,7 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     const cachedSpotifyPromise = getSpotifyDumpArtistTrackPlays();
 
     setStatus({status: 'scanning', songsCounted: 0});
-    const scanPromise = scanForInstalledCharts(count => {
+    const scanPromise = tryScanForInstalledCharts(count => {
       setStatus(prevStatus => ({
         ...prevStatus,
         songsCounted: count,
@@ -173,9 +173,17 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         spotifyDataHandle = await window.showDirectoryPicker({
           id: 'spotify-dump',
         });
-      } catch {
+      } catch (error) {
+        if (
+          !(
+            error instanceof DOMException &&
+            (error.name === 'AbortError' || error.name === 'NotAllowedError')
+          )
+        ) {
+          scanPromise.catch(() => {});
+          throw error;
+        }
         toast.info('Directory picker canceled');
-        console.log('User canceled picker');
         abortController.abort();
         // Drain the in-flight scan so its rejection (if any) doesn't surface
         // as an unhandled-promise warning.
@@ -185,22 +193,18 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     }
 
     const spotifyDumpPromise = (async () => {
-      if (artistTrackPlays != null) return artistTrackPlays;
+      if (artistTrackPlays != null) {
+        return {status: 'imported' as const, plays: artistTrackPlays};
+      }
       if (spotifyDataHandle == null) {
         throw new Error('Spotify data handle is null');
       }
-      return await processSpotifyDump(spotifyDataHandle);
+      return await tryProcessSpotifyDump(spotifyDataHandle);
     })();
 
     try {
-      await scanPromise;
-      setStatus(prevStatus => ({
-        ...prevStatus,
-        status: 'done-scanning',
-      }));
-      await pause();
-    } catch (err) {
-      if (err instanceof Error && err.message == 'User canceled picker') {
+      const scanResult = await scanPromise;
+      if (scanResult == null) {
         toast.info('Directory picker canceled');
         setStatus({
           status: 'not-started',
@@ -208,22 +212,36 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         });
         abortController.abort();
         return;
-      } else {
-        toast.error('Error scanning local charts', {duration: 8000});
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-        throw err;
       }
+      setStatus(prevStatus => ({
+        ...prevStatus,
+        status: 'done-scanning',
+      }));
+      await pause();
+    } catch (err) {
+      toast.error('Error scanning local charts', {duration: 8000});
+      setStatus({
+        status: 'not-started',
+        songsCounted: 0,
+      });
+      throw err;
     }
 
     // Wait for parallel tasks to finish
     try {
-      [artistTrackPlays] = await Promise.all([
+      const [spotifyDumpResult] = await Promise.all([
         spotifyDumpPromise,
         chorusChartsPromise,
       ]);
+      if (spotifyDumpResult.status === 'invalid-selection') {
+        setStatus({
+          status: 'not-started',
+          songsCounted: 0,
+        });
+        toast.error(spotifyDumpResult.message, {duration: 8000});
+        return;
+      }
+      artistTrackPlays = spotifyDumpResult.plays;
     } catch (err) {
       setStatus({
         status: 'not-started',

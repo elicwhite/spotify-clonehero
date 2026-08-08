@@ -21,7 +21,14 @@ export class RateLimitError extends Error {
   }
 }
 
-class MyResponseValidator implements IValidateResponses {
+export class SpotifyUnavailableError extends Error {
+  constructor() {
+    super('Spotify is unavailable in this country');
+    this.name = 'SpotifyUnavailableError';
+  }
+}
+
+export class MyResponseValidator implements IValidateResponses {
   public async validateResponse(response: Response): Promise<void> {
     switch (response.status) {
       case 401:
@@ -30,6 +37,9 @@ class MyResponseValidator implements IValidateResponses {
         );
       case 403:
         const body = await response.text();
+        if (body.includes('Spotify is unavailable in this country')) {
+          throw new SpotifyUnavailableError();
+        }
         throw new Error(
           `Bad OAuth request (wrong consumer key, bad nonce, expired timestamp...). Unfortunately, re-authenticating the user won't help here. Body: ${body}`,
         );
@@ -75,11 +85,30 @@ export class MyErrorHandler implements IHandleErrors {
 
 async function fetchAccessToken(): Promise<ProtectedAccessToken | null> {
   const resp = await fetch('/api/spotify/access-token', {cache: 'no-store'});
+  if (resp.status === 401) {
+    return null;
+  }
   if (!resp.ok) {
-    throw new Error('Not authenticated or no Spotify token');
+    throw new Error(
+      `Spotify access token request failed with status ${resp.status}`,
+    );
   }
   const json = await resp.json();
   return json as ProtectedAccessToken;
+}
+
+export async function withSpotifyAvailabilityFallback<T>(
+  request: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof SpotifyUnavailableError) {
+      return fallback;
+    }
+    throw error;
+  }
 }
 
 let cachedSharedSdk: SpotifyApi | null = null;

@@ -1,5 +1,9 @@
 import {useCallback, useEffect, useState} from 'react';
-import {RateLimitError, getSpotifySdk} from './ClientInstance';
+import {
+  RateLimitError,
+  getSpotifySdk,
+  withSpotifyAvailabilityFallback,
+} from './ClientInstance';
 import {
   PlaylistedTrack,
   SimplifiedPlaylist,
@@ -522,10 +526,21 @@ export function useSpotifyLibraryUpdate(): [
       abortController: AbortController,
       options: {concurrency?: number},
     ): Promise<SpotifyLibrary> => {
-      return new Promise(async (resolve, reject) => {
+      return new Promise(async resolve => {
         const sdk = await getSpotifySdk();
         if (sdk == null) {
-          reject(new Error('Spotify SDK not found'));
+          setProgress({
+            playlists: {},
+            albums: {},
+            rateLimitCountdown: null,
+            updateStatus: 'idle',
+          });
+          resolve({
+            playlistMetadata: {},
+            albumMetadata: {},
+            playlistTracks: {},
+            albumTracks: {},
+          });
           return;
         }
 
@@ -944,7 +959,11 @@ export function useSpotifyLibraryUpdate(): [
               // Persist album tracks to DB atomically replacing links
               await replaceAlbumTracks(
                 albumId,
-                tracks.map(t => ({id: t.id, name: t.name, artists: t.artists})),
+                tracks.map(t => ({
+                  id: t.id,
+                  name: t.name,
+                  artists: t.artists,
+                })),
               );
             } catch (e) {
               console.error('Error fetching album tracks', albumId, e);
@@ -1014,8 +1033,8 @@ export async function getSpotifyLibraryMetadata(
   sdk: SpotifyApi,
 ): Promise<SpotifyLibraryMetadata> {
   const [playlists, savedAlbums] = await Promise.all([
-    getAllPlaylists(sdk),
-    getAllSavedAlbums(sdk),
+    withSpotifyAvailabilityFallback(() => getAllPlaylists(sdk), []),
+    withSpotifyAvailabilityFallback(() => getAllSavedAlbums(sdk), []),
   ]);
   const playlistMetadata = playlists.reduce((acc: PlaylistMetadata, p) => {
     const snapshot: string = p.snapshot_id;

@@ -13,7 +13,7 @@ import {sql} from 'kysely';
 import {useData} from '@/lib/suspense-data';
 import {SignInWithSpotifyCard} from './SignInWithSpotifyCard';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
-import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
 import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
 import {toast} from 'sonner';
 import {
@@ -147,30 +147,26 @@ function LoggedIn() {
     setStatus({status: 'scanning', songsCounted: 0});
 
     try {
-      await scanForInstalledCharts(count => {
+      const scanResult = await tryScanForInstalledCharts(count => {
         setStatus(prevStatus => ({
           ...prevStatus,
           songsCounted: count,
         }));
       });
+      if (scanResult == null) {
+        toast.info('Directory picker canceled');
+        setStatus({status: 'not-started', songsCounted: 0});
+        return;
+      }
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();
     } catch (err) {
-      if (err instanceof Error && err.message == 'User canceled picker') {
-        toast.info('Directory picker canceled');
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-        return;
-      } else {
-        toast.error('Error scanning local charts', {duration: 8000});
-        setStatus({
-          status: 'not-started',
-          songsCounted: 0,
-        });
-        throw err;
-      }
+      toast.error('Error scanning local charts', {duration: 8000});
+      setStatus({
+        status: 'not-started',
+        songsCounted: 0,
+      });
+      throw err;
     }
 
     await Promise.all([chorusChartsPromise, updateSpotifyLibraryPromise]);

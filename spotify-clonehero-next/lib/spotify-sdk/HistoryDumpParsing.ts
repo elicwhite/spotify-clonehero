@@ -7,6 +7,12 @@ import {getLocalDb} from '@/lib/local-db/client';
 
 export type ArtistTrackPlays = Map<string, Map<string, number>>;
 
+export type SpotifyHistoryImportResult =
+  | {status: 'imported'; plays: ArtistTrackPlays}
+  | {status: 'invalid-selection'; message: string};
+
+class SpotifyHistorySelectionError extends Error {}
+
 export async function getSpotifyDumpArtistTrackPlays() {
   const root = await navigator.storage.getDirectory();
   let installedChartsCacheHandle: FileSystemFileHandle;
@@ -36,14 +42,21 @@ export async function getSpotifyDumpArtistTrackPlays() {
   return artistTrackPlays;
 }
 
-export async function processSpotifyDump(
+export async function tryProcessSpotifyDump(
   spotifyDataHandle: FileSystemDirectoryHandle,
-) {
-  const results = await getAllSpotifyPlays(spotifyDataHandle);
-  const artistTrackPlays = createPlaysMapOfSpotifyData(results);
+): Promise<SpotifyHistoryImportResult> {
+  try {
+    const results = await getAllSpotifyPlays(spotifyDataHandle);
+    const artistTrackPlays = createPlaysMapOfSpotifyData(results);
 
-  await cacheArtistTrackPlays(artistTrackPlays);
-  return artistTrackPlays;
+    await cacheArtistTrackPlays(artistTrackPlays);
+    return {status: 'imported', plays: artistTrackPlays};
+  } catch (error) {
+    if (error instanceof SpotifyHistorySelectionError) {
+      return {status: 'invalid-selection', message: error.message};
+    }
+    throw error;
+  }
 }
 
 async function cacheArtistTrackPlays(artistTrackPlays: ArtistTrackPlays) {
@@ -95,7 +108,7 @@ async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
   const results = [];
   for await (const entry of handle.values()) {
     if (entry.kind !== 'file') {
-      throw new Error(
+      throw new SpotifyHistorySelectionError(
         `Spotify History: Did not expect to see subfolders. Found folder ${entry.name}. Are you sure you selected your Spotify Extended Streaming History?`,
       );
     }
@@ -120,14 +133,14 @@ async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
       console.error(
         `Expected ${entry.name} to contain an array. Received ${typeof json}`,
       );
-      throw new Error(
+      throw new SpotifyHistorySelectionError(
         `Spotify History: Unexpected file contents in ${entry.name}. Are you sure you selected your Spotify Extended Streaming History?`,
       );
     }
   }
 
   if (!hasPdf) {
-    throw new Error(
+    throw new SpotifyHistorySelectionError(
       `Spotify History: Expected to find a ReadMeFirst.pdf file. Are you sure you selected your Spotify Extended Streaming History?`,
     );
   }

@@ -8,19 +8,23 @@ import {coalesceProgress} from './scan-progress';
 import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 
-async function promptForSongsDirectory() {
+async function promptForSongsDirectory(): Promise<FileSystemDirectoryHandle | null> {
   alert('Select your Songs directory');
 
-  let handle;
+  let handle: FileSystemDirectoryHandle;
   try {
     handle = await window.showDirectoryPicker({
       id: 'clone-hero-songs',
       mode: 'readwrite',
     });
-  } catch (err) {
-    throw new Error('User canceled picker', {
-      cause: err,
-    });
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === 'AbortError' || error.name === 'NotAllowedError')
+    ) {
+      return null;
+    }
+    throw error;
   }
 
   await set('songsDirectoryHandle', handle);
@@ -77,7 +81,7 @@ export async function getCachedSongsDirectoryHandle(): Promise<FileSystemDirecto
   return handle;
 }
 
-async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
+async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
   if (currentSongDirectoryCache) {
     return currentSongDirectoryCache;
   }
@@ -88,7 +92,9 @@ async function getSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle> {
   }
 
   const promptedHandle = await promptForSongsDirectory();
-  currentSongDirectoryCache = promptedHandle;
+  if (promptedHandle) {
+    currentSongDirectoryCache = promptedHandle;
+  }
   return promptedHandle;
 }
 
@@ -97,12 +103,15 @@ type InstalledChartsResponse = {
   installedCharts: SongAccumulator[];
 };
 
-export async function scanForInstalledCharts(
+export async function tryScanForInstalledCharts(
   onProgress: (count: number) => void = () => {},
-): Promise<InstalledChartsResponse> {
+): Promise<InstalledChartsResponse | null> {
   const root = await navigator.storage.getDirectory();
 
-  const handle = await getSongsDirectoryHandle();
+  const handle = await tryGetSongsDirectoryHandle();
+  if (!handle) {
+    return null;
+  }
 
   // Coalesce per-chart progress ticks so the caller's React setState doesn't
   // re-render ~15k times during a full library scan.
@@ -162,8 +171,11 @@ async function scanDirectoryForCharts(
   };
 }
 
-async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
-  const songsDirHandle = await getSongsDirectoryHandle();
+async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle | null> {
+  const songsDirHandle = await tryGetSongsDirectoryHandle();
+  if (!songsDirHandle) {
+    return null;
+  }
   const downloadsHandle = await songsDirHandle.getDirectoryHandle(
     'musiccharts-dot-tools-downloads',
     {create: true},
@@ -360,6 +372,9 @@ export async function downloadSong(
 
   const downloadLocation =
     options?.folder ?? (await getDefaultDownloadDirectory());
+  if (!downloadLocation) {
+    return null;
+  }
 
   const backupRootDirHandle = await getBackupDirectory();
 

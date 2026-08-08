@@ -57,11 +57,11 @@ jest.mock('../../../lib/spotify-sdk/SpotifyFetching', () => ({
 }));
 
 jest.mock('../../../lib/spotify-sdk/HistoryDumpParsing', () => ({
-  processSpotifyDump: jest.fn(),
+  tryProcessSpotifyDump: jest.fn(),
 }));
 
 jest.mock('../../../lib/local-songs-folder', () => ({
-  scanForInstalledCharts: jest.fn(),
+  tryScanForInstalledCharts: jest.fn(),
 }));
 
 const mockGetFindMusicSongs = jest.fn();

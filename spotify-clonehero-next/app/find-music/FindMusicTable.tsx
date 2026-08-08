@@ -109,13 +109,17 @@ export default function FindMusicTable({
   const install = useCallback(async (chart: FindMusicChart) => {
     setDownloadStates(current => ({...current, [chart.md5]: 'downloading'}));
     try {
-      await downloadSong(
+      const result = await downloadSong(
         chart.artist,
         chart.name,
         chart.charter,
         `https://files.enchor.us/${chart.md5}.sng`,
         {asSng: true, source: 'unknown', md5: chart.md5},
       );
+      if (result == null) {
+        setDownloadStates(current => ({...current, [chart.md5]: 'idle'}));
+        return;
+      }
       setDownloadStates(current => ({...current, [chart.md5]: 'done'}));
     } catch (error) {
       console.error('Failed to install chart', error);

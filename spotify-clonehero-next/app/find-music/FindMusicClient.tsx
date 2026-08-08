@@ -13,8 +13,8 @@ import {
   onPlaylistCacheUpdated,
   useSpotifyLibraryUpdate,
 } from '@/lib/spotify-sdk/SpotifyFetching';
-import {processSpotifyDump} from '@/lib/spotify-sdk/HistoryDumpParsing';
-import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import {tryProcessSpotifyDump} from '@/lib/spotify-sdk/HistoryDumpParsing';
+import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {
   Sheet,
@@ -306,7 +306,17 @@ export default function FindMusicClient() {
     try {
       const handle = await window.showDirectoryPicker({id: 'spotify-dump'});
       setHistoryStatus({phase: 'loading', summary: 'Reading Spotify history…'});
-      const plays = await processSpotifyDump(handle);
+      const historyResult = await tryProcessSpotifyDump(handle);
+      if (historyResult.status === 'invalid-selection') {
+        setHistoryStatus({
+          phase: 'error',
+          summary: 'History import failed',
+          detail: historyResult.message,
+        });
+        toast.error(historyResult.message);
+        return;
+      }
+      const plays = historyResult.plays;
       const songCount = Array.from(plays.values()).reduce(
         (sum, songs) => sum + songs.size,
         0,
@@ -354,12 +364,16 @@ export default function FindMusicClient() {
   const runLocalScan = useCallback(async () => {
     setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
     try {
-      const result = await scanForInstalledCharts(count => {
+      const result = await tryScanForInstalledCharts(count => {
         setLocalStatus({
           phase: 'loading',
           summary: `Scanning… ${count.toLocaleString()} charts found`,
         });
       });
+      if (result == null) {
+        setLocalStatus(null);
+        return;
+      }
       setLocalStatus({
         phase: 'ready',
         summary: `${result.installedCharts.length.toLocaleString()} installed charts`,
@@ -367,10 +381,6 @@ export default function FindMusicClient() {
       });
       await stageSnapshot();
     } catch (error) {
-      if (isPickerCancel(error)) {
-        setLocalStatus(null);
-        return;
-      }
       const message = error instanceof Error ? error.message : String(error);
       setLocalStatus({
         phase: 'error',
@@ -686,8 +696,8 @@ function fingerprint(song: FindMusicSong | RadarSong) {
 
 function isPickerCancel(error: unknown) {
   return (
-    (error instanceof DOMException && error.name === 'AbortError') ||
-    (error instanceof Error && error.message === 'User canceled picker')
+    error instanceof DOMException &&
+    (error.name === 'AbortError' || error.name === 'NotAllowedError')
   );
 }
 
