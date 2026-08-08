@@ -58,6 +58,11 @@ Authentication is stored by Claude Code and must not be committed. When asking
 Claude to investigate production errors, scope searches to organization
 `clone-hero-chart-tools` and project `frontend` unless the task says otherwise.
 
+Sentry uses Vercel's deployment environment as its environment name:
+`production` and `preview` are reported separately, while local development and
+unknown environments are disabled. The shared mapping lives in
+`lib/sentry/environment.ts` and is used by both client and server setup.
+
 ## Drum Transcription Feature
 
 Fully browser-based: upload a song → separate stems via Demucs (ONNX + WebGPU) → transcribe drums via ADTOF model (ONNX + WebGPU) → edit on a Clone Hero highway (like Moonscraper) → export as .zip or .sng.
