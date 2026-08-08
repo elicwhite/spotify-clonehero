@@ -34,6 +34,12 @@ function chart(overrides: ChartOverrides): FindMusicChart {
     hasVideoBackground: false,
     isInstalled: false,
     ...rest,
+    instrumentPresence: {
+      guitar: false,
+      bass: false,
+      keys: false,
+      proDrums: false,
+    },
     instruments: {
       guitar: null,
       bass: null,
@@ -237,6 +243,23 @@ describe('find music filtering', () => {
         filters({instruments: new Set(['proDrums'])}),
       ),
     ).toEqual([]);
+  });
+
+  test('uses track-level presence when Chorus intensity metadata is absent', () => {
+    const trackBacked = chart({
+      md5: 'b26561a9d61bd5f4d2454a9169a42654',
+      instruments: {guitar: -1, bass: -1},
+    });
+    trackBacked.instrumentPresence.guitar = true;
+    trackBacked.instrumentPresence.bass = true;
+
+    const result = applyMusicFilters(
+      [music({key: 'violet-hill', charts: [trackBacked]})],
+      filters({instruments: new Set(['guitar', 'bass'])}),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].charts).toEqual([trackBacked]);
   });
 
   test('hide-installed excludes a song with any installed chart', () => {

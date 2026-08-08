@@ -61,6 +61,10 @@ function makeDb(): Kysely<DB> {
       diff_bass INTEGER,
       diff_keys INTEGER,
       diff_drums_real INTEGER,
+      has_guitar INTEGER NOT NULL DEFAULT 0,
+      has_bass INTEGER NOT NULL DEFAULT 0,
+      has_keys INTEGER NOT NULL DEFAULT 0,
+      has_pro_drums INTEGER NOT NULL DEFAULT 0,
       modified_time TEXT NOT NULL,
       song_length INTEGER,
       has_video_background INTEGER NOT NULL,
@@ -129,6 +133,10 @@ function chart(
     diff_bass: null,
     diff_keys: null,
     diff_drums_real: 2,
+    has_guitar: 1,
+    has_bass: 0,
+    has_keys: 0,
+    has_pro_drums: 1,
     modified_time: '2026-01-01',
     song_length: 180_000,
     has_video_background: 0,
@@ -368,6 +376,55 @@ describe('find-music queries', () => {
         bass: 0,
         keys: -1,
         proDrums: 4,
+      },
+    });
+  });
+
+  it('projects track-level presence when numeric intensities are unavailable', async () => {
+    await db
+      .insertInto('spotify_history')
+      .values({
+        artist: 'Coldplay',
+        artist_normalized: 'coldplay',
+        name: 'Violet Hill',
+        name_normalized: 'violet hill',
+        play_count: 8,
+      })
+      .execute();
+    await db
+      .insertInto('chorus_charts')
+      .values(
+        chart(
+          'b26561a9d61bd5f4d2454a9169a42654',
+          'Coldplay',
+          'coldplay',
+          'Violet Hill',
+          'violet hill',
+          'Vicarious Visions',
+          'vicarious visions',
+          {
+            diff_guitar: -1,
+            diff_bass: -1,
+            diff_keys: -1,
+            diff_drums_real: -1,
+            has_guitar: 1,
+            has_bass: 1,
+            has_keys: 0,
+            has_pro_drums: 0,
+          },
+        ),
+      )
+      .execute();
+
+    const [song] = await getFindMusicSongs(db);
+    expect(song.charts[0]).toMatchObject({
+      md5: 'b26561a9d61bd5f4d2454a9169a42654',
+      instruments: {guitar: -1, bass: -1},
+      instrumentPresence: {
+        guitar: true,
+        bass: true,
+        keys: false,
+        proDrums: false,
       },
     });
   });

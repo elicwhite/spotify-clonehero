@@ -22,6 +22,10 @@ export interface ChorusCharts {
   diff_guitar: number | null;
   diff_keys: number | null;
   group_id: number;
+  has_bass: number;
+  has_guitar: number;
+  has_keys: number;
+  has_pro_drums: number;
   has_video_background: number;
   md5: string;
   modified_time: string;

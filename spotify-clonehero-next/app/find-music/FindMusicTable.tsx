@@ -387,6 +387,8 @@ function VirtualRows({
               ) : (
                 <ChartRow
                   chart={item.chart}
+                  view={view}
+                  previewEnabled={previewEnabled}
                   downloadState={downloadStates[item.chart.md5] ?? 'idle'}
                   onInstall={() => onInstall(item.chart)}
                 />
@@ -578,7 +580,10 @@ function relevanceEvidence(
       const labels = INSTRUMENTS.filter(([id]) =>
         radar.charts.some(chart => {
           const difficulty = chart.instruments[id];
-          return difficulty != null && difficulty >= 0;
+          return (
+            (difficulty != null && difficulty >= 0) ||
+            chart.instrumentPresence[id]
+          );
         }),
       ).map(([, , name]) => name);
       return labels.length > 0 ? labels.join(', ') : 'No instrument data';
@@ -617,15 +622,30 @@ function InstalledCount({
 
 function ChartRow({
   chart,
+  view,
+  previewEnabled,
   downloadState,
   onInstall,
 }: {
   chart: FindMusicChart;
+  view: FindMusicView;
+  previewEnabled: boolean;
   downloadState: DownloadState;
   onInstall: () => Promise<void>;
 }) {
   return (
-    <div className="grid h-full grid-cols-[34px_minmax(170px,1fr)_minmax(220px,1.4fr)_120px_110px] items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs">
+    <div
+      data-testid="chart-row"
+      className={cn(
+        'grid h-full items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs',
+        view === 'music'
+          ? previewEnabled
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_150px_120px_100px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
+          : previewEnabled
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_170px_120px_100px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
+      )}>
       <span />
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate font-medium">{chart.charter}</span>
@@ -643,7 +663,11 @@ function ChartRow({
           </a>
         </Button>
       </span>
-      <InstrumentBadges chart={chart} />
+      <span className="min-w-0 pl-2">
+        <InstrumentBadges chart={chart} />
+      </span>
+      {previewEnabled ? <span /> : null}
+      <span />
       <span className="font-mono text-xs text-muted-foreground">
         <span className="sr-only">Updated </span>
         {formatDate(chart.modifiedTime)}
@@ -676,7 +700,9 @@ function ChartRow({
 function InstrumentBadges({chart}: {chart: FindMusicChart}) {
   const available = INSTRUMENTS.filter(([id]) => {
     const difficulty = chart.instruments[id];
-    return difficulty != null && difficulty >= 0;
+    return (
+      (difficulty != null && difficulty >= 0) || chart.instrumentPresence[id]
+    );
   });
   if (available.length === 0) {
     return <span className="text-muted-foreground">—</span>;
@@ -684,15 +710,20 @@ function InstrumentBadges({chart}: {chart: FindMusicChart}) {
   return (
     <span className="flex flex-wrap gap-1.5">
       {available.map(([id, , name]) => {
-        const difficulty = chart.instruments[id] as number;
+        const difficulty = chart.instruments[id];
+        const hasIntensity = difficulty != null && difficulty >= 0;
         return (
           <span
             key={id}
-            title={`${name}: difficulty ${difficulty}`}
+            title={
+              hasIntensity
+                ? `${name}: intensity ${difficulty}`
+                : `${name}: intensity unavailable`
+            }
             className="inline-flex h-8 min-w-11 items-center justify-center gap-1.5 rounded-md border bg-background px-2 text-secondary-foreground">
             <FindMusicInstrumentIcon instrument={id} size={19} />
             <small className="font-mono text-xs font-semibold leading-none text-foreground">
-              {difficulty}
+              {hasIntensity ? difficulty : '?'}
             </small>
           </span>
         );

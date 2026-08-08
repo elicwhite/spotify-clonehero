@@ -81,6 +81,12 @@ function chart(md5: string, name: string, installed = false): FindMusicChart {
     groupId: 1,
     hasVideoBackground: false,
     isInstalled: installed,
+    instrumentPresence: {
+      guitar: true,
+      bass: false,
+      keys: false,
+      proDrums: true,
+    },
     instruments: {
       guitar: 4,
       bass: -1,
@@ -182,17 +188,61 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   expect(screen.getAllByText(/2025|2026/).length).toBeGreaterThan(0);
   expect(screen.queryByText('3:05')).not.toBeInTheDocument();
   expect(screen.queryByTitle('Bass: not charted')).not.toBeInTheDocument();
-  const proDrumsBadge = screen.getByTitle('Pro drums: difficulty 3');
+  const proDrumsBadge = screen.getByTitle('Pro drums: intensity 3');
   expect(proDrumsBadge.querySelector('img')).toHaveAttribute(
     'src',
     expect.stringContaining('drums.png'),
   );
   expect(proDrumsBadge.querySelector('small')).toHaveClass('text-xs');
-  expect(screen.queryByTitle('Drums: difficulty 3')).not.toBeInTheDocument();
+  expect(screen.queryByTitle('Drums: intensity 3')).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', {name: 'Install'}));
   await waitFor(() => expect(mockDownloadSong).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.getAllByText('Installed')).toHaveLength(2));
+});
+
+it('renders track-backed instruments with unavailable intensity beneath the song column', () => {
+  const violetHill = song('violet-hill', 'Violet Hill', 10);
+  violetHill.charts = [
+    {
+      ...chart('b26561a9d61bd5f4d2454a9169a42654', 'Violet Hill'),
+      charter: 'Vicarious Visions',
+      instruments: {guitar: -1, bass: -1, keys: -1, proDrums: -1},
+      instrumentPresence: {
+        guitar: true,
+        bass: true,
+        keys: false,
+        proDrums: false,
+      },
+    },
+  ];
+
+  render(
+    <FindMusicTable
+      view="music"
+      music={[violetHill]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByTestId('song-row'));
+
+  expect(screen.getByTitle('Guitar: intensity unavailable')).toHaveTextContent(
+    '?',
+  );
+  expect(screen.getByTitle('Bass: intensity unavailable')).toHaveTextContent(
+    '?',
+  );
+  expect(screen.getByTestId('chart-row')).toHaveClass(
+    'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]',
+  );
+  expect(
+    screen.getByTitle('Guitar: intensity unavailable').parentElement
+      ?.parentElement,
+  ).toHaveClass('pl-2');
 });
 
 it('shows only chart versions that satisfy the active instrument filter', () => {
@@ -206,6 +256,12 @@ it('shows only chart versions that satisfy the active instrument filter', () => 
         keys: -1,
         proDrums: 4,
       },
+      instrumentPresence: {
+        guitar: true,
+        bass: true,
+        keys: false,
+        proDrums: true,
+      },
     },
     {
       ...chart('drums-chart', 'Pro Drums Version'),
@@ -214,6 +270,12 @@ it('shows only chart versions that satisfy the active instrument filter', () => 
         bass: null,
         keys: null,
         proDrums: 4,
+      },
+      instrumentPresence: {
+        guitar: false,
+        bass: false,
+        keys: false,
+        proDrums: true,
       },
     },
   ];
@@ -237,8 +299,8 @@ it('shows only chart versions that satisfy the active instrument filter', () => 
       name: 'Open chart by Charter Guitar Version on Enchor',
     }),
   ).toHaveAttribute('href', 'https://www.enchor.us/chart/guitar-chart');
-  expect(screen.getByTitle('Bass: difficulty 0')).toBeInTheDocument();
-  expect(screen.queryByTitle('Keys: difficulty -1')).not.toBeInTheDocument();
+  expect(screen.getByTitle('Bass: intensity 0')).toBeInTheDocument();
+  expect(screen.queryByTitle('Keys: intensity -1')).not.toBeInTheDocument();
   expect(
     screen.queryByRole('link', {
       name: 'Open chart by Charter Pro Drums Version on Enchor',

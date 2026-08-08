@@ -159,6 +159,12 @@ function song(key: string, name: string): FindMusicSong {
           keys: null,
           proDrums: 2,
         },
+        instrumentPresence: {
+          guitar: true,
+          bass: false,
+          keys: false,
+          proDrums: true,
+        },
       },
     ],
   };

@@ -25,7 +25,7 @@ export async function upsertCharts(
   if (charts.length === 0) return;
   const before = performance.now();
 
-  const BATCH_SIZE = Math.floor(MAX_VARIABLE_NUMBER / 17);
+  const BATCH_SIZE = Math.floor(MAX_VARIABLE_NUMBER / 21);
   const chartRows = charts
     .filter(
       // Some charts seem to have invalid data.
@@ -36,26 +36,59 @@ export async function upsertCharts(
         chart.charter != null &&
         chart.md5 != null,
     )
-    .map(chart => ({
-      md5: chart.md5,
-      name: chart.name,
-      artist: chart.artist,
-      charter: chart.charter,
-      artist_normalized: normalizeStrForMatching(chart.artist),
-      charter_normalized: normalizeStrForMatching(chart.charter),
-      name_normalized: normalizeStrForMatching(chart.name),
-      diff_drums: chart.diff_drums ?? null,
-      diff_guitar: chart.diff_guitar ?? null,
-      diff_bass: chart.diff_bass ?? null,
-      diff_keys: chart.diff_keys ?? null,
-      diff_drums_real: chart.diff_drums_real ?? null,
-      modified_time: chart.modifiedTime,
-      song_length: chart.song_length ?? null,
-      // types currently define boolean columns as numbers in generated types
-      has_video_background: chart.hasVideoBackground ? 1 : 0,
-      album_art_md5: chart.albumArtMd5 ?? null,
-      group_id: chart.groupId ?? 0,
-    }));
+    .map(chart => {
+      const trackInstruments = new Set(
+        (
+          chart.notesData as unknown as {
+            trackHashes?: Array<{instrument?: string}>;
+          }
+        )?.trackHashes?.map(track => track.instrument) ?? [],
+      );
+      const chartWithDrumMetadata = chart as ChartResponseEncore & {
+        pro_drums?: boolean;
+      };
+
+      return {
+        md5: chart.md5,
+        name: chart.name,
+        artist: chart.artist,
+        charter: chart.charter,
+        artist_normalized: normalizeStrForMatching(chart.artist),
+        charter_normalized: normalizeStrForMatching(chart.charter),
+        name_normalized: normalizeStrForMatching(chart.name),
+        diff_drums: chart.diff_drums ?? null,
+        diff_guitar: chart.diff_guitar ?? null,
+        diff_bass: chart.diff_bass ?? null,
+        diff_keys: chart.diff_keys ?? null,
+        diff_drums_real: chart.diff_drums_real ?? null,
+        has_guitar:
+          (chart.diff_guitar != null && chart.diff_guitar >= 0) ||
+          trackInstruments.has('guitar')
+            ? 1
+            : 0,
+        has_bass:
+          (chart.diff_bass != null && chart.diff_bass >= 0) ||
+          trackInstruments.has('bass')
+            ? 1
+            : 0,
+        has_keys:
+          (chart.diff_keys != null && chart.diff_keys >= 0) ||
+          trackInstruments.has('keys')
+            ? 1
+            : 0,
+        has_pro_drums:
+          (chart.diff_drums_real != null && chart.diff_drums_real >= 0) ||
+          chartWithDrumMetadata.pro_drums === true
+            ? 1
+            : 0,
+        modified_time: chart.modifiedTime,
+        song_length: chart.song_length ?? null,
+        // types currently define boolean columns as numbers in generated types
+        has_video_background: chart.hasVideoBackground ? 1 : 0,
+        album_art_md5: chart.albumArtMd5 ?? null,
+        group_id: chart.groupId ?? 0,
+      };
+    });
 
   const tempTable = '_temp_chorus_charts';
 
@@ -102,6 +135,10 @@ export async function upsertCharts(
       'diff_bass',
       'diff_keys',
       'diff_drums_real',
+      'has_guitar',
+      'has_bass',
+      'has_keys',
+      'has_pro_drums',
       'modified_time',
       'song_length',
       'has_video_background',
@@ -124,6 +161,10 @@ export async function upsertCharts(
           'diff_bass',
           'diff_keys',
           'diff_drums_real',
+          'has_guitar',
+          'has_bass',
+          'has_keys',
+          'has_pro_drums',
           'modified_time',
           'song_length',
           'has_video_background',
@@ -145,6 +186,10 @@ export async function upsertCharts(
         diff_bass: eb.ref('excluded.diff_bass'),
         diff_keys: eb.ref('excluded.diff_keys'),
         diff_drums_real: eb.ref('excluded.diff_drums_real'),
+        has_guitar: eb.ref('excluded.has_guitar'),
+        has_bass: eb.ref('excluded.has_bass'),
+        has_keys: eb.ref('excluded.has_keys'),
+        has_pro_drums: eb.ref('excluded.has_pro_drums'),
         modified_time: eb.ref('excluded.modified_time'),
         song_length: eb.ref('excluded.song_length'),
         has_video_background: eb.ref('excluded.has_video_background'),

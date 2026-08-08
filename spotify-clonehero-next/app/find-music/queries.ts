@@ -31,6 +31,10 @@ type ChartRow = {
   diff_bass: number | null;
   diff_keys: number | null;
   diff_drums_real: number | null;
+  has_guitar: number | bigint | boolean;
+  has_bass: number | bigint | boolean;
+  has_keys: number | bigint | boolean;
+  has_pro_drums: number | bigint | boolean;
   is_installed: number | bigint | boolean;
   is_song_installed: number | bigint | boolean;
 };
@@ -67,6 +71,12 @@ function toChart(row: ChartRow): FindMusicChart {
       bass: row.diff_bass,
       keys: row.diff_keys,
       proDrums: row.diff_drums_real,
+    },
+    instrumentPresence: {
+      guitar: Boolean(row.has_guitar),
+      bass: Boolean(row.has_bass),
+      keys: Boolean(row.has_keys),
+      proDrums: Boolean(row.has_pro_drums),
     },
   };
 }
@@ -146,6 +156,10 @@ export async function getFindMusicSongs(
       chart.diff_bass,
       chart.diff_keys,
       chart.diff_drums_real,
+      chart.has_guitar,
+      chart.has_bass,
+      chart.has_keys,
+      chart.has_pro_drums,
       CASE WHEN EXISTS (
         SELECT 1
         FROM local_charts AS local
@@ -282,12 +296,12 @@ export async function getRadarSongs(
         MIN(chart.name) AS display_song,
         affinity.artist_play_count,
         COUNT(*) AS chart_count,
-        MAX(CASE WHEN chart.diff_drums_real >= 0 THEN 1 ELSE 0 END) AS has_pro_drums,
+        MAX(chart.has_pro_drums) AS has_pro_drums,
         MAX(
-          (CASE WHEN chart.diff_guitar >= 0 THEN 1 ELSE 0 END) +
-          (CASE WHEN chart.diff_bass >= 0 THEN 1 ELSE 0 END) +
-          (CASE WHEN chart.diff_keys >= 0 THEN 1 ELSE 0 END) +
-          (CASE WHEN chart.diff_drums_real >= 0 THEN 1 ELSE 0 END)
+          chart.has_guitar +
+          chart.has_bass +
+          chart.has_keys +
+          chart.has_pro_drums
         ) AS instrument_coverage,
         MAX(chart.modified_time) AS latest_chart
       FROM chorus_charts AS chart
@@ -339,6 +353,10 @@ export async function getRadarSongs(
       chart.diff_bass,
       chart.diff_keys,
       chart.diff_drums_real,
+      chart.has_guitar,
+      chart.has_bass,
+      chart.has_keys,
+      chart.has_pro_drums,
       CASE WHEN EXISTS (
         SELECT 1
         FROM local_charts AS local

@@ -20,6 +20,7 @@ export type FindMusicChart = {
   hasVideoBackground: boolean;
   isInstalled: boolean;
   instruments: Record<InstrumentId, number | null>;
+  instrumentPresence: Record<InstrumentId, boolean>;
 };
 
 export type FindMusicSong = {

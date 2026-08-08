@@ -81,7 +81,10 @@ export function scoreRadarSong(song: RadarSong): Score {
   const availableInstruments = INSTRUMENT_IDS.filter(instrument =>
     song.charts.some(chart => {
       const difficulty = chart.instruments[instrument];
-      return difficulty != null && difficulty >= 0;
+      return (
+        (difficulty != null && difficulty >= 0) ||
+        chart.instrumentPresence[instrument]
+      );
     }),
   ).length;
   const newestYear = song.charts.reduce((latest, chart) => {
@@ -111,7 +114,11 @@ function chartHasInstruments(
 ): boolean {
   for (const instrument of instruments) {
     const difficulty = chart.instruments[instrument];
-    if (difficulty == null || difficulty < 0) return false;
+    if (
+      (difficulty == null || difficulty < 0) &&
+      !chart.instrumentPresence[instrument]
+    )
+      return false;
   }
   return true;
 }
