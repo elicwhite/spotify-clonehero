@@ -1,8 +1,11 @@
 import DrumTranscriptionClient from './DrumTranscriptionClient';
+import type {Metadata} from 'next';
 
-// No per-page metadata: the feature isn't shipped yet, so we don't
-// want unfurl cards advertising it. The route still works for
-// development; it just inherits the site-wide title/description.
+export const metadata: Metadata = {
+  title: 'Drum Transcription',
+  description:
+    'Turn a song into a draft drum chart, then review and edit it in your browser.',
+};
 
 export default function Page() {
   return <DrumTranscriptionClient />;
