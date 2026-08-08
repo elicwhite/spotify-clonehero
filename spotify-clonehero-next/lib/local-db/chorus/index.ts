@@ -86,10 +86,9 @@ export async function upsertCharts(
     }
   }
 
-  // Insert only rows that don't already exist in chorus_charts by md5
+  // Refresh existing rows as Chorus metadata can change without changing md5.
   await trx
     .insertInto('chorus_charts')
-    .ignore()
     .columns([
       'md5',
       'name',
@@ -132,6 +131,26 @@ export async function upsertCharts(
           'group_id',
         ])
         .orderBy('md5'),
+    )
+    .onConflict(oc =>
+      oc.column('md5').doUpdateSet(eb => ({
+        name: eb.ref('excluded.name'),
+        artist: eb.ref('excluded.artist'),
+        charter: eb.ref('excluded.charter'),
+        artist_normalized: eb.ref('excluded.artist_normalized'),
+        charter_normalized: eb.ref('excluded.charter_normalized'),
+        name_normalized: eb.ref('excluded.name_normalized'),
+        diff_drums: eb.ref('excluded.diff_drums'),
+        diff_guitar: eb.ref('excluded.diff_guitar'),
+        diff_bass: eb.ref('excluded.diff_bass'),
+        diff_keys: eb.ref('excluded.diff_keys'),
+        diff_drums_real: eb.ref('excluded.diff_drums_real'),
+        modified_time: eb.ref('excluded.modified_time'),
+        song_length: eb.ref('excluded.song_length'),
+        has_video_background: eb.ref('excluded.has_video_background'),
+        album_art_md5: eb.ref('excluded.album_art_md5'),
+        group_id: eb.ref('excluded.group_id'),
+      })),
     )
     .execute();
 

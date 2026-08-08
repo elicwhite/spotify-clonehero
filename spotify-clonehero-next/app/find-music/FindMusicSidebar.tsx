@@ -1,14 +1,16 @@
 'use client';
 
+import {useState} from 'react';
 import {
-  Apple,
   FolderOpen,
+  ExternalLink,
   LoaderCircle,
   Music2,
+  Plus,
   Radio,
   RotateCw,
   Search,
-  Youtube,
+  X,
 } from 'lucide-react';
 
 import {Icons} from '@/components/icons';
@@ -25,6 +27,7 @@ import {
 } from './types';
 
 export interface FindMusicSidebarProps {
+  variant?: 'responsive' | 'drawer';
   view: FindMusicView;
   onViewChange: (view: FindMusicView) => void;
   filters: FindMusicFilters;
@@ -53,6 +56,13 @@ type SourceCardProps = {
   actionLabel: string;
   onAction: () => void;
   primaryAction?: boolean;
+  actionDisabled?: boolean;
+  helpLink?:
+    | {
+        href: string;
+        label: string;
+      }
+    | undefined;
 };
 
 const sectionHeadingClass =
@@ -66,7 +76,9 @@ function activeFilterCount(filters: FindMusicFilters) {
   return (
     (filters.install === 'all' ? 0 : 1) +
     filters.instruments.size +
-    (filters.query.trim() ? 1 : 0)
+    (filters.query.trim() ? 1 : 0) +
+    filters.exclusions.length +
+    (filters.exclusionDraft.trim() ? 1 : 0)
   );
 }
 
@@ -86,6 +98,8 @@ function SourceCard({
   actionLabel,
   onAction,
   primaryAction = false,
+  actionDisabled = false,
+  helpLink,
 }: SourceCardProps) {
   const loading = status.phase === 'loading';
   const error = status.phase === 'error';
@@ -136,6 +150,17 @@ function SourceCard({
           </p>
         ) : null}
 
+        {helpLink ? (
+          <a
+            href={helpLink.href}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-primary underline-offset-4 hover:underline">
+            {helpLink.label}
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          </a>
+        ) : null}
+
         {loading && status.progress !== undefined ? (
           <Progress
             value={status.progress}
@@ -150,7 +175,7 @@ function SourceCard({
           variant={primaryAction ? 'default' : 'secondary'}
           className="mt-2"
           onClick={onAction}
-          disabled={loading}
+          disabled={loading || actionDisabled}
           aria-label={loading ? `${name} is loading` : actionLabel}>
           {loading ? (
             <LoaderCircle className="animate-spin" aria-hidden="true" />
@@ -164,26 +189,8 @@ function SourceCard({
   );
 }
 
-function PlannedSource({name, icon}: {name: string; icon: React.ReactNode}) {
-  return (
-    <article className="rounded-lg border border-dashed bg-card px-3 py-2.5 opacity-60">
-      <div className="flex items-center gap-2">
-        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-muted-foreground text-background [&_svg]:h-3 [&_svg]:w-3">
-          {icon}
-        </span>
-        <h3 className="text-xs font-semibold">{name}</h3>
-        <span className="ml-auto rounded-full border px-1.5 text-[10px] text-muted-foreground">
-          planned
-        </span>
-      </div>
-      <p className="ml-7 mt-1 text-[11.5px] text-muted-foreground">
-        Connector not available yet
-      </p>
-    </article>
-  );
-}
-
 export default function FindMusicSidebar({
+  variant = 'responsive',
   view,
   onViewChange,
   filters,
@@ -203,8 +210,17 @@ export default function FindMusicSidebar({
   musicCount,
   radarCount,
 }: FindMusicSidebarProps) {
+  const [addingExclusion, setAddingExclusion] = useState(
+    filters.exclusionDraft.trim().length > 0,
+  );
+  const showExclusionInput =
+    addingExclusion || filters.exclusionDraft.trim().length > 0;
   const activeFilters = activeFilterCount(filters);
   const spotifyConnected = authenticated && hasSpotify;
+  const tasteSourceConnected =
+    spotifyConnected ||
+    libraryStatus.phase === 'ready' ||
+    historyStatus.phase === 'ready';
   const spotifyActionLabel = !authenticated
     ? 'Sign in with Spotify'
     : !hasSpotify
@@ -222,9 +238,39 @@ export default function FindMusicSidebar({
     onFiltersChange({...filters, instruments});
   }
 
+  function commitExclusion() {
+    const term = filters.exclusionDraft.trim();
+    if (!term) return;
+    const duplicate = filters.exclusions.some(
+      existing => existing.toLocaleLowerCase() === term.toLocaleLowerCase(),
+    );
+    onFiltersChange({
+      ...filters,
+      exclusions: duplicate
+        ? filters.exclusions
+        : [...filters.exclusions, term],
+      exclusionDraft: '',
+    });
+    setAddingExclusion(false);
+  }
+
+  function removeExclusion(index: number) {
+    onFiltersChange({
+      ...filters,
+      exclusions: filters.exclusions.filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    });
+  }
+
   return (
     <aside
-      className="min-h-0 max-h-[40vh] w-full shrink-0 overflow-y-auto border-b border-border bg-muted/30 px-3.5 py-4 text-foreground [contain:paint] sm:max-h-[44vh] lg:h-full lg:max-h-full lg:w-[292px] lg:border-b-0 lg:border-r"
+      className={cn(
+        'min-h-0 shrink-0 overflow-y-auto bg-muted/30 px-3.5 py-4 text-foreground [contain:paint]',
+        variant === 'drawer'
+          ? 'h-full max-h-full w-full border-0'
+          : 'max-h-[40vh] w-full border-b border-border sm:max-h-[44vh] lg:h-full lg:max-h-full lg:w-[292px] lg:border-b-0 lg:border-r',
+      )}
       aria-label="Navigation, filters and sources">
       <section className="mb-5">
         <h2 className={sectionHeadingClass}>Browse</h2>
@@ -263,7 +309,7 @@ export default function FindMusicSidebar({
               <span className="min-w-0 flex-1">
                 Recommendations
                 <span className="mt-0.5 block font-normal text-muted-foreground">
-                  affinity recommendations
+                  more from artists you play
                 </span>
               </span>
               <span className="text-[11.5px] font-normal tabular-nums text-muted-foreground">
@@ -346,33 +392,114 @@ export default function FindMusicSidebar({
               Instruments — require
             </legend>
             <div className="flex flex-wrap gap-1">
-              {INSTRUMENTS.filter(([id]) => id !== 'drums').map(
-                ([id, , label]) => {
-                  const selected = filters.instruments.has(id);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={cn(
-                        'inline-flex h-8 min-w-9 items-center justify-center gap-1 rounded-md border bg-secondary px-2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                        selected &&
-                          'border-primary bg-primary text-primary-foreground hover:text-primary-foreground',
-                      )}
-                      aria-label={`Require ${label}`}
-                      aria-pressed={selected}
-                      onClick={() => toggleInstrument(id)}>
-                      <FindMusicInstrumentIcon instrument={id} size={18} />
-                    </button>
-                  );
-                },
-              )}
+              {INSTRUMENTS.map(([id, , label]) => {
+                const selected = filters.instruments.has(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={cn(
+                      'inline-flex h-8 min-w-9 items-center justify-center gap-1 rounded-md border bg-secondary px-2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                      selected &&
+                        'border-primary bg-primary text-primary-foreground hover:text-primary-foreground',
+                    )}
+                    aria-label={`Require ${label}`}
+                    aria-pressed={selected}
+                    onClick={() => toggleInstrument(id)}>
+                    <FindMusicInstrumentIcon instrument={id} size={18} />
+                  </button>
+                );
+              })}
             </div>
           </fieldset>
+
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-[11px] font-semibold text-muted-foreground">
+                Exclude
+              </h4>
+              {!showExclusionInput ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  className="h-7 px-2"
+                  onClick={() => setAddingExclusion(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add exclusion
+                </Button>
+              ) : null}
+            </div>
+
+            {filters.exclusions.length > 0 ? (
+              <div
+                className="mt-1.5 flex flex-wrap gap-1.5"
+                aria-label="Excluded terms">
+                {filters.exclusions.map((term, index) => (
+                  <span
+                    key={`${term}-${index}`}
+                    className="inline-flex min-w-0 items-center gap-1 rounded-full border bg-secondary py-1 pl-2.5 pr-1 text-xs text-secondary-foreground">
+                    <span className="max-w-36 truncate">{term}</span>
+                    <button
+                      type="button"
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Remove exclusion ${term}`}
+                      onClick={() => removeExclusion(index)}>
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {showExclusionInput ? (
+              <input
+                type="search"
+                autoFocus
+                value={filters.exclusionDraft}
+                onChange={event =>
+                  onFiltersChange({
+                    ...filters,
+                    exclusionDraft: event.currentTarget.value,
+                  })
+                }
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitExclusion();
+                  }
+                  if (event.key === 'Escape') {
+                    onFiltersChange({...filters, exclusionDraft: ''});
+                    setAddingExclusion(false);
+                  }
+                }}
+                aria-label="Exclusion term"
+                placeholder="blink"
+                className="mt-2 h-8 w-full rounded-md border bg-background px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            ) : null}
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Hides matches in the artist, song, or charter while you type.
+            </p>
+          </div>
         </div>
       </section>
 
       <section className="mb-5 space-y-2">
         <h2 className={sectionHeadingClass}>Taste sources</h2>
+        <SourceCard
+          id="library"
+          name="Spotify Library"
+          icon={
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[#1ed760] text-[#08210f]">
+              <Icons.spotify className="h-3 w-3" />
+            </span>
+          }
+          status={libraryStatus}
+          actionLabel={spotifyActionLabel}
+          onAction={spotifyConnected ? onRefreshLibrary : onConnectSpotify}
+          primaryAction={!spotifyConnected || libraryStatus.phase === 'idle'}
+        />
         <SourceCard
           id="history"
           name="Spotify History"
@@ -391,22 +518,15 @@ export default function FindMusicSidebar({
           }
           onAction={onRefreshHistory}
           primaryAction={historyStatus.phase === 'idle'}
-        />
-        <SourceCard
-          id="library"
-          name="Spotify Library"
-          icon={
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[#1ed760] text-[#08210f]">
-              <Icons.spotify className="h-3 w-3" />
-            </span>
+          helpLink={
+            historyStatus.phase === 'idle'
+              ? {
+                  href: 'https://www.spotify.com/us/account/privacy/',
+                  label: 'Request Extended Streaming History',
+                }
+              : undefined
           }
-          status={libraryStatus}
-          actionLabel={spotifyActionLabel}
-          onAction={spotifyConnected ? onRefreshLibrary : onConnectSpotify}
-          primaryAction={!spotifyConnected || libraryStatus.phase === 'idle'}
         />
-        <PlannedSource name="YouTube Music" icon={<Youtube />} />
-        <PlannedSource name="Apple Music" icon={<Apple />} />
       </section>
 
       <section className="mb-3 space-y-2">
@@ -440,16 +560,16 @@ export default function FindMusicSidebar({
           }
           status={chorusStatus}
           actionLabel={
-            chorusStatus.phase === 'error' ? 'Try again' : 'Refresh index'
+            !tasteSourceConnected
+              ? 'Connect taste sources first'
+              : chorusStatus.phase === 'error'
+                ? 'Try again'
+                : 'Refresh index'
           }
           onAction={onRefreshChorus}
+          actionDisabled={!tasteSourceConnected}
         />
       </section>
-
-      <p className="px-0.5 text-[11px] leading-4 text-muted-foreground">
-        Taste sources decide which songs matter to you. System sources track
-        what is installed and what exists on Chorus.
-      </p>
     </aside>
   );
 }

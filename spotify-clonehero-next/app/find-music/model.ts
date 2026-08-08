@@ -21,13 +21,7 @@ export type HoldState<T> = {
 
 type Keyed = {key: string};
 
-const INSTRUMENT_IDS: InstrumentId[] = [
-  'drums',
-  'guitar',
-  'bass',
-  'keys',
-  'proDrums',
-];
+const INSTRUMENT_IDS: InstrumentId[] = ['guitar', 'bass', 'keys', 'proDrums'];
 
 function safeCount(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -122,29 +116,43 @@ function chartHasInstruments(
   return true;
 }
 
-function passesChartFilters(
-  song: Pick<FindMusicSong | RadarSong, 'charts' | 'hasInstalledChart'>,
-  filters: FindMusicFilters,
+function passesInstallFilter(
+  song: Pick<FindMusicSong | RadarSong, 'hasInstalledChart'>,
+  filters: Pick<FindMusicFilters, 'install'>,
 ): boolean {
   if (filters.install === 'hide-installed' && song.hasInstalledChart)
     return false;
-
-  if (filters.instruments.size > 0) {
-    // Do not combine instruments from unrelated chart versions.
-    return song.charts.some(chart =>
-      chartHasInstruments(chart, filters.instruments),
-    );
-  }
   return true;
+}
+
+function withFilteredCharts<T extends FindMusicSong | RadarSong>(
+  song: T,
+  instruments: Set<InstrumentId>,
+): T | null {
+  if (instruments.size === 0) return song;
+
+  // Instruments must coexist on an individual chart version. Return only
+  // those versions so expanding a matching song cannot reveal charts that do
+  // not satisfy the active filter.
+  const charts = song.charts.filter(chart =>
+    chartHasInstruments(chart, instruments),
+  );
+  if (charts.length === 0) return null;
+  return charts.length === song.charts.length ? song : {...song, charts};
 }
 
 export function applyMusicFilters(
   songs: FindMusicSong[],
   filters: FindMusicFilters,
 ): FindMusicSong[] {
-  return songs.filter(song => {
-    if (!passesChartFilters(song, filters)) return false;
-    return matchesText(song, filters.query);
+  return songs.flatMap(song => {
+    if (!passesInstallFilter(song, filters)) return [];
+    const filteredSong = withFilteredCharts(song, filters.instruments);
+    if (!filteredSong) return [];
+    return matchesText(filteredSong, filters.query) &&
+      !matchesExclusion(filteredSong, filters)
+      ? [filteredSong]
+      : [];
   });
 }
 
@@ -152,10 +160,32 @@ export function applyRadarFilters(
   songs: RadarSong[],
   filters: FindMusicFilters,
 ): RadarSong[] {
-  return songs.filter(
-    song =>
-      passesChartFilters(song, filters) && matchesText(song, filters.query),
-  );
+  return songs.flatMap(song => {
+    if (!passesInstallFilter(song, filters)) return [];
+    const filteredSong = withFilteredCharts(song, filters.instruments);
+    if (!filteredSong) return [];
+    return matchesText(filteredSong, filters.query) &&
+      !matchesExclusion(filteredSong, filters)
+      ? [filteredSong]
+      : [];
+  });
+}
+
+function matchesExclusion(
+  song: Pick<FindMusicSong | RadarSong, 'artist' | 'song' | 'charts'>,
+  filters: Pick<FindMusicFilters, 'exclusions' | 'exclusionDraft'>,
+): boolean {
+  const terms = [...filters.exclusions, filters.exclusionDraft]
+    .map(term => term.trim().toLocaleLowerCase('en-US'))
+    .filter(Boolean);
+  if (terms.length === 0) return false;
+
+  const fields = [
+    song.artist,
+    song.song,
+    ...song.charts.map(chart => chart.charter),
+  ].map(value => value.toLocaleLowerCase('en-US'));
+  return terms.some(term => fields.some(field => field.includes(term)));
 }
 
 function matchesText(

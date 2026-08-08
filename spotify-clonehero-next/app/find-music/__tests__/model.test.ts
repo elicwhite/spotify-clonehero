@@ -29,14 +29,12 @@ function chart(overrides: ChartOverrides): FindMusicChart {
     name: 'Song',
     charter: 'Charter',
     modifiedTime: '2024-01-01T00:00:00.000Z',
-    songLength: 180_000,
     albumArtMd5: null,
     groupId: 1,
     hasVideoBackground: false,
     isInstalled: false,
     ...rest,
     instruments: {
-      drums: null,
       guitar: null,
       bass: null,
       keys: null,
@@ -58,6 +56,7 @@ function music(
     playCount: 0,
     playlists: [],
     albums: [],
+    spotifyUrl: null,
     hasInstalledChart:
       rest.hasInstalledChart ?? charts.some(item => item.isInstalled),
     charts,
@@ -75,6 +74,7 @@ function radar(
     artist: 'Artist',
     song: 'Song',
     artistPlayCount: 0,
+    spotifyUrl: null,
     hasInstalledChart:
       rest.hasInstalledChart ?? charts.some(item => item.isInstalled),
     charts,
@@ -87,6 +87,8 @@ function filters(overrides: Partial<FindMusicFilters> = {}): FindMusicFilters {
     install: 'all',
     instruments: new Set(),
     query: '',
+    exclusions: [],
+    exclusionDraft: '',
     ...overrides,
   };
 }
@@ -123,7 +125,6 @@ describe('find music scoring', () => {
             md5: 'full-band',
             modifiedTime: '2026-02-01T00:00:00Z',
             instruments: {
-              drums: 5,
               guitar: 5,
               bass: 5,
               keys: 5,
@@ -135,11 +136,11 @@ describe('find music scoring', () => {
       }),
     );
     expect(result).toEqual({
-      value: 91,
+      value: 87,
       parts: [
         {label: 'Artist affinity', points: 55},
         {label: 'Available charts', points: 6},
-        {label: 'Instrument coverage', points: 20},
+        {label: 'Instrument coverage', points: 16},
         {label: 'Chart freshness', points: 10},
       ],
     });
@@ -150,10 +151,10 @@ describe('find music filtering', () => {
   const fullBand = chart({
     md5: 'full-band',
     isInstalled: true,
-    instruments: {drums: 5, guitar: 5},
+    instruments: {proDrums: 5, guitar: 5},
   });
   const splitBand = [
-    chart({md5: 'drums', instruments: {drums: 5}}),
+    chart({md5: 'pro-drums', instruments: {proDrums: 5}}),
     chart({md5: 'guitar', instruments: {guitar: 5}}),
   ];
 
@@ -194,19 +195,47 @@ describe('find music filtering', () => {
       applyMusicFilters(
         [split],
         filters({
-          instruments: new Set(['drums', 'guitar']),
+          instruments: new Set(['proDrums', 'guitar']),
         }),
       ),
     ).toEqual([]);
   });
 
+  test('keeps only chart versions that contain every selected instrument', () => {
+    const guitar = chart({md5: 'guitar', instruments: {guitar: 5}});
+    const proDrums = chart({
+      md5: 'pro-drums',
+      instruments: {proDrums: 4},
+    });
+    const both = chart({
+      md5: 'both',
+      instruments: {guitar: 3, proDrums: 3},
+    });
+    const source = music({key: 'versions', charts: [guitar, proDrums, both]});
+
+    const [filtered] = applyMusicFilters(
+      [source],
+      filters({instruments: new Set(['guitar'])}),
+    );
+
+    expect(filtered.charts.map(item => item.md5)).toEqual(['guitar', 'both']);
+    expect(source.charts.map(item => item.md5)).toEqual([
+      'guitar',
+      'pro-drums',
+      'both',
+    ]);
+  });
+
   test('treats Chorus difficulty -1 as an instrument not being charted', () => {
     const absent = music({
       key: 'absent',
-      charts: [chart({md5: 'absent', instruments: {drums: -1}})],
+      charts: [chart({md5: 'absent', instruments: {proDrums: -1}})],
     });
     expect(
-      applyMusicFilters([absent], filters({instruments: new Set(['drums'])})),
+      applyMusicFilters(
+        [absent],
+        filters({instruments: new Set(['proDrums'])}),
+      ),
     ).toEqual([]);
   });
 
@@ -250,6 +279,48 @@ describe('find music filtering', () => {
     ).toEqual([drive]);
   });
 
+  test('excludes music by case-insensitive artist, song, or charter substring', () => {
+    const byArtist = music({
+      key: 'artist',
+      artist: 'blink-182',
+      song: 'Always',
+    });
+    const bySong = music({
+      key: 'song',
+      artist: 'The Cure',
+      song: 'Blink Three Times',
+    });
+    const byCharter = music({
+      key: 'charter',
+      artist: 'Muse',
+      song: 'Uprising',
+      charts: [chart({md5: 'charter', charter: 'BlinkCharting'})],
+    });
+    const visible = music({key: 'visible', artist: 'Incubus', song: 'Drive'});
+
+    expect(
+      applyMusicFilters(
+        [byArtist, bySong, byCharter, visible],
+        filters({exclusions: ['BLINK']}),
+      ),
+    ).toEqual([visible]);
+  });
+
+  test('applies a non-empty draft exclusion while it is being typed', () => {
+    const excluded = music({key: 'excluded', artist: 'blink-182'});
+    const visible = music({key: 'visible', artist: 'Incubus'});
+
+    expect(
+      applyMusicFilters(
+        [excluded, visible],
+        filters({exclusionDraft: ' blink '}),
+      ),
+    ).toEqual([visible]);
+    expect(
+      applyMusicFilters([excluded, visible], filters({exclusionDraft: '   '})),
+    ).toEqual([excluded, visible]);
+  });
+
   test('radar applies text and chart filters', () => {
     const matching = radar({
       key: 'matching',
@@ -271,6 +342,39 @@ describe('find music filtering', () => {
         }),
       ),
     ).toEqual([matching]);
+  });
+
+  test('radar removes chart versions that do not satisfy the instrument filter', () => {
+    const source = radar({
+      key: 'radar-versions',
+      charts: [
+        chart({md5: 'guitar', instruments: {guitar: 4}}),
+        chart({md5: 'pro-drums', instruments: {proDrums: 4}}),
+      ],
+    });
+
+    const [filtered] = applyRadarFilters(
+      [source],
+      filters({instruments: new Set(['proDrums'])}),
+    );
+
+    expect(filtered.charts.map(item => item.md5)).toEqual(['pro-drums']);
+  });
+
+  test('radar applies committed and draft exclusions to charter metadata', () => {
+    const committed = radar({key: 'committed', artist: 'blink-182'});
+    const drafting = radar({
+      key: 'drafting',
+      charts: [chart({md5: 'drafting', charter: 'NightHawk'})],
+    });
+    const visible = radar({key: 'visible', artist: 'Incubus'});
+
+    expect(
+      applyRadarFilters(
+        [committed, drafting, visible],
+        filters({exclusions: ['blink'], exclusionDraft: 'hawk'}),
+      ),
+    ).toEqual([visible]);
   });
 });
 

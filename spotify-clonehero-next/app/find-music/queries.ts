@@ -16,6 +16,7 @@ type ChartRow = {
   name_normalized: string;
   display_artist: string;
   display_song: string;
+  spotify_id?: string | null;
   play_count?: number | bigint;
   artist_play_count?: number | bigint;
   md5: string;
@@ -23,11 +24,9 @@ type ChartRow = {
   chart_name: string;
   charter: string;
   modified_time: string;
-  song_length: number | null;
   album_art_md5: string | null;
   group_id: number | bigint;
   has_video_background: number | bigint | boolean;
-  diff_drums: number | null;
   diff_guitar: number | null;
   diff_bass: number | null;
   diff_keys: number | null;
@@ -59,13 +58,11 @@ function toChart(row: ChartRow): FindMusicChart {
     name: row.chart_name,
     charter: row.charter,
     modifiedTime: row.modified_time,
-    songLength: row.song_length,
     albumArtMd5: row.album_art_md5,
     groupId: Number(row.group_id),
     hasVideoBackground: Boolean(row.has_video_background),
     isInstalled: Boolean(row.is_installed),
     instruments: {
-      drums: row.diff_drums,
       guitar: row.diff_guitar,
       bass: row.diff_bass,
       keys: row.diff_keys,
@@ -91,6 +88,7 @@ export async function getFindMusicSongs(
         name_normalized,
         artist,
         name AS song,
+        NULL AS spotify_id,
         play_count,
         1 AS is_history
       FROM spotify_history
@@ -103,6 +101,7 @@ export async function getFindMusicSongs(
         name_normalized,
         artist,
         name AS song,
+        id AS spotify_id,
         0 AS play_count,
         0 AS is_history
       FROM spotify_tracks
@@ -123,6 +122,7 @@ export async function getFindMusicSongs(
           MIN(CASE WHEN is_history = 1 THEN song END),
           MIN(song)
         ) AS display_song,
+        MIN(spotify_id) AS spotify_id,
         SUM(play_count) AS play_count
       FROM direct_identity_rows
       GROUP BY artist_normalized, name_normalized
@@ -132,17 +132,16 @@ export async function getFindMusicSongs(
       direct_songs.name_normalized,
       direct_songs.display_artist,
       direct_songs.display_song,
+      direct_songs.spotify_id,
       direct_songs.play_count,
       chart.md5,
       chart.artist AS chart_artist,
       chart.name AS chart_name,
       chart.charter,
       chart.modified_time,
-      chart.song_length,
       chart.album_art_md5,
       chart.group_id,
       chart.has_video_background,
-      chart.diff_drums,
       chart.diff_guitar,
       chart.diff_bass,
       chart.diff_keys,
@@ -216,6 +215,9 @@ export async function getFindMusicSongs(
         playCount: Number(row.play_count ?? 0),
         playlists: playlistsBySong.get(key) ?? [],
         albums: albumsBySong.get(key) ?? [],
+        spotifyUrl: row.spotify_id
+          ? `https://open.spotify.com/track/${row.spotify_id}`
+          : null,
         hasInstalledChart: Boolean(row.is_song_installed),
         charts: [],
       };
@@ -280,9 +282,8 @@ export async function getRadarSongs(
         MIN(chart.name) AS display_song,
         affinity.artist_play_count,
         COUNT(*) AS chart_count,
-        MAX(CASE WHEN chart.diff_drums >= 0 THEN 1 ELSE 0 END) AS has_drums,
+        MAX(CASE WHEN chart.diff_drums_real >= 0 THEN 1 ELSE 0 END) AS has_pro_drums,
         MAX(
-          (CASE WHEN chart.diff_drums >= 0 THEN 1 ELSE 0 END) +
           (CASE WHEN chart.diff_guitar >= 0 THEN 1 ELSE 0 END) +
           (CASE WHEN chart.diff_bass >= 0 THEN 1 ELSE 0 END) +
           (CASE WHEN chart.diff_keys >= 0 THEN 1 ELSE 0 END) +
@@ -313,7 +314,7 @@ export async function getRadarSongs(
       ORDER BY
         artist_play_count DESC,
         chart_count DESC,
-        has_drums DESC,
+        has_pro_drums DESC,
         instrument_coverage DESC,
         latest_chart DESC,
         display_artist COLLATE NOCASE,
@@ -331,11 +332,9 @@ export async function getRadarSongs(
       chart.name AS chart_name,
       chart.charter,
       chart.modified_time,
-      chart.song_length,
       chart.album_art_md5,
       chart.group_id,
       chart.has_video_background,
-      chart.diff_drums,
       chart.diff_guitar,
       chart.diff_bass,
       chart.diff_keys,
@@ -360,7 +359,7 @@ export async function getRadarSongs(
     ORDER BY
       candidate.artist_play_count DESC,
       candidate.chart_count DESC,
-      candidate.has_drums DESC,
+      candidate.has_pro_drums DESC,
       candidate.instrument_coverage DESC,
       candidate.latest_chart DESC,
       candidate.display_artist COLLATE NOCASE,
@@ -379,6 +378,7 @@ export async function getRadarSongs(
         artist: row.display_artist,
         song: row.display_song,
         artistPlayCount: Number(row.artist_play_count ?? 0),
+        spotifyUrl: null,
         hasInstalledChart: Boolean(row.is_song_installed),
         charts: [],
       };

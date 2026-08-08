@@ -313,13 +313,63 @@ describe('find-music queries', () => {
       playCount: 7,
       playlists: ['Favorites', 'Road Trip'],
       albums: ['The Album'],
+      spotifyUrl: 'https://open.spotify.com/track/track-1',
     });
     expect(merged?.charts.map(item => item.md5).sort()).toEqual([
       'same-a',
       'same-b',
     ]);
     expect(songs.find(song => song.song === 'Remembered')?.playCount).toBe(9);
+    expect(
+      songs.find(song => song.song === 'Remembered')?.spotifyUrl,
+    ).toBeNull();
     expect(songs.find(song => song.song === 'Saved Song')?.playCount).toBe(0);
+  });
+
+  it('projects zero and positive Chorus difficulty values without dropping instruments', async () => {
+    await db
+      .insertInto('spotify_history')
+      .values({
+        artist: 'Franz Ferdinand',
+        artist_normalized: 'franz ferdinand',
+        name: 'Take Me Out',
+        name_normalized: 'take me out',
+        play_count: 22,
+      })
+      .execute();
+    await db
+      .insertInto('chorus_charts')
+      .values(
+        chart(
+          'f3aed706fd4f7ab4723a95be70ddc3b6',
+          'Franz Ferdinand',
+          'franz ferdinand',
+          'Take Me Out',
+          'take me out',
+          'Harmonix',
+          'harmonix',
+          {
+            diff_drums: 4,
+            diff_guitar: 3,
+            diff_bass: 0,
+            diff_keys: -1,
+            diff_drums_real: 4,
+          },
+        ),
+      )
+      .execute();
+
+    const [song] = await getFindMusicSongs(db);
+    expect(song.charts).toHaveLength(1);
+    expect(song.charts[0]).toMatchObject({
+      md5: 'f3aed706fd4f7ab4723a95be70ddc3b6',
+      instruments: {
+        guitar: 3,
+        bass: 0,
+        keys: -1,
+        proDrums: 4,
+      },
+    });
   });
 
   it('marks only the exact normalized artist/song/charter chart as installed', async () => {

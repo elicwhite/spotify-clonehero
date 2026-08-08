@@ -117,6 +117,13 @@ it('keeps one preview active, stops it on a second click, and releases it on nav
     </AudioProvider>,
   );
 
+  expect(
+    screen.getByRole('link', {name: 'Open Song A by Artist A in Spotify'}),
+  ).toHaveAttribute('href', 'https://open.spotify.com/track/a');
+  expect(
+    screen.getByRole('link', {name: 'Open Song B by Artist B in Spotify'}),
+  ).toHaveAttribute('href', 'https://open.spotify.com/track/b');
+
   fireEvent.click(
     screen.getByRole('button', {name: 'Play preview of Song A by Artist A'}),
   );
@@ -455,14 +462,49 @@ it('cannot start playback after a pending lookup unmounts', async () => {
   expect(FakeAudio.instances).toHaveLength(0);
 });
 
-it('shows the Spotify destination when a track has no preview clip', async () => {
+it('shows a known compact Spotify destination while still looking up its preview', async () => {
+  const lookup = jest.fn(async () => ({
+    previewUrl: 'https://preview.test/known.mp3',
+    spotifyUrl: 'https://open.spotify.com/track/known',
+  }));
+  mockUseTrackUrls.mockImplementation(() => lookup);
+  render(
+    <AudioProvider>
+      <SpotifyPreviewButton
+        artist="Known Artist"
+        song="Known Song"
+        spotifyUrl="https://open.spotify.com/track/known"
+        compact
+      />
+    </AudioProvider>,
+  );
+
+  expect(
+    screen.getByRole('link', {
+      name: 'Open Known Song by Known Artist in Spotify',
+    }),
+  ).toHaveAttribute('href', 'https://open.spotify.com/track/known');
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Play preview of Known Song by Known Artist',
+    }),
+  );
+  expect(
+    await screen.findByRole('button', {
+      name: 'Stop preview of Known Song by Known Artist',
+    }),
+  ).toBeInTheDocument();
+  expect(lookup).toHaveBeenCalledTimes(1);
+});
+
+it('shows the compact Spotify destination when a track has no preview clip', async () => {
   mockUseTrackUrls.mockImplementation(() => async () => ({
     previewUrl: null,
     spotifyUrl: 'https://open.spotify.com/track/no-preview',
   }));
   render(
     <AudioProvider>
-      <SpotifyPreviewButton artist="Quiet Artist" song="Quiet Song" />
+      <SpotifyPreviewButton artist="Quiet Artist" song="Quiet Song" compact />
     </AudioProvider>,
   );
   fireEvent.click(

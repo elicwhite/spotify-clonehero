@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   Check,
+  ExternalLink,
   FolderOpen,
   History,
   LoaderCircle,
@@ -37,7 +38,7 @@ export interface FindMusicWelcomeProps {
 
 type SetupCardProps = {
   name: string;
-  description: string;
+  description: React.ReactNode;
   icon: React.ReactNode;
   status: SourceStatus;
   actionLabel: string;
@@ -89,7 +90,7 @@ function SetupCard({
   return (
     <article
       className={cn(
-        'flex min-h-[220px] flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-sm',
+        'flex flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-sm',
         optional && 'border-dashed shadow-none',
         error && 'border-destructive/50',
       )}
@@ -117,7 +118,7 @@ function SetupCard({
         </div>
       </div>
 
-      <div className="mt-auto pt-5">
+      <div className="mt-5">
         <div className="flex items-start gap-2 text-sm">
           <StatusDot phase={status.phase} />
           <div className="min-w-0">
@@ -239,7 +240,7 @@ export default function FindMusicWelcome({
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
             Add a little music you already know. We match it with Chorus right
-            here in your browser—your listening history and library never need
+            here in your browser. Your listening history and library never need
             to leave this device.
           </p>
           <div className="mt-4 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
@@ -274,7 +275,22 @@ export default function FindMusicWelcome({
             />
             <SetupCard
               name="Spotify History"
-              description="Import your Spotify privacy export to surface songs you actually play."
+              description={
+                <>
+                  Import your{' '}
+                  <a
+                    href="https://www.spotify.com/us/account/privacy/"
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Request your Spotify Extended Streaming History"
+                    aria-label="Request your Spotify Extended Streaming History"
+                    className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline">
+                    Spotify Extended Streaming History
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>{' '}
+                  to surface songs you listen to.
+                </>
+              }
               icon={<History />}
               status={historyStatus}
               actionLabel={historyAction}
@@ -293,7 +309,7 @@ export default function FindMusicWelcome({
           </div>
           <SetupCard
             name="Local Songs Folder"
-            description="Scan your Clone Hero or YARG Songs folder so recommendations do not repeat charts you already have."
+            description="Choose your Clone Hero or YARG Songs folder to install charts directly and filter out songs you already have."
             icon={<FolderOpen />}
             status={localStatus}
             actionLabel={localAction}

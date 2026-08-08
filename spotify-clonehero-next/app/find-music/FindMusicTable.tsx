@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Download,
   Check,
+  ExternalLink,
   RotateCw,
 } from 'lucide-react';
 import {useVirtual} from 'react-virtual';
@@ -148,7 +149,8 @@ export default function FindMusicTable({
               : 'No songs match the current filters'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Filters combine with AND. Clear them to see every available match.
+            Filters are applied together. Clear them to see every available
+            match.
           </p>
           <Button className="mt-4" variant="outline" onClick={onClearFilters}>
             Clear all filters
@@ -241,7 +243,7 @@ function MusicHeader({
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
         previewEnabled
-          ? 'min-w-[946px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_150px_120px_100px]'
+          ? 'min-w-[986px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_150px_120px_100px]'
           : 'min-w-[838px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]',
       )}>
       <span />
@@ -271,7 +273,7 @@ function RadarHeader({previewEnabled}: {previewEnabled: boolean}) {
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
         previewEnabled
-          ? 'min-w-[966px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_170px_120px_100px]'
+          ? 'min-w-[1006px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_170px_120px_100px]'
           : 'min-w-[858px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <span />
@@ -348,8 +350,8 @@ function VirtualRows({
         'min-h-0 flex-1 overflow-y-auto overscroll-contain',
         previewEnabled
           ? view === 'music'
-            ? 'min-w-[946px]'
-            : 'min-w-[966px]'
+            ? 'min-w-[986px]'
+            : 'min-w-[1006px]'
           : view === 'music'
             ? 'min-w-[838px]'
             : 'min-w-[858px]',
@@ -426,10 +428,10 @@ function SongRow({
         'grid h-full w-full cursor-pointer items-center gap-2 border-b px-3 text-left text-sm hover:bg-muted/50',
         view === 'music'
           ? previewEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_150px_120px_100px]'
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_150px_120px_100px]'
             : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
           : previewEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_170px_120px_100px]'
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_170px_120px_100px]'
             : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <button
@@ -455,6 +457,7 @@ function SongRow({
             artist={song.artist}
             song={song.song}
             trackKey={song.key}
+            spotifyUrl={song.spotifyUrl}
             compact
           />
         </div>
@@ -622,16 +625,28 @@ function ChartRow({
   onInstall: () => Promise<void>;
 }) {
   return (
-    <div className="grid h-full grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.4fr)_120px_90px_110px] items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs">
+    <div className="grid h-full grid-cols-[34px_minmax(170px,1fr)_minmax(220px,1.4fr)_120px_110px] items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs">
       <span />
-      <span className="truncate font-medium">{chart.charter}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate font-medium">{chart.charter}</span>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 shrink-0"
+          asChild>
+          <a
+            href={`https://www.enchor.us/chart/${chart.md5}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open chart by ${chart.charter} on Enchor`}>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </span>
       <InstrumentBadges chart={chart} />
       <span className="font-mono text-xs text-muted-foreground">
         <span className="sr-only">Updated </span>
         {formatDate(chart.modifiedTime)}
-      </span>
-      <span className="font-mono text-muted-foreground">
-        {formatDuration(chart.songLength)}
       </span>
       {chart.isInstalled || downloadState === 'done' ? (
         <span className="font-medium text-emerald-600 dark:text-emerald-400">
@@ -674,9 +689,9 @@ function InstrumentBadges({chart}: {chart: FindMusicChart}) {
           <span
             key={id}
             title={`${name}: difficulty ${difficulty}`}
-            className="inline-flex h-7 min-w-9 items-center justify-center gap-1 rounded-md border bg-background px-1.5 text-secondary-foreground">
-            <FindMusicInstrumentIcon instrument={id} size={18} />
-            <small className="font-mono text-[9px] font-bold text-muted-foreground">
+            className="inline-flex h-8 min-w-11 items-center justify-center gap-1.5 rounded-md border bg-background px-2 text-secondary-foreground">
+            <FindMusicInstrumentIcon instrument={id} size={19} />
+            <small className="font-mono text-xs font-semibold leading-none text-foreground">
               {difficulty}
             </small>
           </span>
@@ -703,10 +718,4 @@ function formatDate(value: string) {
     month: 'short',
     day: 'numeric',
   });
-}
-
-function formatDuration(milliseconds: number | null) {
-  if (!milliseconds) return '—';
-  const seconds = Math.floor(milliseconds / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }

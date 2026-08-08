@@ -1,9 +1,8 @@
 export const INSTRUMENTS = [
-  ['drums', 'D', 'Drums'],
   ['guitar', 'G', 'Guitar'],
   ['bass', 'B', 'Bass'],
   ['keys', 'K', 'Keys'],
-  ['proDrums', 'PD', 'Pro drums'],
+  ['proDrums', 'D', 'Pro drums'],
 ] as const;
 
 export type InstrumentId = (typeof INSTRUMENTS)[number][0];
@@ -16,7 +15,6 @@ export type FindMusicChart = {
   name: string;
   charter: string;
   modifiedTime: string;
-  songLength: number | null;
   albumArtMd5: string | null;
   groupId: number;
   hasVideoBackground: boolean;
@@ -31,6 +29,7 @@ export type FindMusicSong = {
   playCount: number;
   playlists: string[];
   albums: string[];
+  spotifyUrl: string | null;
   hasInstalledChart: boolean;
   charts: FindMusicChart[];
 };
@@ -40,6 +39,7 @@ export type RadarSong = {
   artist: string;
   song: string;
   artistPlayCount: number;
+  spotifyUrl: string | null;
   hasInstalledChart: boolean;
   charts: FindMusicChart[];
 };
@@ -69,10 +69,14 @@ export type FindMusicFilters = {
   install: InstallFilter;
   instruments: Set<InstrumentId>;
   query: string;
+  exclusions: string[];
+  exclusionDraft: string;
 };
 
 export const EMPTY_FILTERS: FindMusicFilters = {
   install: 'all',
   instruments: new Set(),
   query: '',
+  exclusions: [],
+  exclusionDraft: '',
 };

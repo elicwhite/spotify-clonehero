@@ -3,8 +3,20 @@
  */
 
 import '@testing-library/jest-dom';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
-import type {FindMusicFilters, FindMusicSong, FindMusicStats} from '../types';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import type {
+  FindMusicFilters,
+  FindMusicSong,
+  FindMusicStats,
+  SourceStatus,
+} from '../types';
 import {FIND_MUSIC_FILTERS_STORAGE_KEY} from '../filterPersistence';
 
 jest.mock('../../SupportedBrowserWarning', () => ({
@@ -62,17 +74,36 @@ jest.mock('../FindMusicSidebar', () => ({
     musicCount,
     filters,
     onFiltersChange,
+    onViewChange,
+    historyStatus,
+    libraryStatus,
+    localStatus,
+    chorusStatus,
   }: {
     musicCount: number;
     filters: FindMusicFilters;
     onFiltersChange: (filters: FindMusicFilters) => void;
+    onViewChange: (view: 'music' | 'radar') => void;
+    historyStatus: SourceStatus;
+    libraryStatus: SourceStatus;
+    localStatus: SourceStatus;
+    chorusStatus: SourceStatus;
   }) => (
-    <aside data-testid="sidebar" data-filter-query={filters.query}>
+    <aside
+      data-testid="sidebar"
+      data-filter-query={filters.query}
+      data-history-phase={historyStatus.phase}
+      data-library-phase={libraryStatus.phase}
+      data-local-phase={localStatus.phase}
+      data-chorus-phase={chorusStatus.phase}>
       {musicCount} matches available
       <button
         type="button"
         onClick={() => onFiltersChange({...filters, query: 'next query'})}>
         Change filter
+      </button>
+      <button type="button" onClick={() => onViewChange('radar')}>
+        Choose recommendations
       </button>
     </aside>
   ),
@@ -109,6 +140,7 @@ function song(key: string, name: string): FindMusicSong {
     playCount: 10,
     playlists: [],
     albums: [],
+    spotifyUrl: null,
     hasInstalledChart: false,
     charts: [
       {
@@ -117,13 +149,11 @@ function song(key: string, name: string): FindMusicSong {
         name,
         charter: 'Charter',
         modifiedTime: '2026-01-01T00:00:00.000Z',
-        songLength: 180000,
         albumArtMd5: null,
         groupId: 1,
         hasVideoBackground: false,
         isInstalled: false,
         instruments: {
-          drums: 2,
           guitar: 3,
           bass: null,
           keys: null,
@@ -171,13 +201,38 @@ it('restores filters from local storage and persists subsequent changes', async 
       install: 'hide-installed',
       instruments: ['guitar'],
       query: 'next query',
+      exclusions: [],
+      exclusionDraft: '',
     }),
   );
 });
 
+it('shows loading source states while the OPFS database snapshot is unresolved', async () => {
+  mockGetFindMusicSongs.mockReturnValue(new Promise(() => {}));
+
+  render(<FindMusicClient />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  const sidebar = screen.getByTestId('sidebar');
+  expect(sidebar).toHaveAttribute('data-history-phase', 'loading');
+  expect(sidebar).toHaveAttribute('data-library-phase', 'loading');
+  expect(sidebar).toHaveAttribute('data-local-phase', 'loading');
+  expect(sidebar).toHaveAttribute('data-chorus-phase', 'loading');
+  expect(
+    screen.getByText('Opening your local music index'),
+  ).toBeInTheDocument();
+});
+
 it('uses the full setup guide when no taste source has been loaded', async () => {
   mockGetFindMusicSongs.mockResolvedValue([]);
-  mockGetFindMusicStats.mockResolvedValue({...stats, historySongs: 0});
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    historySongs: 0,
+    libraryTracks: 0,
+    chorusCharts: 0,
+  });
 
   render(<FindMusicClient />);
 
@@ -188,6 +243,44 @@ it('uses the full setup guide when no taste source has been loaded', async () =>
     }),
   ).toBeInTheDocument();
   expect(screen.queryByTestId('music-table')).not.toBeInTheDocument();
+  expect(mockRefreshChorus).not.toHaveBeenCalled();
+  expect(
+    screen.getAllByText(
+      'Connect Spotify Library or History to download the index',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+it('moves the sidebar into a dismissible hamburger drawer on small screens', async () => {
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+  expect(screen.getByTestId('find-music-layout')).toHaveClass(
+    'grid-rows-[minmax(0,1fr)]',
+  );
+  expect(screen.getByTestId('find-music-desktop-sidebar')).toHaveClass(
+    'hidden',
+    'lg:block',
+  );
+
+  fireEvent.click(
+    screen.getByRole('button', {name: 'Open filters and sources'}),
+  );
+
+  const drawer = screen.getByRole('dialog', {name: 'Find music controls'});
+  expect(drawer).toBeInTheDocument();
+  expect(screen.getAllByTestId('sidebar')).toHaveLength(2);
+
+  fireEvent.click(
+    within(drawer).getByRole('button', {name: 'Choose recommendations'}),
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', {name: 'Find music controls'}),
+    ).not.toBeInTheDocument(),
+  );
 });
 
 it('holds source-driven matches until the user explicitly re-ranks', async () => {
@@ -209,6 +302,7 @@ it('holds source-driven matches until the user explicitly re-ranks', async () =>
   expect(await screen.findByTestId('music-table')).toHaveTextContent('Alpha');
 
   const hold = await screen.findByTestId('held-matches');
+  expect(mockRefreshChorus).toHaveBeenCalledTimes(1);
   expect(hold).toHaveTextContent('1 new match held');
   expect(screen.getByTestId('sidebar')).toHaveTextContent(
     '2 matches available',

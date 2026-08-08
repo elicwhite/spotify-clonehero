@@ -51,6 +51,20 @@ describe('FindMusicWelcome', () => {
       screen.getByRole('heading', {name: 'Recommendations'}),
     ).toBeInTheDocument();
     expect(screen.getByText('Optional', {exact: false})).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', {
+        name: 'Request your Spotify Extended Streaming History',
+      }),
+    ).toHaveAttribute('href', 'https://www.spotify.com/us/account/privacy/');
+    expect(screen.getByTestId('welcome-spotify-history')).toHaveTextContent(
+      'Import your Spotify Extended Streaming History to surface songs you listen to.',
+    );
+    expect(
+      screen.getByText(/install charts directly and filter out songs/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('welcome-spotify-library')).not.toHaveClass(
+      'min-h-[220px]',
+    );
     expect(screen.getByTestId('find-music-welcome')).toHaveClass(
       'overflow-y-auto',
     );

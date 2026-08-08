@@ -21,6 +21,8 @@ describe('find music filter persistence', () => {
       install: 'hide-installed',
       instruments: new Set(['guitar', 'proDrums']),
       query: 'Incubus Drive',
+      exclusions: ['blink', 'Charter Name'],
+      exclusionDraft: 'fall out',
     });
 
     expect(storage.setItem).toHaveBeenCalledWith(
@@ -31,6 +33,8 @@ describe('find music filter persistence', () => {
       install: 'hide-installed',
       instruments: new Set(['guitar', 'proDrums']),
       query: 'Incubus Drive',
+      exclusions: ['blink', 'Charter Name'],
+      exclusionDraft: 'fall out',
     });
   });
 
@@ -42,6 +46,8 @@ describe('find music filter persistence', () => {
         query: 123,
         minPlays: 50,
         evidence: ['history'],
+        exclusions: [' blink ', '', 'BLINK', 42, 'Charter Name'],
+        exclusionDraft: 123,
       }),
     );
 
@@ -49,6 +55,8 @@ describe('find music filter persistence', () => {
       install: 'all',
       instruments: new Set(['guitar']),
       query: '',
+      exclusions: ['blink', 'Charter Name'],
+      exclusionDraft: '',
     });
   });
 
@@ -57,6 +65,8 @@ describe('find music filter persistence', () => {
       install: 'all',
       instruments: new Set(),
       query: '',
+      exclusions: [],
+      exclusionDraft: '',
     });
 
     const unavailable = {
@@ -68,6 +78,8 @@ describe('find music filter persistence', () => {
       install: 'all',
       instruments: new Set(),
       query: '',
+      exclusions: [],
+      exclusionDraft: '',
     });
   });
 });

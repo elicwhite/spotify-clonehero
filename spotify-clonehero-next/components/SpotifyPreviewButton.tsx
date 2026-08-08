@@ -75,7 +75,8 @@ function SpotifyPreviewButtonForTrack({
   const lookup = useTrackUrls(artist, song);
   const cacheKey = `${artist.toLocaleLowerCase()}\u001f${song.toLocaleLowerCase()}`;
   const initialResult = useMemo<TrackUrls | null>(
-    () => (spotifyUrl ? {previewUrl: previewUrl ?? null, spotifyUrl} : null),
+    () =>
+      spotifyUrl && previewUrl !== undefined ? {previewUrl, spotifyUrl} : null,
     [previewUrl, spotifyUrl],
   );
   const [result, setResult] = useState<TrackUrls | null>(initialResult);
@@ -178,6 +179,7 @@ function SpotifyPreviewButtonForTrack({
 
   const lookingUp = phase === 'loading' && !thisTrack;
   const unavailable = phase === 'unavailable';
+  const destinationUrl = result?.spotifyUrl ?? spotifyUrl;
   const label = thisTrackPlaying
     ? 'Stop'
     : thisTrackLoading
@@ -208,14 +210,18 @@ function SpotifyPreviewButtonForTrack({
         )}
         {label}
       </Button>
-      {!compact && result?.spotifyUrl ? (
-        <Button size="icon" variant="outline" asChild>
+      {destinationUrl ? (
+        <Button
+          size="icon"
+          variant="outline"
+          className={cn(compact && 'h-7 w-7 shrink-0')}
+          asChild>
           <a
-            href={result.spotifyUrl}
+            href={destinationUrl}
             target="_blank"
             rel="noreferrer"
             aria-label={`Open ${song} by ${artist} in Spotify`}>
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className={cn('h-4 w-4', compact && 'h-3.5 w-3.5')} />
           </a>
         </Button>
       ) : null}

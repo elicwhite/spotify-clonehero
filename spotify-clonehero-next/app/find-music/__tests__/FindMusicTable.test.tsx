@@ -34,8 +34,25 @@ jest.mock('../../../lib/local-songs-folder', () => ({
 
 jest.mock('../../../components/SpotifyPreviewButton', () => ({
   __esModule: true,
-  default: ({artist, song}: {artist: string; song: string}) => (
-    <button aria-label={`Play preview of ${song} by ${artist}`}>Play</button>
+  default: ({
+    artist,
+    song,
+    spotifyUrl,
+  }: {
+    artist: string;
+    song: string;
+    spotifyUrl?: string | null;
+  }) => (
+    <>
+      <button aria-label={`Play preview of ${song} by ${artist}`}>Play</button>
+      {spotifyUrl ? (
+        <a
+          href={spotifyUrl}
+          aria-label={`Open ${song} by ${artist} in Spotify`}>
+          Spotify
+        </a>
+      ) : null}
+    </>
   ),
 }));
 
@@ -49,6 +66,8 @@ const filters: FindMusicFilters = {
   install: 'all',
   instruments: new Set(),
   query: '',
+  exclusions: [],
+  exclusionDraft: '',
 };
 
 function chart(md5: string, name: string, installed = false): FindMusicChart {
@@ -58,13 +77,11 @@ function chart(md5: string, name: string, installed = false): FindMusicChart {
     name,
     charter: `Charter ${name}`,
     modifiedTime: '2026-01-01T00:00:00.000Z',
-    songLength: 185_000,
     albumArtMd5: null,
     groupId: 1,
     hasVideoBackground: false,
     isInstalled: installed,
     instruments: {
-      drums: 3,
       guitar: 4,
       bass: -1,
       keys: null,
@@ -86,6 +103,7 @@ function song(
     playCount,
     playlists: playCount > 20 ? ['Favorites'] : [],
     albums: [],
+    spotifyUrl: `https://open.spotify.com/track/${key}`,
     hasInstalledChart: installed,
     charts: [chart(`${key}-chart`, name, installed)],
   };
@@ -155,15 +173,77 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   fireEvent.click(songRows[0]);
   expect(await screen.findByText('Charter Beta')).toBeInTheDocument();
   expect(screen.queryByText('beta-chart')).not.toBeInTheDocument();
-  expect(screen.getAllByText(/2025|2026/).length).toBeGreaterThan(0);
-  expect(screen.queryByTitle('Bass: not charted')).not.toBeInTheDocument();
   expect(
-    screen.getByTitle('Drums: difficulty 3').querySelector('img'),
-  ).toHaveAttribute('src', expect.stringContaining('drums.png'));
+    screen.getByRole('link', {name: 'Open chart by Charter Beta on Enchor'}),
+  ).toHaveAttribute('href', 'https://www.enchor.us/chart/beta-chart');
+  expect(
+    screen.getByRole('link', {name: 'Open chart by Charter Beta on Enchor'}),
+  ).toHaveAttribute('target', '_blank');
+  expect(screen.getAllByText(/2025|2026/).length).toBeGreaterThan(0);
+  expect(screen.queryByText('3:05')).not.toBeInTheDocument();
+  expect(screen.queryByTitle('Bass: not charted')).not.toBeInTheDocument();
+  const proDrumsBadge = screen.getByTitle('Pro drums: difficulty 3');
+  expect(proDrumsBadge.querySelector('img')).toHaveAttribute(
+    'src',
+    expect.stringContaining('drums.png'),
+  );
+  expect(proDrumsBadge.querySelector('small')).toHaveClass('text-xs');
+  expect(screen.queryByTitle('Drums: difficulty 3')).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', {name: 'Install'}));
   await waitFor(() => expect(mockDownloadSong).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.getAllByText('Installed')).toHaveLength(2));
+});
+
+it('shows only chart versions that satisfy the active instrument filter', () => {
+  const filteredSong = song('filtered', 'Filtered Song', 10);
+  filteredSong.charts = [
+    {
+      ...chart('guitar-chart', 'Guitar Version'),
+      instruments: {
+        guitar: 3,
+        bass: 0,
+        keys: -1,
+        proDrums: 4,
+      },
+    },
+    {
+      ...chart('drums-chart', 'Pro Drums Version'),
+      instruments: {
+        guitar: null,
+        bass: null,
+        keys: null,
+        proDrums: 4,
+      },
+    },
+  ];
+
+  render(
+    <FindMusicTable
+      view="music"
+      music={[filteredSong]}
+      radar={[]}
+      filters={{...filters, instruments: new Set(['guitar'])}}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  fireEvent.click(screen.getByTestId('song-row'));
+
+  expect(
+    screen.getByRole('link', {
+      name: 'Open chart by Charter Guitar Version on Enchor',
+    }),
+  ).toHaveAttribute('href', 'https://www.enchor.us/chart/guitar-chart');
+  expect(screen.getByTitle('Bass: difficulty 0')).toBeInTheDocument();
+  expect(screen.queryByTitle('Keys: difficulty -1')).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('link', {
+      name: 'Open chart by Charter Pro Drums Version on Enchor',
+    }),
+  ).not.toBeInTheDocument();
 });
 
 it('keeps Recommendations in a distinct explanatory state while affinity is loading', () => {
@@ -226,6 +306,11 @@ it('adds the compact preview column only for a linked Spotify account', () => {
       name: 'Play preview of Preview Song by Artist',
     }),
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole('link', {
+      name: 'Open Preview Song by Artist in Spotify',
+    }),
+  ).toHaveAttribute('href', 'https://open.spotify.com/track/preview');
 
   fireEvent.click(
     screen.getByRole('button', {
@@ -241,6 +326,7 @@ it('preserves independent scroll positions for each view', () => {
     artist: 'Artist',
     song: 'Recommendation',
     artistPlayCount: 20,
+    spotifyUrl: null,
     hasInstalledChart: false,
     charts: [chart('recommendation-chart', 'Recommendation')],
   };

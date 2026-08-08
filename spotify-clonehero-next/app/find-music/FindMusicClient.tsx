@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Sparkles} from 'lucide-react';
+import {Menu, Sparkles} from 'lucide-react';
 import {toast} from 'sonner';
 import type {User} from '@supabase/supabase-js';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
@@ -14,6 +14,15 @@ import {
 } from '@/lib/spotify-sdk/SpotifyFetching';
 import {processSpotifyDump} from '@/lib/spotify-sdk/HistoryDumpParsing';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
+import {Button} from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import FindMusicSidebar from './FindMusicSidebar';
 import FindMusicTable from './FindMusicTable';
 import FindMusicWelcome from './FindMusicWelcome';
@@ -51,6 +60,7 @@ export default function FindMusicClient() {
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [hasSpotify, setHasSpotify] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [view, setView] = useState<FindMusicView>('music');
   const [filters, setFilters] = useState<FindMusicFilters>(freshEmptyFilters);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
@@ -78,25 +88,41 @@ export default function FindMusicClient() {
   const historyStatus = useMemo<SourceStatus>(
     () =>
       historyStatusOverride ??
-      (stats.historySongs > 0
-        ? readySource(
-            `${stats.historySongs.toLocaleString()} songs with plays`,
-            formatFreshness(stats.historyUpdatedAt),
-          )
-        : {phase: 'idle', summary: 'No history folder loaded'}),
-    [historyStatusOverride, stats.historySongs, stats.historyUpdatedAt],
+      (initializing
+        ? {phase: 'loading', summary: 'Checking saved local data…'}
+        : stats.historySongs > 0
+          ? readySource(
+              `${stats.historySongs.toLocaleString()} songs with plays`,
+              formatFreshness(stats.historyUpdatedAt),
+            )
+          : {phase: 'idle', summary: 'No history folder loaded'}),
+    [
+      historyStatusOverride,
+      initializing,
+      stats.historySongs,
+      stats.historyUpdatedAt,
+    ],
   );
   const localStatus = useMemo<SourceStatus>(
     () =>
       localStatusOverride ??
-      (stats.localCharts > 0
-        ? readySource(
-            `${stats.localCharts.toLocaleString()} installed charts`,
-            formatFreshness(stats.localUpdatedAt),
-          )
-        : {phase: 'idle', summary: 'No Songs folder scanned'}),
-    [localStatusOverride, stats.localCharts, stats.localUpdatedAt],
+      (initializing
+        ? {phase: 'loading', summary: 'Checking saved local data…'}
+        : stats.localCharts > 0
+          ? readySource(
+              `${stats.localCharts.toLocaleString()} installed charts`,
+              formatFreshness(stats.localUpdatedAt),
+            )
+          : {phase: 'idle', summary: 'No Songs folder scanned'}),
+    [
+      localStatusOverride,
+      initializing,
+      stats.localCharts,
+      stats.localUpdatedAt,
+    ],
   );
+  const hasTasteSource =
+    hasSpotify || stats.libraryTracks > 0 || stats.historySongs > 0;
 
   const querySnapshot = useCallback(async (): Promise<Snapshot> => {
     const [music, radar] = await Promise.all([
@@ -154,6 +180,7 @@ export default function FindMusicClient() {
   }, [pending]);
 
   const runChorusRefresh = useCallback(async () => {
+    if (!hasTasteSource) return;
     const controller = new AbortController();
     activeControllersRef.current.push(controller);
     setChorusError(null);
@@ -167,7 +194,7 @@ export default function FindMusicClient() {
         toast.error('Could not refresh the Chorus index');
       }
     }
-  }, [refreshChorusIndex, stageSnapshot]);
+  }, [hasTasteSource, refreshChorusIndex, stageSnapshot]);
 
   useEffect(() => {
     let canceled = false;
@@ -223,10 +250,11 @@ export default function FindMusicClient() {
   }, [stageSnapshot]);
 
   useEffect(() => {
-    if (!initializedRef.current || chorusStartedRef.current) return;
+    if (!initializedRef.current || !hasTasteSource || chorusStartedRef.current)
+      return;
     chorusStartedRef.current = true;
     void runChorusRefresh();
-  }, [initializing, runChorusRefresh]);
+  }, [hasTasteSource, initializing, runChorusRefresh]);
 
   useEffect(() => {
     if (spotifyProgress.updateStatus !== 'fetching') return;
@@ -367,6 +395,9 @@ export default function FindMusicClient() {
     if (spotifyProgress.updateStatus === 'error') {
       return {phase: 'error', summary: 'Spotify library refresh failed'};
     }
+    if (initializing) {
+      return {phase: 'loading', summary: 'Checking saved local data…'};
+    }
     if (stats.libraryTracks > 0) {
       return {
         phase: 'ready',
@@ -378,9 +409,18 @@ export default function FindMusicClient() {
       phase: 'idle',
       summary: authChecked && hasSpotify ? 'Ready to scan' : 'Not connected',
     };
-  }, [authChecked, hasSpotify, spotifyProgress, stats]);
+  }, [authChecked, hasSpotify, initializing, spotifyProgress, stats]);
 
   const chorusStatus = useMemo<SourceStatus>(() => {
+    if (initializing) {
+      return {phase: 'loading', summary: 'Checking saved local data…'};
+    }
+    if (!hasTasteSource && stats.chorusCharts === 0) {
+      return {
+        phase: 'idle',
+        summary: 'Connect Spotify Library or History to download the index',
+      };
+    }
     if (chorusError) {
       return {
         phase: 'error',
@@ -412,10 +452,19 @@ export default function FindMusicClient() {
       ? {
           phase: 'ready',
           summary: `${stats.chorusCharts.toLocaleString()} charts`,
-          detail: 'Refreshed on page load',
+          detail:
+            chorusProgress.status === 'complete'
+              ? 'Refreshed just now'
+              : 'Stored in this browser',
         }
       : {phase: 'idle', summary: 'Index not downloaded yet'};
-  }, [chorusError, chorusProgress, stats.chorusCharts]);
+  }, [
+    chorusError,
+    chorusProgress,
+    hasTasteSource,
+    initializing,
+    stats.chorusCharts,
+  ]);
 
   const busy =
     initializing ||
@@ -432,38 +481,91 @@ export default function FindMusicClient() {
       <div
         data-testid="find-music-page"
         className="-m-4 flex min-h-0 w-[calc(100%+2rem)] flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
-        <header className="border-b px-4 py-3 md:px-5">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h1 className="text-base font-semibold tracking-tight">
-              Find charts for music you love
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Matches your listening data against Chorus. Everything stays in
-              this browser.
-            </p>
+        <header className="border-b px-3 py-3 md:px-5">
+          <div className="flex items-start gap-2.5">
+            <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-ml-1 h-8 w-8 shrink-0 lg:hidden"
+                  aria-label="Open filters and sources">
+                  <Menu className="h-5 w-5" aria-hidden="true" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="w-[min(92vw,340px)] gap-0 overflow-hidden p-0 sm:max-w-[340px]">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Find music controls</SheetTitle>
+                  <SheetDescription>
+                    Browse results, filter songs, and connect music sources.
+                  </SheetDescription>
+                </SheetHeader>
+                <FindMusicSidebar
+                  variant="drawer"
+                  view={view}
+                  onViewChange={nextView => {
+                    setView(nextView);
+                    setMobileSidebarOpen(false);
+                  }}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  onClearFilters={clearFilters}
+                  historyStatus={historyStatus}
+                  libraryStatus={libraryStatus}
+                  localStatus={localStatus}
+                  chorusStatus={chorusStatus}
+                  onRefreshHistory={() => void runHistoryRefresh()}
+                  onRefreshLibrary={() => void runLibraryRefresh()}
+                  onScanLocal={() => void runLocalScan()}
+                  onRefreshChorus={() => void runChorusRefresh()}
+                  onConnectSpotify={() => void connectSpotify()}
+                  authenticated={Boolean(user)}
+                  hasSpotify={hasSpotify}
+                  musicCount={pending?.music.length ?? committed.music.length}
+                  radarCount={pending?.radar.length ?? committed.radar.length}
+                />
+              </SheetContent>
+            </Sheet>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="text-base font-semibold tracking-tight">
+                Find charts for music you love
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Matches your listening data against Chorus.
+              </p>
+            </div>
           </div>
         </header>
-        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,auto)_minmax(0,1fr)] lg:grid-cols-[292px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-          <FindMusicSidebar
-            view={view}
-            onViewChange={setView}
-            filters={filters}
-            onFiltersChange={setFilters}
-            onClearFilters={clearFilters}
-            historyStatus={historyStatus}
-            libraryStatus={libraryStatus}
-            localStatus={localStatus}
-            chorusStatus={chorusStatus}
-            onRefreshHistory={() => void runHistoryRefresh()}
-            onRefreshLibrary={() => void runLibraryRefresh()}
-            onScanLocal={() => void runLocalScan()}
-            onRefreshChorus={() => void runChorusRefresh()}
-            onConnectSpotify={() => void connectSpotify()}
-            authenticated={Boolean(user)}
-            hasSpotify={hasSpotify}
-            musicCount={pending?.music.length ?? committed.music.length}
-            radarCount={pending?.radar.length ?? committed.radar.length}
-          />
+        <div
+          data-testid="find-music-layout"
+          className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[292px_minmax(0,1fr)]">
+          <div
+            data-testid="find-music-desktop-sidebar"
+            className="hidden min-h-0 lg:block">
+            <FindMusicSidebar
+              view={view}
+              onViewChange={setView}
+              filters={filters}
+              onFiltersChange={setFilters}
+              onClearFilters={clearFilters}
+              historyStatus={historyStatus}
+              libraryStatus={libraryStatus}
+              localStatus={localStatus}
+              chorusStatus={chorusStatus}
+              onRefreshHistory={() => void runHistoryRefresh()}
+              onRefreshLibrary={() => void runLibraryRefresh()}
+              onScanLocal={() => void runLocalScan()}
+              onRefreshChorus={() => void runChorusRefresh()}
+              onConnectSpotify={() => void connectSpotify()}
+              authenticated={Boolean(user)}
+              hasSpotify={hasSpotify}
+              musicCount={pending?.music.length ?? committed.music.length}
+              radarCount={pending?.radar.length ?? committed.radar.length}
+            />
+          </div>
           <section
             aria-label="Find music results"
             data-testid="find-music-results"
