@@ -13,7 +13,10 @@ import {sql} from 'kysely';
 import {useData} from '@/lib/suspense-data';
 import {SignInWithSpotifyCard} from './SignInWithSpotifyCard';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
-import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
+import {
+  getLocalScanWarning,
+  tryScanForInstalledCharts,
+} from '@/lib/local-songs-folder';
 import {useSpotifyLibraryUpdate} from '@/lib/spotify-sdk/SpotifyFetching';
 import {toast} from 'sonner';
 import {
@@ -157,6 +160,9 @@ export function LoggedIn() {
         toast.info('Directory picker canceled');
         setStatus({status: 'not-started', songsCounted: 0});
         return;
+      }
+      if (scanResult.status === 'partial') {
+        toast.warning(getLocalScanWarning(scanResult.issues.length));
       }
       setStatus(prevStatus => ({...prevStatus, status: 'done-scanning'}));
       await pause();

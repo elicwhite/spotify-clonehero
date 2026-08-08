@@ -14,7 +14,10 @@ import {
   useSpotifyLibraryUpdate,
 } from '@/lib/spotify-sdk/SpotifyFetching';
 import {tryProcessSpotifyDump} from '@/lib/spotify-sdk/HistoryDumpParsing';
-import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
+import {
+  getLocalScanWarning,
+  tryScanForInstalledCharts,
+} from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {
   Sheet,
@@ -382,9 +385,15 @@ export default function FindMusicClient() {
         setLocalStatus(null);
         return;
       }
+      if (result.status === 'partial') {
+        toast.warning(getLocalScanWarning(result.issues.length));
+      }
       setLocalStatus({
         phase: 'ready',
-        summary: `${result.installedCharts.length.toLocaleString()} installed charts`,
+        summary:
+          result.status === 'partial'
+            ? `${result.installedCharts.length.toLocaleString()} charts found before some locations were skipped`
+            : `${result.installedCharts.length.toLocaleString()} installed charts`,
         detail: 'Scanned just now',
       });
       await stageSnapshot();

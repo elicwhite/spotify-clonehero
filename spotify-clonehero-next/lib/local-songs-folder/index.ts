@@ -3,7 +3,10 @@ import filenamify from 'filenamify/browser';
 
 import {track} from '@/lib/analytics/track';
 import {writeFile} from '@/lib/fileSystemHelpers';
-import scanLocalCharts, {SongAccumulator} from './scanLocalCharts';
+import scanLocalCharts, {
+  LocalChartScanIssue,
+  SongAccumulator,
+} from './scanLocalCharts';
 import {coalesceProgress} from './scan-progress';
 import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
@@ -99,9 +102,15 @@ async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle |
 }
 
 type InstalledChartsResponse = {
+  status: 'complete' | 'partial';
   lastScanned: Date;
   installedCharts: SongAccumulator[];
+  issues: LocalChartScanIssue[];
 };
+
+export function getLocalScanWarning(issueCount: number) {
+  return `${issueCount.toLocaleString()} chart ${issueCount === 1 ? 'location was' : 'locations were'} skipped. Existing indexed charts were preserved.`;
+}
 
 export async function tryScanForInstalledCharts(
   onProgress: (count: number) => void = () => {},
@@ -117,10 +126,8 @@ export async function tryScanForInstalledCharts(
   // re-render ~15k times during a full library scan.
   const progress = coalesceProgress(onProgress);
 
-  const {lastScanned, installedCharts} = await scanDirectoryForCharts(
-    progress.bump,
-    handle,
-  );
+  const {lastScanned, installedCharts, issues, status} =
+    await scanDirectoryForCharts(progress.bump, handle);
 
   progress.flush();
 
@@ -129,24 +136,29 @@ export async function tryScanForInstalledCharts(
     value: installedCharts.length,
   });
 
-  const installedChartsCacheHandle = await root.getFileHandle(
-    'installedCharts.json',
-    {
-      create: true,
-    },
-  );
+  await upsertLocalCharts(installedCharts, {
+    pruneMissing: status === 'complete',
+  });
 
-  // Write the charts to the local db
-  await upsertLocalCharts(installedCharts);
-
-  writeFile(installedChartsCacheHandle, JSON.stringify(installedCharts));
-  localStorage.setItem(
-    'lastScannedInstalledCharts',
-    lastScanned.getTime().toString(),
-  );
+  if (status === 'complete') {
+    const installedChartsCacheHandle = await root.getFileHandle(
+      'installedCharts.json',
+      {create: true},
+    );
+    await writeFile(
+      installedChartsCacheHandle,
+      JSON.stringify(installedCharts),
+    );
+    localStorage.setItem(
+      'lastScannedInstalledCharts',
+      lastScanned.getTime().toString(),
+    );
+  }
   return {
+    status,
     lastScanned,
     installedCharts,
+    issues,
   };
 }
 
@@ -156,7 +168,11 @@ async function scanDirectoryForCharts(
 ): Promise<InstalledChartsResponse> {
   const beforeScan = Date.now();
   const installedCharts: SongAccumulator[] = [];
-  await scanLocalCharts(directoryHandle, installedCharts, callbackPerSong);
+  const {issues} = await scanLocalCharts(
+    directoryHandle,
+    installedCharts,
+    callbackPerSong,
+  );
   console.log(
     'Took',
     (Date.now() - beforeScan) / 1000,
@@ -166,8 +182,10 @@ async function scanDirectoryForCharts(
 
   const now = new Date();
   return {
+    status: issues.length === 0 ? 'complete' : 'partial',
     lastScanned: now,
     installedCharts,
+    issues,
   };
 }
 

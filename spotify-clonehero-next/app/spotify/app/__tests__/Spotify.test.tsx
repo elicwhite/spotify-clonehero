@@ -6,6 +6,7 @@ const mockUpdateSpotifyLibrary = jest.fn();
 const mockFetchChorusCharts = jest.fn(async () => []);
 const mockScanForInstalledCharts = jest.fn();
 const mockToastError = jest.fn();
+const mockToastWarning = jest.fn();
 
 jest.mock('../../../../lib/spotify-sdk/SpotifyFetching', () => ({
   useSpotifyLibraryUpdate: () => [
@@ -22,6 +23,7 @@ jest.mock('../../../../lib/chorusChartDb', () => ({
 }));
 
 jest.mock('../../../../lib/local-songs-folder', () => ({
+  getLocalScanWarning: (count: number) => `${count} locations skipped`,
   tryScanForInstalledCharts: (...args: unknown[]) =>
     mockScanForInstalledCharts(...args),
 }));
@@ -33,6 +35,7 @@ jest.mock('sonner', () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     info: jest.fn(),
+    warning: (...args: unknown[]) => mockToastWarning(...args),
   },
 }));
 
@@ -112,5 +115,23 @@ describe('Spotify refresh errors', () => {
       await screen.findByRole('button', {name: 'Select Songs Folder'}),
     ).toBeInTheDocument();
     expect(mockToastError).toHaveBeenCalledWith('Spotify metadata failed');
+  });
+
+  it('shows one aggregate warning for a partial local scan', async () => {
+    mockUpdateSpotifyLibrary.mockReturnValue(new Promise(() => {}));
+    mockScanForInstalledCharts.mockResolvedValue({
+      status: 'partial',
+      lastScanned: new Date(),
+      installedCharts: [],
+      issues: [{path: 'Songs/Inaccessible'}, {path: 'Songs/Offline'}],
+    });
+
+    render(<LoggedIn />);
+    fireEvent.click(screen.getByRole('button', {name: 'Select Songs Folder'}));
+
+    await waitFor(() =>
+      expect(mockToastWarning).toHaveBeenCalledWith('2 locations skipped'),
+    );
+    expect(mockToastWarning).toHaveBeenCalledTimes(1);
   });
 });

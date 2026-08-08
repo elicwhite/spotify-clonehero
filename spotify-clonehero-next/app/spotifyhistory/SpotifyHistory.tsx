@@ -2,7 +2,10 @@
 
 import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
-import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
+import {
+  getLocalScanWarning,
+  tryScanForInstalledCharts,
+} from '@/lib/local-songs-folder';
 import {
   getSpotifyDumpArtistTrackPlays,
   tryProcessSpotifyDump,
@@ -212,6 +215,9 @@ function SpotifyHistory({authenticated}: {authenticated: boolean}) {
         });
         abortController.abort();
         return;
+      }
+      if (scanResult.status === 'partial') {
+        toast.warning(getLocalScanWarning(scanResult.issues.length));
       }
       setStatus(prevStatus => ({
         ...prevStatus,

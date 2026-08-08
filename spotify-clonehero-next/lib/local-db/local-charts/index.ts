@@ -32,9 +32,13 @@ export async function upsertLocalCharts(
     for (const row of existing) {
       const key = makeKey(row.artist, row.song, row.charter);
       const c = incoming.get(key);
-      if (c == null && options.pruneMissing) {
-        if (row.id != null) removedIds.push(row.id);
-      } else if (c.modifiedTime === row.modified_time) {
+      if (c == null) {
+        if (options.pruneMissing && row.id != null) {
+          removedIds.push(row.id);
+        }
+        continue;
+      }
+      if (c.modifiedTime === row.modified_time) {
         // Unchanged — no need to rewrite the row.
         incoming.delete(key);
       }
