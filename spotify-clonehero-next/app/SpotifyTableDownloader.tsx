@@ -738,7 +738,7 @@ function DownloadButton({
         source,
         md5,
       });
-      if (result == null) {
+      if (result.status === 'canceled') {
         updateDownloadState('not-downloading');
         return;
       }

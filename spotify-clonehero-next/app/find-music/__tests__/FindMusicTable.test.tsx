@@ -27,6 +27,7 @@ jest.mock('react-virtual', () => ({
 
 jest.mock('../../../lib/local-songs-folder', () => ({
   downloadSong: jest.fn(async () => ({
+    status: 'downloaded',
     newParentDirectoryHandle: {},
     fileName: 'chart.sng',
   })),
@@ -199,6 +200,29 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   fireEvent.click(screen.getByRole('button', {name: 'Install'}));
   await waitFor(() => expect(mockDownloadSong).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.getAllByText('Installed')).toHaveLength(2));
+});
+
+it('returns an install action to idle when directory selection is canceled', async () => {
+  mockDownloadSong.mockResolvedValueOnce({status: 'canceled'});
+  render(
+    <FindMusicTable
+      view="music"
+      music={[song('alpha', 'Alpha', 2)]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  fireEvent.click(screen.getByTestId('song-row'));
+  fireEvent.click(await screen.findByRole('button', {name: 'Install'}));
+
+  await waitFor(() =>
+    expect(screen.getByRole('button', {name: 'Install'})).toBeEnabled(),
+  );
+  expect(screen.queryByRole('button', {name: 'Retry'})).not.toBeInTheDocument();
 });
 
 it('renders track-backed instruments with unavailable intensity beneath the song column', () => {

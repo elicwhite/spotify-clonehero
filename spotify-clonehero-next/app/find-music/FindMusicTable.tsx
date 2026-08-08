@@ -116,7 +116,7 @@ export default function FindMusicTable({
         `https://files.enchor.us/${chart.md5}.sng`,
         {asSng: true, source: 'unknown', md5: chart.md5},
       );
-      if (result == null) {
+      if (result.status === 'canceled') {
         setDownloadStates(current => ({...current, [chart.md5]: 'idle'}));
         return;
       }

@@ -362,16 +362,19 @@ export async function downloadSong(
       | 'unknown';
     md5?: string;
   },
-): Promise<null | {
-  newParentDirectoryHandle: FileSystemDirectoryHandle;
-  fileName: string;
-}> {
-  track({
-    event: 'chart_downloaded',
-    source: options?.source ?? 'unknown',
-    format: options?.asSng === false ? 'chart' : 'sng',
-    md5: options?.md5,
-  });
+): Promise<
+  | {status: 'canceled'}
+  | {
+      status: 'downloaded';
+      newParentDirectoryHandle: FileSystemDirectoryHandle;
+      fileName: string;
+    }
+> {
+  const downloadLocation =
+    options?.folder ?? (await getDefaultDownloadDirectory());
+  if (!downloadLocation) {
+    return {status: 'canceled'};
+  }
 
   const response = await fetch(url, {
     headers: {
@@ -385,21 +388,18 @@ export async function downloadSong(
     credentials: 'omit',
     cache: 'no-store',
   });
+  if (!response.ok) {
+    throw new Error(`Chart download failed with HTTP ${response.status}`);
+  }
 
   const body = response.body;
   if (body == null) {
-    return null;
+    throw new Error('Chart download response did not include a body');
   }
   const artistSongTitle = `${artist} - ${song} (${charter})${
     options?.asSng ? '.sng' : ''
   }`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
-
-  const downloadLocation =
-    options?.folder ?? (await getDefaultDownloadDirectory());
-  if (!downloadLocation) {
-    return null;
-  }
 
   const backupRootDirHandle = await getBackupDirectory();
 
@@ -424,11 +424,23 @@ export async function downloadSong(
     downloadLocation,
   );
 
-  // Delete the temp directory
-  await backupRootDirHandle.removeEntry(filename, {recursive: true});
+  // Installation commits when the destination copy succeeds. A stale backup
+  // is safe to leave behind because the next attempt removes it before writing.
+  try {
+    await backupRootDirHandle.removeEntry(filename, {recursive: true});
+  } catch (error) {
+    console.warn(`Could not remove download backup ${filename}`, error);
+  }
+
+  track({
+    event: 'chart_downloaded',
+    source: options?.source ?? 'unknown',
+    format: options?.asSng === false ? 'chart' : 'sng',
+    md5: options?.md5,
+  });
 
   console.log(`Finished downloading ${filename}`);
-  return result;
+  return {status: 'downloaded', ...result};
 }
 
 async function downloadAsFolder(
