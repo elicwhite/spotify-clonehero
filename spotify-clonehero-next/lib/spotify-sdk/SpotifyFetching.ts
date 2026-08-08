@@ -526,7 +526,7 @@ export function useSpotifyLibraryUpdate(): [
       abortController: AbortController,
       options: {concurrency?: number},
     ): Promise<SpotifyLibrary> => {
-      return new Promise(async resolve => {
+      return (async () => {
         const sdk = await getSpotifySdk();
         if (sdk == null) {
           setProgress({
@@ -535,13 +535,12 @@ export function useSpotifyLibraryUpdate(): [
             rateLimitCountdown: null,
             updateStatus: 'idle',
           });
-          resolve({
+          return {
             playlistMetadata: {},
             albumMetadata: {},
             playlistTracks: {},
             albumTracks: {},
-          });
-          return;
+          };
         }
 
         const [cachedPlaylistsTracks, cachedAlbumsTracks] = await Promise.all([
@@ -1015,13 +1014,13 @@ export function useSpotifyLibraryUpdate(): [
           updateStatus: 'complete',
         }));
 
-        resolve({
+        return {
           playlistMetadata,
           albumMetadata,
           playlistTracks: newPlaylistCache,
           albumTracks: newAlbumCache,
-        });
-      });
+        };
+      })();
     },
     [],
   );
