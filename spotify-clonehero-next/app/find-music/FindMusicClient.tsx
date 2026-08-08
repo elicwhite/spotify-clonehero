@@ -492,7 +492,7 @@ export default function FindMusicClient() {
         data-testid="find-music-page"
         className="-m-4 flex min-h-0 w-[calc(100%+2rem)] flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
         <header className="border-b px-3 py-3 md:px-5">
-          <div className="flex items-start gap-2.5">
+          <div className="flex items-center gap-2.5">
             <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
               <SheetTrigger asChild>
                 <Button

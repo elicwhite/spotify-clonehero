@@ -480,9 +480,6 @@ export default function FindMusicSidebar({
                 className="mt-2 h-8 w-full rounded-md border bg-background px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
               />
             ) : null}
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              Hides matches in the artist, song, or charter while you type.
-            </p>
           </div>
         </div>
       </section>
