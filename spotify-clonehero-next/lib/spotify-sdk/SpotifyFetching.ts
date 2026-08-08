@@ -337,6 +337,7 @@ async function getTrackUrls(
   );
 
   const item = track.tracks.items[0];
+  if (!item) return null;
 
   const previewUrl = item.preview_url;
   const spotifyUrl = item.external_urls.spotify;

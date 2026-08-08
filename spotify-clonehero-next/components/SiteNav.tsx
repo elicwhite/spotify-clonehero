@@ -13,7 +13,7 @@ import SocialLinks from '@/components/SocialLinks';
  */
 export default function SiteNav() {
   return (
-    <nav className="border-b border-border/60 h-12 md:h-16 px-4 md:px-8">
+    <nav className="h-12 shrink-0 border-b border-border/60 px-4 md:h-16 md:px-8">
       <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto h-full">
         <div className="flex flex-row gap-8">
           <Link

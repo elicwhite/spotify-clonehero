@@ -1,12 +1,4 @@
-import {
-  memo,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ChartResponseEncore} from '../lib/chartSelection';
 import {
   FilterFn,
@@ -25,10 +17,7 @@ import {useVirtual} from 'react-virtual';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {track} from '@/lib/analytics/track';
 import {downloadSong} from '@/lib/local-songs-folder';
-import {useTrackUrls} from '@/lib/spotify-sdk/SpotifyFetching';
-import {AudioContext} from './AudioProvider';
 import {Button} from '@/components/ui/button';
-import {Icons} from '@/components/icons';
 import {
   Table,
   TableBody,
@@ -45,7 +34,6 @@ import {
   RENDERED_INSTRUMENTS,
   preFilterInstruments,
 } from '@/components/ChartInstruments';
-import {RxExternalLink} from 'react-icons/rx';
 import {NotesData} from '@eliwhite/scan-chart';
 import {SpotifyAlbums, SpotifyPlaylists} from '@/lib/local-db/types';
 import {Disc3, User} from 'lucide-react';
@@ -56,6 +44,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import SpotifyPreviewButton from '@/components/SpotifyPreviewButton';
 
 export type TableDownloadStates =
   | 'downloaded'
@@ -370,106 +359,20 @@ const columns = [
       }
 
       if (url == null || spotifyUrl == null) {
-        return <LookUpPreviewButton artist={artist} song={song} />;
+        return <SpotifyPreviewButton artist={artist} song={song} />;
       }
 
       return (
-        <PreviewButton
+        <SpotifyPreviewButton
           artist={artist}
           song={song}
-          url={url}
+          previewUrl={url}
           spotifyUrl={spotifyUrl}
         />
       );
     },
   }),
 ];
-
-function LookUpPreviewButton({artist, song}: {artist: string; song: string}) {
-  const getTrackUrls = useTrackUrls(artist, song);
-  const {playTrack} = useContext(AudioContext);
-  const [urls, setUrls] =
-    useState<Awaited<ReturnType<typeof getTrackUrls>>>(null);
-  const [fetched, setFetched] = useState(false);
-
-  const handler = useCallback(async () => {
-    const urls = await getTrackUrls();
-    setUrls(urls);
-    setFetched(true);
-    if (urls?.previewUrl) {
-      playTrack(artist, song, urls.previewUrl);
-    }
-  }, [getTrackUrls, artist, song, playTrack]);
-
-  return (
-    <>
-      {urls?.previewUrl == null ? (
-        fetched == true ? (
-          <div className="flex gap-4 items-center">
-            No Preview
-            <a href={urls?.spotifyUrl} target="_blank">
-              <Button variant="outline">
-                <RxExternalLink className="inline" />
-              </Button>
-            </a>
-          </div>
-        ) : (
-          <Button onClick={handler}>
-            <Icons.spotify className="h-4 w-4 mr-2" />
-            Play
-          </Button>
-        )
-      ) : (
-        <PreviewButton
-          artist={artist}
-          song={song}
-          url={urls.previewUrl}
-          spotifyUrl={urls.spotifyUrl}
-        />
-      )}
-    </>
-  );
-}
-
-function PreviewButton({
-  artist,
-  song,
-  url,
-  spotifyUrl,
-}: {
-  artist: string;
-  song: string;
-  url: string;
-  spotifyUrl: string;
-}) {
-  const {isPlaying, currentTrack, playTrack, pause} = useContext(AudioContext);
-
-  const thisTrackPlaying =
-    isPlaying && currentTrack?.artist === artist && currentTrack?.song === song;
-
-  const handler = useCallback(() => {
-    if (thisTrackPlaying) {
-      pause();
-    } else {
-      playTrack(artist, song, url);
-    }
-  }, [artist, thisTrackPlaying, pause, playTrack, song, url]);
-
-  return (
-    <div className="flex gap-4">
-      <Button onClick={handler}>
-        <Icons.spotify className="h-4 w-4 mr-2" />
-        {thisTrackPlaying ? 'Stop' : 'Play'}
-      </Button>
-
-      <a href={spotifyUrl} target="_blank">
-        <Button variant="outline">
-          <RxExternalLink className="inline" />
-        </Button>
-      </a>
-    </div>
-  );
-}
 
 export default function SpotifyTableDownloader({
   tracks,

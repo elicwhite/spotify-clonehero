@@ -107,7 +107,7 @@ async function getUpdatedCharts(
 
   // Start a new scan session
   const db = await getLocalDb();
-  db.transaction().execute(async trx => {
+  await db.transaction().execute(async trx => {
     const id = await createScanSession(trx, scan_since_time, last_chart_id);
 
     let updatePromises = Promise.resolve();
