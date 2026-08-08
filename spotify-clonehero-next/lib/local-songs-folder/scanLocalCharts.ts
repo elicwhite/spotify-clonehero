@@ -1,6 +1,5 @@
 import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
-import * as Sentry from '@sentry/nextjs';
 import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
 
@@ -114,8 +113,7 @@ async function scanLocalChartsDirectory(
         `Error scanning directory ${parentDirectoryHandle.name}/${currentDirectoryHandle.name}`,
         {cause: e},
       );
-      Sentry.captureException(error);
-      console.error(error.message);
+      console.warn(error.message, e);
       return null;
     }
 
@@ -250,8 +248,7 @@ async function scanLocalSngFileInner(
       `Error scanning sng file ${parentDirectoryHandle.name}/${fileHandle.name}`,
       {cause: e},
     );
-    Sentry.captureException(error);
-    console.error(error.message);
+    console.warn(error.message, e);
     return;
   }
 

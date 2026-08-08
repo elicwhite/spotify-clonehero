@@ -4,6 +4,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import {getSentryEnvironment, isSentryEnabled} from '@/lib/sentry/environment';
+import {isExpectedUserFlowEvent} from '@/lib/sentry/expected-errors';
 
 const sentryEnvironment = getSentryEnvironment(
   process.env['NEXT_PUBLIC_VERCEL_ENV'],
@@ -13,6 +14,8 @@ Sentry.init({
   dsn: 'https://ef4de5241935af48ae2c81fbc23c6a46@o4506522084048896.ingest.us.sentry.io/4506522086080512',
 
   environment: sentryEnvironment,
+
+  beforeSend: event => (isExpectedUserFlowEvent(event) ? null : event),
 
   // Add optional integrations for additional features
   integrations: [Sentry.replayIntegration()],
