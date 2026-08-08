@@ -86,8 +86,7 @@ function filters(overrides: Partial<FindMusicFilters> = {}): FindMusicFilters {
   return {
     install: 'all',
     instruments: new Set(),
-    minPlays: 0,
-    evidence: new Set(),
+    query: '',
     ...overrides,
   };
 }
@@ -158,35 +157,32 @@ describe('find music filtering', () => {
     chart({md5: 'guitar', instruments: {guitar: 5}}),
   ];
 
-  test('combines every music filter with AND semantics', () => {
+  test('combines text, install and instrument filters with AND semantics', () => {
     const matching = music({
       key: 'matching',
-      playCount: 12,
-      playlists: ['Mix'],
-      albums: ['Album'],
+      artist: 'The Matching Artist',
+      song: 'Midnight Drive',
+      charts: [chart({md5: 'available', instruments: {guitar: 5}})],
+    });
+    const installed = music({
+      key: 'installed',
+      artist: 'The Matching Artist',
+      song: 'Midnight Drive',
       charts: [fullBand],
     });
-    const noAlbum = music({
-      key: 'no-album',
-      playCount: 12,
-      playlists: ['Mix'],
-      charts: [fullBand],
-    });
-    const fewPlays = music({
-      key: 'few-plays',
-      playCount: 9,
-      playlists: ['Mix'],
-      albums: ['Album'],
-      charts: [fullBand],
+    const wrongText = music({
+      key: 'wrong-text',
+      artist: 'Another Artist',
+      song: 'Daylight',
+      charts: [chart({md5: 'other', instruments: {guitar: 5}})],
     });
     expect(
       applyMusicFilters(
-        [noAlbum, matching, fewPlays],
+        [installed, wrongText, matching],
         filters({
-          install: 'only-installed',
-          instruments: new Set(['drums', 'guitar']),
-          minPlays: 10,
-          evidence: new Set(['history', 'playlist', 'album']),
+          install: 'hide-installed',
+          instruments: new Set(['guitar']),
+          query: 'matching drive',
         }),
       ),
     ).toEqual([matching]);
@@ -227,7 +223,7 @@ describe('find music filtering', () => {
     ).toEqual([available]);
   });
 
-  test('installed filters use song-level state when the exact Chorus version differs', () => {
+  test('installed filter uses song-level state when the exact Chorus version differs', () => {
     const otherVersionInstalled = music({
       key: 'other-version',
       hasInstalledChart: true,
@@ -239,40 +235,42 @@ describe('find music filtering', () => {
         filters({install: 'hide-installed'}),
       ),
     ).toEqual([]);
-    expect(
-      applyMusicFilters(
-        [otherVersionInstalled],
-        filters({install: 'only-installed'}),
-      ),
-    ).toEqual([otherVersionInstalled]);
   });
 
-  test('radar ignores direct-song controls but keeps chart filters', () => {
+  test('text search is case-insensitive across artist and song', () => {
+    const drive = music({
+      key: 'drive',
+      artist: 'Incubus',
+      song: 'Drive',
+    });
+    const other = music({key: 'other', artist: 'Muse', song: 'Uprising'});
+
+    expect(
+      applyMusicFilters([other, drive], filters({query: 'INC drive'})),
+    ).toEqual([drive]);
+  });
+
+  test('radar applies text and chart filters', () => {
     const matching = radar({
       key: 'matching',
+      artist: 'Matching Artist',
       artistPlayCount: 20,
-      charts: [fullBand],
+      charts: [chart({md5: 'matching', instruments: {guitar: 5}})],
     });
-    const cold = radar({key: 'cold', artistPlayCount: 0, charts: [fullBand]});
+    const cold = radar({
+      key: 'cold',
+      artist: 'Other Artist',
+      charts: [chart({md5: 'cold', instruments: {guitar: 5}})],
+    });
     expect(
       applyRadarFilters(
         [cold, matching],
         filters({
-          minPlays: 100,
-          evidence: new Set(['playlist']),
-          install: 'only-installed',
-          instruments: new Set(['drums', 'guitar']),
+          query: 'matching',
+          instruments: new Set(['guitar']),
         }),
       ),
-    ).toEqual([cold, matching]);
-    expect(
-      applyRadarFilters(
-        [matching],
-        filters({
-          install: 'hide-installed',
-        }),
-      ),
-    ).toEqual([]);
+    ).toEqual([matching]);
   });
 });
 
@@ -290,7 +288,7 @@ describe('find music sorting', () => {
     expect(input).toEqual([beta, alphaZ, alphaA]);
   });
 
-  test('supports updated and play-count directions', () => {
+  test('supports updated directions', () => {
     const older = music({
       key: 'older',
       playCount: 20,
@@ -303,9 +301,6 @@ describe('find music sorting', () => {
     });
     expect(
       sortMusicSongs([older, newer], {key: 'updated', direction: 'desc'}),
-    ).toEqual([newer, older]);
-    expect(
-      sortMusicSongs([older, newer], {key: 'plays', direction: 'asc'}),
     ).toEqual([newer, older]);
   });
 

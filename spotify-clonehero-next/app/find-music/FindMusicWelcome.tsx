@@ -1,0 +1,384 @@
+'use client';
+
+import {
+  AlertCircle,
+  Check,
+  FolderOpen,
+  History,
+  LoaderCircle,
+  LockKeyhole,
+  Music2,
+  Radio,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
+
+import {Icons} from '@/components/icons';
+import {Button} from '@/components/ui/button';
+import {Progress} from '@/components/ui/progress';
+import {cn} from '@/lib/utils';
+
+import type {SourceStatus} from './types';
+
+export interface FindMusicWelcomeProps {
+  authenticated: boolean;
+  hasSpotify: boolean;
+  historyStatus: SourceStatus;
+  libraryStatus: SourceStatus;
+  localStatus: SourceStatus;
+  chorusStatus: SourceStatus;
+  onConnectSpotify: () => void;
+  onRefreshHistory: () => void;
+  onRefreshLibrary: () => void;
+  onScanLocal: () => void;
+  onRefreshChorus: () => void;
+}
+
+type SetupCardProps = {
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  status: SourceStatus;
+  actionLabel: string;
+  onAction: () => void;
+  accent?: 'spotify' | 'default';
+  optional?: boolean;
+};
+
+function StatusDot({phase}: {phase: SourceStatus['phase']}) {
+  return (
+    <span
+      className={cn(
+        'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40',
+        phase === 'ready' && 'bg-emerald-600 dark:bg-emerald-400',
+        phase === 'loading' && 'animate-pulse bg-amber-500',
+        phase === 'error' && 'bg-destructive',
+      )}
+      aria-hidden="true"
+    />
+  );
+}
+
+function statusLabel(status: SourceStatus) {
+  switch (status.phase) {
+    case 'ready':
+      return 'Ready';
+    case 'loading':
+      return 'Working';
+    case 'error':
+      return 'Needs attention';
+    default:
+      return 'Not connected';
+  }
+}
+
+function SetupCard({
+  name,
+  description,
+  icon,
+  status,
+  actionLabel,
+  onAction,
+  accent = 'default',
+  optional = false,
+}: SetupCardProps) {
+  const loading = status.phase === 'loading';
+  const error = status.phase === 'error';
+
+  return (
+    <article
+      className={cn(
+        'flex min-h-[220px] flex-col rounded-xl border bg-card p-5 text-card-foreground shadow-sm',
+        optional && 'border-dashed shadow-none',
+        error && 'border-destructive/50',
+      )}
+      data-testid={`welcome-${name.toLowerCase().replaceAll(' ', '-')}`}>
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            'grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:h-5 [&_svg]:w-5',
+            accent === 'spotify' && 'bg-[#1ed760] text-[#08210f]',
+          )}>
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 className="font-semibold tracking-tight">{name}</h3>
+            {optional ? (
+              <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Optional
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-auto pt-5">
+        <div className="flex items-start gap-2 text-sm">
+          <StatusDot phase={status.phase} />
+          <div className="min-w-0">
+            <p
+              className={cn(
+                'leading-5 text-muted-foreground',
+                error && 'text-destructive',
+              )}
+              role={error ? 'alert' : loading ? 'status' : undefined}>
+              {status.summary}
+            </p>
+            {status.detail ? (
+              <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
+                {status.detail}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        {loading && status.progress !== undefined ? (
+          <Progress
+            value={status.progress}
+            className="mt-3 h-1.5"
+            aria-label={`${name} progress`}
+          />
+        ) : null}
+
+        <Button
+          type="button"
+          size="sm"
+          variant={error ? 'outline' : 'default'}
+          className="mt-4"
+          onClick={onAction}
+          disabled={loading}
+          aria-label={loading ? `${name} is working` : actionLabel}>
+          {loading ? <LoaderCircle className="animate-spin" /> : null}
+          {error ? <RefreshCw className="h-3.5 w-3.5" /> : null}
+          {loading ? 'Working…' : actionLabel}
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function OutcomePanel({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <article className="rounded-xl border bg-card p-5 text-card-foreground">
+      <span className="grid h-9 w-9 place-items-center rounded-lg bg-secondary text-secondary-foreground [&_svg]:h-[18px] [&_svg]:w-[18px]">
+        {icon}
+      </span>
+      <h3 className="mt-4 font-semibold tracking-tight">{title}</h3>
+      <p className="mt-1.5 text-sm leading-5 text-muted-foreground">
+        {children}
+      </p>
+    </article>
+  );
+}
+
+export default function FindMusicWelcome({
+  authenticated,
+  hasSpotify,
+  historyStatus,
+  libraryStatus,
+  localStatus,
+  chorusStatus,
+  onConnectSpotify,
+  onRefreshHistory,
+  onRefreshLibrary,
+  onScanLocal,
+  onRefreshChorus,
+}: FindMusicWelcomeProps) {
+  const spotifyConnected = authenticated && hasSpotify;
+  const libraryAction = spotifyConnected
+    ? libraryStatus.phase === 'idle'
+      ? 'Load library'
+      : libraryStatus.phase === 'error'
+        ? 'Try again'
+        : 'Refresh library'
+    : authenticated
+      ? 'Connect Spotify'
+      : 'Sign in with Spotify';
+
+  const historyAction =
+    historyStatus.phase === 'idle'
+      ? 'Choose history folder'
+      : historyStatus.phase === 'error'
+        ? 'Try again'
+        : 'Refresh history';
+  const localAction =
+    localStatus.phase === 'idle'
+      ? 'Choose Songs folder'
+      : localStatus.phase === 'error'
+        ? 'Try again'
+        : 'Rescan folder';
+
+  return (
+    <section
+      className="min-h-0 flex-1 overflow-y-auto bg-background"
+      aria-labelledby="find-music-welcome-title"
+      data-testid="find-music-welcome">
+      <div className="mx-auto w-full max-w-5xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
+        <header className="max-w-2xl">
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
+            Local and private
+          </span>
+          <h2
+            id="find-music-welcome-title"
+            className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+            Bring in the music you already care about
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
+            Add a little music you already know. We match it with Chorus right
+            here in your browser—your listening history and library never need
+            to leave this device.
+          </p>
+          <div className="mt-4 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span>
+              Your folders are read locally and saved in this browser&apos;s
+              private music index.
+            </span>
+          </div>
+        </header>
+
+        <section className="mt-8" aria-labelledby="start-with-music-heading">
+          <div className="mb-4">
+            <h3
+              id="start-with-music-heading"
+              className="text-sm font-semibold tracking-tight">
+              Start with your music
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Connect either source, or both, for better matches.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <SetupCard
+              name="Spotify Library"
+              description="Match songs from your playlists, liked albums, and saved music."
+              icon={<Icons.spotify />}
+              accent="spotify"
+              status={libraryStatus}
+              actionLabel={libraryAction}
+              onAction={spotifyConnected ? onRefreshLibrary : onConnectSpotify}
+            />
+            <SetupCard
+              name="Spotify History"
+              description="Import your Spotify privacy export to surface songs you actually play."
+              icon={<History />}
+              status={historyStatus}
+              actionLabel={historyAction}
+              onAction={onRefreshHistory}
+            />
+          </div>
+        </section>
+
+        <section className="mt-5" aria-labelledby="local-songs-folder-heading">
+          <div className="mb-3">
+            <h3
+              id="local-songs-folder-heading"
+              className="text-sm font-semibold tracking-tight">
+              Already have charts?
+            </h3>
+          </div>
+          <SetupCard
+            name="Local Songs Folder"
+            description="Scan your Clone Hero or YARG Songs folder so recommendations do not repeat charts you already have."
+            icon={<FolderOpen />}
+            status={localStatus}
+            actionLabel={localAction}
+            onAction={onScanLocal}
+            optional
+          />
+        </section>
+
+        <section className="mt-8" aria-labelledby="what-you-get-heading">
+          <div className="mb-4">
+            <h3
+              id="what-you-get-heading"
+              className="text-sm font-semibold tracking-tight">
+              What you&apos;ll get
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your sources become useful, practical ways to browse Chorus.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <OutcomePanel icon={<Music2 />} title="Your music">
+              Charts matched directly to songs in your library or listening
+              history, with the evidence that brought each one here.
+            </OutcomePanel>
+            <OutcomePanel icon={<Radio />} title="Recommendations">
+              Chorus charts selected from the artists and songs you listen to,
+              ready for when you want something adjacent and new.
+            </OutcomePanel>
+          </div>
+        </section>
+
+        <section
+          className="mt-8 rounded-xl border bg-card p-4 text-card-foreground sm:flex sm:items-center sm:gap-4"
+          aria-labelledby="chorus-index-heading">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            {chorusStatus.phase === 'loading' ? (
+              <LoaderCircle className="h-[18px] w-[18px] animate-spin" />
+            ) : chorusStatus.phase === 'error' ? (
+              <AlertCircle className="h-[18px] w-[18px] text-destructive" />
+            ) : chorusStatus.phase === 'ready' ? (
+              <Check className="h-[18px] w-[18px]" />
+            ) : (
+              <Sparkles className="h-[18px] w-[18px]" />
+            )}
+          </span>
+          <div className="mt-3 min-w-0 flex-1 sm:mt-0">
+            <div className="flex items-center gap-2">
+              <h3 id="chorus-index-heading" className="text-sm font-semibold">
+                Chorus Chart Index
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                {statusLabel(chorusStatus)}
+              </span>
+            </div>
+            <p
+              className={cn(
+                'mt-0.5 text-sm text-muted-foreground',
+                chorusStatus.phase === 'error' && 'text-destructive',
+              )}
+              role={chorusStatus.phase === 'error' ? 'alert' : undefined}>
+              {chorusStatus.summary}
+              {chorusStatus.detail ? ` · ${chorusStatus.detail}` : ''}
+            </p>
+            {chorusStatus.phase === 'loading' &&
+            chorusStatus.progress !== undefined ? (
+              <Progress
+                value={chorusStatus.progress}
+                className="mt-3 h-1.5 max-w-md"
+                aria-label="Chorus index progress"
+              />
+            ) : null}
+          </div>
+          {chorusStatus.phase === 'error' ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4 sm:mt-0"
+              onClick={onRefreshChorus}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry index
+            </Button>
+          ) : null}
+        </section>
+      </div>
+    </section>
+  );
+}

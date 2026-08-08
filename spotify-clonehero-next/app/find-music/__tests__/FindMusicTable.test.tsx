@@ -6,7 +6,12 @@ import '@testing-library/jest-dom';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import FindMusicTable from '../FindMusicTable';
 import {AudioContext} from '../../AudioProvider';
-import type {FindMusicChart, FindMusicFilters, FindMusicSong} from '../types';
+import type {
+  FindMusicChart,
+  FindMusicFilters,
+  FindMusicSong,
+  RadarSong,
+} from '../types';
 
 jest.mock('react-virtual', () => ({
   useVirtual: ({size}: {size: number}) => ({
@@ -43,8 +48,7 @@ const mockDownloadSong = downloadSong as jest.MockedFunction<
 const filters: FindMusicFilters = {
   install: 'all',
   instruments: new Set(),
-  minPlays: 0,
-  evidence: new Set(),
+  query: '',
 };
 
 function chart(md5: string, name: string, installed = false): FindMusicChart {
@@ -129,12 +133,17 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   );
   expect(songRows[0]).toHaveTextContent('other version');
 
-  const relevance = screen.getByRole('button', {
-    name: 'Relevance 68 of 100. View why Beta is relevant',
-  });
-  fireEvent.click(relevance);
-  const ledger = await screen.findByRole('dialog');
-  expect(ledger).toHaveTextContent('Why this song is relevant');
+  const relevance = screen.getByLabelText(
+    'Relevance 68 of 100. Why Beta is relevant',
+  );
+  fireEvent.focus(relevance);
+  const ledger = await screen.findByRole('tooltip');
+  expect(ledger).toHaveTextContent('Evidence ledger');
+  const paintedTooltip = screen
+    .getAllByText('Evidence ledger')
+    .map(element => element.closest('[data-side]'))
+    .find(Boolean);
+  expect(paintedTooltip).toHaveClass('bg-popover', 'text-popover-foreground');
   expect(ledger).toHaveTextContent('50 plays in Spotify history');
   expect(ledger).toHaveTextContent('Favorites');
   expect(ledger).toHaveTextContent(
@@ -142,12 +151,11 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   );
   expect(sharedScroller).not.toContainElement(ledger);
   expect(screen.queryByText('Charter Beta')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', {name: 'Close'}));
 
-  fireEvent.click(
-    screen.getByRole('button', {name: 'Show chart versions for Artist — Beta'}),
-  );
+  fireEvent.click(songRows[0]);
   expect(await screen.findByText('Charter Beta')).toBeInTheDocument();
+  expect(screen.queryByText('beta-chart')).not.toBeInTheDocument();
+  expect(screen.getAllByText(/2025|2026/).length).toBeGreaterThan(0);
   expect(screen.queryByTitle('Bass: not charted')).not.toBeInTheDocument();
   expect(
     screen.getByTitle('Drums: difficulty 3').querySelector('img'),
@@ -158,7 +166,7 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   await waitFor(() => expect(screen.getAllByText('Installed')).toHaveLength(2));
 });
 
-it('keeps Radar in a distinct explanatory state while affinity is loading', () => {
+it('keeps Recommendations in a distinct explanatory state while affinity is loading', () => {
   render(
     <FindMusicTable
       view="radar"
@@ -172,7 +180,7 @@ it('keeps Radar in a distinct explanatory state while affinity is loading', () =
   );
 
   expect(
-    screen.getByText('Radar is building artist affinity'),
+    screen.getByText('Recommendations are building artist affinity'),
   ).toBeInTheDocument();
   expect(
     screen.getByText(
@@ -218,6 +226,80 @@ it('adds the compact preview column only for a linked Spotify account', () => {
       name: 'Play preview of Preview Song by Artist',
     }),
   ).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Play preview of Preview Song by Artist',
+    }),
+  );
+  expect(screen.queryByText('Charter Preview Song')).not.toBeInTheDocument();
+});
+
+it('preserves independent scroll positions for each view', () => {
+  const recommendation: RadarSong = {
+    key: 'recommendation',
+    artist: 'Artist',
+    song: 'Recommendation',
+    artistPlayCount: 20,
+    hasInstalledChart: false,
+    charts: [chart('recommendation-chart', 'Recommendation')],
+  };
+  const {rerender} = render(
+    <FindMusicTable
+      view="music"
+      music={[song('music', 'Music', 10)]}
+      radar={[recommendation]}
+      filters={filters}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  const scroller = screen.getByTestId('results-rows');
+  scroller.scrollTop = 320;
+  fireEvent.scroll(scroller);
+
+  rerender(
+    <FindMusicTable
+      view="radar"
+      music={[song('music', 'Music', 10)]}
+      radar={[recommendation]}
+      filters={filters}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  expect(scroller.scrollTop).toBe(0);
+  scroller.scrollTop = 140;
+  fireEvent.scroll(scroller);
+
+  rerender(
+    <FindMusicTable
+      view="music"
+      music={[song('music', 'Music', 10)]}
+      radar={[recommendation]}
+      filters={filters}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  expect(scroller.scrollTop).toBe(320);
+
+  rerender(
+    <FindMusicTable
+      view="radar"
+      music={[song('music', 'Music', 10)]}
+      radar={[recommendation]}
+      filters={filters}
+      radarLoading={false}
+      previewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  expect(scroller.scrollTop).toBe(140);
 });
 
 it('stops a preview when filters remove its song from the result set', async () => {

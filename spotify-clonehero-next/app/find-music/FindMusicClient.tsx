@@ -16,9 +16,14 @@ import {processSpotifyDump} from '@/lib/spotify-sdk/HistoryDumpParsing';
 import {scanForInstalledCharts} from '@/lib/local-songs-folder';
 import FindMusicSidebar from './FindMusicSidebar';
 import FindMusicTable from './FindMusicTable';
+import FindMusicWelcome from './FindMusicWelcome';
+import {
+  freshEmptyFilters,
+  loadFindMusicFilters,
+  saveFindMusicFilters,
+} from './filterPersistence';
 import {getFindMusicSongs, getFindMusicStats, getRadarSongs} from './queries';
 import {
-  EMPTY_FILTERS,
   type FindMusicFilters,
   type FindMusicSong,
   type FindMusicStats,
@@ -47,11 +52,8 @@ export default function FindMusicClient() {
   const [authChecked, setAuthChecked] = useState(false);
   const [hasSpotify, setHasSpotify] = useState(false);
   const [view, setView] = useState<FindMusicView>('music');
-  const [filters, setFilters] = useState<FindMusicFilters>(() => ({
-    ...EMPTY_FILTERS,
-    instruments: new Set(),
-    evidence: new Set(),
-  }));
+  const [filters, setFilters] = useState<FindMusicFilters>(freshEmptyFilters);
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [committed, setCommitted] = useState<Snapshot>({music: [], radar: []});
   const [pending, setPending] = useState<Snapshot | null>(null);
@@ -166,6 +168,31 @@ export default function FindMusicClient() {
       }
     }
   }, [refreshChorusIndex, stageSnapshot]);
+
+  useEffect(() => {
+    let canceled = false;
+    queueMicrotask(() => {
+      if (canceled) return;
+      try {
+        setFilters(loadFindMusicFilters(window.localStorage));
+      } catch {
+        setFilters(freshEmptyFilters());
+      }
+      setFiltersHydrated(true);
+    });
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    try {
+      saveFindMusicFilters(window.localStorage, filters);
+    } catch {
+      // Filtering remains usable when local storage is unavailable.
+    }
+  }, [filters, filtersHydrated]);
 
   useEffect(() => {
     let canceled = false;
@@ -397,7 +424,7 @@ export default function FindMusicClient() {
     chorusStatus.phase === 'loading';
 
   const clearFilters = useCallback(() => {
-    setFilters({...EMPTY_FILTERS, instruments: new Set(), evidence: new Set()});
+    setFilters(freshEmptyFilters());
   }, []);
 
   return (
@@ -437,7 +464,10 @@ export default function FindMusicClient() {
             musicCount={pending?.music.length ?? committed.music.length}
             radarCount={pending?.radar.length ?? committed.radar.length}
           />
-          <main className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4 md:p-5">
+          <section
+            aria-label="Find music results"
+            data-testid="find-music-results"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4 md:p-5">
             {pending && (
               <div
                 data-testid="held-matches"
@@ -480,26 +510,19 @@ export default function FindMusicClient() {
             ) : committed.music.length === 0 &&
               stats.historySongs === 0 &&
               stats.libraryTracks === 0 ? (
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="mx-auto mt-[8vh] max-w-xl pb-8">
-                  <h2 className="text-lg font-semibold">
-                    Nothing connected yet
-                  </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Add Spotify history or your library from the sidebar. The
-                    Chorus index refreshes automatically, and a Songs-folder
-                    scan marks charts already installed.
-                  </p>
-                  <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                    <li>
-                      Pick an unzipped Spotify Extended Streaming History
-                      folder.
-                    </li>
-                    <li>Connect Spotify to scan playlists and saved albums.</li>
-                    <li>Pick your Clone Hero or YARG Songs folder.</li>
-                  </ol>
-                </div>
-              </div>
+              <FindMusicWelcome
+                authenticated={Boolean(user)}
+                hasSpotify={hasSpotify}
+                historyStatus={historyStatus}
+                libraryStatus={libraryStatus}
+                localStatus={localStatus}
+                chorusStatus={chorusStatus}
+                onConnectSpotify={() => void connectSpotify()}
+                onRefreshHistory={() => void runHistoryRefresh()}
+                onRefreshLibrary={() => void runLibraryRefresh()}
+                onScanLocal={() => void runLocalScan()}
+                onRefreshChorus={() => void runChorusRefresh()}
+              />
             ) : (
               <FindMusicTable
                 view={view}
@@ -511,7 +534,7 @@ export default function FindMusicClient() {
                 onClearFilters={clearFilters}
               />
             )}
-          </main>
+          </section>
         </div>
       </div>
     </SupportedBrowserWarning>

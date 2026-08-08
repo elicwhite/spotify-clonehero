@@ -9,7 +9,7 @@ import type {
 export type ScorePart = {label: string; points: number};
 export type Score = {value: number; parts: ScorePart[]};
 export type MusicSort = {
-  key: 'score' | 'artist' | 'song' | 'plays' | 'updated';
+  key: 'score' | 'artist' | 'song' | 'updated';
   direction: 'asc' | 'desc';
 };
 export type HoldState<T> = {
@@ -126,8 +126,6 @@ function passesChartFilters(
   song: Pick<FindMusicSong | RadarSong, 'charts' | 'hasInstalledChart'>,
   filters: FindMusicFilters,
 ): boolean {
-  if (filters.install === 'only-installed' && !song.hasInstalledChart)
-    return false;
   if (filters.install === 'hide-installed' && song.hasInstalledChart)
     return false;
 
@@ -145,16 +143,8 @@ export function applyMusicFilters(
   filters: FindMusicFilters,
 ): FindMusicSong[] {
   return songs.filter(song => {
-    if (safeCount(song.playCount) < safeCount(filters.minPlays)) return false;
     if (!passesChartFilters(song, filters)) return false;
-
-    for (const evidence of filters.evidence) {
-      if (evidence === 'history' && safeCount(song.playCount) === 0)
-        return false;
-      if (evidence === 'playlist' && song.playlists.length === 0) return false;
-      if (evidence === 'album' && song.albums.length === 0) return false;
-    }
-    return true;
+    return matchesText(song, filters.query);
   });
 }
 
@@ -162,10 +152,25 @@ export function applyRadarFilters(
   songs: RadarSong[],
   filters: FindMusicFilters,
 ): RadarSong[] {
-  // Play-count and direct-evidence controls describe known songs, so they are
-  // intentionally ignored in Radar. Install and instrument requirements still
-  // apply because they describe the available Chorus charts.
-  return songs.filter(song => passesChartFilters(song, filters));
+  return songs.filter(
+    song =>
+      passesChartFilters(song, filters) && matchesText(song, filters.query),
+  );
+}
+
+function matchesText(
+  song: Pick<FindMusicSong | RadarSong, 'artist' | 'song'>,
+  query: string,
+): boolean {
+  const terms = query
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (terms.length === 0) return true;
+
+  const searchable = `${song.artist} ${song.song}`.toLocaleLowerCase('en-US');
+  return terms.every(term => searchable.includes(term));
 }
 
 function compareText(left: string, right: string): number {
@@ -205,9 +210,6 @@ export function sortMusicSongs(
         break;
       case 'song':
         primary = compareText(left.song, right.song);
-        break;
-      case 'plays':
-        primary = safeCount(left.playCount) - safeCount(right.playCount);
         break;
       case 'updated':
         primary =

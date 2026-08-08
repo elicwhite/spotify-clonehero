@@ -2,12 +2,12 @@
 
 import {
   Apple,
-  CircleAlert,
   FolderOpen,
   LoaderCircle,
   Music2,
   Radio,
   RotateCw,
+  Search,
   Youtube,
 } from 'lucide-react';
 
@@ -19,10 +19,8 @@ import {cn} from '@/lib/utils';
 import FindMusicInstrumentIcon from './FindMusicInstrumentIcon';
 import {
   INSTRUMENTS,
-  type EvidenceFilter,
   type FindMusicFilters,
   type FindMusicView,
-  type InstallFilter,
   type SourceStatus,
 } from './types';
 
@@ -68,8 +66,7 @@ function activeFilterCount(filters: FindMusicFilters) {
   return (
     (filters.install === 'all' ? 0 : 1) +
     filters.instruments.size +
-    (filters.minPlays > 0 ? 1 : 0) +
-    filters.evidence.size
+    (filters.query.trim() ? 1 : 0)
   );
 }
 
@@ -206,7 +203,6 @@ export default function FindMusicSidebar({
   musicCount,
   radarCount,
 }: FindMusicSidebarProps) {
-  const radar = view === 'radar';
   const activeFilters = activeFilterCount(filters);
   const spotifyConnected = authenticated && hasSpotify;
   const spotifyActionLabel = !authenticated
@@ -219,22 +215,11 @@ export default function FindMusicSidebar({
           ? 'Try again'
           : 'Refresh';
 
-  function setInstallFilter(install: InstallFilter) {
-    onFiltersChange({...filters, install});
-  }
-
   function toggleInstrument(instrument: (typeof INSTRUMENTS)[number][0]) {
     const instruments = new Set(filters.instruments);
     if (instruments.has(instrument)) instruments.delete(instrument);
     else instruments.add(instrument);
     onFiltersChange({...filters, instruments});
-  }
-
-  function toggleEvidence(evidence: EvidenceFilter) {
-    const nextEvidence = new Set(filters.evidence);
-    if (nextEvidence.has(evidence)) nextEvidence.delete(evidence);
-    else nextEvidence.add(evidence);
-    onFiltersChange({...filters, evidence: nextEvidence});
   }
 
   return (
@@ -276,7 +261,7 @@ export default function FindMusicSidebar({
               onClick={() => onViewChange('radar')}>
               <Radio className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="min-w-0 flex-1">
-                Radar
+                Recommendations
                 <span className="mt-0.5 block font-normal text-muted-foreground">
                   affinity recommendations
                 </span>
@@ -310,31 +295,50 @@ export default function FindMusicSidebar({
             </button>
           </div>
 
+          <label className="mb-3 block">
+            <span className="mb-1.5 block text-[11px] font-semibold text-muted-foreground">
+              Artist or song
+            </span>
+            <span className="relative block">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={filters.query}
+                onChange={event =>
+                  onFiltersChange({
+                    ...filters,
+                    query: event.currentTarget.value,
+                  })
+                }
+                placeholder="Search artist or song"
+                className="h-8 w-full rounded-md border bg-background pl-8 pr-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </span>
+          </label>
+
           <fieldset className="mb-3">
             <legend className="mb-1.5 text-[11px] font-semibold text-muted-foreground">
               Install state
             </legend>
-            {(
-              [
-                ['all', 'Show all'],
-                ['hide-installed', 'Hide songs with installed charts'],
-                ['only-installed', 'Only installed'],
-              ] as const
-            ).map(([value, label]) => (
-              <label
-                key={value}
-                className="mb-1 flex cursor-pointer items-center gap-1.5 text-xs last:mb-0">
-                <input
-                  type="radio"
-                  name="find-music-install-filter"
-                  value={value}
-                  checked={filters.install === value}
-                  onChange={() => setInstallFilter(value)}
-                  className="accent-primary"
-                />
-                {label}
-              </label>
-            ))}
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={filters.install === 'hide-installed'}
+                onChange={event =>
+                  onFiltersChange({
+                    ...filters,
+                    install: event.currentTarget.checked
+                      ? 'hide-installed'
+                      : 'all',
+                  })
+                }
+                className="accent-primary"
+              />
+              Hide songs with installed charts
+            </label>
           </fieldset>
 
           <fieldset className="mb-3">
@@ -342,99 +346,28 @@ export default function FindMusicSidebar({
               Instruments — require
             </legend>
             <div className="flex flex-wrap gap-1">
-              {INSTRUMENTS.map(([id, shortLabel, label]) => {
-                const selected = filters.instruments.has(id);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    className={cn(
-                      'inline-flex h-8 min-w-9 items-center justify-center gap-1 rounded-md border bg-secondary px-2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                      selected &&
-                        'border-primary bg-primary text-primary-foreground hover:text-primary-foreground',
-                    )}
-                    aria-label={`Require ${label}`}
-                    aria-pressed={selected}
-                    onClick={() => toggleInstrument(id)}>
-                    <FindMusicInstrumentIcon instrument={id} size={18} />
-                    {id === 'proDrums' ? (
-                      <span className="font-mono text-[9px] font-bold">
-                        {shortLabel}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
+              {INSTRUMENTS.filter(([id]) => id !== 'drums').map(
+                ([id, , label]) => {
+                  const selected = filters.instruments.has(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={cn(
+                        'inline-flex h-8 min-w-9 items-center justify-center gap-1 rounded-md border bg-secondary px-2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                        selected &&
+                          'border-primary bg-primary text-primary-foreground hover:text-primary-foreground',
+                      )}
+                      aria-label={`Require ${label}`}
+                      aria-pressed={selected}
+                      onClick={() => toggleInstrument(id)}>
+                      <FindMusicInstrumentIcon instrument={id} size={18} />
+                    </button>
+                  );
+                },
+              )}
             </div>
           </fieldset>
-
-          <fieldset className="mb-3" disabled={radar}>
-            <legend className="mb-1.5 text-[11px] font-semibold text-muted-foreground">
-              Minimum plays
-            </legend>
-            <div className={cn(radar && 'opacity-45')}>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={filters.minPlays}
-                aria-label="Minimum play count"
-                className="w-full accent-primary"
-                onChange={event =>
-                  onFiltersChange({
-                    ...filters,
-                    minPlays: Number(event.currentTarget.value),
-                  })
-                }
-              />
-              <p className="text-[11px] leading-4 text-muted-foreground">
-                floor:{' '}
-                <span className="font-mono tabular-nums">
-                  {filters.minPlays}
-                </span>{' '}
-                plays
-              </p>
-            </div>
-          </fieldset>
-
-          <fieldset disabled={radar}>
-            <legend className="mb-1.5 text-[11px] font-semibold text-muted-foreground">
-              Evidence source
-            </legend>
-            <div className={cn(radar && 'opacity-45')}>
-              {(
-                [
-                  ['history', 'History'],
-                  ['playlist', 'Playlists'],
-                  ['album', 'Saved albums'],
-                ] as const
-              ).map(([value, label]) => (
-                <label
-                  key={value}
-                  className="mb-1 flex cursor-pointer items-center gap-1.5 text-xs last:mb-0">
-                  <input
-                    type="checkbox"
-                    checked={filters.evidence.has(value)}
-                    onChange={() => toggleEvidence(value)}
-                    className="accent-primary"
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          {radar ? (
-            <p className="mt-2 flex gap-1.5 text-[11px] leading-4 text-muted-foreground">
-              <CircleAlert
-                className="mt-0.5 h-3 w-3 shrink-0"
-                aria-hidden="true"
-              />
-              Play-count and evidence filters do not apply to Radar because
-              those songs have no direct evidence.
-            </p>
-          ) : null}
         </div>
       </section>
 

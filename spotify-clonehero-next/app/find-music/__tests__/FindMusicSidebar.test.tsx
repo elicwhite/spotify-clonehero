@@ -19,8 +19,7 @@ function makeFilters(
   return {
     install: 'all',
     instruments: new Set(),
-    minPlays: 0,
-    evidence: new Set(),
+    query: '',
     ...overrides,
   };
 }
@@ -52,7 +51,7 @@ function makeProps(
 }
 
 describe('FindMusicSidebar', () => {
-  it('switches between Your music and Radar and displays their counts', () => {
+  it('switches between Your music and Recommendations and displays their counts', () => {
     const onViewChange = jest.fn();
     render(<FindMusicSidebar {...makeProps({onViewChange})} />);
 
@@ -67,15 +66,15 @@ describe('FindMusicSidebar', () => {
     expect(screen.getByText('3,783')).toBeInTheDocument();
     expect(screen.getByText('1,200')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', {name: /radar/i}));
+    fireEvent.click(screen.getByRole('button', {name: /recommendations/i}));
     expect(onViewChange).toHaveBeenCalledWith('radar');
     fireEvent.click(screen.getByRole('button', {name: /your music/i}));
     expect(onViewChange).toHaveBeenLastCalledWith('music');
   });
 
-  it('emits immutable install, instrument, minimum-play and evidence filters', () => {
+  it('emits text, install and immutable instrument filters', () => {
     const onFiltersChange = jest.fn();
-    const filters = makeFilters({instruments: new Set(['drums'])});
+    const filters = makeFilters({instruments: new Set(['guitar'])});
     render(<FindMusicSidebar {...makeProps({filters, onFiltersChange})} />);
 
     expect(
@@ -83,7 +82,7 @@ describe('FindMusicSidebar', () => {
     ).toHaveAttribute('src', expect.stringContaining('guitar.png'));
 
     fireEvent.click(
-      screen.getByRole('radio', {
+      screen.getByRole('checkbox', {
         name: 'Hide songs with installed charts',
       }),
     );
@@ -92,20 +91,30 @@ describe('FindMusicSidebar', () => {
       install: 'hide-installed',
     });
 
-    fireEvent.click(screen.getByRole('button', {name: 'Require Drums'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Require Guitar'}));
     const instrumentUpdate = onFiltersChange.mock.calls[1][0];
     expect(instrumentUpdate.instruments).toEqual(new Set());
     expect(instrumentUpdate.instruments).not.toBe(filters.instruments);
 
-    fireEvent.change(screen.getByRole('slider', {name: 'Minimum play count'}), {
-      target: {value: '25'},
+    fireEvent.change(screen.getByRole('searchbox', {name: 'Artist or song'}), {
+      target: {value: 'Incubus Drive'},
     });
-    expect(onFiltersChange).toHaveBeenCalledWith({...filters, minPlays: 25});
+    expect(onFiltersChange).toHaveBeenLastCalledWith({
+      ...filters,
+      query: 'Incubus Drive',
+    });
+  });
 
-    fireEvent.click(screen.getByRole('checkbox', {name: 'Playlists'}));
-    const evidenceUpdate = onFiltersChange.mock.calls[3][0];
-    expect(evidenceUpdate.evidence).toEqual(new Set(['playlist']));
-    expect(evidenceUpdate.evidence).not.toBe(filters.evidence);
+  it('offers pro drums without a PD label and does not offer regular drums', () => {
+    render(<FindMusicSidebar {...makeProps()} />);
+
+    expect(
+      screen.getByRole('button', {name: 'Require Pro drums'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {name: 'Require Drums'}),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('PD')).not.toBeInTheDocument();
   });
 
   it('clears active filters through the provided callback', () => {
@@ -113,7 +122,7 @@ describe('FindMusicSidebar', () => {
     render(
       <FindMusicSidebar
         {...makeProps({
-          filters: makeFilters({minPlays: 10}),
+          filters: makeFilters({query: 'muse'}),
           onClearFilters,
         })}
       />,
@@ -124,20 +133,20 @@ describe('FindMusicSidebar', () => {
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps install and instrument filters enabled on Radar but disables direct-evidence filters', () => {
+  it('keeps the same focused filters available on Recommendations', () => {
     render(<FindMusicSidebar {...makeProps({view: 'radar'})} />);
 
-    expect(screen.getByRole('radio', {name: 'Only installed'})).toBeEnabled();
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Hide songs with installed charts',
+      }),
+    ).toBeEnabled();
     expect(screen.getByRole('button', {name: 'Require Guitar'})).toBeEnabled();
     expect(
-      screen.getByRole('slider', {name: 'Minimum play count'}),
-    ).toBeDisabled();
-    expect(screen.getByRole('checkbox', {name: 'History'})).toBeDisabled();
-    expect(
-      screen.getByText(
-        /play-count and evidence filters do not apply to radar/i,
-      ),
-    ).toBeInTheDocument();
+      screen.getByRole('searchbox', {name: 'Artist or song'}),
+    ).toBeEnabled();
+    expect(screen.queryByText('Minimum plays')).not.toBeInTheDocument();
+    expect(screen.queryByText('Evidence source')).not.toBeInTheDocument();
   });
 
   it('routes each source action to its callback and connects Spotify when needed', () => {

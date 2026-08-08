@@ -7,8 +7,7 @@ export const INSTRUMENTS = [
 ] as const;
 
 export type InstrumentId = (typeof INSTRUMENTS)[number][0];
-export type InstallFilter = 'all' | 'hide-installed' | 'only-installed';
-export type EvidenceFilter = 'history' | 'playlist' | 'album';
+export type InstallFilter = 'all' | 'hide-installed';
 export type FindMusicView = 'music' | 'radar';
 
 export type FindMusicChart = {
@@ -69,13 +68,11 @@ export type SourceStatus = {
 export type FindMusicFilters = {
   install: InstallFilter;
   instruments: Set<InstrumentId>;
-  minPlays: number;
-  evidence: Set<EvidenceFilter>;
+  query: string;
 };
 
 export const EMPTY_FILTERS: FindMusicFilters = {
   install: 'all',
   instruments: new Set(),
-  minPlays: 0,
-  evidence: new Set(),
+  query: '',
 };

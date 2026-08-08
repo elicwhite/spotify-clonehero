@@ -4,7 +4,8 @@
 
 import '@testing-library/jest-dom';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
-import type {FindMusicSong, FindMusicStats} from '../types';
+import type {FindMusicFilters, FindMusicSong, FindMusicStats} from '../types';
+import {FIND_MUSIC_FILTERS_STORAGE_KEY} from '../filterPersistence';
 
 jest.mock('../../SupportedBrowserWarning', () => ({
   __esModule: true,
@@ -57,8 +58,23 @@ jest.mock('../queries', () => ({
 
 jest.mock('../FindMusicSidebar', () => ({
   __esModule: true,
-  default: ({musicCount}: {musicCount: number}) => (
-    <aside data-testid="sidebar">{musicCount} matches available</aside>
+  default: ({
+    musicCount,
+    filters,
+    onFiltersChange,
+  }: {
+    musicCount: number;
+    filters: FindMusicFilters;
+    onFiltersChange: (filters: FindMusicFilters) => void;
+  }) => (
+    <aside data-testid="sidebar" data-filter-query={filters.query}>
+      {musicCount} matches available
+      <button
+        type="button"
+        onClick={() => onFiltersChange({...filters, query: 'next query'})}>
+        Change filter
+      </button>
+    </aside>
   ),
 }));
 
@@ -120,8 +136,58 @@ function song(key: string, name: string): FindMusicSong {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  window.localStorage.clear();
   mockGetFindMusicStats.mockResolvedValue(stats);
   mockGetRadarSongs.mockResolvedValue([]);
+});
+
+it('restores filters from local storage and persists subsequent changes', async () => {
+  window.localStorage.setItem(
+    FIND_MUSIC_FILTERS_STORAGE_KEY,
+    JSON.stringify({
+      install: 'hide-installed',
+      instruments: ['guitar'],
+      query: 'saved query',
+    }),
+  );
+  mockGetFindMusicSongs.mockResolvedValue([]);
+
+  render(<FindMusicClient />);
+
+  await waitFor(() =>
+    expect(screen.getByTestId('sidebar')).toHaveAttribute(
+      'data-filter-query',
+      'saved query',
+    ),
+  );
+
+  fireEvent.click(screen.getByRole('button', {name: 'Change filter'}));
+  await waitFor(() =>
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(FIND_MUSIC_FILTERS_STORAGE_KEY) ?? '{}',
+      ),
+    ).toEqual({
+      install: 'hide-installed',
+      instruments: ['guitar'],
+      query: 'next query',
+    }),
+  );
+});
+
+it('uses the full setup guide when no taste source has been loaded', async () => {
+  mockGetFindMusicSongs.mockResolvedValue([]);
+  mockGetFindMusicStats.mockResolvedValue({...stats, historySongs: 0});
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('find-music-welcome')).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', {
+      name: 'Bring in the music you already care about',
+    }),
+  ).toBeInTheDocument();
+  expect(screen.queryByTestId('music-table')).not.toBeInTheDocument();
 });
 
 it('holds source-driven matches until the user explicitly re-ranks', async () => {
@@ -134,9 +200,11 @@ it('holds source-driven matches until the user explicitly re-ranks', async () =>
   expect(screen.getByTestId('find-music-page')).toHaveClass(
     'w-[calc(100%+2rem)]',
   );
-  expect(
-    screen.getByTestId('find-music-page').querySelector('main'),
-  ).toHaveClass('flex', 'min-h-0', 'overflow-hidden');
+  expect(screen.getByTestId('find-music-results')).toHaveClass(
+    'flex',
+    'min-h-0',
+    'overflow-hidden',
+  );
 
   expect(await screen.findByTestId('music-table')).toHaveTextContent('Alpha');
 

@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,13 +19,11 @@ import {
 import {useVirtual} from 'react-virtual';
 import {Button} from '@/components/ui/button';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
 import {downloadSong} from '@/lib/local-songs-folder';
 import SpotifyPreviewButton from '@/components/SpotifyPreviewButton';
@@ -48,7 +47,7 @@ import {
 } from './model';
 
 type MusicSort = {
-  key: 'score' | 'artist' | 'song' | 'plays' | 'updated';
+  key: 'score' | 'artist' | 'song' | 'updated';
   direction: 'asc' | 'desc';
 };
 
@@ -128,7 +127,9 @@ export default function FindMusicTable({
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border bg-card p-10 text-center">
         <div>
           <RotateCw className="mx-auto mb-3 h-5 w-5 animate-spin text-primary" />
-          <h2 className="font-semibold">Radar is building artist affinity</h2>
+          <h2 className="font-semibold">
+            Recommendations are building artist affinity
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Your music remains usable while the matching pass finishes.
           </p>
@@ -143,7 +144,7 @@ export default function FindMusicTable({
         <div>
           <h2 className="font-semibold">
             {view === 'radar'
-              ? 'No Radar candidates match'
+              ? 'No recommendations match'
               : 'No songs match the current filters'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -169,7 +170,7 @@ export default function FindMusicTable({
       <div className="flex items-center border-b px-4 py-2 text-xs text-muted-foreground">
         <span>
           <b className="text-foreground">{rows.length.toLocaleString()}</b>{' '}
-          {view === 'radar' ? 'candidates' : 'songs'} shown
+          {view === 'radar' ? 'recommendations' : 'songs'} shown
         </span>
       </div>
       <div
@@ -240,8 +241,8 @@ function MusicHeader({
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
         previewEnabled
-          ? 'min-w-[1008px] grid-cols-[34px_minmax(130px,1fr)_minmax(170px,1.35fr)_100px_130px_76px_70px_110px_100px]'
-          : 'min-w-[900px] grid-cols-[34px_minmax(130px,1fr)_minmax(170px,1.35fr)_130px_76px_70px_110px_100px]',
+          ? 'min-w-[946px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_150px_120px_100px]'
+          : 'min-w-[838px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]',
       )}>
       <span />
       <SortButton label="Artist" sortKey="artist" sort={sort} onSort={onSort} />
@@ -253,14 +254,6 @@ function MusicHeader({
         sort={sort}
         onSort={onSort}
       />
-      <SortButton
-        label="Plays"
-        sortKey="plays"
-        sort={sort}
-        onSort={onSort}
-        className="text-right"
-      />
-      <span className="text-right">Charts</span>
       <SortButton
         label="Updated"
         sortKey="updated"
@@ -278,16 +271,15 @@ function RadarHeader({previewEnabled}: {previewEnabled: boolean}) {
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
         previewEnabled
-          ? 'min-w-[979px] grid-cols-[34px_minmax(140px,1fr)_minmax(180px,1.3fr)_100px_150px_85px_110px_100px]'
-          : 'min-w-[871px] grid-cols-[34px_minmax(140px,1fr)_minmax(180px,1.3fr)_150px_85px_110px_100px]',
+          ? 'min-w-[966px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_170px_120px_100px]'
+          : 'min-w-[858px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <span />
       <span>Artist</span>
       <span>Song</span>
       {previewEnabled ? <span className="text-center">Preview</span> : null}
       <span>Why it is here</span>
-      <span className="text-right">Charts</span>
-      <span>Newest</span>
+      <span>Updated</span>
       <span>Installed</span>
     </div>
   );
@@ -326,11 +318,27 @@ function VirtualRows({
     return flat;
   }, [expanded, rows]);
   const parentRef = useRef<HTMLDivElement>(null);
+  const previousViewRef = useRef(view);
+  const scrollPositionsRef = useRef<Record<FindMusicView, number>>({
+    music: 0,
+    radar: 0,
+  });
   const rowVirtualizer = useVirtual({
     parentRef,
     size: flatRows.length,
     overscan: 12,
   });
+
+  useLayoutEffect(() => {
+    const scrollElement = parentRef.current;
+    if (!scrollElement) return;
+    const previousView = previousViewRef.current;
+    if (previousView !== view) {
+      scrollPositionsRef.current[previousView] = scrollElement.scrollTop;
+      scrollElement.scrollTop = scrollPositionsRef.current[view];
+      previousViewRef.current = view;
+    }
+  }, [view]);
 
   return (
     <div
@@ -340,12 +348,15 @@ function VirtualRows({
         'min-h-0 flex-1 overflow-y-auto overscroll-contain',
         previewEnabled
           ? view === 'music'
-            ? 'min-w-[1008px]'
-            : 'min-w-[979px]'
+            ? 'min-w-[946px]'
+            : 'min-w-[966px]'
           : view === 'music'
-            ? 'min-w-[900px]'
-            : 'min-w-[871px]',
-      )}>
+            ? 'min-w-[838px]'
+            : 'min-w-[858px]',
+      )}
+      onScroll={event => {
+        scrollPositionsRef.current[view] = event.currentTarget.scrollTop;
+      }}>
       <div
         className="relative w-full"
         style={{height: `${rowVirtualizer.totalSize}px`}}>
@@ -410,22 +421,26 @@ function SongRow({
     <div
       data-testid="song-row"
       data-song-key={song.key}
+      onClick={onToggle}
       className={cn(
-        'grid h-full w-full items-center gap-2 border-b px-3 text-left text-sm hover:bg-muted/50',
+        'grid h-full w-full cursor-pointer items-center gap-2 border-b px-3 text-left text-sm hover:bg-muted/50',
         view === 'music'
           ? previewEnabled
-            ? 'grid-cols-[34px_minmax(130px,1fr)_minmax(170px,1.35fr)_100px_130px_76px_70px_110px_100px]'
-            : 'grid-cols-[34px_minmax(130px,1fr)_minmax(170px,1.35fr)_130px_76px_70px_110px_100px]'
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_150px_120px_100px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
           : previewEnabled
-            ? 'grid-cols-[34px_minmax(140px,1fr)_minmax(180px,1.3fr)_100px_150px_85px_110px_100px]'
-            : 'grid-cols-[34px_minmax(140px,1fr)_minmax(180px,1.3fr)_150px_85px_110px_100px]',
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_100px_170px_120px_100px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <button
         type="button"
         aria-expanded={expanded}
         aria-label={`${expanded ? 'Hide' : 'Show'} chart versions for ${song.artist} — ${song.song}`}
         className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        onClick={onToggle}>
+        onClick={event => {
+          event.stopPropagation();
+          onToggle();
+        }}>
         {expanded ? (
           <ChevronDown className="h-4 w-4" />
         ) : (
@@ -435,20 +450,16 @@ function SongRow({
       <span className="truncate text-muted-foreground">{song.artist}</span>
       <span className="block min-w-0 truncate font-medium">{song.song}</span>
       {previewEnabled ? (
-        <SpotifyPreviewButton
-          artist={song.artist}
-          song={song.song}
-          trackKey={song.key}
-          compact
-        />
+        <div onClick={event => event.stopPropagation()}>
+          <SpotifyPreviewButton
+            artist={song.artist}
+            song={song.song}
+            trackKey={song.key}
+            compact
+          />
+        </div>
       ) : null}
       <Relevance score={score} song={song} view={view} />
-      {view === 'music' ? (
-        <span className="text-right font-mono text-xs">
-          {(song as FindMusicSong).playCount || '—'}
-        </span>
-      ) : null}
-      <span className="text-right font-mono text-xs">{song.charts.length}</span>
       <span className="font-mono text-xs text-muted-foreground">
         {formatDate(newest)}
       </span>
@@ -471,55 +482,39 @@ function Relevance({
   view: FindMusicView;
 }) {
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Relevance ${score.value} of 100. View why ${song.song} is relevant`}
-          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-2 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-          <span className="w-6 text-right font-mono text-xs font-bold">
-            {score.value}
-          </span>
-          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-            <span
-              className="block h-full rounded-full bg-fuchsia-700 dark:bg-fuchsia-400"
-              style={{width: `${score.value}%`}}
-              aria-hidden="true"
-            />
-          </span>
-        </button>
-      </SheetTrigger>
-      <SheetContent className="w-[min(92vw,420px)] overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>Why this song is relevant</SheetTitle>
-          <SheetDescription>
-            {song.artist} — {song.song}
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="mt-6 rounded-lg border bg-card p-4 text-card-foreground">
-          <div className="flex items-end justify-between gap-4">
-            <span className="text-sm font-medium">Relevance score</span>
-            <span className="font-mono text-3xl font-bold">
+    <TooltipProvider delayDuration={180}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            aria-label={`Relevance ${score.value} of 100. Why ${song.song} is relevant`}
+            className="flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            <span className="w-6 text-right font-mono text-xs font-bold">
               {score.value}
-              <span className="text-sm font-normal text-muted-foreground">
-                /100
-              </span>
             </span>
+            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <span
+                className="block h-full rounded-full bg-fuchsia-700 dark:bg-fuchsia-400"
+                style={{width: `${score.value}%`}}
+                aria-hidden="true"
+              />
+            </span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="left"
+          align="center"
+          sideOffset={10}
+          className="z-[70] w-[min(88vw,360px)] bg-popover p-0 text-popover-foreground shadow-xl">
+          <div className="border-b px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Evidence ledger
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold">
+              {song.artist} — {song.song}
+            </p>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-fuchsia-700 dark:bg-fuchsia-400"
-              style={{width: `${score.value}%`}}
-            />
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Evidence ledger
-          </h3>
-          <dl className="mt-2 divide-y rounded-lg border bg-card text-card-foreground">
+          <dl className="divide-y">
             {score.parts.map(part => (
               <div key={part.label} className="px-4 py-3">
                 <div className="flex items-baseline justify-between gap-4">
@@ -534,12 +529,9 @@ function Relevance({
               </div>
             ))}
           </dl>
-        </div>
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Each source contributes independently. The total is capped at 100.
-        </p>
-      </SheetContent>
-    </Sheet>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -630,15 +622,14 @@ function ChartRow({
   onInstall: () => Promise<void>;
 }) {
   return (
-    <div className="grid h-full grid-cols-[34px_minmax(160px,1fr)_minmax(180px,1.1fr)_250px_90px_110px] items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs">
+    <div className="grid h-full grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.4fr)_120px_90px_110px] items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs">
       <span />
-      <span
-        className="truncate font-mono text-[10px] text-muted-foreground"
-        title={chart.md5}>
-        {chart.md5.slice(0, 10)}
-      </span>
       <span className="truncate font-medium">{chart.charter}</span>
       <InstrumentBadges chart={chart} />
+      <span className="font-mono text-xs text-muted-foreground">
+        <span className="sr-only">Updated </span>
+        {formatDate(chart.modifiedTime)}
+      </span>
       <span className="font-mono text-muted-foreground">
         {formatDuration(chart.songLength)}
       </span>
