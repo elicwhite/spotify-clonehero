@@ -8,29 +8,54 @@ async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+export type FetchNewChartsStats = {
+  /**
+   * The highest chart id covered by every response handed to `onEachResponse`
+   * so far. Resuming a scan with this id picks up exactly where the last
+   * handled response left off.
+   */
+  lastChartId: number;
+  newSongsFound: number;
+  totalSongsFound: number;
+  totalChartsFound: number;
+  totalSongsToFetch: number;
+};
+
+export type FetchNewChartsOptions = {
+  /**
+   * Charts recovered from an interrupted run. They seed the dedupe map so a
+   * resumed scan returns the full set, not just the charts fetched after the
+   * interruption.
+   */
+  seedCharts?: any[];
+  /**
+   * The time the (possibly interrupted) run originally started. Recorded as
+   * `metadata.lastRun` so a resumed run doesn't skip charts modified while it
+   * was running.
+   */
+  runStartTime?: Date;
+};
+
 export default async function fetchNewCharts(
   afterTime: Date,
   scanFromId: number,
-  onEachResponse: (
-    json: any[],
-    stats: {
-      lastChartId: number;
-      newSongsFound: number;
-      totalSongsFound: number;
-      totalChartsFound: number;
-      totalSongsToFetch: number;
-    },
-  ) => void,
+  onEachResponse: (json: any[], stats: FetchNewChartsStats) => void,
+  options: FetchNewChartsOptions = {},
 ) {
   const results = new Map<number, any>();
-  const runStartTime = new Date();
+  const runStartTime = options.runStartTime ?? new Date();
+
+  for (const chart of options.seedCharts ?? []) {
+    mergeChart(results, chart);
+  }
 
   let lastChartId = scanFromId;
 
-  let totalSongs = 0;
+  let totalSongs = results.size;
   let totalCharts = 0;
   let newSongs = 0;
   let iterations = 0;
+  let hasMoreCharts = true;
 
   let totalSongsToFetch = -1;
 
@@ -50,20 +75,19 @@ export default async function fetchNewCharts(
         thisRunLatestChartId = song.chartId;
       }
 
-      if (!results.has(song.groupId)) {
-        results.set(song.groupId, filterKeys(song));
+      if (mergeChart(results, song)) {
         newSongs++;
         totalSongs++;
-      } else {
-        const existing = results.get(song.groupId);
-        if (new Date(existing.modifiedTime) < new Date(song.modifiedTime)) {
-          results.set(song.groupId, filterKeys(song));
-        }
       }
     }
 
+    // Paging is driven by the chart id cursor, not by how many of the charts
+    // were new: a page can be entirely updates to songs we already have and
+    // still be followed by more pages.
+    hasMoreCharts = json.data.length > 0 && thisRunLatestChartId > lastChartId;
+
     const stats = {
-      lastChartId,
+      lastChartId: thisRunLatestChartId,
       newSongsFound: newSongs,
       totalSongsFound: totalSongs,
       totalChartsFound: totalCharts,
@@ -80,7 +104,7 @@ export default async function fetchNewCharts(
 
     lastChartId = thisRunLatestChartId;
     onEachResponse(json.data.map(filterKeys), stats);
-  } while (newSongs > 0 && iterations < MAX_ITERATIONS);
+  } while (hasMoreCharts && iterations < MAX_ITERATIONS);
 
   return {
     charts: Array.from(results.values()),
@@ -89,6 +113,22 @@ export default async function fetchNewCharts(
       totalSongs,
     },
   };
+}
+
+/** Returns true when the chart introduces a song we hadn't seen yet. */
+function mergeChart(results: Map<number, any>, song: any): boolean {
+  const existing = results.get(song.groupId);
+
+  if (existing == null) {
+    results.set(song.groupId, filterKeys(song));
+    return true;
+  }
+
+  if (new Date(existing.modifiedTime) < new Date(song.modifiedTime)) {
+    results.set(song.groupId, filterKeys(song));
+  }
+
+  return false;
 }
 
 const saveKeys = [
@@ -226,6 +266,11 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
     }
     return await fetchSongsAfter(date, lastChartId);
   } else {
-    console.log('Fetch failed', response.status, response.statusText);
+    // 5xx responses are already retried and turned into a
+    // ChorusUnavailableError inside search-encore, so anything left here is a
+    // client error worth reporting.
+    throw new Error(
+      `Fetching charts from Chorus failed with status ${response.status}: ${response.statusText}`,
+    );
   }
 }

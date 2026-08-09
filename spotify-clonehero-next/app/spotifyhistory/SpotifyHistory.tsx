@@ -4,6 +4,10 @@ import {Suspense, useCallback, useEffect, useRef, useState} from 'react';
 import * as Sentry from '@sentry/nextjs';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
 import {
+  CHORUS_UNAVAILABLE_MESSAGE,
+  isChorusUnavailableError,
+} from '@/lib/chorus-errors';
+import {
   getLocalScanWarning,
   scanInstalledCharts,
   tryGetSongsDirectoryHandle,
@@ -277,11 +281,18 @@ export function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     } catch (error) {
       abortController?.abort();
       setStatus({status: 'not-started', songsCounted: 0});
-      toast.error(
-        error instanceof Error ? error.message : 'Spotify history scan failed',
-        {duration: 8000},
-      );
-      Sentry.captureException(error);
+      if (isChorusUnavailableError(error)) {
+        // Chorus being down is not our bug, so it stays out of Sentry.
+        toast.error(CHORUS_UNAVAILABLE_MESSAGE, {duration: 8000});
+      } else {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Spotify history scan failed',
+          {duration: 8000},
+        );
+        Sentry.captureException(error);
+      }
     } finally {
       runInProgress.current = false;
     }

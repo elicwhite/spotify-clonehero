@@ -9,6 +9,10 @@ import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 import {createClient} from '@/lib/supabase/client';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
+import {
+  CHORUS_UNAVAILABLE_MESSAGE,
+  isChorusUnavailableError,
+} from '@/lib/chorus-errors';
 import {localDbExists} from '@/lib/local-db/client';
 import {
   onPlaylistCacheUpdated,
@@ -266,9 +270,15 @@ export default function FindMusicClient() {
       await stageSnapshot();
     } catch (error) {
       if (!controller.signal.aborted) {
-        const message = error instanceof Error ? error.message : String(error);
-        setChorusError(message);
-        toast.error('Could not refresh the Chorus index');
+        if (isChorusUnavailableError(error)) {
+          setChorusError(CHORUS_UNAVAILABLE_MESSAGE);
+          toast.error(CHORUS_UNAVAILABLE_MESSAGE);
+        } else {
+          setChorusError(
+            error instanceof Error ? error.message : String(error),
+          );
+          toast.error('Could not refresh the Chorus index');
+        }
       }
     }
   }, [hasIndexedTasteData, refreshChorusIndex, stageSnapshot]);

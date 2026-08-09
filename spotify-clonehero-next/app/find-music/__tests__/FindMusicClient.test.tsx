@@ -149,7 +149,8 @@ jest.mock('../FindMusicSidebar', () => ({
       data-library-phase={spotifyLibraryStatus.phase}
       data-apple-music-phase={appleMusicStatus.phase}
       data-local-phase={localStatus.phase}
-      data-chorus-phase={chorusStatus.phase}>
+      data-chorus-phase={chorusStatus.phase}
+      data-chorus-detail={chorusStatus.detail}>
       {musicCount} matches available
       <span>{appleMusicStatus.summary}</span>
       <button
@@ -194,6 +195,10 @@ jest.mock('../FindMusicTable', () => ({
 }));
 
 import FindMusicClient from '../FindMusicClient';
+import {
+  CHORUS_UNAVAILABLE_MESSAGE,
+  ChorusUnavailableError,
+} from '../../../lib/chorus-errors';
 
 const stats: FindMusicStats = {
   historySongs: 2,
@@ -264,6 +269,31 @@ beforeEach(() => {
   mockLocalDbExists.mockResolvedValue(true);
   mockGetFindMusicStats.mockResolvedValue(stats);
   mockGetRadarSongs.mockResolvedValue([]);
+  mockRefreshChorus.mockImplementation(async () => []);
+});
+
+it('tells the user to try again later when Chorus is unavailable', async () => {
+  mockAppleSetupState = 'authorized';
+  mockGetFindMusicSongs.mockResolvedValue([song('apple', 'Apple Song')]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    appleMusicLibraryTracks: 1,
+  });
+  mockRefreshChorus.mockRejectedValue(new ChorusUnavailableError(500));
+
+  render(<FindMusicClient />);
+
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(screen.getByTestId('sidebar')).toHaveAttribute(
+      'data-chorus-detail',
+      CHORUS_UNAVAILABLE_MESSAGE,
+    ),
+  );
+  expect(screen.getByTestId('sidebar')).toHaveAttribute(
+    'data-chorus-phase',
+    'error',
+  );
 });
 
 it('does not create the local index or prepare sources before first interaction', async () => {

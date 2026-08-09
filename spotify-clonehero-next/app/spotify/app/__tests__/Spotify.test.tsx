@@ -81,6 +81,10 @@ jest.mock('../SignInWithSpotifyCard', () => ({
 }));
 
 import {LoggedIn} from '../Spotify';
+import {
+  CHORUS_UNAVAILABLE_MESSAGE,
+  ChorusUnavailableError,
+} from '../../../../lib/chorus-errors';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -101,6 +105,7 @@ function deferred<T>(): Deferred<T> {
 describe('Spotify refresh errors', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFetchChorusCharts.mockImplementation(async () => []);
     mockGetSongsDirectoryHandle.mockResolvedValue({
       kind: 'directory',
       name: 'Songs',
@@ -181,6 +186,32 @@ describe('Spotify refresh errors', () => {
     expect(mockUpdateSpotifyLibrary).not.toHaveBeenCalled();
     expect(mockFetchChorusCharts).not.toHaveBeenCalled();
     expect(mockScanForInstalledCharts).not.toHaveBeenCalled();
+  });
+
+  it('reports a Chorus outage to the user but not to Sentry', async () => {
+    const chorus = deferred<never>();
+    mockUpdateSpotifyLibrary.mockResolvedValue({status: 'ok'});
+    mockFetchChorusCharts.mockReturnValue(chorus.promise as never);
+    mockScanForInstalledCharts.mockResolvedValue({
+      status: 'complete',
+      lastScanned: new Date(),
+      installedCharts: [],
+      issues: [],
+    });
+
+    render(<LoggedIn />);
+    fireEvent.click(screen.getByRole('button', {name: 'Select Songs Folder'}));
+
+    await waitFor(() => expect(mockFetchChorusCharts).toHaveBeenCalled());
+    await act(async () => {
+      chorus.reject(new ChorusUnavailableError(500));
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith(CHORUS_UNAVAILABLE_MESSAGE),
+    );
+    expect(mockCaptureException).not.toHaveBeenCalled();
   });
 
   it('keeps the retry action visible when a scan completes after another task fails', async () => {

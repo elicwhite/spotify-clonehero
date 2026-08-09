@@ -15,6 +15,10 @@ import {useData} from '@/lib/suspense-data';
 import {SignInWithSpotifyCard} from './SignInWithSpotifyCard';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
 import {
+  CHORUS_UNAVAILABLE_MESSAGE,
+  isChorusUnavailableError,
+} from '@/lib/chorus-errors';
+import {
   getLocalScanWarning,
   scanInstalledCharts,
   tryGetSongsDirectoryHandle,
@@ -186,10 +190,15 @@ export function LoggedIn() {
     } catch (error) {
       abortController?.abort();
       setStatus({status: 'not-started', songsCounted: 0});
-      toast.error(
-        error instanceof Error ? error.message : 'Library refresh failed',
-      );
-      Sentry.captureException(error);
+      if (isChorusUnavailableError(error)) {
+        // Chorus being down is not our bug, so it stays out of Sentry.
+        toast.error(CHORUS_UNAVAILABLE_MESSAGE);
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : 'Library refresh failed',
+        );
+        Sentry.captureException(error);
+      }
     } finally {
       runInProgress.current = false;
     }

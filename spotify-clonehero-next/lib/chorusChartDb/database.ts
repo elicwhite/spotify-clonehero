@@ -30,12 +30,12 @@ export function useChorusChartDb(): [
 
   const run = useCallback(
     async (_abort: AbortController): Promise<ChartResponseEncore[]> => {
-      return new Promise(async resolve => {
-        setProgress(progress => ({
-          ...progress,
-          status: 'fetching',
-        }));
+      setProgress(progress => ({
+        ...progress,
+        status: 'fetching',
+      }));
 
+      try {
         debugLog('Checking for server data updates');
         // Get the latest data version from database metadata
         const localDataVersion = await getChartsDataVersion();
@@ -73,14 +73,20 @@ export function useChorusChartDb(): [
           }));
         });
         debugLog('Done fetching charts');
-
+      } catch (error) {
         setProgress(progress => ({
           ...progress,
-          status: 'complete',
+          status: 'error',
         }));
+        throw error;
+      }
 
-        resolve([]);
-      });
+      setProgress(progress => ({
+        ...progress,
+        status: 'complete',
+      }));
+
+      return [];
     },
     [],
   );
