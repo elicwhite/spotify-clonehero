@@ -2,4 +2,8 @@ secrets.env
 .env.local
 .vscode
 spotify-clonehero-next/raw_db_files
+# Build outputs of `pnpm update:db`. The dump clients actually load is
+# published to R2 by .github/workflows/update-chart-db.yml.
+spotify-clonehero-next/public/data/charts.json
+spotify-clonehero-next/public/data/metadata.json
 /.pnpm-store

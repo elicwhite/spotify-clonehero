@@ -103,9 +103,8 @@ custom domain.
 - **Never make the paging loop depend on how many charts were new.** A page can
   be entirely updates to songs already seen and still be followed by more pages;
   paging follows the chart id cursor.
-
-## Pending cleanup
-
-`loadChartDbDump` still falls back to the committed `public/data/charts.json`
-when the manifest can't be read. That fallback, and the 74MB file itself, come
-out once the workflow has published successfully at least once.
+- **There is no local fallback dump.** `public/data/charts.json` and
+  `metadata.json` are gitignored build outputs of `pnpm update:db`, read only by
+  `pnpm publish:db`. Nothing serves them. If the manifest can't be read, cold
+  start fails loudly — seeding from an empty dump would leave a client
+  permanently convinced it had the whole catalog.

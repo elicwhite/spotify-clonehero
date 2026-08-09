@@ -106,23 +106,16 @@ describe('loadChartDbDump', () => {
     expect(fetchImpl.mock.calls[1][0]).toBe(chartDbAssetUrl(manifest.key));
   });
 
-  it('falls back to the bundled copy when the manifest is unreachable', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const fetchImpl = jest.fn(async (url: string) => {
-      if (url.startsWith('https://')) throw new TypeError('offline');
-      return jsonResponse(
-        url === '/data/charts.json'
-          ? [{groupId: 2}]
-          : {lastRun: '2026-01-01T00:00:00.000Z'},
-      );
+  it('propagates a failure rather than seeding from nothing', async () => {
+    const fetchImpl = jest.fn(async () => {
+      throw new TypeError('offline');
     });
 
-    const dump = await loadChartDbDump(fetchImpl as unknown as typeof fetch);
-
-    expect(dump).toEqual({
-      charts: [{groupId: 2}],
-      lastRun: '2026-01-01T00:00:00.000Z',
-    });
+    // A client that silently started from an empty dump would record a scan
+    // session claiming it was current, and never backfill the catalog.
+    await expect(
+      loadChartDbDump(fetchImpl as unknown as typeof fetch),
+    ).rejects.toThrow('offline');
   });
 });
 

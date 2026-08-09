@@ -124,32 +124,14 @@ export type ChartDbDump = {
   lastRun: string;
 };
 
-/**
- * The dump a client with no local data starts from.
- *
- * TODO: drop the bundled fallback (and `public/data/*`) once the scheduled
- * publish has run once. It exists only so this ships before the first upload.
- */
+/** The dump a client with no local data starts from. */
 export async function loadChartDbDump(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ChartDbDump> {
-  try {
-    const manifest = await fetchChartDbManifest(fetchImpl);
-    return {
-      charts: await fetchChartDbDump(manifest.key, fetchImpl),
-      lastRun: manifest.lastRun,
-    };
-  } catch (error) {
-    console.warn(
-      'Could not load the published chart dump, falling back to the bundled copy:',
-      error,
-    );
+  const manifest = await fetchChartDbManifest(fetchImpl);
 
-    const [charts, metadata] = await Promise.all([
-      fetchImpl('/data/charts.json').then(r => r.json()),
-      fetchImpl('/data/metadata.json').then(r => r.json()),
-    ]);
-
-    return {charts, lastRun: metadata.lastRun};
-  }
+  return {
+    charts: await fetchChartDbDump(manifest.key, fetchImpl),
+    lastRun: manifest.lastRun,
+  };
 }
