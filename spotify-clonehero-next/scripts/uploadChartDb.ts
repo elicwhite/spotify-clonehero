@@ -3,14 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import {promisify} from 'util';
+import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 import {
-  DeleteObjectsCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
-import {
-  CHART_DB_KEY_PREFIX,
   CHART_DB_MANIFEST_KEY,
   chartDbAssetUrl,
   chartDbDumpKey,
@@ -20,20 +14,22 @@ import {
   buildManifest,
   DUMP_CACHE_CONTROL,
   MANIFEST_CACHE_CONTROL,
-  selectVersionsToPrune,
-  VERSIONS_TO_KEEP,
 } from '../lib/chorusChartDb/chartDbPublish';
 
 /**
  * Publishes what `downloadDb.ts` wrote to the R2 bucket behind
  * assets.musiccharts.tools.
  *
- *   pnpm publish:db              upload, then prune old versions
+ *   pnpm publish:db              upload
  *   pnpm publish:db --dry-run    report what would happen, touch nothing
  *
  * The dump is uploaded to an immutable key and the manifest is written LAST, so
  * a failure part way through leaves clients on the previous dump rather than
  * pointing them at something half-written.
+ *
+ * This only ever writes. Superseded dumps are expired by a bucket lifecycle
+ * rule on the `charts/dumps/` prefix, so the credentials here need no delete
+ * permission and can never remove a dump clients are still being pointed at.
  */
 
 const gzip = promisify(zlib.gzip);
@@ -82,36 +78,6 @@ function createClient(): S3Client {
       secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
     },
   });
-}
-
-async function listDumpKeys(
-  client: S3Client,
-  bucket: string,
-): Promise<string[]> {
-  const keys: string[] = [];
-  let continuationToken: string | undefined;
-
-  do {
-    const response = await client.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: `${CHART_DB_KEY_PREFIX}/`,
-        ContinuationToken: continuationToken,
-      }),
-    );
-
-    for (const object of response.Contents ?? []) {
-      if (object.Key) {
-        keys.push(object.Key);
-      }
-    }
-
-    continuationToken = response.IsTruncated
-      ? response.NextContinuationToken
-      : undefined;
-  } while (continuationToken);
-
-  return keys;
 }
 
 async function run() {
@@ -182,23 +148,6 @@ async function run() {
     }),
   );
   console.log(`Updated ${chartDbAssetUrl(CHART_DB_MANIFEST_KEY)}`);
-
-  const stale = selectVersionsToPrune(
-    await listDumpKeys(client, bucket),
-    version,
-  );
-
-  if (stale.length > 0) {
-    await client.send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        Delete: {Objects: stale.map(old => ({Key: chartDbDumpKey(old)}))},
-      }),
-    );
-    console.log(
-      `Pruned ${stale.length} dump(s) older than the newest ${VERSIONS_TO_KEEP}: ${stale.join(', ')}`,
-    );
-  }
 }
 
 run().catch(error => {

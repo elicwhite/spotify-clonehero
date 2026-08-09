@@ -30,32 +30,6 @@ pnpm lint       # ESLint + Prettier check
 
 - **Comments:** Don't mention how things used to be. Comments should only ever describe the current state of the code, if they are needed at all.
 
-## Chart database
-
-A first-time visitor seeds their local DB from a dump of the Chorus/Encore
-catalog, then keeps it current by scanning the Encore API from their own
-browser. The dump is published to R2 (`assets.musiccharts.tools/charts/`), not
-committed:
-
-```
-charts/manifest.json               mutable pointer, no-cache
-charts/<version>/charts.json.gz    immutable, cached forever
-```
-
-`.github/workflows/update-chart-db.yml` rebuilds it — daily incremental, monthly
-full — via `pnpm update:db [--incremental]` then `pnpm publish:db`. It needs the
-repo secrets `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
-`R2_SECRET_ACCESS_KEY`.
-
-Two things to keep in mind:
-
-- **`chartsDataVersion` in `app/api/data/route.ts` is a schema version, not a
-  data version.** Bump it only when the dump's shape changes; it makes every
-  client wipe its DB and re-download. A refreshed dump must not bump it —
-  existing clients don't need the new dump, they scan for themselves.
-- **Incremental runs only add and replace.** Charts deleted from Chorus survive
-  until the monthly full crawl.
-
 ## Next.js DevTools MCP (AI agent tooling)
 
 Next.js 16 exposes a DevTools MCP server (default-on while `pnpm dev` runs) at

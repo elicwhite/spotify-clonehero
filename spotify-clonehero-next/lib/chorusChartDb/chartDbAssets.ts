@@ -5,18 +5,27 @@
  *
  * Layout:
  *   charts/manifest.json                        mutable, no-cache
- *   charts/<version>/charts.json.gz             immutable, cached forever
+ *   charts/dumps/<version>/charts.json.gz       immutable, cached forever
  *
  * The manifest is the only mutable object and is written last, so a publish
  * that dies partway leaves clients on the previous dump. Reading the dump URL
  * and `lastRun` from one manifest snapshot also keeps them consistent: fetching
  * two mutable objects separately could pair a dump with a newer cutoff and
  * leave a permanent hole in that client's database.
+ *
+ * Superseded dumps are reaped by a bucket lifecycle rule rather than by this
+ * code, so the publishing credentials never need delete permission.
  */
 
 export const CHART_DB_ASSET_BASE_URL = 'https://assets.musiccharts.tools';
 export const CHART_DB_KEY_PREFIX = 'charts';
 export const CHART_DB_MANIFEST_KEY = `${CHART_DB_KEY_PREFIX}/manifest.json`;
+/**
+ * Dumps sit under their own prefix so the lifecycle rule that expires them can
+ * be scoped to exactly them — never the manifest, never the models sharing
+ * this bucket.
+ */
+export const CHART_DB_DUMP_PREFIX = `${CHART_DB_KEY_PREFIX}/dumps`;
 export const CHART_DB_DUMP_FILE_NAME = 'charts.json.gz';
 
 export type ChartDbManifest = {
@@ -37,7 +46,7 @@ export function chartDbAssetUrl(key: string): string {
 }
 
 export function chartDbDumpKey(version: string): string {
-  return `${CHART_DB_KEY_PREFIX}/${version}/${CHART_DB_DUMP_FILE_NAME}`;
+  return `${CHART_DB_DUMP_PREFIX}/${version}/${CHART_DB_DUMP_FILE_NAME}`;
 }
 
 /**

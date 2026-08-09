@@ -1,4 +1,5 @@
 import {
+  CHART_DB_DUMP_PREFIX,
   CHART_DB_MANIFEST_KEY,
   ChartDbManifest,
   chartDbAssetUrl,
@@ -8,17 +9,13 @@ import {
   loadChartDbDump,
   parseChartDbManifest,
 } from '../chartDbAssets';
-import {
-  buildManifest,
-  selectVersionsToPrune,
-  versionFromDumpKey,
-} from '../chartDbPublish';
+import {buildManifest} from '../chartDbPublish';
 
 const manifest: ChartDbManifest = {
   version: '2026-08-09T17-14-53-098Z',
   lastRun: '2026-08-09T17:14:53.098Z',
   totalSongs: 94609,
-  key: 'charts/2026-08-09T17-14-53-098Z/charts.json.gz',
+  key: 'charts/dumps/2026-08-09T17-14-53-098Z/charts.json.gz',
   bytes: 8950156,
   sha256: 'abc123',
 };
@@ -30,7 +27,7 @@ function jsonResponse(body: unknown, ok = true) {
 describe('chart DB asset addressing', () => {
   it('derives an immutable dump key from a version', () => {
     expect(chartDbDumpKey('2026-08-09T17-14-53-098Z')).toBe(
-      'charts/2026-08-09T17-14-53-098Z/charts.json.gz',
+      'charts/dumps/2026-08-09T17-14-53-098Z/charts.json.gz',
     );
   });
 
@@ -129,34 +126,17 @@ describe('loadChartDbDump', () => {
   });
 });
 
-describe('selectVersionsToPrune', () => {
-  const keys = (...versions: string[]) => versions.map(chartDbDumpKey);
-
-  it('keeps the newest versions and deletes the rest', () => {
-    expect(
-      selectVersionsToPrune(keys('v1', 'v2', 'v3', 'v4', 'v5', 'v6'), 'v6', 3),
-    ).toEqual(['v1', 'v2', 'v3']);
-  });
-
-  it('never deletes the version just published', () => {
-    expect(selectVersionsToPrune(keys('v1', 'v2', 'v3'), 'v1', 1)).toEqual([
-      'v2',
-      'v3',
-    ]);
-  });
-
-  it('deletes nothing when under the retention count', () => {
-    expect(selectVersionsToPrune(keys('v1', 'v2'), 'v2', 5)).toEqual([]);
-  });
-
-  it('ignores objects that are not dumps, including the manifest', () => {
-    expect(
-      selectVersionsToPrune(
-        [...keys('v1', 'v2'), CHART_DB_MANIFEST_KEY, 'charts/v3/notes.json'],
-        'v2',
-        1,
-      ),
-    ).toEqual(['v1']);
-    expect(versionFromDumpKey(CHART_DB_MANIFEST_KEY)).toBeNull();
+describe('lifecycle-rule safety', () => {
+  it('keeps dumps under a prefix that excludes the manifest', () => {
+    // The bucket rule that expires old dumps is scoped to CHART_DB_DUMP_PREFIX.
+    // If the manifest (or anything else in this shared bucket) ever fell under
+    // it, the pointer would be deleted out from under every new visitor.
+    expect(chartDbDumpKey('any-version').startsWith(CHART_DB_DUMP_PREFIX)).toBe(
+      true,
+    );
+    expect(CHART_DB_MANIFEST_KEY.startsWith(CHART_DB_DUMP_PREFIX)).toBe(false);
+    expect('models/beat_this.onnx'.startsWith(CHART_DB_DUMP_PREFIX)).toBe(
+      false,
+    );
   });
 });

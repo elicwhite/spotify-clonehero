@@ -7,6 +7,11 @@ name: Update chart DB
 # Encore API from their own browser — so a fresher dump only shortens the
 # catch-up for new visitors. Nothing breaks if a run is skipped or fails: the
 # manifest is written last, so clients stay on the previous dump.
+#
+# This only ever writes to the bucket. Superseded dumps are expired by a
+# lifecycle rule on the charts/dumps/ prefix, so retention must outlast a
+# stretch of failed runs — if the live dump ages out while the manifest still
+# points at it, first-visit loading breaks.
 on:
   schedule:
     # Daily incremental: only what changed since the published dump.
