@@ -1,17 +1,25 @@
 'use client';
 
-import {initializeWebModelContext} from '@mcp-b/global';
+import {useEffect} from 'react';
+import {usePathname} from 'next/navigation';
+import {isTasteDataPrivateRoute} from '@/lib/apple-music/private-route';
 
-// Initialize on module load (client-side only).
-// This must run before any component calls navigator.modelContext.registerTool().
-if (typeof window !== 'undefined') {
-  initializeWebModelContext();
-}
-
-/**
- * Dummy component to ensure this module is included in the client bundle.
- * The actual initialization happens at module scope above.
- */
 export default function WebMCPInit() {
+  const pathname = usePathname();
+  const isTasteDataPrivate = isTasteDataPrivateRoute(pathname);
+
+  useEffect(() => {
+    if (isTasteDataPrivate) return;
+
+    let cancelled = false;
+    void import('@mcp-b/global').then(({initializeWebModelContext}) => {
+      if (!cancelled) initializeWebModelContext();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isTasteDataPrivate]);
+
   return null;
 }

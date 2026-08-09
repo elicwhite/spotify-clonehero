@@ -19,6 +19,15 @@ export type HoldState<T> = {
   pendingChangedCount: number;
 };
 
+export type RadarCandidateSummary = Pick<
+  RadarSong,
+  'key' | 'artist' | 'song' | 'artistPlayCount' | 'savedLibrarySongCount'
+> & {
+  chartCount: number;
+  availableInstrumentCount: number;
+  newestChartYear: number;
+};
+
 type Keyed = {key: string};
 
 const INSTRUMENT_IDS: InstrumentId[] = ['guitar', 'bass', 'keys', 'proDrums'];
@@ -45,7 +54,7 @@ export function scoreMusicSong(song: FindMusicSong): Score {
   const playCount = safeCount(song.playCount);
   const historyPoints = Math.min(55, Math.round(14 * Math.log2(1 + playCount)));
 
-  return makeScore([
+  const parts: ScorePart[] = [
     {label: 'Listening history', points: historyPoints},
     {
       label: 'Spotify playlists',
@@ -55,11 +64,15 @@ export function scoreMusicSong(song: FindMusicSong): Score {
       label: 'Spotify albums',
       points: Math.min(20, song.albums.length * 10),
     },
-    {
-      label: 'Installed chart',
-      points: song.hasInstalledChart ? 1 : 0,
-    },
-  ]);
+  ];
+  if (song.inAppleMusicLibrary) {
+    parts.push({label: 'Apple Music library', points: 20});
+  }
+  parts.push({
+    label: 'Installed chart',
+    points: song.hasInstalledChart ? 1 : 0,
+  });
+  return makeScore(parts);
 }
 
 function latestModifiedTime(charts: FindMusicChart[]): number {
@@ -71,41 +84,84 @@ function latestModifiedTime(charts: FindMusicChart[]): number {
   return latest;
 }
 
-/** Discovery evidence: affinity leads, with breadth and freshness supporting. */
-export function scoreRadarSong(song: RadarSong): Score {
-  const artistPlayCount = safeCount(song.artistPlayCount);
+function scoreRadarEvidence({
+  artistPlayCount,
+  savedLibrarySongCount,
+  chartCount,
+  availableInstrumentCount,
+  newestChartYear,
+}: Pick<RadarCandidateSummary, 'artistPlayCount' | 'savedLibrarySongCount'> & {
+  chartCount: number;
+  availableInstrumentCount: number;
+  newestChartYear: number;
+}): Score {
+  const safeArtistPlayCount = safeCount(artistPlayCount);
   const affinityPoints = Math.min(
     55,
-    Math.round((55 * Math.log1p(artistPlayCount)) / Math.log(101)),
+    Math.round((55 * Math.log1p(safeArtistPlayCount)) / Math.log(101)),
   );
-  const availableInstruments = INSTRUMENT_IDS.filter(instrument =>
-    song.charts.some(chart => {
-      const difficulty = chart.instruments[instrument];
-      return (
-        (difficulty != null && difficulty >= 0) ||
-        chart.instrumentPresence[instrument]
-      );
-    }),
-  ).length;
-  const newestYear = song.charts.reduce((latest, chart) => {
-    const year = new Date(chart.modifiedTime).getUTCFullYear();
-    return Number.isFinite(year) ? Math.max(latest, year) : latest;
-  }, 0);
   const recencyPoints =
-    newestYear >= 2026
+    newestChartYear >= 2026
       ? 10
-      : newestYear >= 2024
+      : newestChartYear >= 2024
         ? 6
-        : newestYear >= 2022
+        : newestChartYear >= 2022
           ? 3
           : 0;
 
-  return makeScore([
+  const parts: ScorePart[] = [
     {label: 'Artist affinity', points: affinityPoints},
-    {label: 'Available charts', points: Math.min(15, song.charts.length * 3)},
-    {label: 'Instrument coverage', points: availableInstruments * 4},
+  ];
+  const safeSavedLibrarySongCount = safeCount(savedLibrarySongCount);
+  if (safeSavedLibrarySongCount > 0) {
+    parts.push({
+      label: 'Saved-library coverage',
+      points: Math.min(25, safeSavedLibrarySongCount * 5),
+    });
+  }
+  parts.push(
+    {
+      label: 'Available charts',
+      points: Math.min(15, safeCount(chartCount) * 3),
+    },
+    {
+      label: 'Instrument coverage',
+      points: safeCount(availableInstrumentCount) * 4,
+    },
     {label: 'Chart freshness', points: recencyPoints},
-  ]);
+  );
+  return makeScore(parts);
+}
+
+function chartYear(modifiedTime: string): number {
+  const match = /^(\d{4})-/.exec(modifiedTime);
+  return match ? Number(match[1]) : 0;
+}
+
+/** Discovery evidence: affinity leads, with breadth and freshness supporting. */
+export function scoreRadarSong(song: RadarSong): Score {
+  return scoreRadarEvidence({
+    artistPlayCount: song.artistPlayCount,
+    savedLibrarySongCount: song.savedLibrarySongCount,
+    chartCount: song.charts.length,
+    availableInstrumentCount: INSTRUMENT_IDS.filter(instrument =>
+      song.charts.some(chart => {
+        const difficulty = chart.instruments[instrument];
+        return (
+          (difficulty != null && difficulty >= 0) ||
+          chart.instrumentPresence[instrument]
+        );
+      }),
+    ).length,
+    newestChartYear: song.charts.reduce(
+      (latest, chart) => Math.max(latest, chartYear(chart.modifiedTime)),
+      0,
+    ),
+  });
+}
+
+function scoreRadarCandidate(candidate: RadarCandidateSummary): Score {
+  return scoreRadarEvidence(candidate);
 }
 
 function chartHasInstruments(
@@ -258,10 +314,27 @@ export function sortMusicSongs(
 }
 
 export function sortRadarSongs(songs: RadarSong[]): RadarSong[] {
-  return [...songs].sort(
+  return sortRadarRankables(songs, scoreRadarSong);
+}
+
+export function sortRadarCandidateSummaries<T extends RadarCandidateSummary>(
+  candidates: T[],
+): T[] {
+  return sortRadarRankables(candidates, scoreRadarCandidate);
+}
+
+function sortRadarRankables<
+  T extends Pick<
+    RadarSong,
+    'key' | 'artist' | 'song' | 'artistPlayCount' | 'savedLibrarySongCount'
+  >,
+>(rows: T[], score: (row: T) => Score): T[] {
+  return [...rows].sort(
     (left, right) =>
-      scoreRadarSong(right).value - scoreRadarSong(left).value ||
+      score(right).value - score(left).value ||
       safeCount(right.artistPlayCount) - safeCount(left.artistPlayCount) ||
+      safeCount(right.savedLibrarySongCount) -
+        safeCount(left.savedLibrarySongCount) ||
       compareIdentity(left, right),
   );
 }

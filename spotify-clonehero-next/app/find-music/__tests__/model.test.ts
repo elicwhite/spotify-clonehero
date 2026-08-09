@@ -63,6 +63,8 @@ function music(
     playlists: [],
     albums: [],
     spotifyUrl: null,
+    providerActions: [],
+    inAppleMusicLibrary: false,
     hasInstalledChart:
       rest.hasInstalledChart ?? charts.some(item => item.isInstalled),
     charts,
@@ -80,6 +82,7 @@ function radar(
     artist: 'Artist',
     song: 'Song',
     artistPlayCount: 0,
+    savedLibrarySongCount: 0,
     spotifyUrl: null,
     hasInstalledChart:
       rest.hasInstalledChart ?? charts.some(item => item.isInstalled),
@@ -121,6 +124,26 @@ describe('find music scoring', () => {
     });
   });
 
+  test('adds Apple Music membership without changing Spotify-only score parts', () => {
+    const result = scoreMusicSong(
+      music({
+        key: 'apple-known',
+        playCount: 3,
+        inAppleMusicLibrary: true,
+      }),
+    );
+    expect(result).toEqual({
+      value: 48,
+      parts: [
+        {label: 'Listening history', points: 28},
+        {label: 'Spotify playlists', points: 0},
+        {label: 'Spotify albums', points: 0},
+        {label: 'Apple Music library', points: 20},
+        {label: 'Installed chart', points: 0},
+      ],
+    });
+  });
+
   test('radar scoring labels affinity, availability, coverage, and freshness', () => {
     const result = scoreRadarSong(
       radar({
@@ -148,6 +171,25 @@ describe('find music scoring', () => {
         {label: 'Available charts', points: 6},
         {label: 'Instrument coverage', points: 16},
         {label: 'Chart freshness', points: 10},
+      ],
+    });
+  });
+
+  test('scores deduplicated saved-library coverage with an independent cap', () => {
+    const result = scoreRadarSong(
+      radar({
+        key: 'saved-coverage',
+        savedLibrarySongCount: 12,
+      }),
+    );
+    expect(result).toEqual({
+      value: 34,
+      parts: [
+        {label: 'Artist affinity', points: 0},
+        {label: 'Saved-library coverage', points: 25},
+        {label: 'Available charts', points: 3},
+        {label: 'Instrument coverage', points: 0},
+        {label: 'Chart freshness', points: 6},
       ],
     });
   });

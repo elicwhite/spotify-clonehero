@@ -46,16 +46,25 @@ function makeProps(
     onFiltersChange: jest.fn(),
     onClearFilters: jest.fn(),
     historyStatus: idle,
-    libraryStatus: idle,
+    spotifyLibraryStatus: idle,
+    appleMusicStatus: {
+      phase: 'idle',
+      summary: 'Apple Music is not connected',
+    },
     localStatus: idle,
     chorusStatus: ready,
     onRefreshHistory: jest.fn(),
-    onRefreshLibrary: jest.fn(),
+    onRefreshSpotifyLibrary: jest.fn(),
+    onRefreshAppleMusic: jest.fn(),
     onScanLocal: jest.fn(),
     onRefreshChorus: jest.fn(),
     onConnectSpotify: jest.fn(),
+    onConnectAppleMusic: jest.fn(),
+    onDisconnectAppleMusic: jest.fn(),
     authenticated: true,
     hasSpotify: true,
+    appleMusicConnected: false,
+    canDisconnectAppleMusic: false,
     musicCount: 3783,
     radarCount: 1200,
     ...overrides,
@@ -89,12 +98,23 @@ describe('FindMusicSidebar', () => {
       screen.queryByText('affinity recommendations'),
     ).not.toBeInTheDocument();
     expect(screen.queryByText('YouTube Music')).not.toBeInTheDocument();
-    expect(screen.queryByText('Apple Music')).not.toBeInTheDocument();
+    expect(screen.getByText('Apple Music')).toBeInTheDocument();
+    expect(screen.getByTestId('source-apple-music')).toHaveTextContent(
+      'Browser-local and available to guests. This is not a site login.',
+    );
+    expect(
+      screen.getByTestId('source-apple-music').querySelector('img'),
+    ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-white.svg');
 
-    const library = screen.getByTestId('source-library');
+    const library = screen.getByTestId('source-spotify-library');
+    const appleMusic = screen.getByTestId('source-apple-music');
     const history = screen.getByTestId('source-history');
     expect(
-      library.compareDocumentPosition(history) &
+      library.compareDocumentPosition(appleMusic) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      appleMusic.compareDocumentPosition(history) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
@@ -263,7 +283,7 @@ describe('FindMusicSidebar', () => {
           onScanLocal,
           onRefreshChorus,
           onConnectSpotify,
-          libraryStatus: ready,
+          spotifyLibraryStatus: ready,
           authenticated: false,
           hasSpotify: false,
         })}
@@ -284,7 +304,11 @@ describe('FindMusicSidebar', () => {
   it('does not allow an index download before a taste source is connected', () => {
     render(
       <FindMusicSidebar
-        {...makeProps({authenticated: false, hasSpotify: false})}
+        {...makeProps({
+          authenticated: true,
+          hasSpotify: true,
+          spotifyLibraryStatus: idle,
+        })}
       />,
     );
 
@@ -296,26 +320,117 @@ describe('FindMusicSidebar', () => {
   });
 
   it('refreshes the Spotify library directly for a connected account', () => {
-    const onRefreshLibrary = jest.fn();
+    const onRefreshSpotifyLibrary = jest.fn();
     render(
       <FindMusicSidebar
         {...makeProps({
-          libraryStatus: ready,
-          onRefreshLibrary,
+          spotifyLibraryStatus: ready,
+          onRefreshSpotifyLibrary,
         })}
       />,
     );
 
-    const library = screen.getByTestId('source-library');
+    const library = screen.getByTestId('source-spotify-library');
     fireEvent.click(within(library).getByRole('button', {name: 'Refresh'}));
-    expect(onRefreshLibrary).toHaveBeenCalledTimes(1);
+    expect(onRefreshSpotifyLibrary).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a signed-out guest connect Apple Music independently', () => {
+    const onConnectAppleMusic = jest.fn();
+    render(
+      <FindMusicSidebar
+        {...makeProps({
+          authenticated: false,
+          hasSpotify: false,
+          onConnectAppleMusic,
+        })}
+      />,
+    );
+
+    const appleMusic = screen.getByTestId('source-apple-music');
+    fireEvent.click(
+      within(appleMusic).getByRole('button', {name: 'Connect Apple Music'}),
+    );
+    expect(onConnectAppleMusic).toHaveBeenCalledTimes(1);
+    expect(
+      within(appleMusic).queryByRole('button', {
+        name: 'Disconnect and clear',
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows Apple progress and errors independently, with refresh and disconnect actions', () => {
+    const onRefreshAppleMusic = jest.fn();
+    const onDisconnectAppleMusic = jest.fn();
+    const loadingProps = makeProps({
+      appleMusicConnected: true,
+      canDisconnectAppleMusic: true,
+      appleMusicStatus: {
+        phase: 'loading',
+        summary: '420 / 1,000 saved songs',
+        detail: 'Scanning this browser-local library',
+        progress: 42,
+      },
+      onRefreshAppleMusic,
+      onDisconnectAppleMusic,
+    });
+    const {rerender} = render(<FindMusicSidebar {...loadingProps} />);
+    const loadingCard = screen.getByTestId('source-apple-music');
+
+    expect(within(loadingCard).getByRole('status')).toHaveTextContent(
+      '420 / 1,000 saved songs',
+    );
+    expect(
+      within(loadingCard).getByRole('progressbar', {
+        name: 'Apple Music progress',
+      }),
+    ).toHaveAttribute('aria-valuenow', '42');
+    expect(
+      within(loadingCard).getByRole('button', {
+        name: 'Apple Music is loading',
+      }),
+    ).toBeDisabled();
+
+    const failedProps = makeProps({
+      appleMusicConnected: true,
+      canDisconnectAppleMusic: true,
+      appleMusicStatus: {
+        phase: 'error',
+        summary: 'Apple Music refresh failed',
+        detail: 'The last complete scan is still available',
+      },
+      onRefreshAppleMusic,
+      onDisconnectAppleMusic,
+    });
+    rerender(<FindMusicSidebar {...failedProps} />);
+    const failedCard = screen.getByTestId('source-apple-music');
+    expect(within(failedCard).getByRole('alert')).toHaveTextContent(
+      'Apple Music refresh failed',
+    );
+    fireEvent.click(
+      within(failedCard).getByRole('button', {name: 'Try again'}),
+    );
+    expect(
+      screen.queryByRole('menuitem', {name: 'Disconnect and clear'}),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(
+      within(failedCard).getByRole('button', {
+        name: 'Apple Music actions',
+      }),
+      {key: 'Enter'},
+    );
+    fireEvent.click(
+      screen.getByRole('menuitem', {name: 'Disconnect and clear'}),
+    );
+    expect(onRefreshAppleMusic).toHaveBeenCalledTimes(1);
+    expect(onDisconnectAppleMusic).toHaveBeenCalledTimes(1);
   });
 
   it('announces source loading state, renders progress, and disables its action', () => {
     render(
       <FindMusicSidebar
         {...makeProps({
-          libraryStatus: {
+          spotifyLibraryStatus: {
             phase: 'loading',
             summary: '14 / 62 playlists',
             detail: 'Continuing after Spotify rate limit',
@@ -325,7 +440,7 @@ describe('FindMusicSidebar', () => {
       />,
     );
 
-    const library = screen.getByTestId('source-library');
+    const library = screen.getByTestId('source-spotify-library');
     expect(within(library).getByRole('status')).toHaveTextContent(
       '14 / 62 playlists',
     );

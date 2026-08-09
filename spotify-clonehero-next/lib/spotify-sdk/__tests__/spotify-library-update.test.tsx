@@ -16,6 +16,16 @@ const mockDeleteMissingPlaylists = jest.fn<Promise<void>, [string[]]>(
   async () => undefined,
 );
 const mockGetPlaylistTracks = jest.fn(async () => ({}));
+const mockGetLocalDb = jest.fn(async () => ({
+  fn: {
+    count: jest.fn(() => ({as: jest.fn(() => 'count')})),
+  },
+  selectFrom: jest.fn(() => ({
+    select: jest.fn(() => ({
+      executeTakeFirst: jest.fn(async () => ({count: 1})),
+    })),
+  })),
+}));
 const mockUpsertAlbums = jest.fn<Promise<void>, [unknown[]]>(
   async () => undefined,
 );
@@ -50,16 +60,7 @@ jest.mock('../../local-db/spotify', () => ({
 }));
 
 jest.mock('../../local-db/client', () => ({
-  getLocalDb: jest.fn(async () => ({
-    fn: {
-      count: jest.fn(() => ({as: jest.fn(() => 'count')})),
-    },
-    selectFrom: jest.fn(() => ({
-      select: jest.fn(() => ({
-        executeTakeFirst: jest.fn(async () => ({count: 1})),
-      })),
-    })),
-  })),
+  getLocalDb: () => mockGetLocalDb(),
 }));
 
 type Deferred<T> = {
@@ -125,6 +126,21 @@ describe('useSpotifyLibraryUpdate async contract', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetKeyval.mockResolvedValue({});
+  });
+
+  it('does not hydrate caches or create the local database until enabled', async () => {
+    const {rerender} = renderHook(
+      ({enabled}: {enabled: boolean}) => useSpotifyLibraryUpdate(enabled),
+      {initialProps: {enabled: false}},
+    );
+
+    expect(mockGetKeyval).not.toHaveBeenCalled();
+    expect(mockGetLocalDb).not.toHaveBeenCalled();
+
+    rerender({enabled: true});
+
+    await waitFor(() => expect(mockGetLocalDb).toHaveBeenCalledTimes(1));
+    expect(mockGetKeyval).toHaveBeenCalled();
   });
 
   it('returns live work immediately, emits progress, and can be awaited later', async () => {

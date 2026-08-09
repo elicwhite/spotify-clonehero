@@ -6,6 +6,7 @@ import {
   FolderOpen,
   ExternalLink,
   LoaderCircle,
+  MoreHorizontal,
   Music2,
   Plus,
   Radio,
@@ -15,7 +16,14 @@ import {
 } from 'lucide-react';
 
 import {Icons} from '@/components/icons';
+import AppleMusicIcon from '@/components/AppleMusicIcon';
 import {Button} from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {Progress} from '@/components/ui/progress';
 import {cn} from '@/lib/utils';
 
@@ -36,16 +44,22 @@ export interface FindMusicSidebarProps {
   onFiltersChange: (filters: FindMusicFilters) => void;
   onClearFilters: () => void;
   historyStatus: SourceStatus;
-  libraryStatus: SourceStatus;
+  spotifyLibraryStatus: SourceStatus;
+  appleMusicStatus: SourceStatus;
   localStatus: SourceStatus;
   chorusStatus: SourceStatus;
   onRefreshHistory: () => void;
-  onRefreshLibrary: () => void;
+  onRefreshSpotifyLibrary: () => void;
+  onRefreshAppleMusic: () => void;
   onScanLocal: () => void;
   onRefreshChorus: () => void;
   onConnectSpotify: () => void;
+  onConnectAppleMusic: () => void;
+  onDisconnectAppleMusic: () => void;
   authenticated: boolean;
   hasSpotify: boolean;
+  appleMusicConnected: boolean;
+  canDisconnectAppleMusic: boolean;
   musicCount: number;
   radarCount: number;
 }
@@ -54,11 +68,14 @@ type SourceCardProps = {
   id: string;
   name: string;
   icon: React.ReactNode;
+  description?: React.ReactNode;
   status: SourceStatus;
   actionLabel: string;
   onAction: () => void;
   primaryAction?: boolean;
   actionDisabled?: boolean;
+  overflowActionLabel?: string | undefined;
+  onOverflowAction?: (() => void) | undefined;
   helpLink?:
     | {
         href: string;
@@ -96,11 +113,14 @@ function SourceCard({
   id,
   name,
   icon,
+  description,
   status,
   actionLabel,
   onAction,
   primaryAction = false,
   actionDisabled = false,
+  overflowActionLabel,
+  onOverflowAction,
   helpLink,
 }: SourceCardProps) {
   const loading = status.phase === 'loading';
@@ -138,6 +158,11 @@ function SourceCard({
       </div>
 
       <div className="ml-7 mt-1">
+        {description ? (
+          <p className="mb-1.5 text-[11px] leading-4 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
         <p
           className={cn(
             'text-[11.5px] leading-4 text-muted-foreground',
@@ -171,21 +196,41 @@ function SourceCard({
           />
         ) : null}
 
-        <Button
-          type="button"
-          size="xs"
-          variant={primaryAction ? 'default' : 'secondary'}
-          className="mt-2"
-          onClick={onAction}
-          disabled={loading || actionDisabled}
-          aria-label={loading ? `${name} is loading` : actionLabel}>
-          {loading ? (
-            <LoaderCircle className="animate-spin" aria-hidden="true" />
-          ) : error ? (
-            <RotateCw aria-hidden="true" />
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <Button
+            type="button"
+            size="xs"
+            variant={primaryAction ? 'default' : 'secondary'}
+            onClick={onAction}
+            disabled={loading || actionDisabled}
+            aria-label={loading ? `${name} is loading` : actionLabel}>
+            {loading ? (
+              <LoaderCircle className="animate-spin" aria-hidden="true" />
+            ) : error ? (
+              <RotateCw aria-hidden="true" />
+            ) : null}
+            {loading ? 'Working…' : actionLabel}
+          </Button>
+          {overflowActionLabel && onOverflowAction ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  className="w-7 px-0"
+                  aria-label={`${name} actions`}>
+                  <MoreHorizontal aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem destructive onSelect={onOverflowAction}>
+                  {overflowActionLabel}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
-          {loading ? 'Working…' : actionLabel}
-        </Button>
+        </div>
       </div>
     </article>
   );
@@ -199,16 +244,22 @@ export default function FindMusicSidebar({
   onFiltersChange,
   onClearFilters,
   historyStatus,
-  libraryStatus,
+  spotifyLibraryStatus,
+  appleMusicStatus,
   localStatus,
   chorusStatus,
   onRefreshHistory,
-  onRefreshLibrary,
+  onRefreshSpotifyLibrary,
+  onRefreshAppleMusic,
   onScanLocal,
   onRefreshChorus,
   onConnectSpotify,
+  onConnectAppleMusic,
+  onDisconnectAppleMusic,
   authenticated,
   hasSpotify,
+  appleMusicConnected,
+  canDisconnectAppleMusic,
   musicCount,
   radarCount,
 }: FindMusicSidebarProps) {
@@ -220,18 +271,23 @@ export default function FindMusicSidebar({
   const activeFilters = activeFilterCount(filters);
   const spotifyConnected = authenticated && hasSpotify;
   const tasteSourceConnected =
-    spotifyConnected ||
-    libraryStatus.phase === 'ready' ||
+    spotifyLibraryStatus.phase === 'ready' ||
+    appleMusicStatus.phase === 'ready' ||
     historyStatus.phase === 'ready';
   const spotifyActionLabel = !authenticated
     ? 'Sign in with Spotify'
     : !hasSpotify
       ? 'Connect Spotify'
-      : libraryStatus.phase === 'idle'
+      : spotifyLibraryStatus.phase === 'idle'
         ? 'Load library'
-        : libraryStatus.phase === 'error'
+        : spotifyLibraryStatus.phase === 'error'
           ? 'Try again'
           : 'Refresh';
+  const appleMusicActionLabel = !appleMusicConnected
+    ? 'Connect Apple Music'
+    : appleMusicStatus.phase === 'error'
+      ? 'Try again'
+      : 'Refresh Apple Music';
 
   function toggleInstrument(instrument: (typeof INSTRUMENTS)[number][0]) {
     const instruments = new Set(filters.instruments);
@@ -487,17 +543,43 @@ export default function FindMusicSidebar({
       <section className="mb-5 space-y-2">
         <h2 className={sectionHeadingClass}>Taste sources</h2>
         <SourceCard
-          id="library"
+          id="spotify-library"
           name="Spotify Library"
           icon={
             <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[#1ed760] text-[#08210f]">
               <Icons.spotify className="h-3 w-3" />
             </span>
           }
-          status={libraryStatus}
+          status={spotifyLibraryStatus}
           actionLabel={spotifyActionLabel}
-          onAction={spotifyConnected ? onRefreshLibrary : onConnectSpotify}
-          primaryAction={!spotifyConnected || libraryStatus.phase === 'idle'}
+          onAction={
+            spotifyConnected ? onRefreshSpotifyLibrary : onConnectSpotify
+          }
+          primaryAction={
+            !spotifyConnected || spotifyLibraryStatus.phase === 'idle'
+          }
+        />
+        <SourceCard
+          id="apple-music"
+          name="Apple Music"
+          icon={
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-gradient-to-br from-[#fa3159] to-[#d7003a] text-white">
+              <AppleMusicIcon variant="white" className="h-3 w-3" />
+            </span>
+          }
+          description="Browser-local and available to guests. This is not a site login."
+          status={appleMusicStatus}
+          actionLabel={appleMusicActionLabel}
+          onAction={
+            appleMusicConnected ? onRefreshAppleMusic : onConnectAppleMusic
+          }
+          primaryAction={!appleMusicConnected}
+          overflowActionLabel={
+            canDisconnectAppleMusic ? 'Disconnect and clear' : undefined
+          }
+          onOverflowAction={
+            canDisconnectAppleMusic ? onDisconnectAppleMusic : undefined
+          }
         />
         <SourceCard
           id="history"

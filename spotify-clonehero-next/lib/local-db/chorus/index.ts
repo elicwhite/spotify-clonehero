@@ -37,16 +37,10 @@ export async function upsertCharts(
         chart.md5 != null,
     )
     .map(chart => {
-      const trackInstruments = new Set(
-        (
-          chart.notesData as unknown as {
-            trackHashes?: Array<{instrument?: string}>;
-          }
-        )?.trackHashes?.map(track => track.instrument) ?? [],
-      );
-      const chartWithDrumMetadata = chart as ChartResponseEncore & {
-        pro_drums?: boolean;
-      };
+      const trackInstruments = new Set([
+        ...(chart.notesData?.instruments ?? []),
+        ...(chart.notesData?.trackHashes?.map(track => track.instrument) ?? []),
+      ]);
 
       return {
         md5: chart.md5,
@@ -78,7 +72,7 @@ export async function upsertCharts(
             : 0,
         has_pro_drums:
           (chart.diff_drums_real != null && chart.diff_drums_real >= 0) ||
-          chartWithDrumMetadata.pro_drums === true
+          trackInstruments.has('drums')
             ? 1
             : 0,
         modified_time: chart.modifiedTime,

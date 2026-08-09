@@ -1,7 +1,7 @@
-import {Kysely, SqliteDialect} from 'kysely';
+import {Kysely, SqliteDialect, type Insertable} from 'kysely';
 
 import type {DB} from '../../../lib/local-db/types';
-import {getFindMusicSongs, getFindMusicStats, getRadarSongs} from '../queries';
+import {getFindMusicSongs, getFindMusicStats} from '../queries';
 
 const Database = require('better-sqlite3') as new (path: string) => {
   exec(source: string): unknown;
@@ -24,6 +24,28 @@ function makeDb(): Kysely<DB> {
       artist_normalized TEXT,
       name_normalized TEXT,
       updated_at TEXT NOT NULL
+    );
+    CREATE TABLE apple_music_tracks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scan_id TEXT NOT NULL,
+      catalog_id TEXT,
+      artist TEXT NOT NULL,
+      name TEXT NOT NULL,
+      artist_normalized TEXT NOT NULL,
+      name_normalized TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE apple_music_library_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      connection_epoch INTEGER NOT NULL DEFAULT 0,
+      active_scan_id TEXT,
+      storefront TEXT,
+      reported_total INTEGER NOT NULL,
+      fetched_count INTEGER NOT NULL,
+      usable_count INTEGER NOT NULL,
+      catalog_associated_count INTEGER NOT NULL,
+      track_count INTEGER NOT NULL,
+      updated_at TEXT
     );
     CREATE TABLE spotify_playlists (
       id TEXT PRIMARY KEY,
@@ -146,6 +168,57 @@ function chart(
   };
 }
 
+async function setAppleMusicState(
+  db: Kysely<DB>,
+  overrides: Partial<Insertable<DB['apple_music_library_state']>> = {},
+) {
+  await db
+    .insertInto('apple_music_library_state')
+    .values({
+      id: 1,
+      active_scan_id: 'active-scan',
+      storefront: 'us',
+      reported_total: 0,
+      fetched_count: 0,
+      usable_count: 0,
+      catalog_associated_count: 0,
+      track_count: 0,
+      updated_at: '2026-03-01T00:00:00.000Z',
+      ...overrides,
+    })
+    .execute();
+}
+
+async function setSpotifyPlaylistMembership(
+  db: Kysely<DB>,
+  trackIds: readonly string[],
+) {
+  await db
+    .insertInto('spotify_playlists')
+    .values({
+      id: 'current-playlist',
+      snapshot_id: 'current-snapshot',
+      name: 'Current playlist',
+      collaborative: 0,
+      owner_display_name: 'Me',
+      owner_external_url: '',
+      total_tracks: trackIds.length,
+      updated_at: '2026-02-10',
+    })
+    .execute();
+  if (trackIds.length > 0) {
+    await db
+      .insertInto('spotify_playlist_tracks')
+      .values(
+        trackIds.map(trackId => ({
+          playlist_id: 'current-playlist',
+          track_id: trackId,
+        })),
+      )
+      .execute();
+  }
+}
+
 describe('find-music queries', () => {
   let db: Kysely<DB>;
 
@@ -246,6 +319,7 @@ describe('find-music queries', () => {
         {playlist_id: 'p1', track_id: 'track-1'},
         {playlist_id: 'p1', track_id: 'track-duplicate'},
         {playlist_id: 'p2', track_id: 'track-duplicate'},
+        {playlist_id: 'p2', track_id: 'library-only'},
       ])
       .execute();
 
@@ -322,7 +396,24 @@ describe('find-music queries', () => {
       playlists: ['Favorites', 'Road Trip'],
       albums: ['The Album'],
       spotifyUrl: 'https://open.spotify.com/track/track-1',
+      inAppleMusicLibrary: false,
     });
+    expect(merged?.providerActions).toEqual([
+      {
+        provider: 'spotify',
+        trackId: 'track-1',
+        url: 'https://open.spotify.com/track/track-1',
+        artist: 'Example',
+        song: 'Same Song',
+      },
+      {
+        provider: 'spotify',
+        trackId: 'track-duplicate',
+        url: 'https://open.spotify.com/track/track-duplicate',
+        artist: 'The Example',
+        song: 'Same Song (Single)',
+      },
+    ]);
     expect(merged?.charts.map(item => item.md5).sort()).toEqual([
       'same-a',
       'same-b',
@@ -332,6 +423,340 @@ describe('find-music queries', () => {
       songs.find(song => song.song === 'Remembered')?.spotifyUrl,
     ).toBeNull();
     expect(songs.find(song => song.song === 'Saved Song')?.playCount).toBe(0);
+  });
+
+  it('ignores orphaned Spotify rows while preserving tracks shared by a current source', async () => {
+    await db
+      .insertInto('spotify_tracks')
+      .values([
+        {
+          id: 'shared',
+          artist: 'Current Artist',
+          artist_normalized: 'current artist',
+          name: 'Shared Song',
+          name_normalized: 'shared song',
+          updated_at: '2026-02-04',
+        },
+        {
+          id: 'playlist-only',
+          artist: 'Current Artist',
+          artist_normalized: 'current artist',
+          name: 'Playlist Song',
+          name_normalized: 'playlist song',
+          updated_at: '2026-02-03',
+        },
+        {
+          id: 'removed-source',
+          artist: 'Removed Artist',
+          artist_normalized: 'removed artist',
+          name: 'Removed Song',
+          name_normalized: 'removed song',
+          updated_at: '2026-02-20',
+        },
+        {
+          id: 'unlinked',
+          artist: 'Orphan Artist',
+          artist_normalized: 'orphan artist',
+          name: 'Orphan Song',
+          name_normalized: 'orphan song',
+          updated_at: '2026-02-21',
+        },
+      ])
+      .execute();
+    await db
+      .insertInto('spotify_playlists')
+      .values({
+        id: 'active-playlist',
+        snapshot_id: 'active-snapshot',
+        name: 'Active playlist',
+        collaborative: 0,
+        owner_display_name: 'Me',
+        owner_external_url: '',
+        total_tracks: 2,
+        updated_at: '2026-02-05',
+      })
+      .execute();
+    await db
+      .insertInto('spotify_playlist_tracks')
+      .values([
+        {playlist_id: 'active-playlist', track_id: 'shared'},
+        {playlist_id: 'active-playlist', track_id: 'playlist-only'},
+        // Simulates a dangling link on databases where FK cascades were off.
+        {playlist_id: 'deleted-playlist', track_id: 'removed-source'},
+      ])
+      .execute();
+    await db
+      .insertInto('spotify_albums')
+      .values({
+        id: 'active-album',
+        name: 'Active album',
+        artist_name: 'Current Artist',
+        total_tracks: 1,
+        updated_at: '2026-02-06',
+      })
+      .execute();
+    await db
+      .insertInto('spotify_album_tracks')
+      .values({
+        album_id: 'active-album',
+        track_id: 'shared',
+        updated_at: '2026-02-06',
+      })
+      .execute();
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        chart(
+          'shared-chart',
+          'Current Artist',
+          'current artist',
+          'Shared Song',
+          'shared song',
+          'A',
+          'a',
+        ),
+        chart(
+          'playlist-chart',
+          'Current Artist',
+          'current artist',
+          'Playlist Song',
+          'playlist song',
+          'A',
+          'a',
+        ),
+        chart(
+          'removed-chart',
+          'Removed Artist',
+          'removed artist',
+          'Removed Song',
+          'removed song',
+          'A',
+          'a',
+        ),
+        chart(
+          'orphan-chart',
+          'Orphan Artist',
+          'orphan artist',
+          'Orphan Song',
+          'orphan song',
+          'A',
+          'a',
+        ),
+      ])
+      .execute();
+
+    await expect(getFindMusicStats(db)).resolves.toMatchObject({
+      spotifyLibraryTracks: 2,
+      libraryTracks: 2,
+    });
+    await expect(getFindMusicSongs(db)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({song: 'Shared Song'}),
+        expect.objectContaining({song: 'Playlist Song'}),
+      ]),
+    );
+    expect((await getFindMusicSongs(db)).map(song => song.song)).not.toEqual(
+      expect.arrayContaining(['Removed Song', 'Orphan Song']),
+    );
+
+    // The playlist links deliberately remain, mirroring a non-cascading legacy
+    // database. Shared Song remains current through its album membership.
+    await db
+      .deleteFrom('spotify_playlists')
+      .where('id', '=', 'active-playlist')
+      .execute();
+
+    await expect(getFindMusicStats(db)).resolves.toMatchObject({
+      spotifyLibraryTracks: 1,
+      libraryTracks: 1,
+    });
+    await expect(getFindMusicSongs(db)).resolves.toMatchObject([
+      {
+        song: 'Shared Song',
+        providerActions: [
+          expect.objectContaining({provider: 'spotify', trackId: 'shared'}),
+        ],
+      },
+    ]);
+  });
+
+  it('returns only active-scan Apple Music songs and retains catalog-less membership evidence', async () => {
+    await setAppleMusicState(db, {
+      reported_total: 3,
+      fetched_count: 3,
+      usable_count: 3,
+      catalog_associated_count: 2,
+      track_count: 2,
+    });
+    await db
+      .insertInto('apple_music_tracks')
+      .values([
+        {
+          scan_id: 'active-scan',
+          catalog_id: 'apple-catalog-1',
+          artist: 'Apple Artist',
+          artist_normalized: 'apple artist',
+          name: 'Catalog Song',
+          name_normalized: 'catalog song',
+          updated_at: '2026-03-01',
+        },
+        {
+          scan_id: 'active-scan',
+          catalog_id: null,
+          artist: 'Apple Artist',
+          artist_normalized: 'apple artist',
+          name: 'Uploaded Song',
+          name_normalized: 'uploaded song',
+          updated_at: '2026-03-01',
+        },
+        {
+          scan_id: 'stale-scan',
+          catalog_id: 'stale-catalog',
+          artist: 'Stale Artist',
+          artist_normalized: 'stale artist',
+          name: 'Stale Song',
+          name_normalized: 'stale song',
+          updated_at: '2026-02-01',
+        },
+      ])
+      .execute();
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        chart(
+          'apple-catalog-chart',
+          'Apple Artist',
+          'apple artist',
+          'Catalog Song',
+          'catalog song',
+          'A',
+          'a',
+        ),
+        chart(
+          'apple-upload-chart',
+          'Apple Artist',
+          'apple artist',
+          'Uploaded Song',
+          'uploaded song',
+          'A',
+          'a',
+        ),
+        chart(
+          'stale-chart',
+          'Stale Artist',
+          'stale artist',
+          'Stale Song',
+          'stale song',
+          'A',
+          'a',
+        ),
+      ])
+      .execute();
+
+    const songs = await getFindMusicSongs(db);
+    expect(songs.map(song => song.song)).toEqual([
+      'Catalog Song',
+      'Uploaded Song',
+    ]);
+    expect(songs[0]).toMatchObject({
+      spotifyUrl: null,
+      inAppleMusicLibrary: true,
+      providerActions: [
+        {
+          provider: 'appleMusic',
+          catalogId: 'apple-catalog-1',
+          artist: 'Apple Artist',
+          song: 'Catalog Song',
+        },
+      ],
+    });
+    expect(songs[1]).toMatchObject({
+      spotifyUrl: null,
+      inAppleMusicLibrary: true,
+      providerActions: [],
+    });
+  });
+
+  it('deduplicates cross-provider identities while retaining every distinct provider action', async () => {
+    await setAppleMusicState(db, {track_count: 2});
+    await db
+      .insertInto('spotify_tracks')
+      .values({
+        id: 'spotify-version',
+        artist: 'The Shared Artist',
+        artist_normalized: 'shared artist',
+        name: 'Shared Song - Remaster',
+        name_normalized: 'shared song',
+        updated_at: '2026-02-01',
+      })
+      .execute();
+    await setSpotifyPlaylistMembership(db, ['spotify-version']);
+    await db
+      .insertInto('apple_music_tracks')
+      .values([
+        {
+          scan_id: 'active-scan',
+          catalog_id: 'apple-version-a',
+          artist: 'Shared Artist',
+          artist_normalized: 'shared artist',
+          name: 'Shared Song',
+          name_normalized: 'shared song',
+          updated_at: '2026-03-01',
+        },
+        {
+          scan_id: 'active-scan',
+          catalog_id: 'apple-version-b',
+          artist: 'Shared Artist',
+          artist_normalized: 'shared artist',
+          name: 'Shared Song (Deluxe)',
+          name_normalized: 'shared song',
+          updated_at: '2026-03-01',
+        },
+      ])
+      .execute();
+    await db
+      .insertInto('chorus_charts')
+      .values(
+        chart(
+          'shared-chart',
+          'Shared Artist',
+          'shared artist',
+          'Shared Song',
+          'shared song',
+          'A',
+          'a',
+        ),
+      )
+      .execute();
+
+    const songs = await getFindMusicSongs(db);
+    expect(songs).toHaveLength(1);
+    expect(songs[0]).toMatchObject({
+      key: 'shared artist\u001fshared song',
+      inAppleMusicLibrary: true,
+      spotifyUrl: 'https://open.spotify.com/track/spotify-version',
+    });
+    expect(songs[0].providerActions).toEqual([
+      {
+        provider: 'appleMusic',
+        catalogId: 'apple-version-a',
+        artist: 'Shared Artist',
+        song: 'Shared Song',
+      },
+      {
+        provider: 'appleMusic',
+        catalogId: 'apple-version-b',
+        artist: 'Shared Artist',
+        song: 'Shared Song (Deluxe)',
+      },
+      {
+        provider: 'spotify',
+        trackId: 'spotify-version',
+        url: 'https://open.spotify.com/track/spotify-version',
+        artist: 'The Shared Artist',
+        song: 'Shared Song - Remaster',
+      },
+    ]);
   });
 
   it('projects zero and positive Chorus difficulty values without dropping instruments', async () => {
@@ -366,7 +791,6 @@ describe('find-music queries', () => {
         ),
       )
       .execute();
-
     const [song] = await getFindMusicSongs(db);
     expect(song.charts).toHaveLength(1);
     expect(song.charts[0]).toMatchObject({
@@ -532,178 +956,5 @@ describe('find-music queries', () => {
     expect(song.hasInstalledChart).toBe(true);
     expect(song.charts).toHaveLength(1);
     expect(song.charts[0].isInstalled).toBe(false);
-  });
-
-  it('ranks radar by artist affinity, excludes all direct evidence, and preserves variants', async () => {
-    await db
-      .insertInto('spotify_history')
-      .values([
-        {
-          artist: 'Most Played',
-          artist_normalized: 'most played',
-          name: 'Known',
-          name_normalized: 'known',
-          play_count: 50,
-        },
-        {
-          artist: 'Variant Artist',
-          artist_normalized: 'variant artist',
-          name: 'Known',
-          name_normalized: 'known',
-          play_count: 20,
-        },
-      ])
-      .execute();
-    await db
-      .insertInto('spotify_tracks')
-      .values({
-        id: 'direct-library',
-        artist: 'Variant Artist',
-        artist_normalized: 'variant artist',
-        name: 'Library Direct',
-        name_normalized: 'library direct',
-        updated_at: '2026-01-01',
-      })
-      .execute();
-    await db
-      .insertInto('chorus_charts')
-      .values([
-        chart(
-          'known-history',
-          'Most Played',
-          'most played',
-          'Known',
-          'known',
-          'A',
-          'a',
-        ),
-        chart(
-          'top-rec',
-          'Most Played',
-          'most played',
-          'Discovery',
-          'discovery',
-          'A',
-          'a',
-        ),
-        chart(
-          'library-direct',
-          'Variant Artist',
-          'variant artist',
-          'Library Direct',
-          'library direct',
-          'A',
-          'a',
-        ),
-        chart(
-          'variant-1',
-          'Variant Artist',
-          'variant artist',
-          'Deep Cut',
-          'deep cut',
-          'A',
-          'a',
-        ),
-        chart(
-          'variant-2',
-          'Variant Artist',
-          'variant artist',
-          'Deep Cut',
-          'deep cut',
-          'B',
-          'b',
-        ),
-        chart(
-          'outsider',
-          'Outsider',
-          'outsider',
-          'No Affinity',
-          'no affinity',
-          'A',
-          'a',
-        ),
-      ])
-      .execute();
-
-    const radar = await getRadarSongs(db, 10);
-    expect(radar.map(song => song.song)).toEqual(['Discovery', 'Deep Cut']);
-    expect(radar[0].artistPlayCount).toBe(50);
-    expect(radar[1].artistPlayCount).toBe(20);
-    expect(radar[1].charts.map(item => item.md5).sort()).toEqual([
-      'variant-1',
-      'variant-2',
-    ]);
-    expect(await getRadarSongs(db, 1)).toMatchObject([
-      {song: 'Discovery', artistPlayCount: 50},
-    ]);
-  });
-
-  it('reports source row counts and real available refresh timestamps', async () => {
-    await db
-      .insertInto('spotify_history')
-      .values([
-        {
-          artist: 'Artist',
-          artist_normalized: 'artist',
-          name: 'Song',
-          name_normalized: 'song',
-          play_count: 2,
-        },
-        {
-          artist: 'The Artist',
-          artist_normalized: 'artist',
-          name: 'Song!',
-          name_normalized: 'song',
-          play_count: 3,
-        },
-      ])
-      .execute();
-    await db
-      .insertInto('spotify_tracks')
-      .values([
-        {
-          id: 'one',
-          artist: 'Artist',
-          artist_normalized: 'artist',
-          name: 'Song',
-          name_normalized: 'song',
-          updated_at: '2026-01-02',
-        },
-        {
-          id: 'two',
-          artist: 'The Artist',
-          artist_normalized: 'artist',
-          name: 'Song!',
-          name_normalized: 'song',
-          updated_at: '2026-01-03',
-        },
-      ])
-      .execute();
-    await db
-      .insertInto('local_charts')
-      .values({
-        artist: 'Artist',
-        artist_normalized: 'artist',
-        song: 'Song',
-        song_normalized: 'song',
-        charter: 'A',
-        charter_normalized: 'a',
-        modified_time: '2026-01-01',
-        data: '{}',
-        updated_at: '2026-02-01',
-      })
-      .execute();
-
-    expect(await getFindMusicStats(db)).toEqual({
-      historySongs: 2,
-      playlists: 0,
-      albums: 0,
-      libraryTracks: 2,
-      chorusCharts: 0,
-      localCharts: 1,
-      historyUpdatedAt: null,
-      libraryUpdatedAt: '2026-01-03',
-      localUpdatedAt: '2026-02-01',
-    });
   });
 });

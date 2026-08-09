@@ -7,6 +7,24 @@ import {normalizeStrForMatching} from './normalize';
 let localDb: Kysely<DB> | null = null;
 let dbInitializationPromise: Promise<Kysely<DB>> | null = null;
 let sqlocalClient: SQLocalKysely | null = null;
+export const LOCAL_DB_PATH = 'spotify-clonehero-local.sqlite3';
+
+/** Checks OPFS without creating the SQLocal database or running migrations. */
+export async function localDbExists(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+    return false;
+  }
+  try {
+    const root = await navigator.storage.getDirectory();
+    await root.getFileHandle(LOCAL_DB_PATH);
+    return true;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'NotFoundError') {
+      return false;
+    }
+    throw error;
+  }
+}
 
 // Initialize the database with migrations
 export async function getLocalDb(): Promise<Kysely<DB>> {
@@ -41,7 +59,7 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
     // quickly on read-heavy workloads (snapshot SELECTs, chorus charts,
     // etc.). Negative values are KiB; -65536 = 64 MiB. Per-tab.
     const client = new SQLocalKysely({
-      databasePath: 'spotify-clonehero-local.sqlite3',
+      databasePath: LOCAL_DB_PATH,
       onInit: sql => [
         sql`PRAGMA cache_size = -65536`,
         sql`PRAGMA temp_store = MEMORY`,

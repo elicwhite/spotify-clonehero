@@ -325,14 +325,16 @@ async function getAllAlbumTracks(
   return tracks;
 }
 
+export type SpotifyTrackUrls = {
+  previewUrl: string | null;
+  spotifyUrl: string;
+};
+
 async function getTrackUrls(
   sdk: SpotifyApi,
   artist: string,
   song: string,
-): Promise<null | {
-  previewUrl: string | null;
-  spotifyUrl: string;
-}> {
+): Promise<SpotifyTrackUrls | null> {
   const track = await sdk.search(
     `track:${song} artist:${artist}`,
     ['track'],
@@ -349,6 +351,35 @@ async function getTrackUrls(
     previewUrl,
     spotifyUrl,
   };
+}
+
+/**
+ * Resolves preview media lazily from the exact Spotify track when one is
+ * known, falling back to the existing artist/title lookup for rows without a
+ * track ID. Keeping this behind the shared SDK loader preserves its auth and
+ * refresh behavior.
+ */
+export async function resolveSpotifyTrackUrls({
+  trackId,
+  artist,
+  song,
+}: {
+  trackId?: string | null | undefined;
+  artist: string;
+  song: string;
+}): Promise<SpotifyTrackUrls | null> {
+  const sdk = await getSpotifySdk();
+  if (sdk == null) return null;
+
+  if (trackId?.trim()) {
+    const track = await sdk.tracks.get(trackId);
+    return {
+      previewUrl: track.preview_url,
+      spotifyUrl: track.external_urls.spotify,
+    };
+  }
+
+  return getTrackUrls(sdk, artist, song);
 }
 
 export function useTrackUrls(
@@ -393,7 +424,9 @@ export type SpotifyLibraryRefreshResult =
   | {status: 'unauthenticated'}
   | {status: 'unavailable'};
 
-export function useSpotifyLibraryUpdate(): [
+export function useSpotifyLibraryUpdate(
+  enabled = true,
+): [
   progress: SpotifyLibraryUpdateProgress,
   run: (
     abort: AbortController,
@@ -408,6 +441,8 @@ export function useSpotifyLibraryUpdate(): [
   });
 
   useEffect(() => {
+    if (!enabled) return;
+
     async function loadFromCache() {
       // Load from IndexedDB cache first
       const cachedPlaylistTracks = await getCachedPlaylistTracks();
@@ -524,7 +559,7 @@ export function useSpotifyLibraryUpdate(): [
       });
     }
     loadFromCache();
-  }, []);
+  }, [enabled]);
 
   const run = useCallback(
     (

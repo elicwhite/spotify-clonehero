@@ -10,6 +10,7 @@ import WebMCPInit from './WebMCPInit';
 import WebMCPTools from './WebMCPTools';
 import {getSiteUrl} from '@/lib/site-url';
 import RegionAwareAnalytics from './RegionAwareAnalytics';
+import TasteDataPrivacyBoundary from './TasteDataPrivacyBoundary';
 
 // The measurement voice on the landing pages: eyebrows, stat values,
 // provenance, stage numbers. Wired into Tailwind's `font-mono`.
@@ -62,6 +63,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
         <Toaster />
         <WebMCPInit />
         <WebMCPTools />
+        <TasteDataPrivacyBoundary />
         <RegionAwareAnalytics gaId="G-LEE7EDJH14" />
       </body>
     </html>

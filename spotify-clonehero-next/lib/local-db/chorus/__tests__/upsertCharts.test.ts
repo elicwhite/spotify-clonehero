@@ -183,3 +183,85 @@ it('persists track-level presence when Chorus has no numeric intensity', async (
     await db.destroy();
   }
 });
+
+it('does not infer drums from a stale pro_drums modifier', async () => {
+  const db = makeDb();
+
+  try {
+    await db.transaction().execute(trx =>
+      upsertCharts(trx, [
+        chart(
+          {
+            diff_drums: -1,
+            diff_guitar: 3,
+            diff_bass: -1,
+            diff_keys: -1,
+            diff_drums_real: -1,
+          },
+          {
+            md5: 'aed76d9d79512e16dd6c3439628e3345',
+            artist: 'Escape the Fate',
+            name: 'Situations',
+            charter: 'Yhughu',
+            pro_drums: true,
+            notesData: {
+              instruments: ['guitar', 'guitarghl'],
+              trackHashes: [
+                {instrument: 'guitar', difficulty: 'expert'},
+                {instrument: 'guitarghl', difficulty: 'expert'},
+              ],
+            } as ChartResponseEncore['notesData'],
+          },
+        ),
+      ]),
+    );
+
+    const row = await db
+      .selectFrom('chorus_charts')
+      .select(['has_guitar', 'has_pro_drums'])
+      .where('md5', '=', 'aed76d9d79512e16dd6c3439628e3345')
+      .executeTakeFirstOrThrow();
+
+    expect(row).toEqual({has_guitar: 1, has_pro_drums: 0});
+  } finally {
+    await db.destroy();
+  }
+});
+
+it('uses the actual drums track when drum intensity is unavailable', async () => {
+  const db = makeDb();
+
+  try {
+    await db.transaction().execute(trx =>
+      upsertCharts(trx, [
+        chart(
+          {
+            diff_drums: -1,
+            diff_guitar: -1,
+            diff_bass: -1,
+            diff_keys: -1,
+            diff_drums_real: -1,
+          },
+          {
+            md5: 'drums-without-intensity',
+            pro_drums: false,
+            notesData: {
+              instruments: ['drums'],
+              trackHashes: [{instrument: 'drums', difficulty: 'expert'}],
+            } as ChartResponseEncore['notesData'],
+          },
+        ),
+      ]),
+    );
+
+    const row = await db
+      .selectFrom('chorus_charts')
+      .select('has_pro_drums')
+      .where('md5', '=', 'drums-without-intensity')
+      .executeTakeFirstOrThrow();
+
+    expect(row.has_pro_drums).toBe(1);
+  } finally {
+    await db.destroy();
+  }
+});

@@ -23,6 +23,21 @@ export type FindMusicChart = {
   instrumentPresence: Record<InstrumentId, boolean>;
 };
 
+export type FindMusicProviderAction =
+  | {
+      provider: 'spotify';
+      trackId: string;
+      url: string;
+      artist: string;
+      song: string;
+    }
+  | {
+      provider: 'appleMusic';
+      catalogId: string;
+      artist: string;
+      song: string;
+    };
+
 export type FindMusicSong = {
   key: string;
   artist: string;
@@ -31,6 +46,8 @@ export type FindMusicSong = {
   playlists: string[];
   albums: string[];
   spotifyUrl: string | null;
+  providerActions: FindMusicProviderAction[];
+  inAppleMusicLibrary: boolean;
   hasInstalledChart: boolean;
   charts: FindMusicChart[];
 };
@@ -40,6 +57,7 @@ export type RadarSong = {
   artist: string;
   song: string;
   artistPlayCount: number;
+  savedLibrarySongCount: number;
   spotifyUrl: string | null;
   hasInstalledChart: boolean;
   charts: FindMusicChart[];
@@ -50,10 +68,15 @@ export type FindMusicStats = {
   playlists: number;
   albums: number;
   libraryTracks: number;
+  spotifyLibraryTracks: number;
+  appleMusicLibraryTracks: number;
   chorusCharts: number;
   localCharts: number;
   historyUpdatedAt: string | null;
   libraryUpdatedAt: string | null;
+  spotifyLibraryUpdatedAt: string | null;
+  appleMusicLibraryUpdatedAt: string | null;
+  appleMusicStorefront: string | null;
   localUpdatedAt: string | null;
 };
 

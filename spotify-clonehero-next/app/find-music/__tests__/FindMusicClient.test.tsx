@@ -3,6 +3,7 @@
  */
 
 import '@testing-library/jest-dom';
+import {StrictMode} from 'react';
 import {
   act,
   fireEvent,
@@ -17,7 +18,9 @@ import type {
   FindMusicStats,
   SourceStatus,
 } from '../types';
+import type {AppleMusicRefreshResult} from '../../../lib/apple-music/AppleMusicFetching';
 import {FIND_MUSIC_FILTERS_STORAGE_KEY} from '../filterPersistence';
+import {FIND_MUSIC_ACTIVATION_KEY} from '../activation';
 
 let mockPathname = '/find-music';
 jest.mock('next/navigation', () => ({
@@ -29,7 +32,10 @@ jest.mock('../../SupportedBrowserWarning', () => ({
   default: ({children}: {children: React.ReactNode}) => <>{children}</>,
 }));
 
-const mockGetUser = jest.fn(async () => ({data: {user: null}}));
+type MockAuthUser = {identities?: Array<{provider: string}>} | null;
+const mockGetUser = jest.fn(
+  async (): Promise<{data: {user: MockAuthUser}}> => ({data: {user: null}}),
+);
 jest.mock('../../../lib/supabase/client', () => ({
   createClient: () => ({
     auth: {
@@ -48,12 +54,47 @@ jest.mock('../../../lib/chorusChartDb', () => ({
   ],
 }));
 
+const mockLocalDbExists = jest.fn(async () => true);
+jest.mock('../../../lib/local-db/client', () => ({
+  localDbExists: () => mockLocalDbExists(),
+}));
+
 jest.mock('../../../lib/spotify-sdk/SpotifyFetching', () => ({
   useSpotifyLibraryUpdate: () => [
     {playlists: {}, albums: {}, updateStatus: 'idle'},
     jest.fn(),
   ],
   onPlaylistCacheUpdated: jest.fn(() => jest.fn()),
+}));
+
+const mockAppleClient = {isAuthorized: () => true};
+const mockSetupAppleMusic = jest.fn(async () => mockAppleClient);
+const mockRefreshAppleMusic = jest.fn(
+  async (): Promise<AppleMusicRefreshResult> => ({status: 'success'}),
+);
+const mockDisconnectAppleMusic = jest.fn(async () => undefined);
+let mockAppleSetupState = 'unauthorized';
+jest.mock('../../../lib/apple-music/AppleMusicFetching', () => ({
+  useAppleMusicLibraryUpdate: () => ({
+    setupState: mockAppleSetupState,
+    progress: {
+      total: null,
+      fetchedCount: 0,
+      usableCount: 0,
+      catalogAssociatedCount: 0,
+      pagesFetched: 0,
+    },
+    client: mockAppleSetupState === 'authorized' ? mockAppleClient : null,
+    setup: mockSetupAppleMusic,
+    refresh: mockRefreshAppleMusic,
+    disconnect: mockDisconnectAppleMusic,
+  }),
+}));
+
+const mockNavigateToAppleMusicPath = jest.fn();
+jest.mock('../../../lib/apple-music/navigation', () => ({
+  navigateToAppleMusicPath: (path: string) =>
+    mockNavigateToAppleMusicPath(path),
 }));
 
 jest.mock('../../../lib/spotify-sdk/HistoryDumpParsing', () => ({
@@ -82,9 +123,11 @@ jest.mock('../FindMusicSidebar', () => ({
     onFiltersChange,
     onViewChange,
     historyStatus,
-    libraryStatus,
+    spotifyLibraryStatus,
+    appleMusicStatus,
     localStatus,
     chorusStatus,
+    onRefreshAppleMusic,
   }: {
     musicCount: number;
     view: 'music' | 'radar';
@@ -92,19 +135,23 @@ jest.mock('../FindMusicSidebar', () => ({
     onFiltersChange: (filters: FindMusicFilters) => void;
     onViewChange: (view: 'music' | 'radar') => void;
     historyStatus: SourceStatus;
-    libraryStatus: SourceStatus;
+    spotifyLibraryStatus: SourceStatus;
+    appleMusicStatus: SourceStatus;
     localStatus: SourceStatus;
     chorusStatus: SourceStatus;
+    onRefreshAppleMusic: () => void;
   }) => (
     <aside
       data-testid="sidebar"
       data-view={view}
       data-filter-query={filters.query}
       data-history-phase={historyStatus.phase}
-      data-library-phase={libraryStatus.phase}
+      data-library-phase={spotifyLibraryStatus.phase}
+      data-apple-music-phase={appleMusicStatus.phase}
       data-local-phase={localStatus.phase}
       data-chorus-phase={chorusStatus.phase}>
       {musicCount} matches available
+      <span>{appleMusicStatus.summary}</span>
       <button
         type="button"
         onClick={() => onFiltersChange({...filters, query: 'next query'})}>
@@ -116,14 +163,31 @@ jest.mock('../FindMusicSidebar', () => ({
       <button type="button" onClick={() => onViewChange('music')}>
         Choose your music
       </button>
+      <button type="button" onClick={onRefreshAppleMusic}>
+        Refresh Apple Music test
+      </button>
     </aside>
   ),
 }));
 
 jest.mock('../FindMusicTable', () => ({
   __esModule: true,
-  default: ({music}: {music: FindMusicSong[]}) => (
-    <div data-testid="music-table">
+  default: ({
+    music,
+    spotifyPreviewEnabled,
+    appleMusicClient,
+    preferredPreviewProvider,
+  }: {
+    music: FindMusicSong[];
+    spotifyPreviewEnabled: boolean;
+    appleMusicClient: unknown;
+    preferredPreviewProvider: string;
+  }) => (
+    <div
+      data-testid="music-table"
+      data-spotify-preview={spotifyPreviewEnabled}
+      data-apple-preview={Boolean(appleMusicClient)}
+      data-preferred-preview={preferredPreviewProvider}>
       {music.map(song => song.song).join(',')}
     </div>
   ),
@@ -136,10 +200,15 @@ const stats: FindMusicStats = {
   playlists: 0,
   albums: 0,
   libraryTracks: 0,
+  spotifyLibraryTracks: 0,
+  appleMusicLibraryTracks: 0,
   chorusCharts: 2,
   localCharts: 0,
   historyUpdatedAt: null,
   libraryUpdatedAt: null,
+  spotifyLibraryUpdatedAt: null,
+  appleMusicLibraryUpdatedAt: null,
+  appleMusicStorefront: null,
   localUpdatedAt: null,
 };
 
@@ -152,6 +221,8 @@ function song(key: string, name: string): FindMusicSong {
     playlists: [],
     albums: [],
     spotifyUrl: null,
+    providerActions: [],
+    inAppleMusicLibrary: false,
     hasInstalledChart: false,
     charts: [
       {
@@ -183,10 +254,71 @@ function song(key: string, name: string): FindMusicSong {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockGetUser.mockResolvedValue({data: {user: null}});
   mockPathname = '/find-music';
+  mockAppleSetupState = 'unauthorized';
+  mockRefreshAppleMusic.mockResolvedValue({status: 'success'});
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  window.sessionStorage.setItem(FIND_MUSIC_ACTIVATION_KEY, 'true');
+  mockLocalDbExists.mockResolvedValue(true);
   mockGetFindMusicStats.mockResolvedValue(stats);
   mockGetRadarSongs.mockResolvedValue([]);
+});
+
+it('does not create the local index or prepare sources before first interaction', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(false);
+  mockGetUser.mockResolvedValue({
+    data: {user: {identities: [{provider: 'spotify'}]}},
+  });
+  mockGetFindMusicSongs.mockResolvedValue([]);
+  mockGetFindMusicStats.mockResolvedValue({...stats, historySongs: 0});
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('find-music-welcome')).toBeInTheDocument();
+  expect(mockLocalDbExists).toHaveBeenCalledTimes(1);
+  expect(mockGetFindMusicSongs).not.toHaveBeenCalled();
+  expect(mockGetRadarSongs).not.toHaveBeenCalled();
+  expect(mockGetFindMusicStats).not.toHaveBeenCalled();
+  expect(mockSetupAppleMusic).not.toHaveBeenCalled();
+  expect(mockRefreshChorus).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('button', {name: 'Connect Apple Music'}));
+
+  expect(mockNavigateToAppleMusicPath).toHaveBeenCalled();
+  expect(window.sessionStorage.getItem(FIND_MUSIC_ACTIVATION_KEY)).toBe('true');
+  await waitFor(() => expect(mockGetFindMusicStats).toHaveBeenCalled());
+  await waitFor(() => expect(mockSetupAppleMusic).toHaveBeenCalled());
+});
+
+it('preserves provider-return activation through React Strict Mode effect replay', async () => {
+  mockLocalDbExists.mockResolvedValue(false);
+  mockGetFindMusicSongs.mockResolvedValue([]);
+  mockGetFindMusicStats.mockResolvedValue({...stats, historySongs: 0});
+
+  render(
+    <StrictMode>
+      <FindMusicClient />
+    </StrictMode>,
+  );
+
+  await waitFor(() => expect(mockGetFindMusicStats).toHaveBeenCalled());
+  expect(window.sessionStorage.getItem(FIND_MUSIC_ACTIVATION_KEY)).toBeNull();
+});
+
+it('loads an existing local index without automatically refreshing Chorus', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(true);
+  mockGetFindMusicSongs.mockResolvedValue([song('saved', 'Saved')]);
+  mockGetFindMusicStats.mockResolvedValue(stats);
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toHaveTextContent('Saved');
+  expect(mockGetFindMusicStats).toHaveBeenCalled();
+  expect(mockRefreshChorus).not.toHaveBeenCalled();
 });
 
 it('keeps the loaded snapshot warm while the route changes', async () => {
@@ -291,9 +423,169 @@ it('uses the full setup guide when no taste source has been loaded', async () =>
   expect(mockRefreshChorus).not.toHaveBeenCalled();
   expect(
     screen.getAllByText(
-      'Connect Spotify Library or History to download the index',
+      'Connect Spotify, Apple Music, or History to download the index',
     ).length,
   ).toBeGreaterThan(0);
+});
+
+it('connects Apple Music without requiring a site account', async () => {
+  mockGetFindMusicSongs.mockResolvedValue([]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    historySongs: 0,
+    libraryTracks: 0,
+    chorusCharts: 0,
+  });
+
+  render(<FindMusicClient />);
+
+  fireEvent.click(
+    await screen.findByRole('button', {name: 'Connect Apple Music'}),
+  );
+  expect(mockNavigateToAppleMusicPath).toHaveBeenCalledWith(
+    '/apple-music-connect?returnTo=%2Ffind-music',
+  );
+});
+
+it('uses an authorized Apple-only library as a taste and preview source', async () => {
+  mockAppleSetupState = 'authorized';
+  mockGetFindMusicSongs.mockResolvedValue([song('apple', 'Apple Song')]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    historySongs: 0,
+    libraryTracks: 1,
+    appleMusicLibraryTracks: 1,
+    appleMusicLibraryUpdatedAt: '2026-08-08T20:00:00.000Z',
+    appleMusicStorefront: 'us',
+  });
+
+  render(<FindMusicClient />);
+
+  const table = await screen.findByTestId('music-table');
+  expect(table).toHaveAttribute('data-spotify-preview', 'false');
+  expect(table).toHaveAttribute('data-apple-preview', 'true');
+  expect(table).toHaveAttribute('data-preferred-preview', 'appleMusic');
+  expect(screen.getByTestId('sidebar')).toHaveAttribute(
+    'data-apple-music-phase',
+    'ready',
+  );
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+});
+
+it('shows the safe Apple Music refresh diagnostic returned by the hook', async () => {
+  mockAppleSetupState = 'authorized';
+  mockGetFindMusicSongs.mockResolvedValue([song('apple-error', 'Apple Song')]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    appleMusicLibraryTracks: 1,
+  });
+  mockRefreshAppleMusic.mockResolvedValue({
+    status: 'error',
+    errorCode: 'local_database:unknown',
+    message:
+      'Apple Music could not update its local library index. Reload this page and try again. (local_database:unknown)',
+  });
+
+  render(<FindMusicClient />);
+  fireEvent.click(
+    await screen.findByRole('button', {name: 'Refresh Apple Music test'}),
+  );
+
+  expect(
+    await screen.findByText(
+      'Apple Music could not update its local library index. Reload this page and try again. (local_database:unknown)',
+    ),
+  ).toBeInTheDocument();
+});
+
+it('prefers Apple Music when both providers are connected and its saved library is larger', async () => {
+  mockAppleSetupState = 'authorized';
+  mockGetUser.mockResolvedValue({
+    data: {
+      user: {
+        identities: [{provider: 'spotify'}],
+      },
+    },
+  });
+  mockGetFindMusicSongs.mockResolvedValue([song('both-apple', 'Both Apple')]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    libraryTracks: 30,
+    spotifyLibraryTracks: 10,
+    appleMusicLibraryTracks: 20,
+  });
+
+  render(<FindMusicClient />);
+
+  const table = await screen.findByTestId('music-table');
+  await waitFor(() =>
+    expect(table).toHaveAttribute('data-spotify-preview', 'true'),
+  );
+  expect(table).toHaveAttribute('data-apple-preview', 'true');
+  expect(table).toHaveAttribute('data-preferred-preview', 'appleMusic');
+});
+
+it.each([
+  ['larger', 12],
+  ['tied', 8],
+] as const)(
+  'prefers Spotify when both providers are connected and its saved library is %s',
+  async (_case, spotifyLibraryTracks) => {
+    mockAppleSetupState = 'authorized';
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          identities: [{provider: 'spotify'}],
+        },
+      },
+    });
+    mockGetFindMusicSongs.mockResolvedValue([
+      song(`both-spotify-${_case}`, `Both Spotify ${_case}`),
+    ]);
+    mockGetFindMusicStats.mockResolvedValue({
+      ...stats,
+      libraryTracks: spotifyLibraryTracks + 8,
+      spotifyLibraryTracks,
+      appleMusicLibraryTracks: 8,
+    });
+
+    render(<FindMusicClient />);
+
+    const table = await screen.findByTestId('music-table');
+    await waitFor(() =>
+      expect(table).toHaveAttribute('data-spotify-preview', 'true'),
+    );
+    expect(table).toHaveAttribute('data-apple-preview', 'true');
+    expect(table).toHaveAttribute('data-preferred-preview', 'spotify');
+  },
+);
+
+it('uses Spotify when it is the only connected preview provider', async () => {
+  mockGetUser.mockResolvedValue({
+    data: {
+      user: {
+        identities: [{provider: 'spotify'}],
+      },
+    },
+  });
+  mockGetFindMusicSongs.mockResolvedValue([
+    song('spotify-provider', 'Spotify Provider'),
+  ]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    libraryTracks: 20,
+    spotifyLibraryTracks: 20,
+    appleMusicLibraryTracks: 100,
+  });
+
+  render(<FindMusicClient />);
+
+  const table = await screen.findByTestId('music-table');
+  await waitFor(() =>
+    expect(table).toHaveAttribute('data-spotify-preview', 'true'),
+  );
+  expect(table).toHaveAttribute('data-apple-preview', 'false');
+  expect(table).toHaveAttribute('data-preferred-preview', 'spotify');
 });
 
 it('moves the sidebar into a dismissible hamburger drawer on small screens', async () => {

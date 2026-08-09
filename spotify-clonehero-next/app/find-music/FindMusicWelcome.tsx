@@ -8,6 +8,7 @@ import {
   History,
   LoaderCircle,
   LockKeyhole,
+  MoreHorizontal,
   Music2,
   Radio,
   RefreshCw,
@@ -16,7 +17,14 @@ import {
 } from 'lucide-react';
 
 import {Icons} from '@/components/icons';
+import AppleMusicIcon from '@/components/AppleMusicIcon';
 import {Button} from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {Progress} from '@/components/ui/progress';
 import {cn} from '@/lib/utils';
 
@@ -25,13 +33,19 @@ import type {SourceStatus} from './types';
 export interface FindMusicWelcomeProps {
   authenticated: boolean;
   hasSpotify: boolean;
+  appleMusicConnected: boolean;
+  canDisconnectAppleMusic: boolean;
   historyStatus: SourceStatus;
-  libraryStatus: SourceStatus;
+  spotifyLibraryStatus: SourceStatus;
+  appleMusicStatus: SourceStatus;
   localStatus: SourceStatus;
   chorusStatus: SourceStatus;
   onConnectSpotify: () => void;
+  onConnectAppleMusic: () => void;
+  onDisconnectAppleMusic: () => void;
   onRefreshHistory: () => void;
-  onRefreshLibrary: () => void;
+  onRefreshSpotifyLibrary: () => void;
+  onRefreshAppleMusic: () => void;
   onScanLocal: () => void;
   onRefreshChorus: () => void;
 }
@@ -43,7 +57,9 @@ type SetupCardProps = {
   status: SourceStatus;
   actionLabel: string;
   onAction: () => void;
-  accent?: 'spotify' | 'default';
+  overflowActionLabel?: string | undefined;
+  onOverflowAction?: (() => void) | undefined;
+  accent?: 'spotify' | 'appleMusic' | 'default';
   optional?: boolean;
 };
 
@@ -81,6 +97,8 @@ function SetupCard({
   status,
   actionLabel,
   onAction,
+  overflowActionLabel,
+  onOverflowAction,
   accent = 'default',
   optional = false,
 }: SetupCardProps) {
@@ -100,6 +118,8 @@ function SetupCard({
           className={cn(
             'grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:h-5 [&_svg]:w-5',
             accent === 'spotify' && 'bg-[#1ed760] text-[#08210f]',
+            accent === 'appleMusic' &&
+              'bg-gradient-to-br from-[#fa3159] to-[#d7003a] text-white',
           )}>
           {icon}
         </span>
@@ -146,18 +166,38 @@ function SetupCard({
           />
         ) : null}
 
-        <Button
-          type="button"
-          size="sm"
-          variant={error ? 'outline' : 'default'}
-          className="mt-4"
-          onClick={onAction}
-          disabled={loading}
-          aria-label={loading ? `${name} is working` : actionLabel}>
-          {loading ? <LoaderCircle className="animate-spin" /> : null}
-          {error ? <RefreshCw className="h-3.5 w-3.5" /> : null}
-          {loading ? 'Working…' : actionLabel}
-        </Button>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={error ? 'outline' : 'default'}
+            onClick={onAction}
+            disabled={loading}
+            aria-label={loading ? `${name} is working` : actionLabel}>
+            {loading ? <LoaderCircle className="animate-spin" /> : null}
+            {error ? <RefreshCw className="h-3.5 w-3.5" /> : null}
+            {loading ? 'Working…' : actionLabel}
+          </Button>
+          {overflowActionLabel && onOverflowAction ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-9 px-0"
+                  aria-label={`${name} actions`}>
+                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem destructive onSelect={onOverflowAction}>
+                  {overflowActionLabel}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -188,26 +228,37 @@ function OutcomePanel({
 export default function FindMusicWelcome({
   authenticated,
   hasSpotify,
+  appleMusicConnected,
+  canDisconnectAppleMusic,
   historyStatus,
-  libraryStatus,
+  spotifyLibraryStatus,
+  appleMusicStatus,
   localStatus,
   chorusStatus,
   onConnectSpotify,
+  onConnectAppleMusic,
+  onDisconnectAppleMusic,
   onRefreshHistory,
-  onRefreshLibrary,
+  onRefreshSpotifyLibrary,
+  onRefreshAppleMusic,
   onScanLocal,
   onRefreshChorus,
 }: FindMusicWelcomeProps) {
   const spotifyConnected = authenticated && hasSpotify;
-  const libraryAction = spotifyConnected
-    ? libraryStatus.phase === 'idle'
+  const spotifyLibraryAction = spotifyConnected
+    ? spotifyLibraryStatus.phase === 'idle'
       ? 'Load library'
-      : libraryStatus.phase === 'error'
+      : spotifyLibraryStatus.phase === 'error'
         ? 'Try again'
         : 'Refresh library'
     : authenticated
       ? 'Connect Spotify'
       : 'Sign in with Spotify';
+  const appleMusicAction = !appleMusicConnected
+    ? 'Connect Apple Music'
+    : appleMusicStatus.phase === 'error'
+      ? 'Try again'
+      : 'Refresh Apple Music';
 
   const historyAction =
     historyStatus.phase === 'idle'
@@ -240,8 +291,9 @@ export default function FindMusicWelcome({
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
             Add a little music you already know. We match it with Chorus right
-            here in your browser. Your listening history and library never need
-            to leave this device.
+            here in your browser. Imported history and the matching index stay
+            in this browser; connected-service requests go directly to the music
+            provider.
           </p>
           <div className="mt-4 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -269,9 +321,28 @@ export default function FindMusicWelcome({
               description="Match songs from your playlists, liked albums, and saved music."
               icon={<Icons.spotify />}
               accent="spotify"
-              status={libraryStatus}
-              actionLabel={libraryAction}
-              onAction={spotifyConnected ? onRefreshLibrary : onConnectSpotify}
+              status={spotifyLibraryStatus}
+              actionLabel={spotifyLibraryAction}
+              onAction={
+                spotifyConnected ? onRefreshSpotifyLibrary : onConnectSpotify
+              }
+            />
+            <SetupCard
+              name="Apple Music"
+              description="Connect in this browser to match saved songs. It works without a site account, does not sign you in to this site, and keeps its library index browser-local."
+              icon={<AppleMusicIcon variant="white" className="h-5 w-5" />}
+              accent="appleMusic"
+              status={appleMusicStatus}
+              actionLabel={appleMusicAction}
+              onAction={
+                appleMusicConnected ? onRefreshAppleMusic : onConnectAppleMusic
+              }
+              overflowActionLabel={
+                canDisconnectAppleMusic ? 'Disconnect and clear' : undefined
+              }
+              onOverflowAction={
+                canDisconnectAppleMusic ? onDisconnectAppleMusic : undefined
+              }
             />
             <SetupCard
               name="Spotify History"

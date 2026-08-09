@@ -34,6 +34,31 @@ export interface ChorusCharts {
   song_length: number | null;
 }
 
+export interface AppleMusicLibraryState {
+  active_scan_id: string | null;
+  catalog_associated_count: number;
+  connection_epoch: Generated<number>;
+  fetched_count: number;
+  id: number;
+  reported_total: number;
+  scan_generation: Generated<number>;
+  storefront: string | null;
+  track_count: number;
+  updated_at: string | null;
+  usable_count: number;
+}
+
+export interface AppleMusicTracks {
+  artist: string;
+  artist_normalized: string;
+  catalog_id: string | null;
+  id: Generated<number | null>;
+  name: string;
+  name_normalized: string;
+  scan_id: string;
+  updated_at: string;
+}
+
 export interface ChorusMetadata {
   key: string | null;
   updated_at: Generated<string>;
@@ -116,6 +141,8 @@ export interface SpotifyHistory {
 }
 
 export interface DB {
+  apple_music_library_state: AppleMusicLibraryState;
+  apple_music_tracks: AppleMusicTracks;
   chorus_charts: ChorusCharts;
   chorus_metadata: ChorusMetadata;
   chorus_scan_sessions: ChorusScanSessions;

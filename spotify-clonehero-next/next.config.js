@@ -71,6 +71,18 @@ const nextConfig = {
           },
         ],
       },
+      // MusicKit's authorization popup requires a non-isolated opener.
+      // This later, exact route rule overrides the site-wide isolation policy.
+      {
+        source: '/apple-music-connect',
+        headers: [
+          {key: 'Cross-Origin-Embedder-Policy', value: 'unsafe-none'},
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin-allow-popups',
+          },
+        ],
+      },
       // Specific headers for WASM files
       {
         source: '/_next/static/media/:path*',

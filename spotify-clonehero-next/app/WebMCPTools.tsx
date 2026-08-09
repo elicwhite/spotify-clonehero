@@ -1,7 +1,23 @@
 'use client';
 
 import {useEffect} from 'react';
+import {usePathname} from 'next/navigation';
 import {runRawSql} from '@/lib/local-db/client';
+import {isTasteDataPrivateRoute} from '@/lib/apple-music/private-route';
+
+function currentRoutePrivacyError() {
+  if (!isTasteDataPrivateRoute(window.location.pathname)) return null;
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: JSON.stringify({
+          error: 'WebMCP tools are unavailable on personal taste-data routes',
+        }),
+      },
+    ],
+  };
+}
 
 /**
  * Registers WebMCP tools for OPFS inspection via navigator.modelContext.
@@ -9,13 +25,26 @@ import {runRawSql} from '@/lib/local-db/client';
  * Renders nothing — this is a side-effect-only component.
  */
 export default function WebMCPTools() {
+  const pathname = usePathname();
+  const isTasteDataPrivate = isTasteDataPrivateRoute(pathname);
+
   useEffect(() => {
+    if (isTasteDataPrivate) return;
     if (
       !navigator.modelContext ||
       typeof navigator.modelContext.registerTool !== 'function'
     ) {
       return;
     }
+
+    const toolNames = [
+      'opfs_list',
+      'opfs_read_text',
+      'opfs_pcm_info',
+      'opfs_storage_quota',
+      'opfs_delete',
+      'run_sql',
+    ];
 
     navigator.modelContext.registerTool({
       name: 'opfs_list',
@@ -32,6 +61,8 @@ export default function WebMCPTools() {
         },
       },
       execute: async (args: Record<string, unknown>) => {
+        const privacyError = currentRoutePrivacyError();
+        if (privacyError) return privacyError;
         const path = (args['path'] as string) || '';
 
         async function listDir(
@@ -125,8 +156,24 @@ export default function WebMCPTools() {
         required: ['path'],
       },
       execute: async (args: Record<string, unknown>) => {
+        const privacyError = currentRoutePrivacyError();
+        if (privacyError) return privacyError;
         const path = args['path'] as string;
         const maxLines = args['maxLines'] as number | undefined;
+
+        if (/\.sqlite3(?:-(?:wal|shm))?$/iu.test(path)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error:
+                    'Personal music database files are unavailable to WebMCP',
+                }),
+              },
+            ],
+          };
+        }
 
         try {
           const parts = path.split('/').filter(Boolean);
@@ -175,6 +222,8 @@ export default function WebMCPTools() {
         required: ['path'],
       },
       execute: async (args: Record<string, unknown>) => {
+        const privacyError = currentRoutePrivacyError();
+        if (privacyError) return privacyError;
         const path = args['path'] as string;
 
         try {
@@ -227,6 +276,8 @@ export default function WebMCPTools() {
       description: 'Check how much OPFS storage space is used and available.',
       inputSchema: {type: 'object', properties: {}},
       execute: async () => {
+        const privacyError = currentRoutePrivacyError();
+        if (privacyError) return privacyError;
         const estimate = await navigator.storage.estimate();
         return {
           content: [
@@ -263,6 +314,8 @@ export default function WebMCPTools() {
         required: ['path'],
       },
       execute: async (args: Record<string, unknown>) => {
+        const privacyError = currentRoutePrivacyError();
+        if (privacyError) return privacyError;
         const path = args['path'] as string;
 
         try {
@@ -308,7 +361,21 @@ export default function WebMCPTools() {
         required: ['sql'],
       },
       execute: async (args: Record<string, unknown>) => {
+        const privacyError = currentRoutePrivacyError();
+        if (privacyError) return privacyError;
         const sql = args['sql'] as string;
+        if (/\bapple_music_/iu.test(sql)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: 'Personal music tables are unavailable to WebMCP',
+                }),
+              },
+            ],
+          };
+        }
         try {
           const rows = await runRawSql(sql);
           return {
@@ -329,7 +396,17 @@ export default function WebMCPTools() {
         }
       },
     });
-  }, []);
+    return () => {
+      const modelContext =
+        navigator.modelContext as typeof navigator.modelContext & {
+          unregisterTool?: (name: string) => void;
+        };
+      if (typeof modelContext.unregisterTool !== 'function') return;
+      for (const name of toolNames) {
+        modelContext.unregisterTool(name);
+      }
+    };
+  }, [isTasteDataPrivate]);
 
   return null;
 }

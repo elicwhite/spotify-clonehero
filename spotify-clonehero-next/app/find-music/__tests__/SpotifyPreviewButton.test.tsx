@@ -45,6 +45,7 @@ class FakeAudio {
   static playQueue: Array<() => Promise<void>> = [];
 
   src = '';
+  crossOrigin: string | null = null;
   loop = false;
   pause = jest.fn(() => this.emit('pause'));
   load = jest.fn();
@@ -148,6 +149,8 @@ it('keeps one preview active, stops it on a second click, and releases it on nav
   const previousAudio = FakeAudio.instances[0];
   const audio = FakeAudio.instances.at(-1)!;
   expect(audio.src).toBe('https://preview.test/b.mp3');
+  expect(audio.crossOrigin).toBe('anonymous');
+  expect(audio.loop).toBe(true);
   expect(previousAudio.pause).toHaveBeenCalled();
 
   previousAudio.emit('abort');
@@ -220,6 +223,49 @@ it('does not let an older play promise replace newer playback', async () => {
   await act(async () => first.resolve());
   expect(screen.getByText('Song B')).toBeInTheDocument();
   expect(FakeAudio.instances.at(-1)?.src).toBe('preview-b');
+});
+
+it('keeps Spotify looping by default while allowing finite provider previews', async () => {
+  function Harness() {
+    const audio = useContext(AudioContext);
+    return (
+      <>
+        <button
+          onClick={() => void audio.playTrack('Spotify', 'Song', 'spotify')}>
+          Spotify
+        </button>
+        <button
+          onClick={() =>
+            void audio.playTrack(
+              'Apple',
+              'Song',
+              'apple',
+              undefined,
+              undefined,
+              {
+                loop: false,
+              },
+            )
+          }>
+          Apple
+        </button>
+      </>
+    );
+  }
+  render(
+    <AudioProvider>
+      <Harness />
+    </AudioProvider>,
+  );
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', {name: 'Spotify'}));
+  });
+  expect(FakeAudio.instances[0].loop).toBe(true);
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', {name: 'Apple'}));
+  });
+  expect(FakeAudio.instances.at(-1)?.loop).toBe(false);
 });
 
 it('ignores a lookup that resolves after another song starts', async () => {

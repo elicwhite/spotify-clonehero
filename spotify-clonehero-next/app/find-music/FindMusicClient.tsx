@@ -9,6 +9,7 @@ import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 import {createClient} from '@/lib/supabase/client';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
+import {localDbExists} from '@/lib/local-db/client';
 import {
   onPlaylistCacheUpdated,
   useSpotifyLibraryUpdate,
@@ -30,6 +31,13 @@ import {
 import FindMusicSidebar from './FindMusicSidebar';
 import FindMusicTable from './FindMusicTable';
 import FindMusicWelcome from './FindMusicWelcome';
+import type {FindMusicWelcomeProps} from './FindMusicWelcome';
+import {useAppleMusicSource} from './useAppleMusicSource';
+import {
+  clearFindMusicActivation,
+  hasFindMusicActivation,
+  markFindMusicActivated,
+} from './activation';
 import {
   freshEmptyFilters,
   loadFindMusicFilters,
@@ -53,10 +61,15 @@ const EMPTY_STATS: FindMusicStats = {
   playlists: 0,
   albums: 0,
   libraryTracks: 0,
+  spotifyLibraryTracks: 0,
+  appleMusicLibraryTracks: 0,
   chorusCharts: 0,
   localCharts: 0,
   historyUpdatedAt: null,
   libraryUpdatedAt: null,
+  spotifyLibraryUpdatedAt: null,
+  appleMusicLibraryUpdatedAt: null,
+  appleMusicStorefront: null,
   localUpdatedAt: null,
 };
 
@@ -74,6 +87,9 @@ export default function FindMusicClient() {
   const [pending, setPending] = useState<Snapshot | null>(null);
   const [pendingCounts, setPendingCounts] = useState({added: 0, changed: 0});
   const [initializing, setInitializing] = useState(true);
+  const [sourceAccessChecked, setSourceAccessChecked] = useState(false);
+  const [sourceAccessEnabled, setSourceAccessEnabled] = useState(false);
+  const [catalogConsent, setCatalogConsent] = useState(false);
   const [historyStatusOverride, setHistoryStatus] =
     useState<SourceStatus | null>(null);
   const [localStatusOverride, setLocalStatus] = useState<SourceStatus | null>(
@@ -83,6 +99,7 @@ export default function FindMusicClient() {
   const initializedRef = useRef(false);
   const committedRef = useRef<Snapshot>({music: [], radar: []});
   const chorusStartedRef = useRef(false);
+  const sourceAccessEnabledRef = useRef(false);
   const activeControllersRef = useRef<AbortController[]>([]);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const refreshAgainRef = useRef(false);
@@ -90,7 +107,8 @@ export default function FindMusicClient() {
   const view: FindMusicView =
     pathname === FIND_MUSIC_RECOMMENDATIONS_PATH ? 'radar' : 'music';
 
-  const [spotifyProgress, refreshSpotifyLibrary] = useSpotifyLibraryUpdate();
+  const [spotifyProgress, refreshSpotifyLibrary] =
+    useSpotifyLibraryUpdate(sourceAccessEnabled);
   const [chorusProgress, refreshChorusIndex] = useChorusChartDb(true);
 
   const historyStatus = useMemo<SourceStatus>(
@@ -130,7 +148,30 @@ export default function FindMusicClient() {
     ],
   );
   const hasTasteSource =
-    hasSpotify || stats.libraryTracks > 0 || stats.historySongs > 0;
+    hasSpotify ||
+    stats.appleMusicLibraryTracks > 0 ||
+    stats.libraryTracks > 0 ||
+    stats.historySongs > 0;
+  const hasIndexedTasteData =
+    stats.spotifyLibraryTracks > 0 ||
+    stats.appleMusicLibraryTracks > 0 ||
+    stats.historySongs > 0;
+
+  const activateSourceAccess = useCallback(() => {
+    clearFindMusicActivation(window.sessionStorage);
+    sourceAccessEnabledRef.current = true;
+    setSourceAccessEnabled(true);
+    setInitializing(true);
+    setCatalogConsent(true);
+  }, []);
+
+  const activateSourceAccessForNavigation = useCallback(() => {
+    markFindMusicActivated(window.sessionStorage);
+    sourceAccessEnabledRef.current = true;
+    setSourceAccessEnabled(true);
+    setInitializing(true);
+    setCatalogConsent(true);
+  }, []);
 
   const querySnapshot = useCallback(async (): Promise<Snapshot> => {
     const [music, radar] = await Promise.all([
@@ -179,6 +220,34 @@ export default function FindMusicClient() {
     }
   }, [querySnapshot]);
 
+  const replaceSnapshot = useCallback(async () => {
+    const [next, nextStats] = await Promise.all([
+      querySnapshot(),
+      getFindMusicStats(),
+    ]);
+    initializedRef.current = true;
+    committedRef.current = next;
+    setCommitted(next);
+    setStats(nextStats);
+    setPending(null);
+    setPendingCounts({added: 0, changed: 0});
+    setInitializing(false);
+  }, [querySnapshot]);
+
+  const spotifyPreviewAvailable = authChecked && hasSpotify;
+  const {viewModel: appleMusicSource, actions: appleMusicActions} =
+    useAppleMusicSource({
+      view,
+      enabled: sourceAccessEnabled,
+      initializing,
+      stats,
+      spotifyPreviewAvailable,
+      stageSnapshot,
+      replaceSnapshot,
+      onActivate: activateSourceAccess,
+      onActivateForNavigation: activateSourceAccessForNavigation,
+    });
+
   const applyPending = useCallback(() => {
     if (!pending) return;
     committedRef.current = pending;
@@ -188,7 +257,7 @@ export default function FindMusicClient() {
   }, [pending]);
 
   const runChorusRefresh = useCallback(async () => {
-    if (!hasTasteSource) return;
+    if (!hasIndexedTasteData) return;
     const controller = new AbortController();
     activeControllersRef.current.push(controller);
     setChorusError(null);
@@ -202,7 +271,7 @@ export default function FindMusicClient() {
         toast.error('Could not refresh the Chorus index');
       }
     }
-  }, [hasTasteSource, refreshChorusIndex, stageSnapshot]);
+  }, [hasIndexedTasteData, refreshChorusIndex, stageSnapshot]);
 
   useEffect(() => {
     let canceled = false;
@@ -250,19 +319,57 @@ export default function FindMusicClient() {
   }, [supabase]);
 
   useEffect(() => {
+    let canceled = false;
+    void (async () => {
+      const navigationActivation = hasFindMusicActivation(
+        window.sessionStorage,
+      );
+      let existingDatabase = false;
+      try {
+        existingDatabase = await localDbExists();
+      } catch {
+        // An unsupported OPFS implementation remains inactive until the user
+        // chooses a source, when the ordinary error path can explain it.
+      }
+      if (canceled) return;
+      if (navigationActivation) {
+        clearFindMusicActivation(window.sessionStorage);
+      }
+      const shouldEnableSourceAccess =
+        sourceAccessEnabledRef.current ||
+        navigationActivation ||
+        existingDatabase;
+      sourceAccessEnabledRef.current = shouldEnableSourceAccess;
+      setSourceAccessEnabled(shouldEnableSourceAccess);
+      if (!shouldEnableSourceAccess) setInitializing(false);
+      setCatalogConsent(current => current || navigationActivation);
+      setSourceAccessChecked(true);
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sourceAccessChecked || !sourceAccessEnabled) return;
     void stageSnapshot().catch(error => {
       console.error('Could not load Find Music data', error);
       setInitializing(false);
       toast.error('Could not read the local music database');
     });
-  }, [stageSnapshot]);
+  }, [sourceAccessChecked, sourceAccessEnabled, stageSnapshot]);
 
   useEffect(() => {
-    if (!initializedRef.current || !hasTasteSource || chorusStartedRef.current)
+    if (
+      !initializedRef.current ||
+      !catalogConsent ||
+      !hasIndexedTasteData ||
+      chorusStartedRef.current
+    )
       return;
     chorusStartedRef.current = true;
     void runChorusRefresh();
-  }, [hasTasteSource, initializing, runChorusRefresh]);
+  }, [catalogConsent, hasIndexedTasteData, initializing, runChorusRefresh]);
 
   useEffect(() => {
     if (spotifyProgress.updateStatus !== 'fetching') return;
@@ -279,6 +386,7 @@ export default function FindMusicClient() {
   }, []);
 
   const connectSpotify = useCallback(async () => {
+    activateSourceAccessForNavigation();
     const currentFindMusicPath = findMusicPathForView(view);
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(currentFindMusicPath)}`;
     const result = user
@@ -295,13 +403,14 @@ export default function FindMusicClient() {
       return;
     }
     if (result.data?.url) window.location.href = result.data.url;
-  }, [supabase, user, view]);
+  }, [activateSourceAccessForNavigation, supabase, user, view]);
 
   const runHistoryRefresh = useCallback(async () => {
     if (!('showDirectoryPicker' in window)) {
       toast.error('This browser cannot open local folders');
       return;
     }
+    activateSourceAccess();
     setHistoryStatus({
       phase: 'loading',
       summary: 'Waiting for history folder…',
@@ -343,9 +452,10 @@ export default function FindMusicClient() {
       });
       toast.error(message);
     }
-  }, [stageSnapshot]);
+  }, [activateSourceAccess, stageSnapshot]);
 
   const runLibraryRefresh = useCallback(async () => {
+    activateSourceAccess();
     if (!user || !hasSpotify) {
       await connectSpotify();
       return;
@@ -370,9 +480,17 @@ export default function FindMusicClient() {
         );
       }
     }
-  }, [connectSpotify, hasSpotify, refreshSpotifyLibrary, stageSnapshot, user]);
+  }, [
+    activateSourceAccess,
+    connectSpotify,
+    hasSpotify,
+    refreshSpotifyLibrary,
+    stageSnapshot,
+    user,
+  ]);
 
   const runLocalScan = useCallback(async () => {
+    activateSourceAccess();
     setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
     try {
       const result = await tryScanForInstalledCharts(count => {
@@ -406,9 +524,9 @@ export default function FindMusicClient() {
       });
       toast.error(message);
     }
-  }, [stageSnapshot]);
+  }, [activateSourceAccess, stageSnapshot]);
 
-  const libraryStatus = useMemo<SourceStatus>(() => {
+  const spotifyLibraryStatus = useMemo<SourceStatus>(() => {
     if (spotifyProgress.updateStatus === 'fetching') {
       const playlists = Object.values(spotifyProgress.playlists);
       const albums = Object.values(spotifyProgress.albums);
@@ -431,11 +549,11 @@ export default function FindMusicClient() {
     if (initializing) {
       return {phase: 'loading', summary: 'Checking saved local data…'};
     }
-    if (stats.libraryTracks > 0) {
+    if ((stats.spotifyLibraryTracks ?? 0) > 0) {
       return {
         phase: 'ready',
         summary: `${stats.playlists.toLocaleString()} playlists · ${stats.albums.toLocaleString()} albums`,
-        detail: `${stats.libraryTracks.toLocaleString()} library tracks`,
+        detail: `${(stats.spotifyLibraryTracks ?? 0).toLocaleString()} library tracks`,
       };
     }
     return {
@@ -451,7 +569,8 @@ export default function FindMusicClient() {
     if (!hasTasteSource && stats.chorusCharts === 0) {
       return {
         phase: 'idle',
-        summary: 'Connect Spotify Library or History to download the index',
+        summary:
+          'Connect Spotify, Apple Music, or History to download the index',
       };
     }
     if (chorusError) {
@@ -502,7 +621,8 @@ export default function FindMusicClient() {
   const busy =
     initializing ||
     historyStatus.phase === 'loading' ||
-    libraryStatus.phase === 'loading' ||
+    spotifyLibraryStatus.phase === 'loading' ||
+    appleMusicSource.refreshing ||
     chorusStatus.phase === 'loading';
 
   const clearFilters = useCallback(() => {
@@ -512,6 +632,26 @@ export default function FindMusicClient() {
   const closeMobileSidebar = useCallback(() => {
     setMobileSidebarOpen(false);
   }, []);
+
+  const sourceProps: FindMusicWelcomeProps = {
+    authenticated: Boolean(user),
+    hasSpotify,
+    appleMusicConnected: appleMusicSource.connected,
+    canDisconnectAppleMusic: appleMusicSource.canDisconnect,
+    historyStatus,
+    spotifyLibraryStatus,
+    appleMusicStatus: appleMusicSource.status,
+    localStatus,
+    chorusStatus,
+    onConnectSpotify: connectSpotify,
+    onConnectAppleMusic: appleMusicActions.connect,
+    onDisconnectAppleMusic: appleMusicActions.disconnect,
+    onRefreshHistory: runHistoryRefresh,
+    onRefreshSpotifyLibrary: runLibraryRefresh,
+    onRefreshAppleMusic: appleMusicActions.refresh,
+    onScanLocal: runLocalScan,
+    onRefreshChorus: runChorusRefresh,
+  };
 
   return (
     <SupportedBrowserWarning>
@@ -541,23 +681,13 @@ export default function FindMusicClient() {
                   </SheetDescription>
                 </SheetHeader>
                 <FindMusicSidebar
+                  {...sourceProps}
                   variant="drawer"
                   view={view}
                   onViewChange={closeMobileSidebar}
                   filters={filters}
                   onFiltersChange={setFilters}
                   onClearFilters={clearFilters}
-                  historyStatus={historyStatus}
-                  libraryStatus={libraryStatus}
-                  localStatus={localStatus}
-                  chorusStatus={chorusStatus}
-                  onRefreshHistory={() => void runHistoryRefresh()}
-                  onRefreshLibrary={() => void runLibraryRefresh()}
-                  onScanLocal={() => void runLocalScan()}
-                  onRefreshChorus={() => void runChorusRefresh()}
-                  onConnectSpotify={() => void connectSpotify()}
-                  authenticated={Boolean(user)}
-                  hasSpotify={hasSpotify}
                   musicCount={pending?.music.length ?? committed.music.length}
                   radarCount={pending?.radar.length ?? committed.radar.length}
                 />
@@ -580,22 +710,12 @@ export default function FindMusicClient() {
             data-testid="find-music-desktop-sidebar"
             className="hidden min-h-0 lg:block">
             <FindMusicSidebar
+              {...sourceProps}
               view={view}
               onViewChange={closeMobileSidebar}
               filters={filters}
               onFiltersChange={setFilters}
               onClearFilters={clearFilters}
-              historyStatus={historyStatus}
-              libraryStatus={libraryStatus}
-              localStatus={localStatus}
-              chorusStatus={chorusStatus}
-              onRefreshHistory={() => void runHistoryRefresh()}
-              onRefreshLibrary={() => void runLibraryRefresh()}
-              onScanLocal={() => void runLocalScan()}
-              onRefreshChorus={() => void runChorusRefresh()}
-              onConnectSpotify={() => void connectSpotify()}
-              authenticated={Boolean(user)}
-              hasSpotify={hasSpotify}
               musicCount={pending?.music.length ?? committed.music.length}
               radarCount={pending?.radar.length ?? committed.radar.length}
             />
@@ -646,19 +766,7 @@ export default function FindMusicClient() {
             ) : committed.music.length === 0 &&
               stats.historySongs === 0 &&
               stats.libraryTracks === 0 ? (
-              <FindMusicWelcome
-                authenticated={Boolean(user)}
-                hasSpotify={hasSpotify}
-                historyStatus={historyStatus}
-                libraryStatus={libraryStatus}
-                localStatus={localStatus}
-                chorusStatus={chorusStatus}
-                onConnectSpotify={() => void connectSpotify()}
-                onRefreshHistory={() => void runHistoryRefresh()}
-                onRefreshLibrary={() => void runLibraryRefresh()}
-                onScanLocal={() => void runLocalScan()}
-                onRefreshChorus={() => void runChorusRefresh()}
-              />
+              <FindMusicWelcome {...sourceProps} />
             ) : (
               <FindMusicTable
                 view={view}
@@ -666,7 +774,11 @@ export default function FindMusicClient() {
                 radar={committed.radar}
                 filters={filters}
                 radarLoading={view === 'radar' && busy}
-                previewEnabled={authChecked && hasSpotify}
+                spotifyPreviewEnabled={spotifyPreviewAvailable}
+                appleMusicClient={appleMusicSource.client}
+                preferredPreviewProvider={
+                  appleMusicSource.preferredPreviewProvider
+                }
                 onClearFilters={clearFilters}
               />
             )}

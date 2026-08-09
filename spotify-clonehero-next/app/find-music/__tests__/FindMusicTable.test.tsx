@@ -3,7 +3,13 @@
  */
 
 import '@testing-library/jest-dom';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import FindMusicTable from '../FindMusicTable';
 import {AudioContext} from '../../AudioProvider';
 import type {
@@ -33,22 +39,34 @@ jest.mock('../../../lib/local-songs-folder', () => ({
   })),
 }));
 
-jest.mock('../../../components/SpotifyPreviewButton', () => ({
+jest.mock('../../../components/MusicPreviewButton', () => ({
   __esModule: true,
   default: ({
     artist,
     song,
-    spotifyUrl,
+    spotifyActions,
+    appleMusicActions,
+    preferredProvider,
   }: {
     artist: string;
     song: string;
-    spotifyUrl?: string | null;
+    spotifyActions?: Array<{url?: string | null; trackId?: string | null}>;
+    appleMusicActions?: Array<{catalogId?: string | null}>;
+    preferredProvider?: string;
   }) => (
     <>
-      <button aria-label={`Play preview of ${song} by ${artist}`}>Play</button>
-      {spotifyUrl ? (
+      <button
+        aria-label={`Play preview of ${song} by ${artist}`}
+        data-spotify-track-id={spotifyActions?.[0]?.trackId}
+        data-apple-catalog-ids={appleMusicActions
+          ?.map(action => action.catalogId)
+          .join(',')}
+        data-preferred-provider={preferredProvider}>
+        Play
+      </button>
+      {spotifyActions?.[0]?.url ? (
         <a
-          href={spotifyUrl}
+          href={spotifyActions[0].url ?? undefined}
           aria-label={`Open ${song} by ${artist} in Spotify`}>
           Spotify
         </a>
@@ -111,10 +129,17 @@ function song(
     playlists: playCount > 20 ? ['Favorites'] : [],
     albums: [],
     spotifyUrl: `https://open.spotify.com/track/${key}`,
+    providerActions: [],
+    inAppleMusicLibrary: false,
     hasInstalledChart: installed,
     charts: [chart(`${key}-chart`, name, installed)],
   };
 }
+
+const defaultPreviewProps = {
+  appleMusicClient: null,
+  preferredPreviewProvider: undefined,
+} as const;
 
 beforeEach(() => {
   mockDownloadSong.mockClear();
@@ -130,7 +155,8 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
       radar={[]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -211,7 +237,8 @@ it('returns an install action to idle when directory selection is canceled', asy
       radar={[]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -248,7 +275,8 @@ it('renders track-backed instruments with unavailable intensity beneath the song
       radar={[]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -311,7 +339,8 @@ it('shows only chart versions that satisfy the active instrument filter', () => 
       radar={[]}
       filters={{...filters, instruments: new Set(['guitar'])}}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -340,7 +369,8 @@ it('keeps Recommendations in a distinct explanatory state while affinity is load
       radar={[]}
       filters={filters}
       radarLoading={true}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -355,7 +385,7 @@ it('keeps Recommendations in a distinct explanatory state while affinity is load
   ).toBeInTheDocument();
 });
 
-it('adds the compact preview column only for a linked Spotify account', () => {
+it('adds the Listen column only for a connected listening provider', () => {
   const music = [song('preview', 'Preview Song', 4)];
   const {rerender} = render(
     <FindMusicTable
@@ -364,11 +394,12 @@ it('adds the compact preview column only for a linked Spotify account', () => {
       radar={[]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
-  expect(screen.queryByText('Preview')).not.toBeInTheDocument();
+  expect(screen.queryByText('Listen')).not.toBeInTheDocument();
   expect(
     screen.queryByRole('button', {
       name: 'Play preview of Preview Song by Artist',
@@ -382,11 +413,12 @@ it('adds the compact preview column only for a linked Spotify account', () => {
       radar={[]}
       filters={filters}
       radarLoading={false}
-      previewEnabled
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled
       onClearFilters={jest.fn()}
     />,
   );
-  expect(screen.getByText('Preview')).toBeInTheDocument();
+  expect(screen.getByText('Listen')).toBeInTheDocument();
   expect(
     screen.getByRole('button', {
       name: 'Play preview of Preview Song by Artist',
@@ -406,12 +438,124 @@ it('adds the compact preview column only for a linked Spotify account', () => {
   expect(screen.queryByText('Charter Preview Song')).not.toBeInTheDocument();
 });
 
+it('renders one preview control while retaining direct provider IDs internally', () => {
+  const direct = song('dual-provider', 'Dual Provider', 4);
+  direct.providerActions = [
+    {
+      provider: 'appleMusic',
+      catalogId: 'apple-one',
+      artist: 'Artist',
+      song: 'Dual Provider',
+    },
+    {
+      provider: 'appleMusic',
+      catalogId: 'apple-two',
+      artist: 'Guest Artist',
+      song: 'Dual Provider (Live)',
+    },
+  ];
+
+  render(
+    <FindMusicTable
+      view="music"
+      music={[direct]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled
+      appleMusicClient={{} as never}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  expect(screen.getByText('Listen')).toBeInTheDocument();
+  const providerActions = screen.getByRole('group', {
+    name: 'Listening actions for Dual Provider by Artist',
+  });
+  expect(providerActions).toHaveClass(
+    'flex-nowrap',
+    'overflow-x-auto',
+    'overflow-y-hidden',
+    'whitespace-nowrap',
+    '[&>*]:shrink-0',
+  );
+  expect(within(providerActions).getAllByRole('button')).toHaveLength(1);
+  const preview = within(providerActions).getByRole('button', {
+    name: 'Play preview of Dual Provider by Artist',
+  });
+  expect(preview).toHaveAttribute(
+    'data-apple-catalog-ids',
+    'apple-one,apple-two',
+  );
+});
+
+it('uses conservative Apple Music text search for rows without a catalog action', () => {
+  const catalogLess = song('catalog-less', 'Catalog Less', 0);
+  catalogLess.inAppleMusicLibrary = true;
+  const spotifyOnly = song('spotify-only', 'Spotify Only', 4);
+  const recommendation: RadarSong = {
+    key: 'radar-apple-search',
+    artist: 'Artist',
+    song: 'Radar Search',
+    artistPlayCount: 0,
+    savedLibrarySongCount: 0,
+    spotifyUrl: null,
+    hasInstalledChart: false,
+    charts: [chart('radar-apple-search-chart', 'Radar Search')],
+  };
+  const {rerender} = render(
+    <FindMusicTable
+      view="music"
+      music={[catalogLess, spotifyOnly]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      appleMusicClient={{} as never}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  expect(
+    screen.getByRole('button', {
+      name: 'Play preview of Catalog Less by Artist',
+    }),
+  ).not.toHaveAttribute('data-apple-catalog-id');
+  expect(
+    screen.getByRole('button', {
+      name: 'Play preview of Spotify Only by Artist',
+    }),
+  ).not.toHaveAttribute('data-apple-catalog-id');
+
+  rerender(
+    <FindMusicTable
+      view="radar"
+      music={[]}
+      radar={[recommendation]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      appleMusicClient={{} as never}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  expect(
+    screen.getByRole('button', {
+      name: 'Play preview of Radar Search by Artist',
+    }),
+  ).toBeInTheDocument();
+});
+
 it('preserves independent scroll positions for each view', () => {
   const recommendation: RadarSong = {
     key: 'recommendation',
     artist: 'Artist',
     song: 'Recommendation',
     artistPlayCount: 20,
+    savedLibrarySongCount: 0,
     spotifyUrl: null,
     hasInstalledChart: false,
     charts: [chart('recommendation-chart', 'Recommendation')],
@@ -423,7 +567,8 @@ it('preserves independent scroll positions for each view', () => {
       radar={[recommendation]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -439,7 +584,8 @@ it('preserves independent scroll positions for each view', () => {
       radar={[recommendation]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -454,7 +600,8 @@ it('preserves independent scroll positions for each view', () => {
       radar={[recommendation]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -467,7 +614,8 @@ it('preserves independent scroll positions for each view', () => {
       radar={[recommendation]}
       filters={filters}
       radarLoading={false}
-      previewEnabled={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
       onClearFilters={jest.fn()}
     />,
   );
@@ -493,7 +641,8 @@ it('stops a preview when filters remove its song from the result set', async () 
         radar={[]}
         filters={filters}
         radarLoading={false}
-        previewEnabled
+        {...defaultPreviewProps}
+        spotifyPreviewEnabled
         onClearFilters={jest.fn()}
       />
     </AudioContext.Provider>,

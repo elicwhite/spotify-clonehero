@@ -27,8 +27,11 @@ import {
 } from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
 import {downloadSong} from '@/lib/local-songs-folder';
-import SpotifyPreviewButton from '@/components/SpotifyPreviewButton';
+import MusicPreviewButton, {
+  type MusicPreviewProvider,
+} from '@/components/MusicPreviewButton';
 import {AudioContext} from '@/app/AudioProvider';
+import type {AppleMusicLibraryClient} from '@/lib/apple-music';
 import FindMusicInstrumentIcon from './FindMusicInstrumentIcon';
 import {
   INSTRUMENTS,
@@ -60,7 +63,9 @@ export default function FindMusicTable({
   radar,
   filters,
   radarLoading,
-  previewEnabled,
+  spotifyPreviewEnabled,
+  appleMusicClient,
+  preferredPreviewProvider,
   onClearFilters,
 }: {
   view: FindMusicView;
@@ -68,7 +73,9 @@ export default function FindMusicTable({
   radar: RadarSong[];
   filters: FindMusicFilters;
   radarLoading: boolean;
-  previewEnabled: boolean;
+  spotifyPreviewEnabled: boolean;
+  appleMusicClient: AppleMusicLibraryClient | null;
+  preferredPreviewProvider: MusicPreviewProvider | undefined;
   onClearFilters: () => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -179,10 +186,12 @@ export default function FindMusicTable({
           <MusicHeader
             sort={sort}
             onSort={setSort}
-            previewEnabled={previewEnabled}
+            listenEnabled={spotifyPreviewEnabled || appleMusicClient !== null}
           />
         ) : (
-          <RadarHeader previewEnabled={previewEnabled} />
+          <RadarHeader
+            listenEnabled={spotifyPreviewEnabled || appleMusicClient !== null}
+          />
         )}
         <VirtualRows
           rows={rows}
@@ -191,7 +200,9 @@ export default function FindMusicTable({
           onToggle={toggleExpanded}
           downloadStates={downloadStates}
           onInstall={install}
-          previewEnabled={previewEnabled}
+          spotifyPreviewEnabled={spotifyPreviewEnabled}
+          appleMusicClient={appleMusicClient}
+          preferredPreviewProvider={preferredPreviewProvider}
         />
       </div>
     </div>
@@ -229,24 +240,24 @@ function SortButton({
 function MusicHeader({
   sort,
   onSort,
-  previewEnabled,
+  listenEnabled,
 }: {
   sort: MusicSort;
   onSort: (sort: MusicSort) => void;
-  previewEnabled: boolean;
+  listenEnabled: boolean;
 }) {
   return (
     <div
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
-        previewEnabled
-          ? 'min-w-[986px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_150px_120px_100px]'
+        listenEnabled
+          ? 'min-w-[1016px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_150px_120px_100px]'
           : 'min-w-[838px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]',
       )}>
       <span />
       <SortButton label="Artist" sortKey="artist" sort={sort} onSort={onSort} />
       <SortButton label="Song" sortKey="song" sort={sort} onSort={onSort} />
-      {previewEnabled ? <span className="text-center">Preview</span> : null}
+      {listenEnabled ? <span className="text-center">Listen</span> : null}
       <SortButton
         label="Relevance"
         sortKey="score"
@@ -264,19 +275,19 @@ function MusicHeader({
   );
 }
 
-function RadarHeader({previewEnabled}: {previewEnabled: boolean}) {
+function RadarHeader({listenEnabled}: {listenEnabled: boolean}) {
   return (
     <div
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
-        previewEnabled
-          ? 'min-w-[1006px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_170px_120px_100px]'
+        listenEnabled
+          ? 'min-w-[1036px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px]'
           : 'min-w-[858px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <span />
       <span>Artist</span>
       <span>Song</span>
-      {previewEnabled ? <span className="text-center">Preview</span> : null}
+      {listenEnabled ? <span className="text-center">Listen</span> : null}
       <span>Why it is here</span>
       <span>Updated</span>
       <span>Installed</span>
@@ -291,7 +302,9 @@ function VirtualRows({
   onToggle,
   downloadStates,
   onInstall,
-  previewEnabled,
+  spotifyPreviewEnabled,
+  appleMusicClient,
+  preferredPreviewProvider,
 }: {
   rows: Array<FindMusicSong | RadarSong>;
   view: FindMusicView;
@@ -299,8 +312,11 @@ function VirtualRows({
   onToggle: (key: string) => void;
   downloadStates: Record<string, DownloadState>;
   onInstall: (chart: FindMusicChart) => Promise<void>;
-  previewEnabled: boolean;
+  spotifyPreviewEnabled: boolean;
+  appleMusicClient: AppleMusicLibraryClient | null;
+  preferredPreviewProvider: MusicPreviewProvider | undefined;
 }) {
+  const listenEnabled = spotifyPreviewEnabled || appleMusicClient !== null;
   const flatRows = useMemo(() => {
     const flat: Array<
       | {kind: 'song'; song: FindMusicSong | RadarSong}
@@ -345,10 +361,10 @@ function VirtualRows({
       data-testid="results-rows"
       className={cn(
         'min-h-0 flex-1 overflow-y-auto overscroll-contain',
-        previewEnabled
+        listenEnabled
           ? view === 'music'
-            ? 'min-w-[986px]'
-            : 'min-w-[1006px]'
+            ? 'min-w-[1016px]'
+            : 'min-w-[1036px]'
           : view === 'music'
             ? 'min-w-[838px]'
             : 'min-w-[858px]',
@@ -379,13 +395,15 @@ function VirtualRows({
                   view={view}
                   expanded={expanded.has(item.song.key)}
                   onToggle={() => onToggle(item.song.key)}
-                  previewEnabled={previewEnabled}
+                  spotifyPreviewEnabled={spotifyPreviewEnabled}
+                  appleMusicClient={appleMusicClient}
+                  preferredPreviewProvider={preferredPreviewProvider}
                 />
               ) : (
                 <ChartRow
                   chart={item.chart}
                   view={view}
-                  previewEnabled={previewEnabled}
+                  listenEnabled={listenEnabled}
                   downloadState={downloadStates[item.chart.md5] ?? 'idle'}
                   onInstall={() => onInstall(item.chart)}
                 />
@@ -403,14 +421,31 @@ function SongRow({
   view,
   expanded,
   onToggle,
-  previewEnabled,
+  spotifyPreviewEnabled,
+  appleMusicClient,
+  preferredPreviewProvider,
 }: {
   song: FindMusicSong | RadarSong;
   view: FindMusicView;
   expanded: boolean;
   onToggle: () => void;
-  previewEnabled: boolean;
+  spotifyPreviewEnabled: boolean;
+  appleMusicClient: AppleMusicLibraryClient | null;
+  preferredPreviewProvider: MusicPreviewProvider | undefined;
 }) {
+  const appleActions =
+    view === 'music'
+      ? (song as FindMusicSong).providerActions.filter(
+          action => action.provider === 'appleMusic',
+        )
+      : [];
+  const spotifyActions =
+    view === 'music'
+      ? (song as FindMusicSong).providerActions.filter(
+          action => action.provider === 'spotify',
+        )
+      : [];
+  const listenEnabled = spotifyPreviewEnabled || appleMusicClient !== null;
   const score =
     view === 'music'
       ? scoreMusicSong(song as FindMusicSong)
@@ -426,11 +461,11 @@ function SongRow({
       className={cn(
         'grid h-full w-full cursor-pointer items-center gap-2 border-b px-3 text-left text-sm hover:bg-muted/50',
         view === 'music'
-          ? previewEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_150px_120px_100px]'
+          ? listenEnabled
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_150px_120px_100px]'
             : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
-          : previewEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_170px_120px_100px]'
+          : listenEnabled
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px]'
             : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <button
@@ -450,15 +485,39 @@ function SongRow({
       </button>
       <span className="truncate text-muted-foreground">{song.artist}</span>
       <span className="block min-w-0 truncate font-medium">{song.song}</span>
-      {previewEnabled ? (
-        <div onClick={event => event.stopPropagation()}>
-          <SpotifyPreviewButton
-            artist={song.artist}
-            song={song.song}
-            trackKey={song.key}
-            spotifyUrl={song.spotifyUrl}
-            compact
-          />
+      {listenEnabled ? (
+        <div
+          className="min-w-0 overflow-hidden"
+          onClick={event => event.stopPropagation()}>
+          <div
+            role="group"
+            aria-label={`Listening actions for ${song.song} by ${song.artist}`}
+            data-testid="provider-actions"
+            className="flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain whitespace-nowrap py-1 [&>*]:shrink-0">
+            <MusicPreviewButton
+              artist={song.artist}
+              song={song.song}
+              trackKey={song.key}
+              preferredProvider={preferredPreviewProvider}
+              spotifyEnabled={spotifyPreviewEnabled}
+              spotifyActions={
+                spotifyActions.length > 0
+                  ? spotifyActions
+                  : song.spotifyUrl
+                    ? [
+                        {
+                          artist: song.artist,
+                          song: song.song,
+                          url: song.spotifyUrl,
+                        },
+                      ]
+                    : []
+              }
+              appleMusicClient={appleMusicClient}
+              appleMusicActions={appleActions}
+              compact
+            />
+          </div>
         </div>
       ) : null}
       <Relevance score={score} song={song} view={view} />
@@ -557,6 +616,10 @@ function relevanceEvidence(
         return music.albums.length > 0
           ? music.albums.join(', ')
           : 'Not found in a scanned saved album';
+      case 'Apple Music library':
+        return music.inAppleMusicLibrary
+          ? 'Found in the Apple Music library saved in this browser'
+          : 'Not found in the saved Apple Music library';
       case 'Installed chart': {
         const exact = music.charts.filter(chart => chart.isInstalled).length;
         if (!music.hasInstalledChart) return 'No local chart found';
@@ -571,6 +634,8 @@ function relevanceEvidence(
   switch (label) {
     case 'Artist affinity':
       return `${radar.artistPlayCount.toLocaleString()} plays across this artist in your history`;
+    case 'Saved-library coverage':
+      return `${radar.savedLibrarySongCount.toLocaleString()} distinct saved songs by this artist across the libraries loaded in this browser`;
     case 'Available charts':
       return `${radar.charts.length.toLocaleString()} chart versions available on Chorus`;
     case 'Instrument coverage': {
@@ -620,13 +685,13 @@ function InstalledCount({
 function ChartRow({
   chart,
   view,
-  previewEnabled,
+  listenEnabled,
   downloadState,
   onInstall,
 }: {
   chart: FindMusicChart;
   view: FindMusicView;
-  previewEnabled: boolean;
+  listenEnabled: boolean;
   downloadState: DownloadState;
   onInstall: () => Promise<void>;
 }) {
@@ -636,11 +701,11 @@ function ChartRow({
       className={cn(
         'grid h-full items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs',
         view === 'music'
-          ? previewEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_150px_120px_100px]'
+          ? listenEnabled
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_150px_120px_100px]'
             : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
-          : previewEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_140px_170px_120px_100px]'
+          : listenEnabled
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px]'
             : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
       )}>
       <span />
@@ -663,7 +728,7 @@ function ChartRow({
       <span className="min-w-0 pl-2">
         <InstrumentBadges chart={chart} />
       </span>
-      {previewEnabled ? <span /> : null}
+      {listenEnabled ? <span /> : null}
       <span />
       <span className="font-mono text-xs text-muted-foreground">
         <span className="sr-only">Updated </span>

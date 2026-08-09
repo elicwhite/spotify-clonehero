@@ -1,8 +1,10 @@
 'use client';
 
 import {useSyncExternalStore} from 'react';
+import {usePathname} from 'next/navigation';
 import {GoogleAnalytics} from '@next/third-parties/google';
 import {REGION_COOKIE} from '@/lib/analytics/region';
+import {isTasteDataPrivateRoute} from '@/lib/apple-music/private-route';
 
 function readRegion(): string | null {
   if (typeof document === 'undefined') return null;
@@ -24,6 +26,7 @@ function readRegion(): string | null {
 // some routing edge case bypassed the proxy — in all of those, defaulting
 // to no-GA is the right call.
 export default function RegionAwareAnalytics({gaId}: {gaId: string}) {
+  const pathname = usePathname();
   // The region cookie is fixed for the session, so subscribe is a no-op and we
   // read it directly. SSR renders nothing; the client resolves the real value.
   const shouldLoad = useSyncExternalStore(
@@ -32,6 +35,7 @@ export default function RegionAwareAnalytics({gaId}: {gaId: string}) {
     () => false,
   );
 
-  if (!shouldLoad) return null;
+  const isTasteDataPrivate = isTasteDataPrivateRoute(pathname);
+  if (isTasteDataPrivate || !shouldLoad) return null;
   return <GoogleAnalytics gaId={gaId} />;
 }

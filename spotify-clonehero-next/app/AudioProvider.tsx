@@ -16,6 +16,11 @@ export type PreviewTrack = {
   song: string;
 };
 
+export type PreviewPlaybackOptions = {
+  /** Spotify's historical default is to loop; short provider previews can opt out. */
+  loop?: boolean;
+};
+
 interface AudioContextProps {
   isPlaying: boolean;
   isLoading: boolean;
@@ -29,6 +34,7 @@ interface AudioContextProps {
     audioUrl: string,
     key?: string,
     requestId?: number,
+    options?: PreviewPlaybackOptions,
   ) => Promise<void>;
   pause: () => void;
 }
@@ -91,6 +97,10 @@ export function AudioProvider({children}: {children: ReactNode}) {
   const ensureAudio = useCallback(() => {
     if (audioRef.current) return audioRef.current;
     const audio = new Audio();
+    // /find-music is cross-origin isolated for SQLocal. Provider preview
+    // assets are cross-origin, so opt into CORS before assigning `src` rather
+    // than leaving the media request in no-cors mode under COEP.
+    audio.crossOrigin = 'anonymous';
     audio.loop = true;
 
     const onPlaying = () => {
@@ -139,6 +149,7 @@ export function AudioProvider({children}: {children: ReactNode}) {
       audioUrl: string,
       key?: string,
       preparedRequestId?: number,
+      options?: PreviewPlaybackOptions,
     ) => {
       const requestId = preparedRequestId ?? beginTrackRequest();
       if (!isTrackRequestCurrent(requestId)) return;
@@ -149,7 +160,7 @@ export function AudioProvider({children}: {children: ReactNode}) {
       setIsLoading(true);
       setIsPlaying(false);
       audio.src = audioUrl;
-      audio.loop = true;
+      audio.loop = options?.loop ?? true;
 
       try {
         await audio.play();
