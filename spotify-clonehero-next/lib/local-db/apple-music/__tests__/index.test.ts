@@ -1,4 +1,4 @@
-import {Kysely, SqliteDialect} from 'kysely';
+import {Kysely, SqliteDialect, sql} from 'kysely';
 import {migration_016_apple_music_library} from '../../migrations/016_apple_music_library';
 import {
   activateAppleMusicScan,
@@ -135,25 +135,19 @@ describe('Apple Music local library repository', () => {
     }
   });
 
-  it('enforces the singleton state row', async () => {
+  it('declares the singleton state constraint in the migrated schema', async () => {
     const db = await makeDb();
     try {
-      await expect(
-        db
-          .insertInto('apple_music_library_state')
-          .values({
-            id: 2,
-            active_scan_id: null,
-            storefront: null,
-            reported_total: 0,
-            fetched_count: 0,
-            usable_count: 0,
-            catalog_associated_count: 0,
-            track_count: 0,
-            updated_at: new Date().toISOString(),
-          })
-          .execute(),
-      ).rejects.toThrow();
+      const schema = await sql<{sql: string}>`
+        select sql
+        from sqlite_master
+        where type = 'table' and name = 'apple_music_library_state'
+      `.execute(db);
+
+      expect(schema.rows).toHaveLength(1);
+      expect(schema.rows[0]?.sql).toMatch(
+        /constraint\s+"apple_music_library_state_singleton"\s+check\s*\(\s*"?id"?\s*=\s*1\s*\)/i,
+      );
     } finally {
       await db.destroy();
     }
