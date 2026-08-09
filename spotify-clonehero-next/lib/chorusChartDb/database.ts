@@ -2,6 +2,7 @@ import {useState, useCallback} from 'react';
 import {ChorusChartProgress, getServerChartsDataVersion} from '.';
 import {ChartResponseEncore} from '../chartSelection';
 import fetchNewCharts from './fetchNewCharts';
+import {loadChartDbDump} from './chartDbAssets';
 import {
   upsertCharts,
   clearAllCharts,
@@ -137,22 +138,15 @@ async function getUpdatedCharts(
 }
 
 async function fetchInitialDump(db: Transaction<DB>) {
-  const results = await Promise.all([
-    fetch('/data/charts.json'),
-    fetch('/data/metadata.json'),
-  ]);
+  const {charts, lastRun} = await loadChartDbDump();
 
-  const [charts, metadata] = await Promise.all(results.map(r => r.json()));
-
-  // TODO: store the charts in the database
-  // Create a new scan session with status complete,
-  // started at and scan_since_time should be metadata.lastRun which is a string in the format 2025-02-10T00:40:59.863Z
-  // last_chart_id should simply be 1. We'll make the next scan start from there
-
+  // The scan session is recorded as already complete as of the dump's cutoff,
+  // so the client's own scanning picks up from there rather than refetching
+  // everything the dump already covers.
   await upsertCharts(db, charts as unknown as ChartResponseEncore[]);
-  const id = await createScanSession(db, new Date(metadata.lastRun), 1);
-  await completeScanSession(db, id, metadata.lastRun);
-  return {charts, metadata};
+  const id = await createScanSession(db, new Date(lastRun), 1);
+  await completeScanSession(db, id, lastRun);
+  return {charts, lastRun};
 }
 
 function debugLog(message: string) {

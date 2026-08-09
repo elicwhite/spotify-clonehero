@@ -1,0 +1,97 @@
+name: Update chart DB
+
+# Rebuilds the Chorus chart dump that seeds a first-time visitor's local
+# database and publishes it to R2 (assets.musiccharts.tools/charts/).
+#
+# Existing visitors never re-download this dump — they catch up against the
+# Encore API from their own browser — so a fresher dump only shortens the
+# catch-up for new visitors. Nothing breaks if a run is skipped or fails: the
+# manifest is written last, so clients stay on the previous dump.
+on:
+  schedule:
+    # Daily incremental: only what changed since the published dump.
+    - cron: '0 8 * * *'
+    # Monthly full crawl. Incremental merges only add or replace, so this is
+    # what drops charts that were deleted from Chorus.
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: How much to fetch
+        type: choice
+        default: incremental
+        options:
+          - incremental
+          - full
+
+# Two runs would race on the manifest and waste an Encore crawl. Queue instead
+# of cancelling: a cancelled run leaves a half-finished run directory behind.
+concurrency:
+  group: update-chart-db
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    # A full crawl is ~400 paged requests with rate-limit backoff; the job limit
+    # is 360 minutes, so fail before GitHub kills us mid-upload.
+    timeout-minutes: 330
+    defaults:
+      run:
+        working-directory: spotify-clonehero-next
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve mode
+        id: mode
+        # A dispatch passes the mode explicitly; a schedule is identified by
+        # which cron fired. Anything unrecognised stays incremental (cheap).
+        run: |
+          if [ -n "${{ inputs.mode }}" ]; then
+            mode="${{ inputs.mode }}"
+          elif [ "${{ github.event.schedule }}" = "0 9 1 * *" ]; then
+            mode="full"
+          else
+            mode="incremental"
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Running a $mode update"
+
+      - name: Download charts
+        run: |
+          if [ "${{ steps.mode.outputs.mode }}" = "full" ]; then
+            pnpm update:db
+          else
+            pnpm update:db --incremental
+          fi
+
+      - name: Publish to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: pnpm publish:db
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Chart DB (${{ steps.mode.outputs.mode }})"
+            if [ -f public/data/metadata.json ]; then
+              cat public/data/metadata.json
+            else
+              echo "No dump was produced."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

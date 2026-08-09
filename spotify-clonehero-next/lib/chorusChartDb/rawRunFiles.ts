@@ -21,6 +21,12 @@ export type RunState = {
   afterTime: string;
   /** When the run first started, so `metadata.lastRun` survives a resume. */
   runStartTime: string;
+  /**
+   * The published dump this run builds on, or null for a full crawl. A resumed
+   * run re-downloads it: the batch files hold only what this run fetched, not
+   * the base it was merging into.
+   */
+  baseVersion: string | null;
   /** Highest chart id whose response has been written to disk. */
   lastChartId: number;
   /** How many batch files are known-good. Anything past this is a torn write. */

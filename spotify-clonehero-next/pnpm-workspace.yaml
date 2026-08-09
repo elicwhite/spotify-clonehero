@@ -26,3 +26,6 @@ onlyBuiltDependencies:
   - sharp
   - '@sentry/cli'
   - supabase
+  # tsx's bundler; its postinstall links the platform binary. Needed so the
+  # chart-db scripts run in CI, where nothing is installed globally.
+  - esbuild

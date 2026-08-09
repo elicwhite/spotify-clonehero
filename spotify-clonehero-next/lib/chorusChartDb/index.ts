@@ -2,6 +2,7 @@
 
 import {ChartInfo, ChartResponseEncore} from '@/lib/chartSelection';
 import fetchNewCharts from './fetchNewCharts';
+import {loadChartDbDump} from './chartDbAssets';
 import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
 import {search, Searcher} from 'fast-fuzzy';
 import {useCallback, useState} from 'react';
@@ -173,12 +174,8 @@ async function fetchServerData(
   chartsHandle: FileSystemFileHandle,
   metadataHandle: FileSystemFileHandle,
 ) {
-  const results = await Promise.all([
-    fetch('/data/charts.json'),
-    fetch('/data/metadata.json'),
-  ]);
-
-  const [charts, metadata] = await Promise.all(results.map(r => r.json()));
+  const {charts, lastRun} = await loadChartDbDump();
+  const metadata = {lastRun};
 
   await Promise.all([
     writeFile(chartsHandle, JSON.stringify(charts)),
