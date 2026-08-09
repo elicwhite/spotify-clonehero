@@ -131,7 +131,7 @@ describe('FindMusicWelcome', () => {
     const connectedCard = screen.getByTestId('welcome-apple-music');
     expect(connectedCard).toHaveTextContent('1,240 saved songs');
     fireEvent.click(
-      within(connectedCard).getByRole('button', {name: 'Refresh Apple Music'}),
+      within(connectedCard).getByRole('button', {name: 'Refresh'}),
     );
     expect(
       screen.queryByRole('menuitem', {name: 'Disconnect and clear'}),

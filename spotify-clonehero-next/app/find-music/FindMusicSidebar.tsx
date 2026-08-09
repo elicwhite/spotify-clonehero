@@ -287,7 +287,7 @@ export default function FindMusicSidebar({
     ? 'Connect Apple Music'
     : appleMusicStatus.phase === 'error'
       ? 'Try again'
-      : 'Refresh Apple Music';
+      : 'Refresh';
 
   function toggleInstrument(instrument: (typeof INSTRUMENTS)[number][0]) {
     const instruments = new Set(filters.instruments);
@@ -567,7 +567,6 @@ export default function FindMusicSidebar({
               <AppleMusicIcon variant="white" className="h-3 w-3" />
             </span>
           }
-          description="Browser-local and available to guests. This is not a site login."
           status={appleMusicStatus}
           actionLabel={appleMusicActionLabel}
           onAction={

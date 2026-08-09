@@ -99,9 +99,6 @@ describe('FindMusicSidebar', () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText('YouTube Music')).not.toBeInTheDocument();
     expect(screen.getByText('Apple Music')).toBeInTheDocument();
-    expect(screen.getByTestId('source-apple-music')).toHaveTextContent(
-      'Browser-local and available to guests. This is not a site login.',
-    );
     expect(
       screen.getByTestId('source-apple-music').querySelector('img'),
     ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-white.svg');
