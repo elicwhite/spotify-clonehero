@@ -258,7 +258,7 @@ export default function FindMusicWelcome({
     ? 'Connect Apple Music'
     : appleMusicStatus.phase === 'error'
       ? 'Try again'
-      : 'Refresh Apple Music';
+      : 'Refresh';
 
   const historyAction =
     historyStatus.phase === 'idle'
