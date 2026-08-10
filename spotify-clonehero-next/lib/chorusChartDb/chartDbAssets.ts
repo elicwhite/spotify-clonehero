@@ -4,22 +4,34 @@
  * `.github/workflows/update-chart-db.yml`.
  *
  * Layout:
- *   charts/manifest.json                        mutable, no-cache
+ *   public/data/manifest.json                   committed to the repo; served
+ *                                               by the Next.js app at
+ *                                               /data/manifest.json
  *   charts/dumps/<version>/charts.json.gz       immutable, cached forever
  *
- * The manifest is the only mutable object and is written last, so a publish
- * that dies partway leaves clients on the previous dump. Reading the dump URL
- * and `lastRun` from one manifest snapshot also keeps them consistent: fetching
- * two mutable objects separately could pair a dump with a newer cutoff and
- * leave a permanent hole in that client's database.
+ * The manifest is committed to the repo by the CI after each successful
+ * publish, so the R2 bucket policy never needs delete or overwrite permission.
+ * Reading the dump URL and `lastRun` from one manifest snapshot also keeps
+ * them consistent.
  *
- * Superseded dumps are reaped by a bucket lifecycle rule rather than by this
- * code, so the publishing credentials never need delete permission.
+ * Superseded dumps are reaped by a bucket lifecycle rule on the
+ * charts/dumps/ prefix; the publishing credentials never need delete
+ * permission.
  */
 
 export const CHART_DB_ASSET_BASE_URL = 'https://assets.musiccharts.tools';
 export const CHART_DB_KEY_PREFIX = 'charts';
-export const CHART_DB_MANIFEST_KEY = `${CHART_DB_KEY_PREFIX}/manifest.json`;
+/**
+ * The URL path (relative to the Next.js app) where the manifest is served.
+ * Clients in browser context use this; the CI scripts read the file directly
+ * from `public/data/manifest.json` instead.
+ */
+export const CHART_DB_MANIFEST_URL_PATH = '/data/manifest.json';
+/**
+ * On-disk path (relative to the Next.js project root) where the manifest is
+ * written by the publish script and committed to the repo.
+ */
+export const CHART_DB_MANIFEST_FILE = 'public/data/manifest.json';
 /**
  * Dumps sit under their own prefix so the lifecycle rule that expires them can
  * be scoped to exactly them — never the manifest, never the models sharing
@@ -85,7 +97,7 @@ export function parseChartDbManifest(value: unknown): ChartDbManifest {
 export async function fetchChartDbManifest(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ChartDbManifest> {
-  const response = await fetchImpl(chartDbAssetUrl(CHART_DB_MANIFEST_KEY), {
+  const response = await fetchImpl(CHART_DB_MANIFEST_URL_PATH, {
     cache: 'no-cache',
   });
 

@@ -1,6 +1,6 @@
 import {
   CHART_DB_DUMP_PREFIX,
-  CHART_DB_MANIFEST_KEY,
+  CHART_DB_MANIFEST_URL_PATH,
   ChartDbManifest,
   chartDbAssetUrl,
   chartDbDumpKey,
@@ -42,10 +42,8 @@ describe('chart DB asset addressing', () => {
     expect(earlier < later).toBe(true);
   });
 
-  it('builds absolute URLs on the assets host', () => {
-    expect(chartDbAssetUrl(CHART_DB_MANIFEST_KEY)).toBe(
-      'https://assets.musiccharts.tools/charts/manifest.json',
-    );
+  it('serves the manifest from the Next.js app, not from R2', () => {
+    expect(CHART_DB_MANIFEST_URL_PATH).toBe('/data/manifest.json');
   });
 
   it('round-trips a built manifest through the parser', () => {
@@ -76,10 +74,9 @@ describe('fetchChartDbManifest', () => {
 
     await fetchChartDbManifest(fetchImpl as unknown as typeof fetch);
 
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://assets.musiccharts.tools/charts/manifest.json',
-      {cache: 'no-cache'},
-    );
+    expect(fetchImpl).toHaveBeenCalledWith('/data/manifest.json', {
+      cache: 'no-cache',
+    });
   });
 
   it('throws on a non-ok response rather than parsing an error page', async () => {
@@ -95,7 +92,7 @@ describe('loadChartDbDump', () => {
   it('pairs the dump and cutoff from a single manifest read', async () => {
     const charts = [{groupId: 1}];
     const fetchImpl = jest.fn(async (url: string) =>
-      url.endsWith('manifest.json')
+      url.endsWith('/data/manifest.json')
         ? jsonResponse(manifest)
         : jsonResponse(charts),
     );
@@ -120,14 +117,12 @@ describe('loadChartDbDump', () => {
 });
 
 describe('lifecycle-rule safety', () => {
-  it('keeps dumps under a prefix that excludes the manifest', () => {
+  it('keeps dumps under a prefix that excludes models and other bucket objects', () => {
     // The bucket rule that expires old dumps is scoped to CHART_DB_DUMP_PREFIX.
-    // If the manifest (or anything else in this shared bucket) ever fell under
-    // it, the pointer would be deleted out from under every new visitor.
+    // Nothing else in the shared bucket should fall under it.
     expect(chartDbDumpKey('any-version').startsWith(CHART_DB_DUMP_PREFIX)).toBe(
       true,
     );
-    expect(CHART_DB_MANIFEST_KEY.startsWith(CHART_DB_DUMP_PREFIX)).toBe(false);
     expect('models/beat_this.onnx'.startsWith(CHART_DB_DUMP_PREFIX)).toBe(
       false,
     );

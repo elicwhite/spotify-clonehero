@@ -11,9 +11,10 @@ import {
 } from './lib/chorusChartDb/rawRunFiles';
 import {
   ChartDbManifest,
+  CHART_DB_MANIFEST_FILE,
   chartDbDumpKey,
   fetchChartDbDump,
-  fetchChartDbManifest,
+  parseChartDbManifest,
 } from './lib/chorusChartDb/chartDbAssets';
 
 /**
@@ -46,6 +47,9 @@ const FRESH = process.argv.includes('--fresh');
 
 /**
  * The published dump an incremental run builds on, or null for a full crawl.
+ * Reads the manifest from the local file written by the previous publish — the
+ * CI commits `CHART_DB_MANIFEST_FILE` after each successful upload so it is
+ * present in the checked-out repo on the next run.
  * Returns null rather than throwing when nothing is published yet, so the first
  * scheduled run bootstraps itself with a full crawl.
  */
@@ -55,10 +59,12 @@ async function loadBaseManifest(): Promise<ChartDbManifest | null> {
   }
 
   try {
-    return await fetchChartDbManifest();
+    return parseChartDbManifest(
+      JSON.parse(fs.readFileSync(CHART_DB_MANIFEST_FILE, 'utf8')),
+    );
   } catch (error) {
     console.log(
-      'No usable published dump to build on, falling back to a full crawl:',
+      'No usable local manifest to build on, falling back to a full crawl:',
       error instanceof Error ? error.message : error,
     );
     return null;

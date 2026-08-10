@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import {promisify} from 'util';
 import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 import {
-  CHART_DB_MANIFEST_KEY,
+  CHART_DB_MANIFEST_FILE,
   chartDbAssetUrl,
   chartDbDumpKey,
   chartDbVersionFromDate,
@@ -13,7 +13,6 @@ import {
 import {
   buildManifest,
   DUMP_CACHE_CONTROL,
-  MANIFEST_CACHE_CONTROL,
 } from '../lib/chorusChartDb/chartDbPublish';
 
 /**
@@ -23,13 +22,12 @@ import {
  *   pnpm publish:db              upload
  *   pnpm publish:db --dry-run    report what would happen, touch nothing
  *
- * The dump is uploaded to an immutable key and the manifest is written LAST, so
- * a failure part way through leaves clients on the previous dump rather than
- * pointing them at something half-written.
+ * The dump is uploaded to an immutable key. The manifest is written to
+ * `public/data/manifest.json` and committed to the repo by CI — never to R2 —
+ * so the R2 credentials never need delete or overwrite permission.
  *
- * This only ever writes. Superseded dumps are expired by a bucket lifecycle
- * rule on the `charts/dumps/` prefix, so the credentials here need no delete
- * permission and can never remove a dump clients are still being pointed at.
+ * This only ever writes NEW objects to R2. Superseded dumps are expired by a
+ * bucket lifecycle rule on the `charts/dumps/` prefix.
  */
 
 const gzip = promisify(zlib.gzip);
@@ -137,17 +135,11 @@ async function run() {
   );
   console.log(`Uploaded ${chartDbAssetUrl(key)}`);
 
-  // Written last: until this lands, clients keep using the previous dump.
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: CHART_DB_MANIFEST_KEY,
-      Body: JSON.stringify(manifest, null, 2),
-      ContentType: 'application/json',
-      CacheControl: MANIFEST_CACHE_CONTROL,
-    }),
-  );
-  console.log(`Updated ${chartDbAssetUrl(CHART_DB_MANIFEST_KEY)}`);
+  // Written to the repo (not to R2) so the bucket policy never needs overwrite
+  // permission. The CI commits this file after a successful publish, and
+  // `downloadDb.ts` reads it directly for incremental runs.
+  fs.writeFileSync(CHART_DB_MANIFEST_FILE, JSON.stringify(manifest, null, 2));
+  console.log(`Wrote manifest to ${CHART_DB_MANIFEST_FILE}`);
 }
 
 run().catch(error => {

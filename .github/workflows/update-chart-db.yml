@@ -41,6 +41,8 @@ jobs:
     # A full crawl is ~400 paged requests with rate-limit backoff; the job limit
     # is 360 minutes, so fail before GitHub kills us mid-upload.
     timeout-minutes: 330
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: spotify-clonehero-next
@@ -88,6 +90,19 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: pnpm publish:db
+
+      - name: Commit manifest
+        # The publish step writes the manifest to public/data/manifest.json so
+        # it can be served by the Next.js app.  We commit it here so the next
+        # incremental run can read it directly from the checked-out repo instead
+        # of needing to overwrite any R2 object.
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add spotify-clonehero-next/public/data/manifest.json
+          git diff --staged --quiet || git commit -m "chore: update chart DB manifest [skip ci]"
+          git push
 
       - name: Summarize
         if: always()
