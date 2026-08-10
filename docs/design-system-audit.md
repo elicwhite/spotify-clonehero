@@ -63,6 +63,12 @@ Pages audited: `/drum-transcription` (`app/drum-transcription/landing/DrumTransc
    **different, unintentional**: in Phase 3 the sentences stay verbatim and the
    decoration goes — the pill becomes plain stated text, the callout box
    becomes a `TrustLine` item. Before/after screenshots required.
+
+   Landed in Phase 3: "Local and private" keeps its words and its position
+   above the heading but renders through `Eyebrow`, and the folders sentence
+   keeps its words and moves into a `TrustLine`. Reading order is unchanged;
+   only the badge chrome and the two icons are gone.
+   `FindMusicWelcome.test.tsx` passes unmodified.
 3. **Does `/sng` join the marketing system?** Track A yes (its OG image
    migrates like every other). Track B no: `/sng` is a utility page, not a
    marketing page — it isn't in the style guide's scope list, has no
@@ -72,10 +78,14 @@ Pages audited: `/drum-transcription` (`app/drum-transcription/landing/DrumTransc
 4. **Is `LandingSection` with `{null}` children (`TempoLanding.tsx:114`) a
    supported variant or a bug?** A bug in the component contract: the section
    is intentional (an intro-only section is legitimate content per the copy
-   guide) but the component still emits an empty `mt-6` body div. Fix:
-   `children` becomes optional and the body div is not rendered when absent.
-   The 1.5 rem of trailing dead space disappears — **different, unintentional**,
-   screenshot pair recorded in Phase 2/3.
+   guide) but the component still emitted an empty `mt-6` body div. Fix:
+   `children` is optional and the body div is not rendered when absent.
+
+   Corrected after measuring (Phase 3): this is a **DOM cleanup with no
+   visual effect**, not the 1.5 rem of dead space predicted here. The empty
+   div's `margin-top` collapses through, so it contributed nothing to layout.
+   Re-inserting an empty `div.mt-6` into the rendered section changes
+   `scrollHeight` by 0. No screenshot pair is needed.
 5. **Does `/sheet-music/[slug]` count as a dashboard for Track C?** No. It is
    a full-viewport chart-detail view (`SongView`/ChartDetailLayout) with no
    sidebar rail and no header-row/rail/main/bottom region structure. Audited
@@ -209,3 +219,30 @@ Captured 2026-08-09. Notes:
   slug when diffing.
 - Landing pages are full-page captures; dashboards are viewport captures
   (their panes scroll internally).
+
+### Diffing a migration against the baseline
+
+Do not diff a migrated page against the Phase 0 PNGs directly. Those were
+captured by resizing the browser window, where macOS overlay scrollbars leave
+the layout viewport at the full width; `emulate`'s viewport override reserves
+15 CSS px for a classic scrollbar instead. The two differ in layout width, so
+every centred element lands ~7.5 px apart and the whole page reads as changed.
+
+The reliable procedure, used for `/tempo` and `/drum-transcription`:
+
+1. Copy the migrated file aside, restore the pre-migration one with
+   `git show HEAD:<path>`, and capture with `emulate` at a fixed viewport
+   (`1512x960x2`) in both schemes.
+2. Restore the migrated file and capture again at the identical settings.
+3. Diff with ffmpeg: `blend=all_mode=difference` for a per-pixel map plus
+   `ssim` for a summary.
+4. **Run the control.** Reload the migrated page again with no code change and
+   diff those two captures. Both landing pages animate a hero canvas, so a
+   nonzero diff is expected; the migration is a no-op when its diff is no
+   larger than the control's, in the same band.
+
+Measured results: both pages came out the same size as their pre-migration
+render and pixel-identical outside the hero-canvas band, and in both cases the
+unchanged-code control produced an equal or larger diff in exactly that band
+(`/tempo` 62 vs 29, `/drum-transcription` 179 vs 179 with more differing
+pixels in the control).

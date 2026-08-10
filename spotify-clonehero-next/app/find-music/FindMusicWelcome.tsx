@@ -7,17 +7,17 @@ import {
   FolderOpen,
   History,
   LoaderCircle,
-  LockKeyhole,
   MoreHorizontal,
   Music2,
   Radio,
   RefreshCw,
-  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 
 import {Icons} from '@/components/icons';
 import AppleMusicIcon from '@/components/AppleMusicIcon';
+import {Eyebrow} from '@/components/landing/Eyebrow';
+import {TrustLine} from '@/components/landing/TrustLine';
 import {Button} from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -279,11 +279,12 @@ export default function FindMusicWelcome({
       aria-labelledby="find-music-welcome-title"
       data-testid="find-music-welcome">
       <div className="mx-auto w-full max-w-5xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
+        {/* Trust signals are stated, not decorated: no badge graphics, no
+            shield icons (docs/landing-page-style-guide.md §7). The label uses
+            the site's plain Eyebrow and the fact below sits in a TrustLine,
+            the same treatment the tool landing pages give their own. */}
         <header className="max-w-2xl">
-          <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
-            Local and private
-          </span>
+          <Eyebrow>Local and private</Eyebrow>
           <h2
             id="find-music-welcome-title"
             className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -295,13 +296,15 @@ export default function FindMusicWelcome({
             in this browser; connected-service requests go directly to the music
             provider.
           </p>
-          <div className="mt-4 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <span>
-              Your folders are read locally and saved in this browser&apos;s
-              private music index.
-            </span>
-          </div>
+          <TrustLine
+            className="mt-4"
+            items={[
+              <>
+                Your folders are read locally and saved in this browser&apos;s
+                private music index.
+              </>,
+            ]}
+          />
         </header>
 
         <section className="mt-8" aria-labelledby="start-with-music-heading">
