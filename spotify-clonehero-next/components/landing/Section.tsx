@@ -7,6 +7,11 @@ import {Eyebrow} from './Eyebrow';
  * section body. Pages whose sections form an ordered sequence can pass a mono
  * `index`; it is decorative, so it is hidden from assistive tech and the
  * heading carries the meaning.
+ *
+ * `children` is optional. A section whose whole content is its intro is a
+ * supported shape (`/tempo`'s "When it works, and when it doesn't" is one
+ * honest paragraph with nothing to illustrate), and such a section renders no
+ * body wrapper rather than an empty one.
  */
 export function LandingSection({
   id,
@@ -21,7 +26,7 @@ export function LandingSection({
   index?: string;
   title: string;
   intro?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -43,7 +48,9 @@ export function LandingSection({
           {intro}
         </div>
       ) : null}
-      <div className="mt-6">{children}</div>
+      {children != null && children !== false ? (
+        <div className="mt-6">{children}</div>
+      ) : null}
     </section>
   );
 }
