@@ -20,6 +20,11 @@ The paper style guide governs prose mechanics (humility, precision, no em-dash p
 "not X, but Y", every number traces to a source). Those rules apply here unchanged. This
 guide adds what is specific to a public page selling a tool to a skeptical community.
 
+This document governs **copy**. Its structural sibling, `docs/design-system.md`, governs
+which components a page is built from and which tokens exist. Several components encode
+rules from this guide — `TrustLine` because of §7, `ComparisonTable`'s missing verdict slot
+because of §5.2 — so a change here may need a change there.
+
 ## 1. Who is reading, and what they distrust
 
 The audience is the Clone Hero / YARG charting community: charters, aspiring charters, and

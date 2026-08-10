@@ -81,21 +81,31 @@ lib/drum-transcription/            # Core logic (testable, no React)
 
 ### Existing Utilities — Reuse, Don't Reimplement
 
-| Need                                                                                                   | Location                                                                  |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart`                                                    |
-| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper                      | `lib/chart-edit/`                                                         |
-| SNG parsing                                                                                            | `parse-sng`                                                               |
-| Tick → ms conversion                                                                                   | `lib/chart-utils/tickToMs.ts` → `tickToMs()`                              |
-| Drum note → VexFlow notation                                                                           | `app/sheet-music/[slug]/convertToVexflow.ts`                              |
-| OPFS file read/write                                                                                   | `lib/fileSystemHelpers.ts`                                                |
-| Audio playback (primary)                                                                               | `lib/preview/audioManager.ts`                                             |
-| Highway 3D renderer                                                                                    | `lib/preview/highway.ts` + `app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
-| Sheet music notation                                                                                   | `app/sheet-music/[slug]/SheetMusic.tsx`                                   |
-| INI parsing                                                                                            | `lib/ini-parser.ts`                                                       |
-| UI components                                                                                          | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, etc.)     |
-| CSS class merging                                                                                      | `lib/utils.ts` → `cn()`                                                   |
-| Toasts                                                                                                 | `sonner` (configured in root layout)                                      |
+| Need                                                                                                                                                                                             | Location                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`)                                                                                           | `@eliwhite/scan-chart`                                                    |
+| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper                                                                                                                | `lib/chart-edit/`                                                         |
+| SNG parsing                                                                                                                                                                                      | `parse-sng`                                                               |
+| Tick → ms conversion                                                                                                                                                                             | `lib/chart-utils/tickToMs.ts` → `tickToMs()`                              |
+| Drum note → VexFlow notation                                                                                                                                                                     | `app/sheet-music/[slug]/convertToVexflow.ts`                              |
+| OPFS file read/write                                                                                                                                                                             | `lib/fileSystemHelpers.ts`                                                |
+| Audio playback (primary)                                                                                                                                                                         | `lib/preview/audioManager.ts`                                             |
+| Highway 3D renderer                                                                                                                                                                              | `lib/preview/highway.ts` + `app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
+| Sheet music notation                                                                                                                                                                             | `app/sheet-music/[slug]/SheetMusic.tsx`                                   |
+| INI parsing                                                                                                                                                                                      | `lib/ini-parser.ts`                                                       |
+| UI components                                                                                                                                                                                    | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, etc.)     |
+| Landing/marketing page structure (`LandingPage`, `LandingHero`, `LandingSection`, `ComparisonTable`, `ToolEntrySection`, `ScrollToStartCta`, `TrustLine`, `Eyebrow`, `StatChip`, `ExternalLink`) | `components/landing/` — see `docs/design-system.md` §1                    |
+| Open Graph images (frame, palette, type scale)                                                                                                                                                   | `lib/og/` → `tokens.ts` + `layout.tsx` + `createToolOgImage`              |
+| Page header + outer gutter (which header a route gets, how much padding `<main>` gives)                                                                                                          | `components/SiteChrome.tsx` → `EDITOR_ROUTES` / `FULL_BLEED_ROUTES`       |
+| CSS class merging                                                                                                                                                                                | `lib/utils.ts` → `cn()`                                                   |
+| Toasts                                                                                                                                                                                           | `sonner` (configured in root layout)                                      |
+
+**Before building a new page,** read `docs/design-system.md` (structure: which
+component to reach for, which tokens exist, what the documented variants mean)
+and `docs/landing-page-style-guide.md` (copy). A new page composes the existing
+primitives rather than opening with a bespoke container. If a page needs no
+outer gutter, add it to `FULL_BLEED_ROUTES` in `components/SiteChrome.tsx`;
+never cancel the gutter with a negative margin (a test enforces this).
 
 ### Reference Projects
 

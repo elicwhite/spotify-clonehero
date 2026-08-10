@@ -1,6 +1,46 @@
 # 0099 — Design system convergence: landing pages, dashboard shells, OG images
 
-Status: in-progress
+Status: in-progress — Phases 0, 1, 2, 3 and 5 complete; Phase 4 complete
+through item 1, items 2-6 deliberately not done (see "Phase 4 stop decision").
+
+## Phase 4 stop decision (2026-08-10)
+
+Item 1, the `SiteMain` gutter contract split, shipped. It is the item the plan
+itself calls "a standalone, shippable fix... worth doing even if the rest of
+Track C is deferred", and it removes the concrete bug risk the audit named.
+
+Items 2-6, the shared dashboard shell, are **not** done, for two reasons that
+should be resolved before someone picks this up:
+
+1. **It would produce two shells, not one.** The audit settled grid-vs-flex in
+   writing: a shared shell must be the named-areas grid generalized, because a
+   flex shell cannot express the editor's ≥1440px rearrangement. But
+   `/sheet-music` is recorded as "different, keep" (a document-flow search page
+   whose lower density is the owner's stated intent) and
+   `/sheet-music/[slug]` is not a dashboard at all. That leaves `/find-music`
+   and `/chart-editor`. If the editor keeps `.chart-editor-grid` and a new
+   shell wraps only `/find-music`, the codebase ends with two shells where it
+   has one grid today — strictly worse. The extraction needs the editor to be
+   its real second consumer.
+2. **The editor's riskiest states have no baseline.** Phase 0 could only
+   capture `/chart-editor` in its chart-picker entry state, because the capture
+   profile had no chart in OPFS. The plan's acceptance bar is the before/after
+   screenshot matrix, and the editor's ≥1440px rearrangement only exists once a
+   chart is loaded. Migrating the highest-risk shell with no reference for the
+   states that make it risky is exactly what the plan's own working rules
+   forbid.
+
+**To resume:** get a chart loaded into `/chart-editor` reproducibly (seed OPFS,
+or add a fixture-loading path), capture the loaded grid at 1280 and 1512 in
+both schemes, then generalize `.chart-editor-grid` with the editor as the first
+consumer and `/find-music` as the second. `docs/design-system.md` §3 records
+the current position so the next reader does not re-derive it.
+
+The density-token promotion (item 4) is also not done. `--ed-*` has 53 call
+sites across the editor and several shadcn primitives whose fallback values are
+load-bearing; renaming that namespace is a wide mechanical change with no
+consumer benefit until a second density variant actually exists, which is the
+shell.
 
 Owner ask, verbatim:
 
