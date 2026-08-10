@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, type ReactNode} from 'react';
+import {type ReactNode} from 'react';
 import {
   AudioLines,
   Grid3x3,
@@ -9,33 +9,22 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import {Button} from '@/components/ui/button';
-import {TooltipProvider} from '@/components/ui/tooltip';
-import {Eyebrow} from '@/components/landing/Eyebrow';
+import {ComparisonTable} from '@/components/landing/ComparisonTable';
+import {ExternalLink} from '@/components/landing/ExternalLink';
+import {LandingHero} from '@/components/landing/LandingHero';
+import {LandingPage} from '@/components/landing/LandingPage';
+import {ScrollToStartCta} from '@/components/landing/ScrollToStartCta';
 import {LandingSection} from '@/components/landing/Section';
-import {StatCell} from '@/components/landing/StatChip';
 import {StepFlow} from '@/components/landing/StepFlow';
-import {TrustLine} from '@/components/landing/TrustLine';
+import {ToolEntrySection} from '@/components/landing/ToolEntrySection';
 
 import {EditPassCanvas} from './EditPassCanvas';
 import {
   COMPARISON_ROWS,
   DATA_DISCLAIMER,
   GENERATED_TEMPO_MAP_ROWS,
+  type ComparisonRow,
 } from './metrics';
-
-/** A named third-party project, linked from the copy that mentions it. */
-function ExternalLink({href, children}: {href: string; children: ReactNode}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer noopener"
-      className="text-foreground underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-      {children}
-    </a>
-  );
-}
 
 const STEPS: {Icon: LucideIcon; label: string; desc: string}[] = [
   {
@@ -81,207 +70,129 @@ const FIXES: {title: string; body: ReactNode}[] = [
 ];
 
 /**
+ * The kit-part rows break down the whole-chart row above them, so the first
+ * row of each group is the summary the rest expand on.
+ */
+function toGroupRows(rows: readonly ComparisonRow[]) {
+  return rows.map((row, index) => ({
+    header: row.family,
+    cells: [row.ours, row.adtof, row.octave],
+    ...(index === 0 ? {summary: true} : {}),
+  }));
+}
+
+/**
  * The /drum-transcription landing page: the entry point to the tool and the
  * page that explains it. The working entry screen is passed in as
  * `toolEntry` so the pipeline flow stays owned by DrumTranscriptionClient.
  */
 export function DrumTranscriptionLanding({toolEntry}: {toolEntry: ReactNode}) {
-  const scrollToStart = useCallback(() => {
-    document
-      .getElementById('start')
-      ?.scrollIntoView({behavior: 'smooth', block: 'start'});
-  }, []);
-
   return (
-    <TooltipProvider delayDuration={150}>
-      <div className="landing-lanes w-full max-w-4xl space-y-12 py-8 sm:py-12">
-        {/* Hero */}
-        <header className="space-y-6">
-          <Eyebrow>Drum transcription</Eyebrow>
-          <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl [text-wrap:balance]">
+    <LandingPage>
+      <LandingHero
+        eyebrow="Drum transcription"
+        title={
+          <>
             {/* Non-breaking hyphen: "first-pass" should never split across
                 lines in the display size. */}
             Turn a song into a first&#8209;pass drum chart
-          </h1>
-          <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+          </>
+        }
+        lede={
+          <>
             Placing every drum note by hand is the slow part of charting a song.
             This tool speeds up charting by giving you a high quality draft. You
             review the draft, fix what&rsquo;s wrong, and decide what ships.
-          </p>
-          <TrustLine
-            items={[
-              'All processing happens on your computer. Your audio file and chart are never uploaded to a server.',
-              'The first run downloads about 515 MB of model files.',
-              'Needs WebGPU, so a recent Chrome or Edge.',
-            ]}
-          />
-          <EditPassCanvas />
-          <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+          </>
+        }
+        trust={[
+          'All processing happens on your computer. Your audio file and chart are never uploaded to a server.',
+          'The first run downloads about 515 MB of model files.',
+          'Needs WebGPU, so a recent Chrome or Edge.',
+        ]}
+        illustration={<EditPassCanvas />}
+        caption={
+          <>
             Above: the model&rsquo;s predicted notes need some edits, like
             moving a cymbal to the right lane, removing a note that was never
             played, or nudging a note onto the beat. Make those fixes in the
             chart editor.
+          </>
+        }
+      />
+
+      <ToolEntrySection
+        title="Start a song"
+        intro="Drop in an audio file to build a new chart, or an existing chart package to keep its tempo map and transcribe drums onto it.">
+        {toolEntry}
+      </ToolEntrySection>
+
+      <LandingSection
+        title="What it does"
+        intro="Three models run on your machine: one separates the drums from the mix, one proposes the drum notes, one finds the beat grid the notes sit on. What they produce together is the draft, and the last step is where you take over.">
+        <StepFlow steps={STEPS} />
+      </LandingSection>
+
+      <LandingSection
+        title="What you'll fix"
+        intro="These are the parts of a draft that are wrong most often. They are where your time goes, so they are worth knowing before you start.">
+        <ul className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          {FIXES.map(fix => (
+            <li
+              key={fix.title}
+              className="flex flex-col gap-3 bg-card p-5 sm:last:odd:col-span-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                {fix.title}
+              </h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {fix.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </LandingSection>
+
+      <LandingSection
+        title="How many edits"
+        intro="Edits per 100 notes counts the work a draft leaves you: every note you add, delete, move to another lane, or move to another position. Lower is fewer edits. Hover or focus a figure to see the measurement behind it.">
+        <div className="space-y-3">
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            This tool can start with an existing tempo map or make one from the
+            audio.
           </p>
-        </header>
-
-        {/* Tool entry: the working screen, promoted to the top of the page. */}
-        <LandingSection
-          id="start"
-          title="Start a song"
-          intro="Drop in an audio file to build a new chart, or an existing chart package to keep its tempo map and transcribe drums onto it.">
-          <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6">
-            {toolEntry}
-          </div>
-        </LandingSection>
-
-        <LandingSection
-          title="What it does"
-          intro="Three models run on your machine: one separates the drums from the mix, one proposes the drum notes, one finds the beat grid the notes sit on. What they produce together is the draft, and the last step is where you take over.">
-          <StepFlow steps={STEPS} />
-        </LandingSection>
-
-        <LandingSection
-          title="What you'll fix"
-          intro="These are the parts of a draft that are wrong most often. They are where your time goes, so they are worth knowing before you start.">
-          <ul className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
-            {FIXES.map(fix => (
-              <li
-                key={fix.title}
-                className="flex flex-col gap-3 bg-card p-5 sm:last:odd:col-span-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {fix.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {fix.body}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </LandingSection>
-
-        <LandingSection
-          title="How many edits"
-          intro="Edits per 100 notes counts the work a draft leaves you: every note you add, delete, move to another lane, or move to another position. Lower is fewer edits. Hover or focus a figure to see the measurement behind it.">
-          <div className="space-y-3">
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              This tool can start with an existing tempo map or make one from
-              the audio.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[30rem] border-collapse text-sm">
-                <caption className="sr-only">
-                  Edits per 100 notes for this tool, ADTOF, and Octave when
-                  starting with an existing tempo map or starting from audio.
-                </caption>
-                <thead>
-                  <tr className="border-b border-border">
-                    <th
-                      scope="col"
-                      className="py-2 pr-4 text-left font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
-                      Part of the kit
-                    </th>
-                    {['This tool', 'ADTOF', 'Octave'].map(head => (
-                      <th
-                        key={head}
-                        scope="col"
-                        className="py-2 pl-4 text-right font-mono text-[11px] font-normal uppercase tracking-[0.14em] text-muted-foreground">
-                        {head}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="border-b border-border/60">
-                  <tr className="border-b border-border/60 bg-muted/40">
-                    <th
-                      scope="rowgroup"
-                      colSpan={4}
-                      className="py-2 text-left text-xs font-medium text-foreground">
-                      With an existing tempo map
-                    </th>
-                  </tr>
-                  {COMPARISON_ROWS.map((row, index) => (
-                    <tr
-                      key={row.family}
-                      className="border-b border-border/60 last:border-b-0">
-                      <th
-                        scope="row"
-                        className={
-                          index === 0
-                            ? 'py-2 pr-4 text-left font-medium text-foreground'
-                            : 'py-2 pr-4 text-left font-normal text-muted-foreground'
-                        }>
-                        {row.family}
-                      </th>
-                      <td className="py-2 pl-4 text-right">
-                        <StatCell metric={row.ours} />
-                      </td>
-                      <td className="py-2 pl-4 text-right">
-                        <StatCell metric={row.adtof} />
-                      </td>
-                      <td className="py-2 pl-4 text-right">
-                        <StatCell metric={row.octave} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tbody>
-                  <tr className="border-b border-border/60 bg-muted/40">
-                    <th
-                      scope="rowgroup"
-                      colSpan={4}
-                      className="py-2 text-left text-xs font-medium text-foreground">
-                      Starting from audio
-                    </th>
-                  </tr>
-                  {GENERATED_TEMPO_MAP_ROWS.map((row, index) => (
-                    <tr
-                      key={row.family}
-                      className="border-b border-border/60 last:border-b-0">
-                      <th
-                        scope="row"
-                        className={
-                          index === 0
-                            ? 'py-2 pr-4 text-left font-medium text-foreground'
-                            : 'py-2 pr-4 text-left font-normal text-muted-foreground'
-                        }>
-                        {row.family}
-                      </th>
-                      <td className="py-2 pl-4 text-right">
-                        <StatCell metric={row.ours} />
-                      </td>
-                      <td className="py-2 pl-4 text-right">
-                        <StatCell metric={row.adtof} />
-                      </td>
-                      <td className="py-2 pl-4 text-right">
-                        <StatCell metric={row.octave} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground">
-              <ExternalLink href="https://github.com/mzehren/adtof">
-                ADTOF
-              </ExternalLink>{' '}
-              predicts five drum classes against this tool&rsquo;s eight-lane
-              output. It doesn&rsquo;t identify which tom or which cymbal.{' '}
-              <ExternalLink href="https://octavestudio.tools/">
-                Octave
-              </ExternalLink>{' '}
-              is a published audio-to-chart system.
-            </p>
-
-            <p className="max-w-2xl pt-7 font-mono text-[11px] leading-relaxed text-muted-foreground">
-              {DATA_DISCLAIMER}
-            </p>
-          </div>
-        </LandingSection>
-
-        <div className="flex flex-col items-start border-t border-border pt-8">
-          <Button onClick={scrollToStart}>Open a song</Button>
+          <ComparisonTable
+            caption="Edits per 100 notes for this tool, ADTOF, and Octave when starting with an existing tempo map or starting from audio."
+            rowHeader="Part of the kit"
+            columns={['This tool', 'ADTOF', 'Octave']}
+            groups={[
+              {
+                label: 'With an existing tempo map',
+                rows: toGroupRows(COMPARISON_ROWS),
+              },
+              {
+                label: 'Starting from audio',
+                rows: toGroupRows(GENERATED_TEMPO_MAP_ROWS),
+              },
+            ]}
+            footnote={
+              <>
+                <ExternalLink href="https://github.com/mzehren/adtof">
+                  ADTOF
+                </ExternalLink>{' '}
+                predicts five drum classes against this tool&rsquo;s eight-lane
+                output. It doesn&rsquo;t identify which tom or which cymbal.{' '}
+                <ExternalLink href="https://octavestudio.tools/">
+                  Octave
+                </ExternalLink>{' '}
+                is a published audio-to-chart system.
+              </>
+            }
+            disclaimer={DATA_DISCLAIMER}
+          />
         </div>
-      </div>
-    </TooltipProvider>
+      </LandingSection>
+
+      <ScrollToStartCta>Open a song</ScrollToStartCta>
+    </LandingPage>
   );
 }
