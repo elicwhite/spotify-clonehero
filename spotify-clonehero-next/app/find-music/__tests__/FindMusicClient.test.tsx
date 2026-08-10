@@ -657,9 +657,13 @@ it('holds source-driven matches until the user explicitly re-ranks', async () =>
 
   render(<FindMusicClient />);
 
-  expect(screen.getByTestId('find-music-page')).toHaveClass(
-    'w-[calc(100%+2rem)]',
-  );
+  // The page fills the width `SiteMain` gives it. It must not reach back out
+  // with a negative margin to cancel a gutter: `/find-music` is registered as
+  // a full-bleed route in `components/SiteChrome.tsx`, so there is no gutter
+  // to cancel.
+  const page = screen.getByTestId('find-music-page');
+  expect(page).toHaveClass('w-full');
+  expect(page.className).not.toMatch(/-m-|calc\(100%\+/);
   expect(screen.getByTestId('find-music-results')).toHaveClass(
     'flex',
     'min-h-0',

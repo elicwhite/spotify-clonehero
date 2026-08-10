@@ -27,8 +27,21 @@ const EDITOR_ROUTES = [
   '/preview',
 ] as const;
 
-function isEditorRoute(pathname: string): boolean {
-  return EDITOR_ROUTES.some(
+/**
+ * Routes that lay out their own full-bleed shell (their own header row, rail,
+ * and panes) and therefore want `<main>` to contribute no gutter, while still
+ * taking the regular site nav above them.
+ *
+ * This is deliberately a separate list from `EDITOR_ROUTES`. Which header a
+ * route gets and how much gutter `<main>` gives it are two independent
+ * decisions, and collapsing them into one check is what forced
+ * `/find-music` to cancel the gutter back out with a hard-coded
+ * `-m-4 w-[calc(100%+2rem)]` that silently broke if `p-4` ever changed.
+ */
+const FULL_BLEED_ROUTES = ['/find-music'] as const;
+
+function matchesRoute(pathname: string, routes: readonly string[]): boolean {
+  return routes.some(
     route => pathname === route || pathname.startsWith(`${route}/`),
   );
 }
@@ -47,34 +60,37 @@ function isEditorRoute(pathname: string): boolean {
  */
 export default function SiteHeader({siteNav}: {siteNav: ReactNode}) {
   const pathname = usePathname();
-  if (!isEditorRoute(pathname ?? '')) {
+  if (!matchesRoute(pathname ?? '', EDITOR_ROUTES)) {
     return <>{siteNav}</>;
   }
   return <CompactSiteHeader />;
 }
 
 /**
- * `app/layout.tsx`'s single `<main>` landmark. Editor routes carry no top
- * padding, so the compact header's bottom border sits flush on the
- * sidebar/main-pane border (plan 0076 item 2); non-editor routes keep the
- * full `p-4`. Lives beside `SiteHeader` (same route check, same client
- * boundary) rather than in the root layout so the route list has one place
- * to stay in sync, per `feedback_no_reexports`-style single-source rules.
+ * `app/layout.tsx`'s single `<main>` landmark, and the owner of the outer
+ * gutter. Three cases:
  *
- * The inset on editor routes is `0.75rem` (`px-3 pb-3`) rather than the full
- * `1rem`, matching the prototype's tighter outer gutter on the sidebar's left
- * edge and the highway's right edge (plan 0076 items 3-4). `ChartEditor`'s
- * grid adds no gutter of its own between the sidebar and the highway, so this
- * wrapper's inset is the only outer padding on editor routes.
+ * - Editor routes inset by `0.75rem` (`px-3 pb-3`) and carry no top padding,
+ *   so the compact header's bottom border sits flush on the sidebar/main-pane
+ *   border (plan 0076 items 2-4). `ChartEditor`'s grid adds no gutter of its
+ *   own, so this wrapper's inset is the only outer padding there.
+ * - Full-bleed routes get no gutter at all, because they lay out their own
+ *   header row and panes edge to edge.
+ * - Everything else keeps the full `p-4`.
+ *
+ * Lives beside `SiteHeader` (same client boundary) rather than in the root
+ * layout so the route lists have one place to stay in sync.
  */
 export function SiteMain({children}: {children: ReactNode}) {
-  const pathname = usePathname();
-  const editor = isEditorRoute(pathname ?? '');
+  const pathname = usePathname() ?? '';
+  const editor = matchesRoute(pathname, EDITOR_ROUTES);
+  const fullBleed = matchesRoute(pathname, FULL_BLEED_ROUTES);
   return (
     <main
       className={cn(
         'flex flex-col flex-1 items-center align-center min-h-0',
-        editor ? 'px-3 pb-3' : 'p-4',
+        editor && 'px-3 pb-3',
+        !editor && !fullBleed && 'p-4',
       )}>
       {children}
     </main>

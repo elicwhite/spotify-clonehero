@@ -665,9 +665,13 @@ export default function FindMusicClient() {
 
   return (
     <SupportedBrowserWarning>
+      {/* `pt-12 sm:pt-0` is a page-specific mobile affordance, not a gutter
+          workaround: it clears the floating account control on small
+          screens. The outer gutter is `SiteMain`'s to give or withhold, and
+          this route is registered there as full-bleed. */}
       <div
         data-testid="find-music-page"
-        className="-m-4 flex min-h-0 w-[calc(100%+2rem)] flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
+        className="flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
         <header className="border-b px-3 py-3 md:px-5">
           <div className="flex items-center gap-2.5">
             <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>

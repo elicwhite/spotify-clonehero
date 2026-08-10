@@ -143,3 +143,35 @@ describe('SiteMain (plan 0076 item 2: no gap below the compact header)', () => {
     expect(main).toHaveClass('p-4');
   });
 });
+
+describe('SiteMain gutter contract (plan 0099 Phase 4 item 1)', () => {
+  /**
+   * Which header a route gets and how much gutter `<main>` gives it are two
+   * independent decisions. A route that lays out its own full-bleed shell can
+   * take the regular site nav and no gutter, so it never has to cancel one
+   * with a negative margin.
+   */
+  it('gives a full-bleed route no gutter at all', () => {
+    mockPathname = '/find-music';
+    render(
+      <SiteMain>
+        <div data-testid="content">content</div>
+      </SiteMain>,
+    );
+
+    const main = screen.getByTestId('content').parentElement;
+    expect(main).not.toHaveClass('p-4');
+    expect(main).not.toHaveClass('px-3');
+    expect(main).not.toHaveClass('pb-3');
+  });
+
+  it('still gives a full-bleed route the regular site nav, not the compact header', () => {
+    mockPathname = '/find-music';
+    renderChrome();
+
+    expect(screen.getByText('Music Charts Tools')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', {name: 'Music Charts Tools home'}),
+    ).not.toBeInTheDocument();
+  });
+});
