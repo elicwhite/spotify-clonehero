@@ -1,19 +1,17 @@
 import {ImageResponse} from 'next/og';
 
-export const alt = 'Find charts for the music you already listen to';
-export const size = {width: 1200, height: 630};
-export const contentType = 'image/png';
+import {
+  OgBrandRow,
+  OgFrame,
+  OgPanel,
+  OgSubtitle,
+  OgTitle,
+} from '@/lib/og/layout';
+import {OG_COLORS, OG_SIZE} from '@/lib/og/tokens';
 
-const COLORS = {
-  panel: 'rgba(255,255,255,0.055)',
-  border: 'rgba(255,255,255,0.14)',
-  card: '#12161f',
-  cardBorder: '#242c3a',
-  muted: 'rgba(255,255,255,0.64)',
-  subtle: 'rgba(255,255,255,0.52)',
-  body: 'rgba(255,255,255,0.62)',
-  purple: '#a855b7',
-} as const;
+export const alt = 'Find charts for the music you already listen to';
+export const size = OG_SIZE;
+export const contentType = 'image/png';
 
 /** Wave marks from the Spotify icon, drawn over the brand-green circle. */
 const SPOTIFY_WAVES =
@@ -37,10 +35,10 @@ function SpotifyMark() {
         width: 48,
         height: 48,
         borderRadius: 24,
-        background: '#1ed760',
+        background: OG_COLORS.spotify,
       }}>
       <svg width="48" height="48" viewBox="0 0 2931 2931">
-        <path fill="#08210f" d={SPOTIFY_WAVES} />
+        <path fill={OG_COLORS.spotifyInk} d={SPOTIFY_WAVES} />
       </svg>
     </div>
   );
@@ -70,13 +68,13 @@ function SongsFolderMark() {
         <path
           d="M4 12 h13 l5 6 h22 a3 3 0 0 1 3 3 v19 a3 3 0 0 1 -3 3 h-40 a3 3 0 0 1 -3 -3 v-25 a3 3 0 0 1 3 -3 z"
           fill="none"
-          stroke={COLORS.purple}
+          stroke={OG_COLORS.purple}
           strokeWidth="3"
         />
         <path
           d="M24 25 v11 m-5 -5 l5 5 l5 -5"
           fill="none"
-          stroke={COLORS.purple}
+          stroke={OG_COLORS.purple}
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -105,15 +103,15 @@ function SourceCard({
         height: 126,
         padding: '0 30px',
         borderRadius: 16,
-        border: `1px solid ${COLORS.cardBorder}`,
-        background: COLORS.card,
+        border: `1px solid ${OG_COLORS.cardBorder}`,
+        background: OG_COLORS.card,
       }}>
       {mark}
       <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
-        <div style={{display: 'flex', fontSize: 25, color: '#ffffff'}}>
+        <div style={{display: 'flex', fontSize: 25, color: OG_COLORS.text}}>
           {name}
         </div>
-        <div style={{display: 'flex', fontSize: 19, color: COLORS.subtle}}>
+        <div style={{display: 'flex', fontSize: 19, color: OG_COLORS.subtle}}>
           {detail}
         </div>
       </div>
@@ -124,59 +122,16 @@ function SourceCard({
 export default function OpengraphImage() {
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '56px 68px',
-          background:
-            'radial-gradient(circle at 84% 18%, rgba(168,85,183,0.2), transparent 34%), linear-gradient(135deg, #17091d 0%, #0a0710 58%, #08070d 100%)',
-          color: '#ffffff',
-          fontFamily: 'system-ui, sans-serif',
-        }}>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 24,
-            letterSpacing: '0.18em',
-            color: COLORS.muted,
-          }}>
-          MUSIC CHARTS TOOLS
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            marginTop: 34,
-            fontSize: 66,
-            fontWeight: 760,
-            letterSpacing: '-0.04em',
-            lineHeight: 1.1,
-          }}>
+      <OgFrame>
+        <OgBrandRow />
+        <OgTitle size="titleCompact" style={{marginTop: 34, lineHeight: 1.1}}>
           <div style={{display: 'flex'}}>Find charts for the music</div>
           <div style={{display: 'flex'}}>you already listen to</div>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            marginTop: 22,
-            fontSize: 28,
-            color: COLORS.body,
-          }}>
+        </OgTitle>
+        <OgSubtitle style={{marginTop: 22}}>
           Matched against Chorus and installed straight to your game.
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            gap: 32,
-            marginTop: 44,
-            padding: 30,
-            borderRadius: 24,
-            border: `1px solid ${COLORS.border}`,
-            background: COLORS.panel,
-          }}>
+        </OgSubtitle>
+        <OgPanel style={{gap: 32, marginTop: 44}}>
           <SourceCard
             mark={<SpotifyMark />}
             name="Spotify"
@@ -192,8 +147,8 @@ export default function OpengraphImage() {
             name="Songs folder"
             detail="Installs charts directly"
           />
-        </div>
-      </div>
+        </OgPanel>
+      </OgFrame>
     ),
     size,
   );

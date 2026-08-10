@@ -2,50 +2,28 @@ import {ImageResponse} from 'next/og';
 import {getMd5FromSlug} from '@/app/getMd5FromSlug';
 import {searchAdvanced} from '@/lib/search-encore';
 
+import {OgEyebrow, OgFrame, OgTitle} from '@/lib/og/layout';
+import {OG_COLORS, OG_SIZE} from '@/lib/og/tokens';
+
 export const alt = 'Drum Sheet Music';
-export const size = {width: 1200, height: 630};
+export const size = OG_SIZE;
 export const contentType = 'image/png';
 
-const BACKGROUND =
-  'linear-gradient(135deg, #1a0a1f 0%, #2c0e36 50%, #0a0a14 100%)';
+/**
+ * This card names the section rather than the site: it is one chart's page,
+ * so the label that earns the top line is what the reader is looking at.
+ */
+function SheetMusicEyebrow() {
+  return <OgEyebrow style={{marginBottom: 22}}>DRUM SHEET MUSIC</OgEyebrow>;
+}
 
 function fallback(label: string) {
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: BACKGROUND,
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: 80,
-        }}>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 30,
-            color: 'rgba(255,255,255,0.55)',
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            marginBottom: 22,
-          }}>
-          Drum Sheet Music
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 88,
-            fontWeight: 800,
-            letterSpacing: '-0.02em',
-          }}>
-          {label}
-        </div>
-      </div>
+      <OgFrame center>
+        <SheetMusicEyebrow />
+        <OgTitle center>{label}</OgTitle>
+      </OgFrame>
     ),
     size,
   );
@@ -68,67 +46,46 @@ export default async function OpengraphImage({
 
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          background: BACKGROUND,
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: 70,
-          gap: 56,
-        }}>
-        <img
-          src={albumArt}
-          alt="Album art"
-          width={420}
-          height={420}
-          style={{borderRadius: 20, objectFit: 'cover'}}
-        />
-        <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 28,
-              color: 'rgba(255,255,255,0.55)',
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              marginBottom: 22,
-            }}>
-            Drum Sheet Music
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 80,
-              fontWeight: 800,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.05,
-              marginBottom: 18,
-            }}>
-            {chart.name}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 46,
-              color: 'rgba(255,255,255,0.82)',
-              marginBottom: 16,
-            }}>
-            {chart.artist}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 32,
-              color: 'rgba(255,255,255,0.55)',
-            }}>
-            Charted by {chart.charter}
+      <OgFrame>
+        <div
+          style={{
+            display: 'flex',
+            flex: 1,
+            alignItems: 'center',
+            gap: 56,
+          }}>
+          <img
+            src={albumArt}
+            alt="Album art"
+            width={420}
+            height={420}
+            style={{borderRadius: 20, objectFit: 'cover'}}
+          />
+          <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
+            <SheetMusicEyebrow />
+            <OgTitle size="titleCompact" style={{marginBottom: 18}}>
+              {chart.name}
+            </OgTitle>
+            <div
+              style={{
+                display: 'flex',
+                fontSize: 46,
+                color: OG_COLORS.muted,
+                marginBottom: 16,
+              }}>
+              {chart.artist}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                fontSize: 32,
+                color: OG_COLORS.subtle,
+              }}>
+              Charted by {chart.charter}
+            </div>
           </div>
         </div>
-      </div>
+      </OgFrame>
     ),
     size,
   );

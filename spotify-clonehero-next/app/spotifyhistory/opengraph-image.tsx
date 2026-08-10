@@ -1,10 +1,17 @@
 import {ImageResponse} from 'next/og';
 
-export const alt = 'Spotify History Chart Finder';
-export const size = {width: 1200, height: 630};
-export const contentType = 'image/png';
+import {
+  OgBrandRow,
+  OgFrame,
+  OgPanel,
+  OgSubtitle,
+  OgTitle,
+} from '@/lib/og/layout';
+import {OG_COLORS, OG_SIZE} from '@/lib/og/tokens';
 
-const SPOTIFY_GREEN = '#1DB954';
+export const alt = 'Spotify History Chart Finder';
+export const size = OG_SIZE;
+export const contentType = 'image/png';
 
 // Public-domain compositions only — traditional folk + a classical
 // piece. Modern hit covers across different eras make them feel
@@ -19,61 +26,15 @@ const SAMPLE_HISTORY: ReadonlyArray<string> = [
 export default function OpengraphImage() {
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          background:
-            'linear-gradient(135deg, #1a0a1f 0%, #2c0e36 50%, #0a0a14 100%)',
-          color: 'white',
-          fontFamily: 'system-ui, sans-serif',
-          padding: '64px 80px',
-        }}>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 28,
-            color: 'rgba(255,255,255,0.55)',
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            marginBottom: 22,
-          }}>
-          Music Charts Tools
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 92,
-            fontWeight: 800,
-            letterSpacing: '-0.03em',
-            lineHeight: 1.05,
-            marginBottom: 28,
-          }}>
+      <OgFrame>
+        <OgBrandRow />
+        <OgTitle style={{marginTop: 22, marginBottom: 28}}>
           Spotify History Charts
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            fontSize: 36,
-            color: 'rgba(255,255,255,0.78)',
-            maxWidth: 1040,
-            lineHeight: 1.25,
-            marginBottom: 36,
-          }}>
+        </OgTitle>
+        <OgSubtitle style={{maxWidth: 1040, marginBottom: 36}}>
           Find charts for every song you&rsquo;ve listened to on Spotify.
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '28px 36px',
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 20,
-            gap: 18,
-          }}>
+        </OgSubtitle>
+        <OgPanel padding="28px 36px" style={{flexDirection: 'column', gap: 18}}>
           {SAMPLE_HISTORY.map(song => (
             <div
               key={song}
@@ -86,13 +47,13 @@ export default function OpengraphImage() {
                   width: 40,
                   height: 40,
                   borderRadius: 20,
-                  background: SPOTIFY_GREEN,
+                  background: OG_COLORS.spotify,
                 }}>
                 <svg width="22" height="22" viewBox="0 0 14 14">
                   <path
                     d="M3 7 L6 10 L11 4"
                     fill="none"
-                    stroke="#0a0a14"
+                    stroke={OG_COLORS.spotifyInk}
                     strokeWidth="2.4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -104,8 +65,8 @@ export default function OpengraphImage() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
+        </OgPanel>
+      </OgFrame>
     ),
     size,
   );
