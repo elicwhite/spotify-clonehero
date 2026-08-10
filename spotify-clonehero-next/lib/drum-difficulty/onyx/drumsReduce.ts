@@ -145,7 +145,9 @@ export function keepSnares(
   const kept: Kept = new Map();
   const keys: Rational[] = [];
   for (const pos of ordered) {
-    if (openInterval(keys, monus(pos, padding), pos.add(padding)).length === 0) {
+    if (
+      openInterval(keys, monus(pos, padding), pos.add(padding)).length === 0
+    ) {
       kept.set(pos.toString(), [RED]);
       insort(keys, pos);
     }

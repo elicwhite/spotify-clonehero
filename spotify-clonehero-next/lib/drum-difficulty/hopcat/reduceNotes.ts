@@ -28,7 +28,13 @@ const LANE_OFFSET: Record<string, number> = {
   blue: 3,
   green: 4,
 };
-const OFFSET_LANE: Record<number, string> = {0: 'kick', 1: 'snare', 2: 'yellow', 3: 'blue', 4: 'green'};
+const OFFSET_LANE: Record<number, string> = {
+  0: 'kick',
+  1: 'snare',
+  2: 'yellow',
+  3: 'blue',
+  4: 'green',
+};
 
 export const ROLL_MARKER = 126; // single-lane drum roll
 export const SWELL_MARKER = 127; // two-lane cymbal swell
@@ -71,7 +77,8 @@ export function lanePitch(tier: string, lane: string): number {
 
 export function laneOf(pitch: number): string {
   const tier = tierOf(pitch);
-  if (tier === null) throw new Error(`laneOf: pitch ${pitch} is not a gem pitch`);
+  if (tier === null)
+    throw new Error(`laneOf: pitch ${pitch} is not a gem pitch`);
   return OFFSET_LANE[pitch - TIER_BASE[tier]];
 }
 
@@ -96,7 +103,12 @@ class Chord {
   toNotes(): Note[] {
     const out: Note[] = [];
     for (let i = 0; i < this.pitches.length; i++) {
-      out.push({pos: this.pos, pitch: this.pitches[i], vel: this.vels[i], dur: this.durs[i]});
+      out.push({
+        pos: this.pos,
+        pitch: this.pitches[i],
+        vel: this.vels[i],
+        dur: this.durs[i],
+      });
     }
     return out;
   }
@@ -268,7 +280,8 @@ export function removeKick(notes: Note[], level: string, what: string): Note[] {
       const hit =
         what === 'a' ||
         (what === 's' && pitches.includes(snare)) ||
-        (what === 't' && pitches.some(p => p === 110 || p === 111 || p === 112)) ||
+        (what === 't' &&
+          pitches.some(p => p === 110 || p === 111 || p === 112)) ||
         (what === 'p' &&
           (pitches.includes(snare) ||
             pitches.some(p => p === 110 || p === 111 || p === 112)));
@@ -297,7 +310,11 @@ export function removeKick(notes: Note[], level: string, what: string): Note[] {
 // single_snare — C3toolbox.py:1854-1930 (mirror of remove_kick on the snare)
 // ---------------------------------------------------------------------------
 
-export function singleSnare(notes: Note[], level: string, what: string): Note[] {
+export function singleSnare(
+  notes: Note[],
+  level: string,
+  what: string,
+): Note[] {
   const leveltext = level;
   const kick = lanePitch(level, 'kick');
   const snare = lanePitch(level, 'snare');
@@ -324,7 +341,8 @@ export function singleSnare(notes: Note[], level: string, what: string): Note[] 
       const hit =
         what === 'a' ||
         (what === 'k' && pitches.includes(kick)) ||
-        (what === 't' && pitches.some(p => p === 110 || p === 111 || p === 112)) ||
+        (what === 't' &&
+          pitches.some(p => p === 110 || p === 111 || p === 112)) ||
         (what === 'c' &&
           pitches.some(p => p === yellow || p === blue || p === green));
       if (hit) {
@@ -399,7 +417,9 @@ export function unflipDiscobeat(
   // Indices into `work`, sorted by pos (stable, so equal-pos keeps order).
   // C3toolbox's `ordered.index(i)` equals this loop's own `idx` because the
   // index values are a unique 0..n-1 permutation.
-  const ordered = work.map((_, i) => i).sort((a, b) => work[a].pos - work[b].pos);
+  const ordered = work
+    .map((_, i) => i)
+    .sort((a, b) => work[a].pos - work[b].pos);
 
   const toRemove = new Set<number>();
   const toAdd: Note[] = [];
@@ -501,7 +521,11 @@ export function simplifyRoll(
     // reproduces Python dict-order tie-breaking (first-seen pitch wins).
     const counts = new Map<number, number>();
     for (const note of notes) {
-      if (start <= note.pos && note.pos <= end && tierOf(note.pitch) === leveltext) {
+      if (
+        start <= note.pos &&
+        note.pos <= end &&
+        tierOf(note.pitch) === leveltext
+      ) {
         counts.set(note.pitch, (counts.get(note.pitch) ?? 0) + 1);
       }
     }
@@ -532,10 +556,17 @@ export function simplifyRoll(
         toRemoveKeys.add(`${n.pitch},${n.pos}`);
       }
     }
-    const sequence = Math.trunc(CORRECT_TQN * 4 * DIVISIONS[LEVEL_DIVISION[level]]);
+    const sequence = Math.trunc(
+      CORRECT_TQN * 4 * DIVISIONS[LEVEL_DIVISION[level]],
+    );
     let loc = start;
     while (loc < end + 20) {
-      toAdd.push({pos: Math.trunc(loc), pitch, vel: template.vel, dur: sixteenth});
+      toAdd.push({
+        pos: Math.trunc(loc),
+        pitch,
+        vel: template.vel,
+        dur: sixteenth,
+      });
       loc += sequence;
     }
   }
@@ -550,7 +581,11 @@ export function simplifyRoll(
     );
     if (template === undefined) continue;
     for (const n of notes) {
-      if ((n.pitch === p1 || n.pitch === p2) && start <= n.pos && n.pos <= end) {
+      if (
+        (n.pitch === p1 || n.pitch === p2) &&
+        start <= n.pos &&
+        n.pos <= end
+      ) {
         toRemoveKeys.add(`${n.pitch},${n.pos}`);
       }
     }
@@ -558,12 +593,22 @@ export function simplifyRoll(
     const quarter = Math.trunc(CORRECT_TQN * 0.25);
     let loc = start;
     while (loc < end + 20) {
-      toAdd.push({pos: Math.trunc(loc), pitch: p1, vel: template.vel, dur: quarter});
+      toAdd.push({
+        pos: Math.trunc(loc),
+        pitch: p1,
+        vel: template.vel,
+        dur: quarter,
+      });
       loc += sequence;
     }
     loc = start + sequence * 0.5;
     while (loc < end + 20) {
-      toAdd.push({pos: Math.trunc(loc), pitch: p2, vel: template.vel, dur: quarter});
+      toAdd.push({
+        pos: Math.trunc(loc),
+        pitch: p2,
+        vel: template.vel,
+        dur: quarter,
+      });
       loc += sequence;
     }
   }

@@ -113,7 +113,8 @@ const ADAPTER_LIMITED = new Set<string>([
 
 function sortRows(rows: Row[]): Row[] {
   return [...rows].sort(
-    (a, b) => a.tick - b.tick || a.pitch - b.pitch || a.lane.localeCompare(b.lane),
+    (a, b) =>
+      a.tick - b.tick || a.pitch - b.pitch || a.lane.localeCompare(b.lane),
   );
 }
 
@@ -129,12 +130,19 @@ function actualRows(notes: Note[], tier: Tier): Row[] {
 function runFixture(id: string): Record<Tier, Row[]> {
   const dir = path.join(FIXTURES_DIR, id);
   const files = [
-    {fileName: 'notes.mid', data: new Uint8Array(readFileSync(path.join(dir, 'notes.mid')))},
-    {fileName: 'song.ini', data: new Uint8Array(readFileSync(path.join(dir, 'song.ini')))},
+    {
+      fileName: 'notes.mid',
+      data: new Uint8Array(readFileSync(path.join(dir, 'notes.mid'))),
+    },
+    {
+      fileName: 'song.ini',
+      data: new Uint8Array(readFileSync(path.join(dir, 'song.ini'))),
+    },
   ];
   const doc = readChart(files as never, {pro_drums: true});
   const adapted = parsedChartToRawDrums(doc.parsedChart);
-  if (!adapted.ok) throw new Error(`${id}: adapter rejected chart: ${adapted.reason}`);
+  if (!adapted.ok)
+    throw new Error(`${id}: adapter rejected chart: ${adapted.reason}`);
   const input = toHopcatInput(adapted.chart);
   const {notes} = reduce5laneDrums(input.notes, input.events, input.measureMap);
   return {
@@ -144,8 +152,9 @@ function runFixture(id: string): Record<Tier, Row[]> {
   };
 }
 
-const FIXTURE_IDS = Array.from({length: 20}, (_, i) =>
-  `reduction-${String(i + 1).padStart(2, '0')}`,
+const FIXTURE_IDS = Array.from(
+  {length: 20},
+  (_, i) => `reduction-${String(i + 1).padStart(2, '0')}`,
 ).filter(id => existsSync(path.join(FIXTURES_DIR, id, 'expected-hopcat.json')));
 
 describe('HOPCAT end-to-end parity (production path)', () => {

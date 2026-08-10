@@ -125,11 +125,11 @@ tick 401880, pitch 100, dur 60
 **What deployed HOPCAT actually produces** (per the bug above — roll notes
 exempted from `remove_notes`, never substituted by `simplify_roll`):
 
-| Tier | Notes in this span |
-|------|---------------------|
-| Hard | 107 (unchanged, same 16th-note density as Expert) |
-| Medium | 107 (unchanged) |
-| Easy | 107 (unchanged) |
+| Tier   | Notes in this span                                |
+| ------ | ------------------------------------------------- |
+| Hard   | 107 (unchanged, same 16th-note density as Expert) |
+| Medium | 107 (unchanged)                                   |
+| Easy   | 107 (unchanged)                                   |
 
 An "Easy" chart with a 107-note unbroken 16th-note stream on one pad is
 obviously not what the feature is supposed to produce — it's the same
@@ -142,11 +142,11 @@ on the correctly-identified most-common pitch (100, i.e. genuinely the sole
 pitch here), spaced by `LEVEL_DIVISION[tier]` (`C3toolbox.py`'s
 `leveldvisions_array`: Hard→1/8, Medium→1/4, Easy→1/2):
 
-| Tier | Spacing | Notes in this span |
-|------|---------|---------------------|
-| Hard | every 240 ticks (1/8) | 27 |
-| Medium | every 480 ticks (1/4) | 14 |
-| Easy | every 960 ticks (1/2) | 7 |
+| Tier   | Spacing               | Notes in this span |
+| ------ | --------------------- | ------------------ |
+| Hard   | every 240 ticks (1/8) | 27                 |
+| Medium | every 480 ticks (1/4) | 14                 |
+| Easy   | every 960 ticks (1/2) | 7                  |
 
 (Counts derived from the source's own loop: `location = start; while location
 < end + 20: ...; location += sequence`, `sequence = correct_tqn*4*DIVISIONS[level_division]`,

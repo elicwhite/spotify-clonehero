@@ -37,21 +37,83 @@ function note(pos: number, pitch: number, vel = 100, dur = 10): Note {
 describe('mbt / MeasureMap', () => {
   test('constant 4/4', () => {
     const mm = buildMeasures([], TPQN, 1920 * 8);
-    expect(mm.mbt(0)).toMatchObject({measure: 1, beat: 1, tickInBeat: 0, ticksSinceMeasureStart: 0});
-    expect(mm.mbt(479)).toMatchObject({measure: 1, beat: 1, tickInBeat: 479, ticksSinceMeasureStart: 479});
-    expect(mm.mbt(480)).toMatchObject({measure: 1, beat: 2, tickInBeat: 0, ticksSinceMeasureStart: 480});
-    expect(mm.mbt(1920)).toMatchObject({measure: 2, beat: 1, tickInBeat: 0, ticksSinceMeasureStart: 0});
-    expect(mm.mbt(1920 + 960)).toMatchObject({measure: 2, beat: 3, tickInBeat: 0, ticksSinceMeasureStart: 960});
+    expect(mm.mbt(0)).toMatchObject({
+      measure: 1,
+      beat: 1,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 0,
+    });
+    expect(mm.mbt(479)).toMatchObject({
+      measure: 1,
+      beat: 1,
+      tickInBeat: 479,
+      ticksSinceMeasureStart: 479,
+    });
+    expect(mm.mbt(480)).toMatchObject({
+      measure: 1,
+      beat: 2,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 480,
+    });
+    expect(mm.mbt(1920)).toMatchObject({
+      measure: 2,
+      beat: 1,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 0,
+    });
+    expect(mm.mbt(1920 + 960)).toMatchObject({
+      measure: 2,
+      beat: 3,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 960,
+    });
   });
 
   test('mid-song time-signature change', () => {
-    const mm = buildMeasures([[0, 4, 4], [7680, 7, 8]], TPQN, 7680 + 1680 * 4);
-    expect(mm.mbt(5760)).toMatchObject({measure: 4, beat: 1, tickInBeat: 0, ticksSinceMeasureStart: 0});
-    expect(mm.mbt(7679)).toMatchObject({measure: 4, beat: 4, tickInBeat: 479, ticksSinceMeasureStart: 1919});
-    expect(mm.mbt(7680)).toMatchObject({measure: 5, beat: 1, tickInBeat: 0, ticksSinceMeasureStart: 0});
-    expect(mm.mbt(7680 + 240)).toMatchObject({measure: 5, beat: 2, tickInBeat: 0, ticksSinceMeasureStart: 240});
-    expect(mm.mbt(7680 + 240 * 6)).toMatchObject({measure: 5, beat: 7, tickInBeat: 0, ticksSinceMeasureStart: 1440});
-    expect(mm.mbt(7680 + 1680)).toMatchObject({measure: 6, beat: 1, tickInBeat: 0, ticksSinceMeasureStart: 0});
+    const mm = buildMeasures(
+      [
+        [0, 4, 4],
+        [7680, 7, 8],
+      ],
+      TPQN,
+      7680 + 1680 * 4,
+    );
+    expect(mm.mbt(5760)).toMatchObject({
+      measure: 4,
+      beat: 1,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 0,
+    });
+    expect(mm.mbt(7679)).toMatchObject({
+      measure: 4,
+      beat: 4,
+      tickInBeat: 479,
+      ticksSinceMeasureStart: 1919,
+    });
+    expect(mm.mbt(7680)).toMatchObject({
+      measure: 5,
+      beat: 1,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 0,
+    });
+    expect(mm.mbt(7680 + 240)).toMatchObject({
+      measure: 5,
+      beat: 2,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 240,
+    });
+    expect(mm.mbt(7680 + 240 * 6)).toMatchObject({
+      measure: 5,
+      beat: 7,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 1440,
+    });
+    expect(mm.mbt(7680 + 1680)).toMatchObject({
+      measure: 6,
+      beat: 1,
+      tickInBeat: 0,
+      ticksSinceMeasureStart: 0,
+    });
   });
 });
 
@@ -91,7 +153,16 @@ describe('removeNotes', () => {
     const base = TIER_BASE['h'];
     const roll = note(0, ROLL_MARKER, 100, 480); // covers [0, 480]
     const offGridInRoll = note(37, base);
-    const out = removeNotes([roll, offGridInRoll], [], mm, 'e', 'h', 0, false, false);
+    const out = removeNotes(
+      [roll, offGridInRoll],
+      [],
+      mm,
+      'e',
+      'h',
+      0,
+      false,
+      false,
+    );
     const tierPositions = out
       .filter(n => tierOf(n.pitch) === 'h')
       .map(n => n.pos)
@@ -113,12 +184,22 @@ describe('cascadeCopy', () => {
       {pos: 0, text: '[mix 3 drums0d]'},
       {pos: 480, text: '[mix 2 drums0]'},
     ];
-    const {notes: newNotes, events: newEvents} = cascadeCopy(notes, events, 'x', 'h');
+    const {notes: newNotes, events: newEvents} = cascadeCopy(
+      notes,
+      events,
+      'x',
+      'h',
+    );
     const hardNotes = newNotes.filter(n => tierOf(n.pitch) === 'h');
     expect(hardNotes.length).toBe(1);
     expect(hardNotes[0].pitch).toBe(hBase + 1);
-    expect(newNotes.some(n => tierOf(n.pitch) === 'h' && n.pitch === hBase + 4)).toBe(false);
-    expect(newEvents.map(e => e.text).sort()).toEqual(['[mix 2 drums0d]', '[mix 3 drums0d]']);
+    expect(
+      newNotes.some(n => tierOf(n.pitch) === 'h' && n.pitch === hBase + 4),
+    ).toBe(false);
+    expect(newEvents.map(e => e.text).sort()).toEqual([
+      '[mix 2 drums0d]',
+      '[mix 3 drums0d]',
+    ]);
   });
 });
 
@@ -150,13 +231,15 @@ describe('reduce5laneDrums end-to-end', () => {
     const easyAfter = out.filter(n => tierOf(n.pitch) === 'e');
 
     // Expert survives unchanged.
-    expect(
-      expertAfter.map(n => [n.pos, n.pitch]).sort(),
-    ).toEqual(expertBefore.map(n => [n.pos, n.pitch]).sort());
+    expect(expertAfter.map(n => [n.pos, n.pitch]).sort()).toEqual(
+      expertBefore.map(n => [n.pos, n.pitch]).sort(),
+    );
     // Hard: straight copy at 1/8 grid — same count.
     expect(hardAfter.length).toBe(32);
     // Medium: remove_kick('p') strips the kick from every kick+snare chord.
-    expect(mediumAfter.some(n => n.pitch === lanePitch('m', 'kick'))).toBe(false);
+    expect(mediumAfter.some(n => n.pitch === lanePitch('m', 'kick'))).toBe(
+      false,
+    );
     expect(mediumAfter.length).toBe(16);
     // Easy: 1/2-note grid thins the per-quarter snare to per-half-note.
     expect(easyAfter.length).toBe(8);

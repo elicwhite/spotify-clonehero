@@ -16,7 +16,15 @@ public
 *.min.js
 *.min.css
 
+# Chart-database dump output (gitignored, machine-generated)
+raw_db_files
+
+# Plan documents (prose, hand-authored; formatting churn is noise)
+plans
+
 # Data blobs and test fixtures (not source — keep minified/as-authored)
+lib/drum-difficulty/__fixtures__
+lib/drum-difficulty/ours/__fixtures__
 lib/tempo-map/beat-this-mel-fb.json
 lib/tempo-map/__tests__/fixtures
 lib/drum-transcription/__tests__/fixtures

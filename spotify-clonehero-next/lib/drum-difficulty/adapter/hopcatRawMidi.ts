@@ -84,9 +84,7 @@ function timeSignatures(
 }
 
 function isNoteOff(ev: MidiEvent): boolean {
-  return (
-    ev.type === 'noteOff' || (ev.type === 'noteOn' && ev.velocity === 0)
-  );
+  return ev.type === 'noteOff' || (ev.type === 'noteOn' && ev.velocity === 0);
 }
 
 export interface RawMidiHopcatResult extends HopcatInput {

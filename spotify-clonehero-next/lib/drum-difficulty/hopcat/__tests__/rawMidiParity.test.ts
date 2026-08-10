@@ -33,7 +33,8 @@ interface Row {
 
 function sortRows(rows: Row[]): Row[] {
   return [...rows].sort(
-    (a, b) => a.tick - b.tick || a.pitch - b.pitch || a.lane.localeCompare(b.lane),
+    (a, b) =>
+      a.tick - b.tick || a.pitch - b.pitch || a.lane.localeCompare(b.lane),
   );
 }
 
@@ -46,8 +47,9 @@ function actualRows(notes: Note[], tier: Tier): Row[] {
   );
 }
 
-const FIXTURE_IDS = Array.from({length: 20}, (_, i) =>
-  `reduction-${String(i + 1).padStart(2, '0')}`,
+const FIXTURE_IDS = Array.from(
+  {length: 20},
+  (_, i) => `reduction-${String(i + 1).padStart(2, '0')}`,
 ).filter(id => existsSync(path.join(FIXTURES_DIR, id, 'expected-hopcat.json')));
 
 describe('HOPCAT end-to-end parity (raw-MIDI path)', () => {
@@ -55,7 +57,11 @@ describe('HOPCAT end-to-end parity (raw-MIDI path)', () => {
     const dir = path.join(FIXTURES_DIR, id);
     const bytes = new Uint8Array(readFileSync(path.join(dir, 'notes.mid')));
     const input = parseRawMidiForHopcat(bytes);
-    const {notes} = reduce5laneDrums(input.notes, input.events, input.measureMap);
+    const {notes} = reduce5laneDrums(
+      input.notes,
+      input.events,
+      input.measureMap,
+    );
 
     const expected = JSON.parse(
       readFileSync(path.join(dir, 'expected-hopcat.json'), 'utf8'),

@@ -28,16 +28,13 @@ describe('WebMCPInit', () => {
     '/apple-music-connect/',
     '/find-music',
     '/find-music/recommendations',
-  ])(
-    'does not initialize WebMCP on %s',
-    async pathname => {
-      mockPathname = pathname;
-      render(<WebMCPInit />);
+  ])('does not initialize WebMCP on %s', async pathname => {
+    mockPathname = pathname;
+    render(<WebMCPInit />);
 
-      await Promise.resolve();
-      expect(await getInitializeWebModelContext()).not.toHaveBeenCalled();
-    },
-  );
+    await Promise.resolve();
+    expect(await getInitializeWebModelContext()).not.toHaveBeenCalled();
+  });
 
   it('initializes WebMCP on ordinary routes', async () => {
     mockPathname = '/chart-editor';

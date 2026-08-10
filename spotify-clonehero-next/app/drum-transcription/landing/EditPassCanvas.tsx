@@ -76,7 +76,12 @@ const GEMS: Gem[] = [
   {col: 16, row: KICK},
   {col: 16, row: TOM, cymbal: true},
   // The cymbal choice the model gets wrong: proposed on yellow, moved to blue.
-  {col: 18, row: HIHAT, cymbal: true, fix: {kind: 'lane', toRow: RIDE, at: 0.3}},
+  {
+    col: 18,
+    row: HIHAT,
+    cymbal: true,
+    fix: {kind: 'lane', toRow: RIDE, at: 0.3},
+  },
   {col: 20, row: SNARE},
   {col: 20, row: HIHAT, cymbal: true},
   // A spurious tom the model added. Deleted.
@@ -160,7 +165,13 @@ export function EditPassCanvas() {
         ctx.lineTo(x - gw * 0.6, y + gh * 0.5);
         ctx.closePath();
       } else {
-        ctx.roundRect(x - gw / 2, y - gh / 2, gw, gh, Math.min(gw / 3, gh * 0.19));
+        ctx.roundRect(
+          x - gw / 2,
+          y - gh / 2,
+          gw,
+          gh,
+          Math.min(gw / 3, gh * 0.19),
+        );
       }
       if (hollow) {
         ctx.strokeStyle = color;
@@ -267,7 +278,16 @@ export function EditPassCanvas() {
         } else if (gem.fix.kind === 'delete') {
           if (t < 1) {
             ctx.globalAlpha = (1 - t) * fade;
-            drawGem(baseX, baseY, nw, nh, baseColor, false, cymbal, 1 - 0.4 * t);
+            drawGem(
+              baseX,
+              baseY,
+              nw,
+              nh,
+              baseColor,
+              false,
+              cymbal,
+              1 - 0.4 * t,
+            );
           }
         } else {
           const x = baseX + (xOf(gem.fix.toCol) - baseX) * t;
