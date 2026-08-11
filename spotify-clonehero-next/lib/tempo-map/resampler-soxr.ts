@@ -90,6 +90,24 @@ export async function initSoxr(): Promise<void> {
 }
 
 /**
+ * How much of the signal is handed to soxr per `processChunk` call.
+ *
+ * `processChunk` `_malloc`s a WASM-side input buffer the size of the chunk
+ * plus an output buffer scaled by the rate ratio, so passing a whole song at
+ * once sizes those allocations by the song's length. The module's memory is
+ * capped well below 4 GB, and an album-length file (~49 min at 48 kHz needs
+ * ~1.1 GB across the two buffers) overruns it — the trap surfaces as
+ * `table index is out of bounds` / `null function`, which
+ * `decodeAudio` then reports as an undecodable file.
+ *
+ * soxr is a streaming resampler: filter state lives in `_resamplerPtr` and
+ * carries across calls, so feeding it in chunks is sample-for-sample
+ * identical to one big call while keeping the WASM buffers a fixed size.
+ * 8M samples is ~32 MB in / ~29 MB out per chunk.
+ */
+const RESAMPLE_CHUNK_SAMPLES = 8_000_000;
+
+/**
  * Resample a mono Float32 PCM signal from `inRate` → `outRate` Hz using
  * soxr's SOXR_HQ recipe (matches python `soxr.resample` default).
  *
@@ -119,18 +137,39 @@ export async function resampleSoxr(
       path.endsWith('.wasm') ? UNPKG_BASE + 'soxr_wasm.wasm' : path,
   });
 
-  const inBytes = new Uint8Array(
-    signal.buffer,
-    signal.byteOffset,
-    signal.byteLength,
-  );
-  const outBytes = resampler.processChunk(inBytes);
+  // `processChunk` hands back a freshly allocated array per call, so these
+  // stay valid as the next chunk overwrites the WASM-side output buffer.
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  for (
+    let offset = 0;
+    offset < signal.length;
+    offset += RESAMPLE_CHUNK_SAMPLES
+  ) {
+    const chunk = signal.subarray(
+      offset,
+      Math.min(offset + RESAMPLE_CHUNK_SAMPLES, signal.length),
+    );
+    const outBytes = resampler.processChunk(
+      new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength),
+    );
+    if (outBytes.length > 0) {
+      parts.push(outBytes);
+      total += outBytes.length;
+    }
+  }
   const flushBytes = resampler.processChunk(null);
+  if (flushBytes && flushBytes.length > 0) {
+    parts.push(flushBytes);
+    total += flushBytes.length;
+  }
 
-  const total = outBytes.length + (flushBytes ? flushBytes.length : 0);
   const owned = new ArrayBuffer(total);
   const u8 = new Uint8Array(owned);
-  u8.set(outBytes, 0);
-  if (flushBytes) u8.set(flushBytes, outBytes.length);
+  let written = 0;
+  for (const part of parts) {
+    u8.set(part, written);
+    written += part.length;
+  }
   return new Float32Array(owned);
 }
