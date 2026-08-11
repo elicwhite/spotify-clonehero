@@ -9,6 +9,10 @@
  * section labeling. That kind skips drum separation and the drum-stem beat
  * pass: LinkSeg reads full-mix beats and the full-mix audio only, and its
  * result cannot carry a grid at all.
+ *
+ * The beat grid LinkSeg reads is the one part a caller can bring itself: a
+ * chart that already has a tempo map has a grid, and LinkSeg is robust to
+ * its beat source, so `deriveBeatTimes` skips beat detection outright.
  */
 
 import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
@@ -43,8 +47,25 @@ const GENERATE_SECTIONS_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> = [
   },
 ];
 
+/** The step list for a run whose beats came from the caller: only LinkSeg
+ *  itself is left. */
+const SECTIONS_ONLY_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> =
+  GENERATE_SECTIONS_STEPS.filter(step => step.key === 'sections');
+
 export interface GenerateSectionsInput {
   audio: AssistAudio;
+  /**
+   * A beat grid the caller already has, as quarter-note times in seconds
+   * covering the decoded audio's duration — for the editor, the chart's own
+   * tempo map (`lib/section-names/chart-beat-grid.ts`). Supplied, the run
+   * skips beat detection entirely: no 83 MB model download, no ~10 s
+   * inference, just LinkSeg on the audio. LinkSeg is robust to its beat
+   * source, so the labels are the same either way.
+   *
+   * A function rather than an array because only the run knows the decoded
+   * duration the grid has to cover.
+   */
+  deriveBeatTimes?: ((durationSeconds: number) => number[]) | undefined;
 }
 
 export interface GenerateSectionsResult {
@@ -68,7 +89,13 @@ export function makeGenerateSectionsTask({
     key: 'generate-sections',
     title: 'Sections',
 
-    async planSteps() {
+    async planSteps({deriveBeatTimes}) {
+      // A run handed a beat grid never touches the beat tracker, so neither
+      // of its steps belongs on the list — predicting work that won't happen
+      // is exactly the "honest scoping" the engine's contract asks for.
+      if (deriveBeatTimes) {
+        return SECTIONS_ONLY_STEPS.map(cfg => ({...cfg, cached: false}));
+      }
       // Nothing here is stem-cached, so the only cache that changes the step
       // list is the OPFS model cache: once Beat This! is in it, the run reads
       // it locally and downloads nothing. Same probe `generate-tempo-map`
@@ -80,7 +107,7 @@ export function makeGenerateSectionsTask({
       }));
     },
 
-    async run({audio}, signal, progress) {
+    async run({audio, deriveBeatTimes}, signal, progress) {
       if (signal.aborted) throw makeAbortError();
       const audioBuffer = audio.loadDecodedMix
         ? await audio.loadDecodedMix()
@@ -96,6 +123,7 @@ export function makeGenerateSectionsTask({
         kind: 'sections',
         createWorker,
         signal,
+        beatTimes: deriveBeatTimes?.(audioBuffer.duration) ?? null,
         onProgress: p => {
           progress({
             activeKey: p.stage,

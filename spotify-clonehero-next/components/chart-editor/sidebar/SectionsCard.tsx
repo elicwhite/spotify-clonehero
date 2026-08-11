@@ -22,6 +22,10 @@ import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
 import {generateSectionsTask} from '@/lib/assist/tasks/generate-sections';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
+import {
+  chartQuarterNoteBeatTimes,
+  hasMusicalTempoGrid,
+} from '@/lib/section-names/chart-beat-grid';
 import {getAssistProvenance} from '@/lib/chart-editor-core';
 import type {ChartDocument} from '@/lib/chart-edit';
 
@@ -68,8 +72,24 @@ export default function SectionsCard({
   const showStale = stale && sectionCount > 0;
   const status = sectionCount === 1 ? '1 section' : `${sectionCount} sections`;
 
+  // A chart that already has a musical grid needs no beat detection: LinkSeg
+  // is robust to its beat source, so the chart's own quarter notes stand in
+  // for a Beat This! pass and the run drops the 83 MB model download and
+  // ~10 s of inference. A blank chart's flat default grid says nothing about
+  // the music, so that one still detects beats from the audio.
+  const chartGrid =
+    doc != null && hasMusicalTempoGrid(doc.parsedChart)
+      ? doc.parsedChart
+      : null;
+
   const {running, run} = useAssistTaskRun(runner, generateSectionsTask, {
-    prepareInput: async () => ({audio: await loadAudio()}),
+    prepareInput: async () => ({
+      audio: await loadAudio(),
+      deriveBeatTimes: chartGrid
+        ? (durationSeconds: number) =>
+            chartQuarterNoteBeatTimes(chartGrid, durationSeconds)
+        : undefined,
+    }),
     applyResult: result => {
       if (!result.sections || result.sections.labels.length === 0) {
         toast.error("Couldn't find any section boundaries in this song.");

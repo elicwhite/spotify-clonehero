@@ -231,6 +231,44 @@ describe('generate-sections', () => {
     ]);
   });
 
+  // A chart that already has a grid hands it over, and then the run must
+  // really skip beat detection: the whole point is dropping the 83 MB model
+  // download and the ~10 s pass, which only happens if the request carries
+  // the beats.
+  describe('with a caller-supplied beat grid', () => {
+    const deriveBeatTimes = (durationSeconds: number) =>
+      Array.from({length: durationSeconds * 2}, (_unused, i) => i * 0.5);
+
+    it('sends the chart beats, derived over the decoded duration', async () => {
+      await makeGenerateSectionsTask().run(
+        {audio: AUDIO, deriveBeatTimes},
+        new AbortController().signal,
+        noProgress,
+      );
+      // DECODED.duration is 4 s.
+      expect(mockRunTempoPipeline.mock.calls[0][1].beatTimes).toEqual([
+        0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5,
+      ]);
+    });
+
+    it('plans only the labeling step: no beat model, no beat pass', async () => {
+      const steps = await makeGenerateSectionsTask().planSteps({
+        audio: AUDIO,
+        deriveBeatTimes,
+      });
+      expect(steps.map(s => s.key)).toEqual(['sections']);
+    });
+
+    it('still detects beats when no grid is offered', async () => {
+      await makeGenerateSectionsTask().run(
+        {audio: AUDIO},
+        new AbortController().signal,
+        noProgress,
+      );
+      expect(mockRunTempoPipeline.mock.calls[0][1].beatTimes).toBeNull();
+    });
+  });
+
   it('reports each stage the pipeline emits', async () => {
     const seen: Array<string | null> = [];
     mockRunTempoPipeline.mockImplementation(async (_buffer, options) => {

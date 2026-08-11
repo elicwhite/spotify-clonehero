@@ -5,9 +5,10 @@
  * Chart Assist sidebar section (plan 0074 Phase 2, Design C/F, task 2e).
  *
  * `lib/assist/tasks` is mocked down to controllable `transcribe-drums` /
- * `generate-tempo-map` tasks (the tasks' own pipeline behavior, including
- * its worker seams, has its own suites elsewhere; what a task run does to
- * the card is what matters here) — under test is `ChartAssist` itself:
+ * `generate-tempo-map` / `generate-sections` tasks (the tasks' own pipeline
+ * behavior, including its worker seams, has its own suites elsewhere; what a
+ * task run does to the card is what matters here) — under test is
+ * `ChartAssist` itself:
  * card visibility as a function of capability variant AND host wiring, the
  * staleness/ack wiring against the real reducer +
  * `ReplaceDrumTrackCommand`/content-stamps machinery, the leading-silence
@@ -59,6 +60,7 @@ interface CapturedRun {
 
 let capturedTranscribe: CapturedRun | null = null;
 let capturedTempo: CapturedRun | null = null;
+let capturedSections: CapturedRun | null = null;
 
 jest.mock('../../../lib/assist/tasks/transcribe-drums-from-audio', () => ({
   transcribeDrumsFromAudioTask: {
@@ -83,6 +85,21 @@ jest.mock('../../../lib/assist/tasks/generate-tempo-map', () => ({
     run: (ctx: unknown, signal: AbortSignal) =>
       new Promise((resolve, reject) => {
         capturedTempo = {ctx, signal, resolve, reject};
+        signal.addEventListener('abort', () =>
+          reject(new DOMException('Aborted', 'AbortError')),
+        );
+      }),
+  },
+}));
+
+jest.mock('../../../lib/assist/tasks/generate-sections', () => ({
+  generateSectionsTask: {
+    key: 'generate-sections',
+    title: 'Sections',
+    planSteps: async () => [{key: 'sections', label: 'Labeling song sections'}],
+    run: (ctx: unknown, signal: AbortSignal) =>
+      new Promise((resolve, reject) => {
+        capturedSections = {ctx, signal, resolve, reject};
         signal.addEventListener('abort', () =>
           reject(new DOMException('Aborted', 'AbortError')),
         );
@@ -245,6 +262,7 @@ async function clickAndConfirm(name: RegExp, confirmName: RegExp) {
 beforeEach(() => {
   capturedTranscribe = null;
   capturedTempo = null;
+  capturedSections = null;
 });
 
 describe('ChartAssist capability gating', () => {
@@ -766,5 +784,46 @@ describe('ChartAssist inline run', () => {
     expect(
       screen.queryByText(/tempo grid changed after transcription/i),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * A chart that already has a grid is its own beat source: LinkSeg is robust
+ * to where beats come from, so handing it the chart's quarter notes skips
+ * the 83 MB beat model and the ~10 s detection pass. The card only offers
+ * the grid when it means something musically — a blank chart's flat default
+ * doesn't describe the audio, so that one still detects beats.
+ */
+describe('ChartAssist Sections beat source', () => {
+  async function runSections(doc: ChartDocument) {
+    renderChartAssist(doc);
+    fireEvent.click(
+      within(screen.getByRole('group', {name: 'Sections'})).getByRole(
+        'button',
+        {name: /^generate$/i},
+      ),
+    );
+    await settle();
+    await waitFor(() => expect(capturedSections).not.toBeNull());
+    return (
+      capturedSections!.ctx as {
+        deriveBeatTimes?: (durationSeconds: number) => number[];
+      }
+    ).deriveBeatTimes;
+  }
+
+  it("derives beats from the chart's tempo map when it has a real grid", async () => {
+    // makeDoc() charts a note, so the grid is the one that note lives on.
+    const deriveBeatTimes = await runSections(makeDoc());
+    expect(deriveBeatTimes).toBeDefined();
+    // 120 BPM: a quarter note every half second, across the decode.
+    expect(deriveBeatTimes!(2).map(t => Math.round(t * 1e6) / 1e6)).toEqual([
+      0, 0.5, 1, 1.5, 2,
+    ]);
+  });
+
+  it('detects beats from the audio for a blank chart', async () => {
+    const deriveBeatTimes = await runSections(makeDoc(0));
+    expect(deriveBeatTimes).toBeUndefined();
   });
 });

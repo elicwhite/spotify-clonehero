@@ -62,9 +62,11 @@ export type PipelineRunKind = 'tempo-map' | 'tempo-map+sections' | 'sections';
 /** What every run produces, both derived from the full-mix beat pass that
  *  every run performs. */
 interface PipelineDiagnostics {
-  /** Full-mix PP beat count (diagnostic). */
+  /** Full-mix PP beat count (diagnostic), or the count of the beats the
+   *  caller supplied on a run that skipped the beat pass. */
   fullMixBeatCount: number;
-  /** Meter regularity from the beat tracker (null = too short to measure).
+  /** Meter regularity from the beat tracker (null = too short to measure, or
+   * a run given its beats, which carry no downbeats to measure).
    * frac4 < METER_CONFIDENCE_THRESHOLD → warn that time signatures likely
    * need manual work. */
   meterStats: import('./meter-confidence').MeterStats | null;
@@ -130,6 +132,14 @@ export interface PipelineRunRequest {
    * already separated the stem.
    */
   drumStemStereo?: {left: Float32Array; right: Float32Array} | null;
+  /**
+   * Beat times in seconds, supplied by a caller that already has a grid (the
+   * chart's own tempo map — see `lib/section-names/chart-beat-grid.ts`).
+   * `'sections'` runs only: with these the run skips the Beat This! download
+   * and pass entirely and hands them to LinkSeg, which is robust to its beat
+   * source. Ignored by a tempo-map run, whose whole job is producing a grid.
+   */
+  beatTimes?: number[] | null;
 }
 
 export type PipelineWorkerMessage =

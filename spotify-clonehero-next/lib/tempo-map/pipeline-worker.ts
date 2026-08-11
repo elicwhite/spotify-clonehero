@@ -247,10 +247,16 @@ async function withBeatThisSession<T>(
   }
 }
 
-/** S3b: LinkSeg functional section labels, from the full-mix beats and the
- *  22.05 kHz full-mix audio that pass already produced. Section labeling is a
+/** S3b: LinkSeg functional section labels, from a beat grid and the 22.05 kHz
+ *  full mix. The beats normally come from the full-mix Beat This! pass, but
+ *  LinkSeg is robust to its beat source, so a caller with a grid of its own
+ *  (the chart's tempo map) supplies them instead. Section labeling is a
  *  nice-to-have; a failure yields null rather than failing the whole run. */
-async function labelSections(fm: BeatPass): Promise<LinkSegSections | null> {
+async function labelSections(input: {
+  beatTimes: number[];
+  mono22k: Float32Array;
+  audioSeconds: number;
+}): Promise<LinkSegSections | null> {
   try {
     progress({stage: 'sections', percent: 0});
     const linksegSession = await loadLinkSegSession(ort, m =>
@@ -260,9 +266,9 @@ async function labelSections(fm: BeatPass): Promise<LinkSegSections | null> {
       const sections = await runLinkSegSections({
         session: linksegSession,
         ortTensor: ort.Tensor,
-        beatTimes: fm.pp.beats,
-        wave22k: fm.mono22k,
-        duration: fm.audioSeconds,
+        beatTimes: input.beatTimes,
+        wave22k: input.mono22k,
+        duration: input.audioSeconds,
       });
       progress({stage: 'sections', percent: 1});
       return sections;
@@ -326,9 +332,44 @@ function buildTempoMap(
 
 // --- pipeline ------------------------------------------------------------
 
+/** The LinkSeg inputs a completed beat pass carries. */
+function beatPassSectionInput(fm: BeatPass) {
+  return {
+    beatTimes: fm.pp.beats,
+    mono22k: fm.mono22k,
+    audioSeconds: fm.audioSeconds,
+  };
+}
+
 /** A sections-only run: full-mix beats, then LinkSeg. No separation, no
- *  drum-stem beat pass, no converter — and no grid in the result. */
+ *  drum-stem beat pass, no converter — and no grid in the result.
+ *
+ * A caller that already has a beat grid (the chart's own tempo map) supplies
+ * it, and then the run skips the beat model download and the beat pass too:
+ * all that remains is the 22.05 kHz mono mix LinkSeg's mel windows read. */
 async function runSections(req: PipelineRunRequest) {
+  if (req.beatTimes && req.beatTimes.length > 0) {
+    const mono22k = await resampleToBeatThis(
+      monoMixdown(req.left, req.right),
+      req.sampleRate,
+    );
+    post({
+      type: 'result',
+      result: {
+        kind: 'sections',
+        sections: await labelSections({
+          beatTimes: req.beatTimes,
+          mono22k,
+          audioSeconds: mono22k.length / BEAT_THIS_SAMPLE_RATE,
+        }),
+        fullMixBeatCount: req.beatTimes.length,
+        // Supplied beats carry no downbeats, so there is no meter to measure.
+        meterStats: null,
+      },
+    });
+    return;
+  }
+
   const {left, right} = await resampleToSeparationRate(req);
   const fm = await withBeatThisSession(session =>
     runBeatThisPass(
@@ -342,7 +383,7 @@ async function runSections(req: PipelineRunRequest) {
     type: 'result',
     result: {
       kind: 'sections',
-      sections: await labelSections(fm),
+      sections: await labelSections(beatPassSectionInput(fm)),
       fullMixBeatCount: fm.pp.beats.length,
       meterStats: computeMeterStats(fm.pp.beats, fm.pp.downbeats),
     },
@@ -371,7 +412,9 @@ async function runTempoMap(req: PipelineRunRequest, withSections: boolean) {
     ),
   }));
 
-  const sections = withSections ? await labelSections(fm) : null;
+  const sections = withSections
+    ? await labelSections(beatPassSectionInput(fm))
+    : null;
   const {synctrack, drumOnsetOffsetMs} = buildTempoMap(fm, ds, drumStem);
 
   post(

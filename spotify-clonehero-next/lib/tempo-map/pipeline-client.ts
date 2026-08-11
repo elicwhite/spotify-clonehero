@@ -39,6 +39,12 @@ export interface TempoPipelineOptions<
    * `'tempo-map+sections'`, the full pipeline.
    */
   kind?: K | undefined;
+  /**
+   * Beat times in seconds for a `'sections'` run whose caller already has a
+   * grid (the chart's own tempo map). Supplied, the run skips the Beat This!
+   * download and pass and labels sections straight off these beats.
+   */
+  beatTimes?: number[] | null;
   onProgress?: (p: PipelineProgress) => void;
   /**
    * Injectable worker factory (defaults to the real pipeline-worker.ts) so
@@ -132,6 +138,7 @@ export async function runTempoPipelineFromPcm<
         sampleRate,
         fingerprint,
         drumStemStereo,
+        beatTimes: options.beatTimes ?? null,
       };
       worker.postMessage(request, transfer);
     },
