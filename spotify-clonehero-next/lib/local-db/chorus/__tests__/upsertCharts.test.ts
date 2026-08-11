@@ -34,6 +34,7 @@ function makeDb() {
       has_video_background INTEGER NOT NULL,
       album_art_md5 TEXT,
       group_id INTEGER NOT NULL,
+      first_seen TEXT,
       artist_normalized TEXT,
       name_normalized TEXT,
       charter_normalized TEXT

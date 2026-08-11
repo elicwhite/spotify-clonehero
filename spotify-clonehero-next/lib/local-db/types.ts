@@ -21,6 +21,7 @@ export interface ChorusCharts {
   diff_drums_real: number | null;
   diff_guitar: number | null;
   diff_keys: number | null;
+  first_seen: string | null;
   group_id: number;
   has_bass: number;
   has_guitar: number;
@@ -135,9 +136,20 @@ export interface SpotifyTrackChartMatches {
 export interface SpotifyHistory {
   artist: string;
   artist_normalized: string;
+  first_played_at: string | null;
+  last_played_at: string | null;
   name: string;
   name_normalized: string;
   play_count: number;
+  skip_count: Generated<number>;
+  total_ms_played: Generated<number>;
+}
+
+export interface RadarDismissed {
+  artist_normalized: string;
+  dismissed_at: string;
+  /** Empty means every song by the artist. */
+  name_normalized: string;
 }
 
 export interface DB {
@@ -147,6 +159,7 @@ export interface DB {
   chorus_metadata: ChorusMetadata;
   chorus_scan_sessions: ChorusScanSessions;
   local_charts: LocalCharts;
+  radar_dismissed: RadarDismissed;
   spotify_album_tracks: SpotifyAlbumTracks;
   spotify_albums: SpotifyAlbums;
   spotify_history: SpotifyHistory;

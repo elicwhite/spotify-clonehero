@@ -9,7 +9,7 @@ import type {
 export type ScorePart = {label: string; points: number};
 export type Score = {value: number; parts: ScorePart[]};
 export type MusicSort = {
-  key: 'score' | 'artist' | 'song' | 'updated';
+  key: 'score' | 'plays' | 'artist' | 'song' | 'updated';
   direction: 'asc' | 'desc';
 };
 export type HoldState<T> = {
@@ -25,12 +25,17 @@ export type RadarCandidateSummary = Pick<
 > & {
   chartCount: number;
   availableInstrumentCount: number;
-  newestChartYear: number;
 };
 
 type Keyed = {key: string};
 
-const INSTRUMENT_IDS: InstrumentId[] = ['guitar', 'bass', 'keys', 'proDrums'];
+type RadarCandidateSummaryEvidence = Pick<
+  RadarCandidateSummary,
+  | 'artistPlayCount'
+  | 'savedLibrarySongCount'
+  | 'chartCount'
+  | 'availableInstrumentCount'
+>;
 
 function safeCount(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -68,10 +73,6 @@ export function scoreMusicSong(song: FindMusicSong): Score {
   if (song.inAppleMusicLibrary) {
     parts.push({label: 'Apple Music library', points: 20});
   }
-  parts.push({
-    label: 'Installed chart',
-    points: song.hasInstalledChart ? 1 : 0,
-  });
   return makeScore(parts);
 }
 
@@ -89,25 +90,12 @@ function scoreRadarEvidence({
   savedLibrarySongCount,
   chartCount,
   availableInstrumentCount,
-  newestChartYear,
-}: Pick<RadarCandidateSummary, 'artistPlayCount' | 'savedLibrarySongCount'> & {
-  chartCount: number;
-  availableInstrumentCount: number;
-  newestChartYear: number;
-}): Score {
+}: RadarCandidateSummaryEvidence): Score {
   const safeArtistPlayCount = safeCount(artistPlayCount);
   const affinityPoints = Math.min(
     55,
     Math.round((55 * Math.log1p(safeArtistPlayCount)) / Math.log(101)),
   );
-  const recencyPoints =
-    newestChartYear >= 2026
-      ? 10
-      : newestChartYear >= 2024
-        ? 6
-        : newestChartYear >= 2022
-          ? 3
-          : 0;
 
   const parts: ScorePart[] = [
     {label: 'Artist affinity', points: affinityPoints},
@@ -128,36 +116,17 @@ function scoreRadarEvidence({
       label: 'Instrument coverage',
       points: safeCount(availableInstrumentCount) * 4,
     },
-    {label: 'Chart freshness', points: recencyPoints},
   );
   return makeScore(parts);
 }
 
-function chartYear(modifiedTime: string): number {
-  const match = /^(\d{4})-/.exec(modifiedTime);
-  return match ? Number(match[1]) : 0;
-}
-
-/** Discovery evidence: affinity leads, with breadth and freshness supporting. */
+/**
+ * Discovery evidence: affinity leads, with breadth supporting. The counts come
+ * from the candidate query rather than the hydrated chart list, so the score
+ * shown is the score that ranked the row.
+ */
 export function scoreRadarSong(song: RadarSong): Score {
-  return scoreRadarEvidence({
-    artistPlayCount: song.artistPlayCount,
-    savedLibrarySongCount: song.savedLibrarySongCount,
-    chartCount: song.charts.length,
-    availableInstrumentCount: INSTRUMENT_IDS.filter(instrument =>
-      song.charts.some(chart => {
-        const difficulty = chart.instruments[instrument];
-        return (
-          (difficulty != null && difficulty >= 0) ||
-          chart.instrumentPresence[instrument]
-        );
-      }),
-    ).length,
-    newestChartYear: song.charts.reduce(
-      (latest, chart) => Math.max(latest, chartYear(chart.modifiedTime)),
-      0,
-    ),
-  });
+  return scoreRadarEvidence(song);
 }
 
 function scoreRadarCandidate(candidate: RadarCandidateSummary): Score {
@@ -204,51 +173,67 @@ function withFilteredCharts<T extends FindMusicSong | RadarSong>(
   return charts.length === song.charts.length ? song : {...song, charts};
 }
 
+function applyFilters<T extends FindMusicSong | RadarSong>(
+  songs: T[],
+  filters: FindMusicFilters,
+): T[] {
+  const exclusions = exclusionTerms(filters);
+  return songs.flatMap(song => {
+    if (!passesInstallFilter(song, filters)) return [];
+    if (!matchesText(song, filters.query)) return [];
+    const withInstruments = withFilteredCharts(song, filters.instruments);
+    if (!withInstruments) return [];
+    const included = withoutExcludedCharts(withInstruments, exclusions);
+    return included ? [included] : [];
+  });
+}
+
 export function applyMusicFilters(
   songs: FindMusicSong[],
   filters: FindMusicFilters,
 ): FindMusicSong[] {
-  return songs.flatMap(song => {
-    if (!passesInstallFilter(song, filters)) return [];
-    const filteredSong = withFilteredCharts(song, filters.instruments);
-    if (!filteredSong) return [];
-    return matchesText(filteredSong, filters.query) &&
-      !matchesExclusion(filteredSong, filters)
-      ? [filteredSong]
-      : [];
-  });
+  return applyFilters(songs, filters);
 }
 
 export function applyRadarFilters(
   songs: RadarSong[],
   filters: FindMusicFilters,
 ): RadarSong[] {
-  return songs.flatMap(song => {
-    if (!passesInstallFilter(song, filters)) return [];
-    const filteredSong = withFilteredCharts(song, filters.instruments);
-    if (!filteredSong) return [];
-    return matchesText(filteredSong, filters.query) &&
-      !matchesExclusion(filteredSong, filters)
-      ? [filteredSong]
-      : [];
-  });
+  return applyFilters(songs, filters);
 }
 
-function matchesExclusion(
-  song: Pick<FindMusicSong | RadarSong, 'artist' | 'song' | 'charts'>,
+function exclusionTerms(
   filters: Pick<FindMusicFilters, 'exclusions' | 'exclusionDraft'>,
-): boolean {
-  const terms = [...filters.exclusions, filters.exclusionDraft]
+): string[] {
+  return [...filters.exclusions, filters.exclusionDraft]
     .map(term => term.trim().toLocaleLowerCase('en-US'))
     .filter(Boolean);
-  if (terms.length === 0) return false;
+}
 
-  const fields = [
-    song.artist,
-    song.song,
-    ...song.charts.map(chart => chart.charter),
-  ].map(value => value.toLocaleLowerCase('en-US'));
-  return terms.some(term => fields.some(field => field.includes(term)));
+/**
+ * An artist or song exclusion is about the music, so it drops the row. A
+ * charter exclusion is about one person's work, so it drops only their
+ * versions — blocking a charter should not cost access to songs other people
+ * also charted.
+ */
+function withoutExcludedCharts<T extends FindMusicSong | RadarSong>(
+  song: T,
+  terms: string[],
+): T | null {
+  if (terms.length === 0) return song;
+
+  const identityFields = [song.artist, song.song].map(value =>
+    value.toLocaleLowerCase('en-US'),
+  );
+  if (terms.some(term => identityFields.some(field => field.includes(term))))
+    return null;
+
+  const charts = song.charts.filter(chart => {
+    const charter = chart.charter.toLocaleLowerCase('en-US');
+    return !terms.some(term => charter.includes(term));
+  });
+  if (charts.length === 0) return null;
+  return charts.length === song.charts.length ? song : {...song, charts};
 }
 
 function matchesText(
@@ -298,6 +283,9 @@ export function sortMusicSongs(
       case 'score':
         primary = scoreMusicSong(left).value - scoreMusicSong(right).value;
         break;
+      case 'plays':
+        primary = safeCount(left.playCount) - safeCount(right.playCount);
+        break;
       case 'artist':
         primary = compareText(left.artist, right.artist);
         break;
@@ -315,6 +303,30 @@ export function sortMusicSongs(
 
 export function sortRadarSongs(songs: RadarSong[]): RadarSong[] {
   return sortRadarRankables(songs, scoreRadarSong);
+}
+
+/**
+ * The radar score saturates well below its own maximum, so its tiebreaks —
+ * artist play count first, and that is constant across an artist's songs — end
+ * up doing the ranking. Left alone the list block-sorts by artist. Keep each
+ * artist's best few and let the rest of the catalog through.
+ */
+export function capPerArtist<T extends {artist: string}>(
+  rows: T[],
+  perArtist: number,
+  // Display names come from MIN(chart.artist), so two songs by one artist can
+  // carry different spellings. Callers with a normalized name should pass it.
+  keyOf: (row: T) => string = row => row.artist.toLocaleLowerCase('en-US'),
+): T[] {
+  if (perArtist <= 0) return [];
+  const counts = new Map<string, number>();
+  return rows.filter(row => {
+    const artist = keyOf(row);
+    const taken = counts.get(artist) ?? 0;
+    if (taken >= perArtist) return false;
+    counts.set(artist, taken + 1);
+    return true;
+  });
 }
 
 export function sortRadarCandidateSummaries<T extends RadarCandidateSummary>(

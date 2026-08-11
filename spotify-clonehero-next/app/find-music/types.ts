@@ -58,6 +58,10 @@ export type RadarSong = {
   song: string;
   artistPlayCount: number;
   savedLibrarySongCount: number;
+  // Carried from the candidate query so the score shown is the score that
+  // ranked the row, rather than one recomputed from the hydrated charts.
+  chartCount: number;
+  availableInstrumentCount: number;
   spotifyUrl: string | null;
   hasInstalledChart: boolean;
   charts: FindMusicChart[];

@@ -94,6 +94,7 @@ function makeDb(queryLog?: QueryLog[]): Kysely<DB> {
       has_video_background INTEGER NOT NULL,
       album_art_md5 TEXT,
       group_id INTEGER NOT NULL,
+      first_seen TEXT,
       artist_normalized TEXT,
       name_normalized TEXT,
       charter_normalized TEXT
@@ -115,6 +116,13 @@ function makeDb(queryLog?: QueryLog[]): Kysely<DB> {
       chart_md5 TEXT NOT NULL,
       matched_at INTEGER NOT NULL
     );
+    CREATE TABLE radar_dismissed (
+      artist_normalized TEXT NOT NULL,
+      name_normalized TEXT NOT NULL,
+      dismissed_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX idx_radar_dismissed_identity
+      ON radar_dismissed (artist_normalized, name_normalized);
     CREATE TABLE chorus_metadata (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -173,9 +181,21 @@ function chart(
     song_length: 180_000,
     has_video_background: 0,
     album_art_md5: null,
-    group_id: 1,
+    // Each fixture chart is its own upload group unless a test is exercising
+    // revision dedupe, where it passes an explicit group_id.
+    group_id: fixtureGroupId(md5),
+    first_seen: null,
     ...overrides,
   };
+}
+
+const fixtureGroupIds = new Map<string, number>();
+function fixtureGroupId(md5: string): number {
+  const existing = fixtureGroupIds.get(md5);
+  if (existing != null) return existing;
+  const next = fixtureGroupIds.size + 1;
+  fixtureGroupIds.set(md5, next);
+  return next;
 }
 
 async function setAppleMusicState(
@@ -237,6 +257,149 @@ describe('find-music Radar queries', () => {
 
   afterEach(async () => {
     await db.destroy();
+  });
+
+  async function seedAffinity(artist: string, playCount = 50) {
+    await db
+      .insertInto('spotify_history')
+      .values({
+        artist,
+        artist_normalized: artist.toLowerCase(),
+        name: `${artist} Known`,
+        name_normalized: `${artist.toLowerCase()} known`,
+        play_count: playCount,
+      })
+      .execute();
+  }
+
+  it('keeps only the newest revision of a chart upload group', async () => {
+    await seedAffinity('Revised');
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        chart('old-rev', 'Revised', 'revised', 'Song', 'song', 'Ana', 'ana', {
+          group_id: 7,
+          modified_time: '2024-01-01',
+        }),
+        chart('new-rev', 'Revised', 'revised', 'Song', 'song', 'Ana', 'ana', {
+          group_id: 7,
+          modified_time: '2026-01-01',
+        }),
+        chart('other', 'Revised', 'revised', 'Song', 'song', 'Bo', 'bo', {
+          group_id: 8,
+        }),
+        // group_id 0 means Chorus reported no group, so these stand alone
+        chart('ungrouped-a', 'Revised', 'revised', 'Song', 'song', 'Cy', 'cy', {
+          group_id: 0,
+        }),
+        chart('ungrouped-b', 'Revised', 'revised', 'Song', 'song', 'Di', 'di', {
+          group_id: 0,
+        }),
+      ])
+      .execute();
+
+    const [song] = await getRadarSongs(db);
+    expect(song.charts.map(item => item.md5).sort()).toEqual([
+      'new-rev',
+      'other',
+      'ungrouped-a',
+      'ungrouped-b',
+    ]);
+    expect(song.chartCount).toBe(4);
+  });
+
+  it('excludes songs that are already installed locally', async () => {
+    await seedAffinity('Owned');
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        chart(
+          'installed',
+          'Owned',
+          'owned',
+          'Have It',
+          'have it',
+          'Ana',
+          'ana',
+        ),
+        chart('fresh', 'Owned', 'owned', 'Need It', 'need it', 'Ana', 'ana'),
+      ])
+      .execute();
+    await db
+      .insertInto('local_charts')
+      .values({
+        artist: 'Owned',
+        song: 'Have It',
+        charter: 'Someone',
+        artist_normalized: 'owned',
+        song_normalized: 'have it',
+        charter_normalized: 'someone',
+        modified_time: '2026-01-01',
+        data: '{}',
+        updated_at: '2026-01-01',
+      })
+      .execute();
+
+    const songs = await getRadarSongs(db);
+    expect(songs.map(item => item.song)).toEqual(['Need It']);
+  });
+
+  it('honors song and artist dismissals', async () => {
+    await seedAffinity('Dropped');
+    await seedAffinity('Partly');
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        chart('d1', 'Dropped', 'dropped', 'Any', 'any', 'Ana', 'ana'),
+        chart('p1', 'Partly', 'partly', 'Gone', 'gone', 'Ana', 'ana'),
+        chart('p2', 'Partly', 'partly', 'Kept', 'kept', 'Ana', 'ana'),
+      ])
+      .execute();
+    await db
+      .insertInto('radar_dismissed')
+      .values([
+        {
+          artist_normalized: 'dropped',
+          name_normalized: '',
+          dismissed_at: '2026-01-01',
+        },
+        {
+          artist_normalized: 'partly',
+          name_normalized: 'gone',
+          dismissed_at: '2026-01-01',
+        },
+      ])
+      .execute();
+
+    const songs = await getRadarSongs(db);
+    expect(songs.map(item => item.song)).toEqual(['Kept']);
+  });
+
+  it('caps how many songs a single artist can occupy', async () => {
+    await seedAffinity('Prolific', 500);
+    await seedAffinity('Quiet', 1);
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        ...Array.from({length: 9}, (_, index) =>
+          chart(
+            `prolific-${index}`,
+            'Prolific',
+            'prolific',
+            `Deep Cut ${index}`,
+            `deep cut ${index}`,
+            'Ana',
+            'ana',
+          ),
+        ),
+        chart('quiet-1', 'Quiet', 'quiet', 'Only One', 'only one', 'Bo', 'bo'),
+      ])
+      .execute();
+
+    const songs = await getRadarSongs(db);
+    expect(songs.filter(item => item.artist === 'Prolific')).toHaveLength(5);
+    // The capped artist must not crowd out everyone else
+    expect(songs.map(item => item.artist)).toContain('Quiet');
   });
 
   it('ranks radar by artist affinity, excludes all direct evidence, and preserves variants', async () => {
@@ -576,15 +739,17 @@ describe('find-music Radar queries', () => {
       )
       .execute();
 
+    // Alpha Final is the first candidate SQL emits, but it has one chart
+    // version where the rest have two, so the public score reorders it away.
     await expect(getRadarSongs(db, 1)).resolves.toMatchObject([
       {
-        artist: 'Alpha Final',
+        artist: 'Zulu Four',
         savedLibrarySongCount: 5,
       },
     ]);
     const detailQuery = queryLog.find(entry =>
       entry.sql.includes('WITH winning_songs'),
     );
-    expect(detailQuery?.parameters).toEqual(['alpha final', 'recommendation']);
+    expect(detailQuery?.parameters).toEqual(['zulu four', 'recommendation']);
   });
 });

@@ -38,6 +38,61 @@ describe('normalizeStrForMatching', () => {
     expect(normalizeStrForMatching('The')).toBe('the');
   });
 
+  it('should strip hyphenated edition suffixes', () => {
+    expect(normalizeStrForMatching('Comfortably Numb - Remastered 2011')).toBe(
+      'comfortably numb',
+    );
+    expect(normalizeStrForMatching('Comfortably Numb')).toBe(
+      'comfortably numb',
+    );
+    expect(normalizeStrForMatching('Bohemian Rhapsody - 2011 Mix')).toBe(
+      'bohemian rhapsody',
+    );
+    expect(normalizeStrForMatching('Runaway - Live at Wembley')).toBe(
+      'runaway',
+    );
+    expect(normalizeStrForMatching('Feel Good Inc - Radio Edit')).toBe(
+      'feel good inc',
+    );
+  });
+
+  it('should keep hyphenated titles that are not edition labels', () => {
+    expect(normalizeStrForMatching('Karn Evil 9 - Part Two')).toBe(
+      'karn evil 9 part two',
+    );
+    expect(normalizeStrForMatching('Marquee Moon - Alright')).toBe(
+      'marquee moon alright',
+    );
+    // A song actually titled "Live" keeps its title, losing only the edition
+    expect(normalizeStrForMatching('Live - Live')).toBe('live');
+    // Never strip away everything
+    expect(normalizeStrForMatching(' - Remastered')).toBe('remastered');
+  });
+
+  it('should treat "&" and "+" as "and"', () => {
+    expect(normalizeStrForMatching('Rock & Roll')).toBe(
+      normalizeStrForMatching('Rock and Roll'),
+    );
+    expect(normalizeStrForMatching('Simon & Garfunkel')).toBe(
+      'simon and garfunkel',
+    );
+    expect(normalizeStrForMatching('Florence + The Machine')).toBe(
+      'florence and the machine',
+    );
+    // The conjunction must not glue words together
+    expect(normalizeStrForMatching('Sam&Dave')).toBe('sam and dave');
+  });
+
+  it('should drop featured-artist suffixes', () => {
+    expect(normalizeStrForMatching('Numb feat. JAY-Z')).toBe('numb');
+    expect(normalizeStrForMatching('Numb ft JAY-Z')).toBe('numb');
+    expect(normalizeStrForMatching('Eminem featuring Dido')).toBe('eminem');
+    // "feat" as a word of the title itself is left alone
+    expect(normalizeStrForMatching('Feat of Strength')).toBe(
+      'feat of strength',
+    );
+  });
+
   it('should preserve non-Latin scripts while folding Latin diacritics', () => {
     // Cyrillic should be preserved (only lowercased)
     expect(normalizeStrForMatching('Дурной Вкус')).toBe('дурной вкус');

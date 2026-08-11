@@ -8,10 +8,15 @@ import type {
   FindMusicStats,
   RadarSong,
 } from './types';
-import {type RadarCandidateSummary, sortRadarCandidateSummaries} from './model';
+import {
+  capPerArtist,
+  type RadarCandidateSummary,
+  sortRadarCandidateSummaries,
+} from './model';
 
 const IDENTITY_SEPARATOR = '\u001f';
 const DEFAULT_RADAR_LIMIT = 1_200;
+const MAX_RADAR_SONGS_PER_ARTIST = 5;
 
 type ChartRow = {
   artist_normalized: string;
@@ -59,6 +64,17 @@ type ProviderActionRow = {
 
 function identityKey(artistNormalized: string, nameNormalized: string) {
   return `${artistNormalized}${IDENTITY_SEPARATOR}${nameNormalized}`;
+}
+
+/**
+ * Charts are keyed on md5, so a charter re-uploading a fix leaves both
+ * revisions in the mirror sharing one group_id. Only the newest revision of a
+ * group is a distinct version to choose between. group_id 0 means Chorus
+ * reported no group, so those rows stand alone.
+ */
+function chartGroupKey(row: Pick<ChartRow, 'group_id' | 'md5'>): string {
+  const groupId = Number(row.group_id);
+  return groupId === 0 ? `md5:${row.md5}` : `group:${groupId}`;
 }
 
 async function resolveDb(db?: Kysely<DB>): Promise<Kysely<DB>> {
@@ -319,6 +335,7 @@ export async function getFindMusicSongs(
   const albumsBySong = groupEvidenceNames(albumResult.rows);
   const actionsBySong = groupProviderActions(actionResult.rows);
   const songs = new Map<string, FindMusicSong>();
+  const seenChartGroups = new Map<string, Set<string>>();
 
   for (const row of chartResult.rows) {
     const key = identityKey(row.artist_normalized, row.name_normalized);
@@ -344,6 +361,12 @@ export async function getFindMusicSongs(
       };
       songs.set(key, song);
     }
+    // Rows arrive newest-first within a song, so the first row of a group wins.
+    const groups = seenChartGroups.get(key) ?? new Set<string>();
+    const groupKey = chartGroupKey(row);
+    if (groups.has(groupKey)) continue;
+    groups.add(groupKey);
+    seenChartGroups.set(key, groups);
     song.charts.push(toChart(row));
   }
 
@@ -407,7 +430,6 @@ type RadarCandidateSummaryRow = {
   saved_library_song_count: number | bigint;
   chart_count: number | bigint;
   available_instrument_count: number | bigint;
-  newest_chart_year: number | bigint;
 };
 
 type RankedRadarCandidate = RadarCandidateSummary & {
@@ -504,6 +526,15 @@ export async function getRadarSongs(
       SELECT artist_normalized, name_normalized
       FROM active_apple_tracks
       WHERE artist_normalized <> '' AND name_normalized <> ''
+
+      UNION
+
+      SELECT artist_normalized, song_normalized AS name_normalized
+      FROM local_charts
+      WHERE artist_normalized IS NOT NULL
+        AND song_normalized IS NOT NULL
+        AND artist_normalized <> ''
+        AND song_normalized <> ''
     )
     SELECT
       chart.artist_normalized,
@@ -512,7 +543,10 @@ export async function getRadarSongs(
       MIN(chart.name) AS display_song,
       signals.artist_play_count,
       signals.saved_library_song_count,
-      COUNT(*) AS chart_count,
+      COUNT(DISTINCT CASE
+        WHEN chart.group_id = 0 THEN 'md5:' || chart.md5
+        ELSE 'group:' || chart.group_id
+      END) AS chart_count,
       (
         MAX(CASE WHEN chart.diff_guitar >= 0 OR chart.has_guitar = 1
           THEN 1 ELSE 0 END) +
@@ -541,6 +575,15 @@ export async function getRadarSongs(
         WHERE direct.artist_normalized = chart.artist_normalized
           AND direct.name_normalized = chart.name_normalized
       )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM radar_dismissed AS dismissed
+        WHERE dismissed.artist_normalized = chart.artist_normalized
+          AND (
+            dismissed.name_normalized = ''
+            OR dismissed.name_normalized = chart.name_normalized
+          )
+      )
     GROUP BY
       chart.artist_normalized,
       chart.name_normalized,
@@ -556,11 +599,14 @@ export async function getRadarSongs(
     savedLibrarySongCount: Number(row.saved_library_song_count ?? 0),
     chartCount: Number(row.chart_count ?? 0),
     availableInstrumentCount: Number(row.available_instrument_count ?? 0),
-    newestChartYear: Number(row.newest_chart_year ?? 0),
     artistNormalized: row.artist_normalized,
     nameNormalized: row.name_normalized,
   }));
-  const winners = sortRadarCandidateSummaries(candidates).slice(0, safeLimit);
+  const winners = capPerArtist(
+    sortRadarCandidateSummaries(candidates),
+    MAX_RADAR_SONGS_PER_ARTIST,
+    candidate => candidate.artistNormalized,
+  ).slice(0, safeLimit);
   if (winners.length === 0) return [];
 
   const chartRows: ChartRow[] = [];
@@ -632,22 +678,55 @@ export async function getRadarSongs(
         song: candidate.song,
         artistPlayCount: candidate.artistPlayCount,
         savedLibrarySongCount: candidate.savedLibrarySongCount,
+        chartCount: candidate.chartCount,
+        availableInstrumentCount: candidate.availableInstrumentCount,
         spotifyUrl: null,
         hasInstalledChart: false,
         charts: [],
       },
     ]),
   );
+  const seenChartGroups = new Map<string, Set<string>>();
   for (const row of chartRows) {
-    const song = songs.get(
-      identityKey(row.artist_normalized, row.name_normalized),
-    );
+    const key = identityKey(row.artist_normalized, row.name_normalized);
+    const song = songs.get(key);
     if (!song) continue;
     song.hasInstalledChart ||= Boolean(row.is_song_installed);
+    const groups = seenChartGroups.get(key) ?? new Set<string>();
+    const groupKey = chartGroupKey(row);
+    if (groups.has(groupKey)) continue;
+    groups.add(groupKey);
+    seenChartGroups.set(key, groups);
     song.charts.push(toChart(row));
   }
 
   return winners.map(candidate => songs.get(candidate.key)!);
+}
+
+/**
+ * Recommendations are ordered deterministically, so without negative feedback
+ * the same rows sit at the top of the list forever. A dismissal with no song
+ * covers the whole artist.
+ */
+export async function dismissRadarSong(
+  key: string,
+  scope: 'song' | 'artist',
+  db?: Kysely<DB>,
+): Promise<void> {
+  const [artistNormalized, nameNormalized] = key.split(IDENTITY_SEPARATOR);
+  if (!artistNormalized) return;
+  const database = await resolveDb(db);
+  await database
+    .insertInto('radar_dismissed')
+    .values({
+      artist_normalized: artistNormalized,
+      name_normalized: scope === 'artist' ? '' : (nameNormalized ?? ''),
+      dismissed_at: new Date().toISOString(),
+    })
+    .onConflict(oc =>
+      oc.columns(['artist_normalized', 'name_normalized']).doNothing(),
+    )
+    .execute();
 }
 
 type StatsRow = {

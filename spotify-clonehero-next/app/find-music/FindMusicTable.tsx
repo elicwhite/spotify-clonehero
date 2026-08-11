@@ -16,6 +16,8 @@ import {
   Check,
   ExternalLink,
   RotateCw,
+  UserX,
+  X,
 } from 'lucide-react';
 import {useVirtual} from 'react-virtual';
 import {Button} from '@/components/ui/button';
@@ -41,6 +43,7 @@ import {
   type FindMusicView,
   type RadarSong,
 } from './types';
+import {dismissRadarSong} from './queries';
 import {
   applyMusicFilters,
   applyRadarFilters,
@@ -51,9 +54,12 @@ import {
 } from './model';
 
 type MusicSort = {
-  key: 'score' | 'artist' | 'song' | 'updated';
+  key: 'score' | 'plays' | 'artist' | 'song' | 'updated';
   direction: 'asc' | 'desc';
 };
+
+const PLAYS_SORT: MusicSort = {key: 'plays', direction: 'desc'};
+const SCORE_SORT: MusicSort = {key: 'score', direction: 'desc'};
 
 type DownloadState = 'idle' | 'downloading' | 'done' | 'error';
 
@@ -79,10 +85,19 @@ export default function FindMusicTable({
   onClearFilters: () => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [sort, setSort] = useState<MusicSort>({
-    key: 'score',
-    direction: 'desc',
-  });
+  // Play count is the honest default when a history import exists: it needs no
+  // explaining and it does not tie. The composite score only leads when there
+  // are no plays to sort by.
+  const [chosenSort, setChosenSort] = useState<MusicSort | null>(null);
+  const [dismissed, setDismissed] = useState<{
+    songs: Set<string>;
+    artists: Set<string>;
+  }>({songs: new Set(), artists: new Set()});
+  const historyLoaded = useMemo(
+    () => music.some(song => song.playCount > 0),
+    [music],
+  );
+  const sort = chosenSort ?? (historyLoaded ? PLAYS_SORT : SCORE_SORT);
   const [downloadStates, setDownloadStates] = useState<
     Record<string, DownloadState>
   >({});
@@ -90,10 +105,29 @@ export default function FindMusicTable({
 
   const rows = useMemo(() => {
     if (view === 'radar') {
-      return sortRadarSongs(applyRadarFilters(radar, filters));
+      const remaining = radar.filter(
+        song =>
+          !dismissed.songs.has(song.key) &&
+          !dismissed.artists.has(song.artist.toLocaleLowerCase('en-US')),
+      );
+      return sortRadarSongs(applyRadarFilters(remaining, filters));
     }
     return sortMusicSongs(applyMusicFilters(music, filters), sort);
-  }, [filters, music, radar, sort, view]);
+  }, [dismissed, filters, music, radar, sort, view]);
+
+  const dismiss = useCallback((song: RadarSong, scope: 'song' | 'artist') => {
+    setDismissed(current => ({
+      songs:
+        scope === 'song' ? new Set(current.songs).add(song.key) : current.songs,
+      artists:
+        scope === 'artist'
+          ? new Set(current.artists).add(song.artist.toLocaleLowerCase('en-US'))
+          : current.artists,
+    }));
+    void dismissRadarSong(song.key, scope).catch(error => {
+      console.error('Failed to save recommendation dismissal', error);
+    });
+  }, []);
 
   useEffect(() => {
     if (
@@ -185,7 +219,7 @@ export default function FindMusicTable({
         {view === 'music' ? (
           <MusicHeader
             sort={sort}
-            onSort={setSort}
+            onSort={setChosenSort}
             listenEnabled={spotifyPreviewEnabled || appleMusicClient !== null}
           />
         ) : (
@@ -196,6 +230,7 @@ export default function FindMusicTable({
         <VirtualRows
           rows={rows}
           view={view}
+          onDismiss={dismiss}
           expanded={expanded}
           onToggle={toggleExpanded}
           downloadStates={downloadStates}
@@ -251,13 +286,20 @@ function MusicHeader({
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
         listenEnabled
-          ? 'min-w-[1016px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_150px_120px_100px]'
-          : 'min-w-[838px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]',
+          ? 'min-w-[1096px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_80px_150px_120px_100px]'
+          : 'min-w-[918px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_80px_150px_120px_100px]',
       )}>
       <span />
       <SortButton label="Artist" sortKey="artist" sort={sort} onSort={onSort} />
       <SortButton label="Song" sortKey="song" sort={sort} onSort={onSort} />
       {listenEnabled ? <span className="text-center">Listen</span> : null}
+      <SortButton
+        label="Plays"
+        sortKey="plays"
+        sort={sort}
+        onSort={onSort}
+        className="text-right"
+      />
       <SortButton
         label="Relevance"
         sortKey="score"
@@ -281,8 +323,8 @@ function RadarHeader({listenEnabled}: {listenEnabled: boolean}) {
       className={cn(
         'grid shrink-0 gap-2 border-b bg-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
         listenEnabled
-          ? 'min-w-[1036px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px]'
-          : 'min-w-[858px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
+          ? 'min-w-[1112px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px_76px]'
+          : 'min-w-[934px] grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px_76px]',
       )}>
       <span />
       <span>Artist</span>
@@ -291,6 +333,7 @@ function RadarHeader({listenEnabled}: {listenEnabled: boolean}) {
       <span>Why it is here</span>
       <span>Updated</span>
       <span>Installed</span>
+      <span className="text-center">Hide</span>
     </div>
   );
 }
@@ -300,6 +343,7 @@ function VirtualRows({
   view,
   expanded,
   onToggle,
+  onDismiss,
   downloadStates,
   onInstall,
   spotifyPreviewEnabled,
@@ -310,6 +354,7 @@ function VirtualRows({
   view: FindMusicView;
   expanded: Set<string>;
   onToggle: (key: string) => void;
+  onDismiss: (song: RadarSong, scope: 'song' | 'artist') => void;
   downloadStates: Record<string, DownloadState>;
   onInstall: (chart: FindMusicChart) => Promise<void>;
   spotifyPreviewEnabled: boolean;
@@ -363,11 +408,11 @@ function VirtualRows({
         'min-h-0 flex-1 overflow-y-auto overscroll-contain',
         listenEnabled
           ? view === 'music'
-            ? 'min-w-[1016px]'
-            : 'min-w-[1036px]'
+            ? 'min-w-[1096px]'
+            : 'min-w-[1112px]'
           : view === 'music'
-            ? 'min-w-[838px]'
-            : 'min-w-[858px]',
+            ? 'min-w-[918px]'
+            : 'min-w-[934px]',
       )}
       onScroll={event => {
         scrollPositionsRef.current[view] = event.currentTarget.scrollTop;
@@ -395,6 +440,7 @@ function VirtualRows({
                   view={view}
                   expanded={expanded.has(item.song.key)}
                   onToggle={() => onToggle(item.song.key)}
+                  onDismiss={onDismiss}
                   spotifyPreviewEnabled={spotifyPreviewEnabled}
                   appleMusicClient={appleMusicClient}
                   preferredPreviewProvider={preferredPreviewProvider}
@@ -421,6 +467,7 @@ function SongRow({
   view,
   expanded,
   onToggle,
+  onDismiss,
   spotifyPreviewEnabled,
   appleMusicClient,
   preferredPreviewProvider,
@@ -429,6 +476,7 @@ function SongRow({
   view: FindMusicView;
   expanded: boolean;
   onToggle: () => void;
+  onDismiss?: (song: RadarSong, scope: 'song' | 'artist') => void;
   spotifyPreviewEnabled: boolean;
   appleMusicClient: AppleMusicLibraryClient | null;
   preferredPreviewProvider: MusicPreviewProvider | undefined;
@@ -462,11 +510,11 @@ function SongRow({
         'grid h-full w-full cursor-pointer items-center gap-2 border-b px-3 text-left text-sm hover:bg-muted/50',
         view === 'music'
           ? listenEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_150px_120px_100px]'
-            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_80px_150px_120px_100px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_80px_150px_120px_100px]'
           : listenEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px]'
-            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px_76px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px_76px]',
       )}>
       <button
         type="button"
@@ -520,6 +568,11 @@ function SongRow({
           </div>
         </div>
       ) : null}
+      {view === 'music' ? (
+        <span className="text-right font-mono text-xs text-muted-foreground">
+          {(song as FindMusicSong).playCount.toLocaleString()}
+        </span>
+      ) : null}
       <Relevance score={score} song={song} view={view} />
       <span className="font-mono text-xs text-muted-foreground">
         {formatDate(newest)}
@@ -529,7 +582,43 @@ function SongRow({
         installed={installed}
         total={song.charts.length}
       />
+      {view === 'radar' && onDismiss ? (
+        <DismissButton song={song as RadarSong} onDismiss={onDismiss} />
+      ) : null}
     </div>
+  );
+}
+
+function DismissButton({
+  song,
+  onDismiss,
+}: {
+  song: RadarSong;
+  onDismiss: (song: RadarSong, scope: 'song' | 'artist') => void;
+}) {
+  return (
+    <span
+      className="flex items-center justify-center gap-0.5"
+      onClick={event => event.stopPropagation()}>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-7 w-7"
+        aria-label={`Not interested in ${song.song} by ${song.artist}`}
+        title="Not interested"
+        onClick={() => onDismiss(song, 'song')}>
+        <X className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-7 w-7"
+        aria-label={`Show less from ${song.artist}`}
+        title={`Less from ${song.artist}`}
+        onClick={() => onDismiss(song, 'artist')}>
+        <UserX className="h-3.5 w-3.5" />
+      </Button>
+    </span>
   );
 }
 
@@ -620,13 +709,6 @@ function relevanceEvidence(
         return music.inAppleMusicLibrary
           ? 'Found in the Apple Music library saved in this browser'
           : 'Not found in the saved Apple Music library';
-      case 'Installed chart': {
-        const exact = music.charts.filter(chart => chart.isInstalled).length;
-        if (!music.hasInstalledChart) return 'No local chart found';
-        if (exact === 0)
-          return 'Installed locally, but the local charter is not among these Chorus versions';
-        return `${exact} of ${music.charts.length} matching Chorus versions installed`;
-      }
     }
   }
 
@@ -695,6 +777,10 @@ function ChartRow({
   downloadState: DownloadState;
   onInstall: () => Promise<void>;
 }) {
+  // The instrument badges flow under the columns that carry no per-chart value
+  // (listen, the view-specific metric, and the spacer before the date).
+  const instrumentSpan =
+    2 + (listenEnabled ? 1 : 0) + (view === 'music' ? 1 : 0);
   return (
     <div
       data-testid="chart-row"
@@ -702,11 +788,11 @@ function ChartRow({
         'grid h-full items-center gap-2 border-b border-l-2 border-l-primary bg-muted/35 px-3 text-xs',
         view === 'music'
           ? listenEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_150px_120px_100px]'
-            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]'
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_80px_150px_120px_100px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_80px_150px_120px_100px]'
           : listenEnabled
-            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px]'
-            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px]',
+            ? 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_170px_120px_100px_76px]'
+            : 'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_170px_120px_100px_76px]',
       )}>
       <span />
       <span className="flex min-w-0 items-center gap-1.5">
@@ -725,11 +811,17 @@ function ChartRow({
           </a>
         </Button>
       </span>
-      <span className="min-w-0 pl-2">
+      <span
+        className={cn(
+          'min-w-0 pl-2',
+          instrumentSpan === 4
+            ? 'col-span-4'
+            : instrumentSpan === 3
+              ? 'col-span-3'
+              : 'col-span-2',
+        )}>
         <InstrumentBadges chart={chart} />
       </span>
-      {listenEnabled ? <span /> : null}
-      <span />
       <span className="font-mono text-xs text-muted-foreground">
         <span className="sr-only">Updated </span>
         {formatDate(chart.modifiedTime)}
@@ -755,6 +847,7 @@ function ChartRow({
           {downloadState === 'error' ? 'Retry' : 'Install'}
         </Button>
       )}
+      {view === 'radar' ? <span /> : null}
     </div>
   );
 }

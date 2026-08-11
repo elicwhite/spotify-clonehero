@@ -15,6 +15,8 @@ import {migration_013_drop_drum_fills} from './013_drop_drum_fills';
 import {migration_014_local_chart_source_song} from './014_local_chart_source_song';
 import {migration_015_chorus_chart_instruments} from './015_chorus_chart_instruments';
 import {migration_016_apple_music_library} from './016_apple_music_library';
+import {migration_017_renormalize_editions_and_features} from './017_renormalize_editions_and_features';
+import {migration_018_find_music_ranking_signals} from './018_find_music_ranking_signals';
 
 export const migrations: Record<string, Migration> = {
   '001_initial': InitialMigration,
@@ -33,4 +35,7 @@ export const migrations: Record<string, Migration> = {
   '014_local_chart_source_song': migration_014_local_chart_source_song,
   '015_chorus_chart_instruments': migration_015_chorus_chart_instruments,
   '016_apple_music_library': migration_016_apple_music_library,
+  '017_renormalize_editions_and_features':
+    migration_017_renormalize_editions_and_features,
+  '018_find_music_ranking_signals': migration_018_find_music_ranking_signals,
 };

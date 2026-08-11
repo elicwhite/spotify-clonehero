@@ -92,6 +92,7 @@ function makeDb(): Kysely<DB> {
       has_video_background INTEGER NOT NULL,
       album_art_md5 TEXT,
       group_id INTEGER NOT NULL,
+      first_seen TEXT,
       artist_normalized TEXT,
       name_normalized TEXT,
       charter_normalized TEXT
@@ -113,6 +114,13 @@ function makeDb(): Kysely<DB> {
       chart_md5 TEXT NOT NULL,
       matched_at INTEGER NOT NULL
     );
+    CREATE TABLE radar_dismissed (
+      artist_normalized TEXT NOT NULL,
+      name_normalized TEXT NOT NULL,
+      dismissed_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX idx_radar_dismissed_identity
+      ON radar_dismissed (artist_normalized, name_normalized);
     CREATE TABLE chorus_metadata (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -163,9 +171,21 @@ function chart(
     song_length: 180_000,
     has_video_background: 0,
     album_art_md5: null,
-    group_id: 1,
+    // Each fixture chart is its own upload group unless a test is exercising
+    // revision dedupe, where it passes an explicit group_id.
+    group_id: fixtureGroupId(md5),
+    first_seen: null,
     ...overrides,
   };
+}
+
+const fixtureGroupIds = new Map<string, number>();
+function fixtureGroupId(md5: string): number {
+  const existing = fixtureGroupIds.get(md5);
+  if (existing != null) return existing;
+  const next = fixtureGroupIds.size + 1;
+  fixtureGroupIds.set(md5, next);
+  return next;
 }
 
 async function setAppleMusicState(
@@ -851,6 +871,38 @@ describe('find-music queries', () => {
         proDrums: false,
       },
     });
+  });
+
+  it('collapses chart revisions that share an upload group', async () => {
+    await db
+      .insertInto('spotify_history')
+      .values({
+        artist: 'Artist',
+        artist_normalized: 'artist',
+        name: 'Song',
+        name_normalized: 'song',
+        play_count: 1,
+      })
+      .execute();
+    await db
+      .insertInto('chorus_charts')
+      .values([
+        chart('old', 'Artist', 'artist', 'Song', 'song', 'Ana', 'ana', {
+          group_id: 4,
+          modified_time: '2023-01-01',
+        }),
+        chart('new', 'Artist', 'artist', 'Song', 'song', 'Ana', 'ana', {
+          group_id: 4,
+          modified_time: '2026-01-01',
+        }),
+        chart('other', 'Artist', 'artist', 'Song', 'song', 'Bo', 'bo', {
+          group_id: 5,
+        }),
+      ])
+      .execute();
+
+    const [song] = await getFindMusicSongs(db);
+    expect(song.charts.map(item => item.md5)).toEqual(['new', 'other']);
   });
 
   it('marks only the exact normalized artist/song/charter chart as installed', async () => {

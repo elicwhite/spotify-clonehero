@@ -11,6 +11,7 @@ import {
   within,
 } from '@testing-library/react';
 import FindMusicTable from '../FindMusicTable';
+import {dismissRadarSong} from '../queries';
 import {AudioContext} from '../../AudioProvider';
 import type {
   FindMusicChart,
@@ -29,6 +30,10 @@ jest.mock('react-virtual', () => ({
       end: (index + 1) * 50,
     })),
   }),
+}));
+
+jest.mock('../queries', () => ({
+  dismissRadarSong: jest.fn(async () => undefined),
 }));
 
 jest.mock('../../../lib/local-songs-folder', () => ({
@@ -77,6 +82,9 @@ jest.mock('../../../components/MusicPreviewButton', () => ({
 
 import {downloadSong} from '../../../lib/local-songs-folder';
 
+const mockDismissRadarSong = dismissRadarSong as jest.MockedFunction<
+  typeof dismissRadarSong
+>;
 const mockDownloadSong = downloadSong as jest.MockedFunction<
   typeof downloadSong
 >;
@@ -136,6 +144,21 @@ function song(
   };
 }
 
+function recommendation(key: string, artist: string, name: string): RadarSong {
+  return {
+    key,
+    artist,
+    song: name,
+    artistPlayCount: 10,
+    savedLibrarySongCount: 0,
+    chartCount: 1,
+    availableInstrumentCount: 2,
+    spotifyUrl: null,
+    hasInstalledChart: false,
+    charts: [chart(`${key}-chart`, name)],
+  };
+}
+
 const defaultPreviewProps = {
   appleMusicClient: null,
   preferredPreviewProvider: undefined,
@@ -143,6 +166,7 @@ const defaultPreviewProps = {
 
 beforeEach(() => {
   mockDownloadSong.mockClear();
+  mockDismissRadarSong.mockClear();
 });
 
 it('renders relevance order, expands chart variants, and installs a chart', async () => {
@@ -185,7 +209,7 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   expect(songRows[0]).toHaveTextContent('other version');
 
   const relevance = screen.getByLabelText(
-    'Relevance 68 of 100. Why Beta is relevant',
+    'Relevance 67 of 100. Why Beta is relevant',
   );
   fireEvent.focus(relevance);
   const ledger = await screen.findByRole('tooltip');
@@ -197,9 +221,6 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   expect(paintedTooltip).toHaveClass('bg-popover', 'text-popover-foreground');
   expect(ledger).toHaveTextContent('50 plays in Spotify history');
   expect(ledger).toHaveTextContent('Favorites');
-  expect(ledger).toHaveTextContent(
-    'Installed locally, but the local charter is not among these Chorus versions',
-  );
   expect(sharedScroller).not.toContainElement(ledger);
   expect(screen.queryByText('Charter Beta')).not.toBeInTheDocument();
 
@@ -289,7 +310,7 @@ it('renders track-backed instruments with unavailable intensity beneath the song
     '?',
   );
   expect(screen.getByTestId('chart-row')).toHaveClass(
-    'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_150px_120px_100px]',
+    'grid-cols-[34px_minmax(150px,1fr)_minmax(220px,1.5fr)_80px_150px_120px_100px]',
   );
   expect(
     screen.getByTitle('Guitar: intensity unavailable').parentElement
@@ -500,6 +521,8 @@ it('uses conservative Apple Music text search for rows without a catalog action'
     song: 'Radar Search',
     artistPlayCount: 0,
     savedLibrarySongCount: 0,
+    chartCount: 1,
+    availableInstrumentCount: 2,
     spotifyUrl: null,
     hasInstalledChart: false,
     charts: [chart('radar-apple-search-chart', 'Radar Search')],
@@ -556,6 +579,8 @@ it('preserves independent scroll positions for each view', () => {
     song: 'Recommendation',
     artistPlayCount: 20,
     savedLibrarySongCount: 0,
+    chartCount: 1,
+    availableInstrumentCount: 2,
     spotifyUrl: null,
     hasInstalledChart: false,
     charts: [chart('recommendation-chart', 'Recommendation')],
@@ -649,4 +674,81 @@ it('stops a preview when filters remove its song from the result set', async () 
   );
 
   await waitFor(() => expect(pause).toHaveBeenCalledTimes(1));
+});
+
+it('opens on plays descending once a history import is loaded', () => {
+  render(
+    <FindMusicTable
+      view="music"
+      music={[song('quiet', 'Quiet', 3), song('loud', 'Loud', 900)]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  expect(screen.getByRole('button', {name: /^Plays/})).toHaveTextContent('▼');
+  const rows = screen.getAllByTestId('song-row');
+  expect(rows[0]).toHaveTextContent('Loud');
+  expect(rows[0]).toHaveTextContent('900');
+  expect(rows[1]).toHaveTextContent('Quiet');
+});
+
+it('falls back to relevance when no history has been imported', () => {
+  render(
+    <FindMusicTable
+      view="music"
+      music={[song('a', 'A', 0), song('b', 'B', 0)]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+
+  expect(screen.getByRole('button', {name: /^Relevance/})).toHaveTextContent(
+    '▼',
+  );
+  expect(screen.getByRole('button', {name: /^Plays/})).not.toHaveTextContent(
+    '▼',
+  );
+});
+
+it('removes a dismissed recommendation and everything by a dismissed artist', () => {
+  render(
+    <FindMusicTable
+      view="radar"
+      music={[]}
+      radar={[
+        recommendation('one', 'Keeper', 'Keep Me'),
+        recommendation('two', 'Dropper', 'Drop Me'),
+        recommendation('three', 'Dropper', 'Also Dropped'),
+      ]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  expect(screen.getAllByTestId('song-row')).toHaveLength(3);
+
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Not interested in Drop Me by Dropper',
+    }),
+  );
+  expect(screen.getAllByTestId('song-row')).toHaveLength(2);
+  expect(mockDismissRadarSong).toHaveBeenCalledWith('two', 'song');
+
+  fireEvent.click(screen.getByRole('button', {name: 'Show less from Dropper'}));
+  const remaining = screen.getAllByTestId('song-row');
+  expect(remaining).toHaveLength(1);
+  expect(remaining[0]).toHaveTextContent('Keep Me');
+  expect(mockDismissRadarSong).toHaveBeenCalledWith('three', 'artist');
 });

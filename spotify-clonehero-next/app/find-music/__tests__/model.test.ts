@@ -2,6 +2,7 @@ import {
   applyHeld,
   applyMusicFilters,
   applyRadarFilters,
+  capPerArtist,
   createHoldState,
   scoreMusicSong,
   scoreRadarSong,
@@ -77,12 +78,25 @@ function radar(
 ): RadarSong {
   const {key, ...rest} = overrides;
   const charts = rest.charts ?? [chart({md5: `${key}-chart`})];
+  // The candidate query supplies these; mirror what it would report so the
+  // fixtures stay consistent with a real row.
+  const instrumentIds = ['guitar', 'bass', 'keys', 'proDrums'] as const;
   return {
     key,
     artist: 'Artist',
     song: 'Song',
     artistPlayCount: 0,
     savedLibrarySongCount: 0,
+    chartCount: new Set(charts.map(item => item.groupId)).size,
+    availableInstrumentCount: instrumentIds.filter(instrument =>
+      charts.some(item => {
+        const difficulty = item.instruments[instrument];
+        return (
+          (difficulty != null && difficulty >= 0) ||
+          item.instrumentPresence[instrument]
+        );
+      }),
+    ).length,
     spotifyUrl: null,
     hasInstalledChart:
       rest.hasInstalledChart ?? charts.some(item => item.isInstalled),
@@ -114,12 +128,11 @@ describe('find music scoring', () => {
       }),
     );
     expect(result).toEqual({
-      value: 100,
+      value: 99,
       parts: [
         {label: 'Listening history', points: 55},
         {label: 'Spotify playlists', points: 24},
         {label: 'Spotify albums', points: 20},
-        {label: 'Installed chart', points: 1},
       ],
     });
   });
@@ -139,12 +152,11 @@ describe('find music scoring', () => {
         {label: 'Spotify playlists', points: 0},
         {label: 'Spotify albums', points: 0},
         {label: 'Apple Music library', points: 20},
-        {label: 'Installed chart', points: 0},
       ],
     });
   });
 
-  test('radar scoring labels affinity, availability, coverage, and freshness', () => {
+  test('radar scoring labels affinity, availability, and coverage', () => {
     const result = scoreRadarSong(
       radar({
         key: 'candidate',
@@ -165,12 +177,11 @@ describe('find music scoring', () => {
       }),
     );
     expect(result).toEqual({
-      value: 87,
+      value: 74,
       parts: [
         {label: 'Artist affinity', points: 55},
-        {label: 'Available charts', points: 6},
+        {label: 'Available charts', points: 3},
         {label: 'Instrument coverage', points: 16},
-        {label: 'Chart freshness', points: 10},
       ],
     });
   });
@@ -183,13 +194,12 @@ describe('find music scoring', () => {
       }),
     );
     expect(result).toEqual({
-      value: 34,
+      value: 28,
       parts: [
         {label: 'Artist affinity', points: 0},
         {label: 'Saved-library coverage', points: 25},
         {label: 'Available charts', points: 3},
         {label: 'Instrument coverage', points: 0},
-        {label: 'Chart freshness', points: 6},
       ],
     });
   });
@@ -371,6 +381,50 @@ describe('find music filtering', () => {
     ).toEqual([visible]);
   });
 
+  test('a charter exclusion removes that charter version, not the song', () => {
+    const shared = music({
+      key: 'shared',
+      artist: 'Muse',
+      song: 'Uprising',
+      charts: [
+        chart({md5: 'blocked', charter: 'BlinkCharting'}),
+        chart({md5: 'kept', charter: 'Someone Else'}),
+      ],
+    });
+    const onlyBlocked = music({
+      key: 'only-blocked',
+      artist: 'Muse',
+      song: 'Hysteria',
+      charts: [chart({md5: 'blocked-solo', charter: 'BlinkCharting'})],
+    });
+
+    const result = applyMusicFilters(
+      [shared, onlyBlocked],
+      filters({exclusions: ['BLINK']}),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].key).toBe('shared');
+    expect(result[0].charts.map(item => item.md5)).toEqual(['kept']);
+  });
+
+  test('radar charter exclusions also keep the surviving versions', () => {
+    const shared = radar({
+      key: 'shared',
+      charts: [
+        chart({md5: 'blocked', charter: 'BlinkCharting'}),
+        chart({md5: 'kept', charter: 'Someone Else'}),
+      ],
+    });
+
+    const result = applyRadarFilters(
+      [shared],
+      filters({exclusions: ['blink']}),
+    );
+    expect(result.map(item => item.charts.map(entry => entry.md5))).toEqual([
+      ['kept'],
+    ]);
+  });
+
   test('applies a non-empty draft exclusion while it is being typed', () => {
     const excluded = music({key: 'excluded', artist: 'blink-182'});
     const visible = music({key: 'visible', artist: 'Incubus'});
@@ -471,6 +525,34 @@ describe('find music sorting', () => {
     expect(
       sortMusicSongs([older, newer], {key: 'updated', direction: 'desc'}),
     ).toEqual([newer, older]);
+  });
+
+  test('sorts by play count', () => {
+    const few = music({key: 'few', playCount: 3});
+    const many = music({key: 'many', playCount: 900});
+    expect(
+      sortMusicSongs([few, many], {key: 'plays', direction: 'desc'}),
+    ).toEqual([many, few]);
+    expect(
+      sortMusicSongs([many, few], {key: 'plays', direction: 'asc'}),
+    ).toEqual([few, many]);
+  });
+
+  test('caps how many songs one artist can occupy', () => {
+    const rows = [
+      ...Array.from({length: 4}, (_, index) => ({
+        key: `hoarder-${index}`,
+        artist: 'Hoarder',
+      })),
+      {key: 'other', artist: 'Someone Else'},
+      {key: 'hoarder-4', artist: 'HOARDER'},
+    ];
+    expect(capPerArtist(rows, 2).map(row => row.key)).toEqual([
+      'hoarder-0',
+      'hoarder-1',
+      'other',
+    ]);
+    expect(capPerArtist(rows, 0)).toEqual([]);
   });
 
   test('radar sort is score-first with deterministic ties', () => {

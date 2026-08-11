@@ -7,6 +7,22 @@ import {getLocalDb} from '@/lib/local-db/client';
 
 export type ArtistTrackPlays = Map<string, Map<string, number>>;
 
+/**
+ * Playback detail that sits alongside the play counts. Kept separate from
+ * ArtistTrackPlays because that map is what the OPFS cache file stores, and a
+ * cache written before this existed must keep deserializing.
+ */
+export type TrackPlaybackStats = {
+  firstPlayedAt: string | null;
+  lastPlayedAt: string | null;
+  totalMsPlayed: number;
+  skipCount: number;
+};
+export type ArtistTrackPlaybackStats = Map<
+  string,
+  Map<string, TrackPlaybackStats>
+>;
+
 export type SpotifyHistoryImportResult =
   | {status: 'imported'; plays: ArtistTrackPlays}
   | {status: 'invalid-selection'; message: string};
@@ -47,9 +63,10 @@ export async function tryProcessSpotifyDump(
 ): Promise<SpotifyHistoryImportResult> {
   try {
     const results = await getAllSpotifyPlays(spotifyDataHandle);
-    const artistTrackPlays = createPlaysMapOfSpotifyData(results);
+    const {plays: artistTrackPlays, stats} =
+      createPlaysMapOfSpotifyData(results);
 
-    await cacheArtistTrackPlays(artistTrackPlays);
+    await cacheArtistTrackPlays(artistTrackPlays, stats);
     return {status: 'imported', plays: artistTrackPlays};
   } catch (error) {
     if (error instanceof SpotifyHistorySelectionError) {
@@ -59,7 +76,10 @@ export async function tryProcessSpotifyDump(
   }
 }
 
-async function cacheArtistTrackPlays(artistTrackPlays: ArtistTrackPlays) {
+async function cacheArtistTrackPlays(
+  artistTrackPlays: ArtistTrackPlays,
+  stats: ArtistTrackPlaybackStats,
+) {
   const serialized = serialize(artistTrackPlays);
   const root = await navigator.storage.getDirectory();
   const installedChartsCacheHandle = await root.getFileHandle(
@@ -73,7 +93,7 @@ async function cacheArtistTrackPlays(artistTrackPlays: ArtistTrackPlays) {
     writeFile(installedChartsCacheHandle, serialized),
     getLocalDb().then(db => {
       return db.transaction().execute(async trx => {
-        await upsertSpotifyHistory(trx, artistTrackPlays);
+        await upsertSpotifyHistory(trx, artistTrackPlays, stats);
       });
     }),
   ]);
@@ -152,6 +172,8 @@ type SpotifyHistoryEntry = {
   reason_end: 'fwdbtn' | 'trackdone' | 'backbtn' | 'clickrow'; // There are other options, but it doesn't matter
   master_metadata_album_artist_name: string;
   master_metadata_track_name: string;
+  ts?: string;
+  ms_played?: number;
 };
 
 function createPlaysMapOfSpotifyData(history: SpotifyHistoryEntry[]) {
@@ -159,18 +181,24 @@ function createPlaysMapOfSpotifyData(history: SpotifyHistoryEntry[]) {
     string,
     Map<string, number>
   >();
+  const stats: ArtistTrackPlaybackStats = new Map();
 
   for (const song of history) {
-    if (song.reason_end != 'trackdone') {
-      continue;
-    }
-
     const artist = song.master_metadata_album_artist_name;
     if (artist == null) {
       // For some reason these don't have any information about what played
       continue;
     }
     const track = song.master_metadata_track_name;
+    const finished = song.reason_end === 'trackdone';
+
+    // A play count still means a finished play. The surrounding detail covers
+    // every entry, including the skips a play count cannot see.
+    recordPlaybackStats(stats, artist, track, song);
+
+    if (!finished) {
+      continue;
+    }
 
     let tracksPlays = artistsTracks.get(artist);
     if (tracksPlays == null) {
@@ -180,5 +208,42 @@ function createPlaysMapOfSpotifyData(history: SpotifyHistoryEntry[]) {
     tracksPlays.set(track, (tracksPlays.get(track) ?? 0) + 1);
   }
 
-  return artistsTracks;
+  return {plays: artistsTracks, stats};
+}
+
+function recordPlaybackStats(
+  stats: ArtistTrackPlaybackStats,
+  artist: string,
+  track: string,
+  song: SpotifyHistoryEntry,
+) {
+  let trackStats = stats.get(artist);
+  if (trackStats == null) {
+    trackStats = new Map();
+    stats.set(artist, trackStats);
+  }
+  const existing = trackStats.get(track) ?? {
+    firstPlayedAt: null,
+    lastPlayedAt: null,
+    totalMsPlayed: 0,
+    skipCount: 0,
+  };
+
+  const timestamp = typeof song.ts === 'string' ? song.ts : null;
+  if (timestamp != null) {
+    if (existing.firstPlayedAt == null || timestamp < existing.firstPlayedAt) {
+      existing.firstPlayedAt = timestamp;
+    }
+    if (existing.lastPlayedAt == null || timestamp > existing.lastPlayedAt) {
+      existing.lastPlayedAt = timestamp;
+    }
+  }
+  if (typeof song.ms_played === 'number' && Number.isFinite(song.ms_played)) {
+    existing.totalMsPlayed += Math.max(0, Math.round(song.ms_played));
+  }
+  if (song.reason_end === 'fwdbtn') {
+    existing.skipCount += 1;
+  }
+
+  trackStats.set(track, existing);
 }

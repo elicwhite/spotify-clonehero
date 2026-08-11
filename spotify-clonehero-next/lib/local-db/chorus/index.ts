@@ -25,7 +25,12 @@ export async function upsertCharts(
   if (charts.length === 0) return;
   const before = performance.now();
 
-  const BATCH_SIZE = Math.floor(MAX_VARIABLE_NUMBER / 21);
+  // Stamped once per scan so every chart discovered in the same pass shares a
+  // first_seen. Existing rows keep theirs: first_seen is deliberately absent
+  // from the conflict update below.
+  const scanStartedAt = nowIso();
+
+  const BATCH_SIZE = Math.floor(MAX_VARIABLE_NUMBER / 22);
   const chartRows = charts
     .filter(
       // Some charts seem to have invalid data.
@@ -81,6 +86,7 @@ export async function upsertCharts(
         has_video_background: chart.hasVideoBackground ? 1 : 0,
         album_art_md5: chart.albumArtMd5 ?? null,
         group_id: chart.groupId ?? 0,
+        first_seen: scanStartedAt,
       };
     });
 
@@ -138,6 +144,7 @@ export async function upsertCharts(
       'has_video_background',
       'album_art_md5',
       'group_id',
+      'first_seen',
     ])
     .expression(eb =>
       eb
@@ -164,6 +171,7 @@ export async function upsertCharts(
           'has_video_background',
           'album_art_md5',
           'group_id',
+          'first_seen',
         ])
         .orderBy('md5'),
     )
