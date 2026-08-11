@@ -161,21 +161,26 @@ export default function FindMusicClient() {
     stats.appleMusicLibraryTracks > 0 ||
     stats.historySongs > 0;
 
-  const activateSourceAccess = useCallback(() => {
-    clearFindMusicActivation(window.sessionStorage);
+  // `initializing` means "the local index has not been opened yet", which is a
+  // page-wide condition every source card reports as loading. It belongs to the
+  // effect that opens the index, so it is always cleared by the same code that
+  // raises it. Activating a source never raises it: scanning one source must
+  // leave the other cards interactive so scans can run in parallel.
+  const enableSourceAccess = useCallback(() => {
     sourceAccessEnabledRef.current = true;
     setSourceAccessEnabled(true);
-    setInitializing(true);
     setCatalogConsent(true);
   }, []);
 
+  const activateSourceAccess = useCallback(() => {
+    clearFindMusicActivation(window.sessionStorage);
+    enableSourceAccess();
+  }, [enableSourceAccess]);
+
   const activateSourceAccessForNavigation = useCallback(() => {
     markFindMusicActivated(window.sessionStorage);
-    sourceAccessEnabledRef.current = true;
-    setSourceAccessEnabled(true);
-    setInitializing(true);
-    setCatalogConsent(true);
-  }, []);
+    enableSourceAccess();
+  }, [enableSourceAccess]);
 
   const querySnapshot = useCallback(async (): Promise<Snapshot> => {
     const [music, radar] = await Promise.all([
@@ -192,36 +197,38 @@ export default function FindMusicClient() {
     }
 
     const run = (async () => {
-      do {
-        refreshAgainRef.current = false;
-        const [next, nextStats] = await Promise.all([
-          querySnapshot(),
-          getFindMusicStats(),
-        ]);
-        setStats(nextStats);
+      try {
+        do {
+          refreshAgainRef.current = false;
+          const [next, nextStats] = await Promise.all([
+            querySnapshot(),
+            getFindMusicStats(),
+          ]);
+          setStats(nextStats);
 
-        if (!initializedRef.current) {
-          initializedRef.current = true;
-          committedRef.current = next;
-          setCommitted(next);
-          setInitializing(false);
-          continue;
-        }
+          if (!initializedRef.current) {
+            initializedRef.current = true;
+            committedRef.current = next;
+            setCommitted(next);
+            setInitializing(false);
+            continue;
+          }
 
-        const counts = diffSnapshots(committedRef.current, next);
-        if (counts.added > 0 || counts.changed > 0) {
-          setPending(next);
-          setPendingCounts(counts);
-        }
-      } while (refreshAgainRef.current);
+          const counts = diffSnapshots(committedRef.current, next);
+          if (counts.added > 0 || counts.changed > 0) {
+            setPending(next);
+            setPendingCounts(counts);
+          }
+        } while (refreshAgainRef.current);
+      } finally {
+        // Released with no await between it and the loop's exit check, so a
+        // source finishing here cannot join a run that will never re-query.
+        refreshInFlightRef.current = null;
+      }
     })();
 
     refreshInFlightRef.current = run;
-    try {
-      await run;
-    } finally {
-      refreshInFlightRef.current = null;
-    }
+    await run;
   }, [querySnapshot]);
 
   const replaceSnapshot = useCallback(async () => {
@@ -362,6 +369,7 @@ export default function FindMusicClient() {
 
   useEffect(() => {
     if (!sourceAccessChecked || !sourceAccessEnabled) return;
+    if (!initializedRef.current) setInitializing(true);
     void stageSnapshot().catch(error => {
       console.error('Could not load Find Music data', error);
       setInitializing(false);

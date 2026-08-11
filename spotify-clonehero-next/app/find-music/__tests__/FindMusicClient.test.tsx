@@ -432,6 +432,61 @@ it('shows loading source states while the OPFS database snapshot is unresolved',
   ).toBeInTheDocument();
 });
 
+it('opens the local index with a full-page spinner on first activation', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(false);
+  mockGetFindMusicSongs.mockReturnValue(new Promise(() => {}));
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('find-music-welcome')).toBeInTheDocument();
+  expect(
+    screen.queryByText('Opening your local music index'),
+  ).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', {name: 'Connect Apple Music'}));
+
+  expect(
+    await screen.findByText('Opening your local music index'),
+  ).toBeInTheDocument();
+});
+
+it('keeps other sources interactive while one source scans', async () => {
+  mockAppleSetupState = 'authorized';
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+  let releaseAppleRefresh = () => {};
+  mockRefreshAppleMusic.mockImplementation(
+    () =>
+      new Promise<AppleMusicRefreshResult>(resolve => {
+        releaseAppleRefresh = () => resolve({status: 'success'});
+      }),
+  );
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole('button', {name: 'Refresh Apple Music test'}),
+  );
+
+  const sidebar = screen.getByTestId('sidebar');
+  await waitFor(() =>
+    expect(sidebar).toHaveAttribute('data-apple-music-phase', 'loading'),
+  );
+  expect(sidebar).toHaveAttribute('data-history-phase', 'ready');
+  expect(sidebar).toHaveAttribute('data-library-phase', 'idle');
+  expect(sidebar).toHaveAttribute('data-local-phase', 'idle');
+  expect(sidebar).toHaveAttribute('data-chorus-phase', 'ready');
+  expect(
+    screen.queryByText('Opening your local music index'),
+  ).not.toBeInTheDocument();
+
+  await act(async () => {
+    releaseAppleRefresh();
+  });
+});
+
 it('uses the full setup guide when no taste source has been loaded', async () => {
   mockGetFindMusicSongs.mockResolvedValue([]);
   mockGetFindMusicStats.mockResolvedValue({
