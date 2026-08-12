@@ -2,8 +2,8 @@ import {ImageResponse} from 'next/og';
 import {getMd5FromSlug} from '@/app/getMd5FromSlug';
 import {searchAdvanced} from '@/lib/search-encore';
 
-import {OgEyebrow, OgFrame, OgTitle} from '@/lib/og/layout';
-import {OG_COLORS, OG_SIZE} from '@/lib/og/tokens';
+import {OgEyebrow, OgFrame, OgSubtitle, OgTitle} from '@/lib/og/layout';
+import {OG_SIZE} from '@/lib/og/tokens';
 
 export const alt = 'Drum Sheet Music';
 export const size = OG_SIZE;
@@ -66,23 +66,10 @@ export default async function OpengraphImage({
             <OgTitle size="titleCompact" style={{marginBottom: 18}}>
               {chart.name}
             </OgTitle>
-            <div
-              style={{
-                display: 'flex',
-                fontSize: 46,
-                color: OG_COLORS.muted,
-                marginBottom: 16,
-              }}>
+            <OgSubtitle size="subtitleLead" style={{marginBottom: 16}}>
               {chart.artist}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                fontSize: 32,
-                color: OG_COLORS.subtle,
-              }}>
-              Charted by {chart.charter}
-            </div>
+            </OgSubtitle>
+            <OgSubtitle>Charted by {chart.charter}</OgSubtitle>
           </div>
         </div>
       </OgFrame>

@@ -58,8 +58,13 @@ export const OG_TYPE = {
   title: 92,
   titleCompact: 66,
   titleInset: 56,
-  /** The line under the title. `subtitleLarge` pairs with `display`. */
+  /**
+   * The line under the title. `subtitleLarge` pairs with `display`;
+   * `subtitleLead` is the first of two stacked metadata lines, where the
+   * second uses plain `subtitle` (the chart viewer's artist over charter).
+   */
   subtitle: 32,
+  subtitleLead: 46,
   subtitleLarge: 48,
   titleWeight: 760,
   titleTracking: '-0.03em',
@@ -70,4 +75,4 @@ export const OG_TYPE = {
 } as const;
 
 export type OgTitleSize = 'display' | 'title' | 'titleCompact' | 'titleInset';
-export type OgSubtitleSize = 'subtitle' | 'subtitleLarge';
+export type OgSubtitleSize = 'subtitle' | 'subtitleLead' | 'subtitleLarge';

@@ -3,7 +3,7 @@ import type {ReactNode} from 'react';
 import {StatCell, type LandingMetric} from './StatChip';
 
 /** One measured row: a row header and one figure per compared system. */
-export interface ComparisonTableRow {
+interface ComparisonTableRow {
   /** The row header, in the reader's vocabulary ("Kick", "Whole chart"). */
   header: string;
   /** One metric per column, in `columns` order. */
@@ -54,6 +54,21 @@ export function ComparisonTable({
   /** What the measurement does not establish. */
   disclaimer?: ReactNode;
 }) {
+  // Nothing in the types ties a row's cell count to the column count, and a
+  // mismatch degrades quietly: one cell too few silently drops a column, one
+  // too many renders a ragged row. Fail loudly in development instead.
+  if (process.env.NODE_ENV !== 'production') {
+    for (const group of groups) {
+      for (const row of group.rows) {
+        if (row.cells.length !== columns.length) {
+          throw new Error(
+            `ComparisonTable: row "${row.header}" has ${row.cells.length} cells but there are ${columns.length} columns.`,
+          );
+        }
+      }
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto">
@@ -78,14 +93,14 @@ export function ComparisonTable({
           </thead>
           {groups.map((group, groupIndex) => {
             const demoteRows = group.rows.some(row => row.summary);
+            // A group's own last row drops its rule, so the rule that
+            // separates one group from the next belongs to the `tbody`. Every
+            // group but the last needs one.
+            const separated = groupIndex < groups.length - 1;
             return (
               <tbody
                 key={group.label ?? groupIndex}
-                className={
-                  groups.length > 1 && groupIndex === 0
-                    ? 'border-b border-border/60'
-                    : undefined
-                }>
+                className={separated ? 'border-b border-border/60' : undefined}>
                 {group.label ? (
                   <tr className="border-b border-border/60 bg-muted/40">
                     <th

@@ -20,6 +20,20 @@ import {
 } from './tokens';
 
 /**
+ * What a caller may adjust through `style`: spacing, measure, alignment.
+ *
+ * The type scale and the palette are the two things this system exists to
+ * hold, so the properties that carry them are not adjustable. A route that
+ * needs a size the scale does not have adds a step to `OG_TYPE` rather than
+ * writing a number at the call site — that is how seven ad-hoc title sizes
+ * accumulated before plan 0099.
+ */
+type OgStyle = Omit<
+  CSSProperties,
+  'display' | 'fontSize' | 'fontWeight' | 'letterSpacing' | 'color'
+>;
+
+/**
  * The card root: brand background, standard padding, font stack, and a flex
  * column for the content. `center` lays the column out centered both ways,
  * for brand-only cards with no illustration.
@@ -61,7 +75,7 @@ export function OgEyebrow({
 }: {
   /** `muted` for the brand line, `accent` for a per-tool label. */
   tone?: 'muted' | 'accent';
-  style?: CSSProperties;
+  style?: OgStyle;
   children: ReactNode;
 }) {
   return (
@@ -106,7 +120,7 @@ export function OgTitle({
 }: {
   size?: OgTitleSize;
   center?: boolean;
-  style?: CSSProperties;
+  style?: OgStyle;
   children: ReactNode;
 }) {
   return (
@@ -133,7 +147,7 @@ export function OgSubtitle({
   children,
 }: {
   size?: OgSubtitleSize;
-  style?: CSSProperties;
+  style?: OgStyle;
   children: ReactNode;
 }) {
   return (
@@ -157,7 +171,7 @@ export function OgPanel({
   children,
 }: {
   padding?: number | string;
-  style?: CSSProperties;
+  style?: OgStyle;
   children: ReactNode;
 }) {
   return (

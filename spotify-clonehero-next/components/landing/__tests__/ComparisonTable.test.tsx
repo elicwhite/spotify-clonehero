@@ -134,6 +134,43 @@ describe('ComparisonTable', () => {
     );
   });
 
+  it('rules off every group but the last, whatever the group count', () => {
+    // A group's own last row drops its rule, so the `tbody` rule is what
+    // separates one group from the next. With three groups, a rule that only
+    // ever landed on the first would leave groups 2 and 3 flush together.
+    const threeGroups: ComparisonTableGroup[] = ['A', 'B', 'C'].map(label => ({
+      label,
+      rows: [
+        {
+          header: `${label} row`,
+          cells: [metric('1.0', 'a'), metric('2.0', 'b')],
+        },
+      ],
+    }));
+    const {container} = renderTable(threeGroups);
+
+    const bodies = [...container.querySelectorAll('tbody')];
+    expect(bodies).toHaveLength(3);
+    expect(bodies[0]).toHaveClass('border-b');
+    expect(bodies[1]).toHaveClass('border-b');
+    expect(bodies[2]).not.toHaveClass('border-b');
+  });
+
+  it('does not rule off a lone group', () => {
+    const {container} = renderTable(peerGroups);
+
+    const bodies = [...container.querySelectorAll('tbody')];
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toHaveClass('border-b');
+  });
+
+  it('throws when a row carries the wrong number of cells', () => {
+    // Silently dropping or raggedly rendering a column is worse than failing.
+    expect(() =>
+      renderTable([{rows: [{header: 'Short', cells: [metric('1.0', 'a')]}]}]),
+    ).toThrow(/1 cells but there are 2 columns/);
+  });
+
   it('renders the methodology footnote and disclaimer when given', () => {
     renderTable(peerGroups, {
       footnote: 'Other is an open-source tool.',

@@ -23,7 +23,7 @@ export default function OpengraphImage() {
         </OgTitle>
         <OgSubtitle
           size="subtitleLarge"
-          style={{textAlign: 'center', maxWidth: 1000, color: OG_COLORS.muted}}>
+          style={{textAlign: 'center', maxWidth: 1000}}>
           Find, view, and edit Clone Hero charts.
         </OgSubtitle>
         <div

@@ -147,9 +147,13 @@ describe('SiteMain (plan 0076 item 2: no gap below the compact header)', () => {
 describe('SiteMain gutter contract (plan 0099 Phase 4 item 1)', () => {
   /**
    * Which header a route gets and how much gutter `<main>` gives it are two
-   * independent decisions. A route that lays out its own full-bleed shell can
-   * take the regular site nav and no gutter, so it never has to cancel one
-   * with a negative margin.
+   * independent decisions, carried as two fields of one `ROUTE_CHROME` entry.
+   * A route that lays out its own full-bleed shell can take the regular site
+   * nav and no gutter, so it never has to cancel one with a negative margin.
+   *
+   * One entry per route is what makes "editor header but no gutter" a
+   * representable state and "in two lists, one silently wins" an
+   * unrepresentable one.
    */
   it('gives a full-bleed route no gutter at all', () => {
     mockPathname = '/find-music';
@@ -173,5 +177,31 @@ describe('SiteMain gutter contract (plan 0099 Phase 4 item 1)', () => {
     expect(
       screen.queryByRole('link', {name: 'Music Charts Tools home'}),
     ).not.toBeInTheDocument();
+  });
+
+  it('does not match a route whose name merely starts with a listed prefix', () => {
+    // `/find-music-something` is a different route, not a sub-path of
+    // `/find-music`, so it takes the default chrome.
+    mockPathname = '/find-music-experiments';
+    render(
+      <SiteMain>
+        <div data-testid="content">content</div>
+      </SiteMain>,
+    );
+
+    expect(screen.getByTestId('content').parentElement).toHaveClass('p-4');
+  });
+
+  it('applies a listed route to its sub-paths', () => {
+    mockPathname = '/find-music/recommendations';
+    render(
+      <SiteMain>
+        <div data-testid="content">content</div>
+      </SiteMain>,
+    );
+
+    const main = screen.getByTestId('content').parentElement;
+    expect(main).not.toHaveClass('p-4');
+    expect(main).not.toHaveClass('px-3');
   });
 });

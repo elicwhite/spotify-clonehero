@@ -77,7 +77,7 @@ function toGroupRows(rows: readonly ComparisonRow[]) {
   return rows.map((row, index) => ({
     header: row.family,
     cells: [row.ours, row.adtof, row.octave],
-    ...(index === 0 ? {summary: true} : {}),
+    summary: index === 0,
   }));
 }
 
