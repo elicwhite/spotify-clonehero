@@ -132,8 +132,13 @@ jobs:
       name: production
       url: ${{ steps.deploy.outputs.url }}
     env:
+      # The CLI reads all three of these from the environment, so none of them
+      # belong on a command line. Passing the token as a --token flag also
+      # turns an unset secret into an empty string, which the CLI reports as a
+      # malformed flag rather than as "you are not authenticated".
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -150,16 +155,16 @@ jobs:
       # inside the app directory would apply it twice.
       - name: Pull Vercel project settings
         working-directory: .
-        run: npx vercel@58 pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+        run: npx vercel@58 pull --yes --environment=production
 
       - name: Build
         working-directory: .
-        run: npx vercel@58 build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+        run: npx vercel@58 build --prod
 
       - name: Deploy
         id: deploy
         working-directory: .
         run: |
-          url="$(npx vercel@58 deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")"
+          url="$(npx vercel@58 deploy --prebuilt --prod)"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $url" >> "$GITHUB_STEP_SUMMARY"
