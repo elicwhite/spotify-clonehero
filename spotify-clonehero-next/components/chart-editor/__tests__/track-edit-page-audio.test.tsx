@@ -50,8 +50,8 @@ class FakeResizeObserver {
 (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
   FakeResizeObserver;
 
-// jsdom's Blob has no `arrayBuffer()`; `encodeWavBlob` (inside
-// `usePaddedAudio`'s build) relies on it. Node's Blob has it.
+// jsdom's Blob has no `arrayBuffer()`; `encodeWavBlob` (used by the padded
+// export path) relies on it. Node's Blob has it.
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
 // ---------------------------------------------------------------------------
@@ -102,6 +102,16 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
     samples: new Float32Array(1),
     sampleRate: 8000,
   })),
+}));
+jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+  decodeAtRate: jest.fn(async () => ({
+    numberOfChannels: 2,
+    length: 8,
+    sampleRate: 44100,
+    duration: 8 / 44100,
+    getChannelData: () => new Float32Array(8),
+  })),
+  nativeDecodeRate: jest.fn(() => 44100),
 }));
 jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => ({
@@ -351,13 +361,17 @@ describe('/chart-editor Add leading silence', () => {
       </TooltipProvider>,
     );
 
-    const action = await screen.findByRole('button', {
-      name: 'Add leading silence',
-    });
-    expect(action).toBeEnabled();
+    // The editor opens on the chart while the song is still being decoded,
+    // and padding audio that isn't in memory yet is not something this host
+    // can honestly offer — so the action waits for it. Re-queried each poll:
+    // dropping the disabled reason unwraps the button from its tooltip, so
+    // the node the first query returned is not the node that ends up live.
+    const silenceAction = () =>
+      screen.getByRole('button', {name: 'Add leading silence'});
+    await waitFor(() => expect(silenceAction()).toBeEnabled());
     // A disabled action carries its reason as the button's accessible
     // description; an offered one has nothing to explain away.
-    expect(action).not.toHaveAccessibleDescription();
+    expect(silenceAction()).not.toHaveAccessibleDescription();
   });
 
   it('persists the audio anchor it applies, so a reload pads the same audio', async () => {
@@ -367,9 +381,12 @@ describe('/chart-editor Add leading silence', () => {
       </TooltipProvider>,
     );
 
-    fireEvent.click(
-      await screen.findByRole('button', {name: 'Add leading silence'}),
-    );
+    // Available once the audio it pads has finished decoding.
+    const silenceAction = () =>
+      screen.getByRole('button', {name: 'Add leading silence'});
+    await screen.findByRole('button', {name: 'Add leading silence'});
+    await waitFor(() => expect(silenceAction()).toBeEnabled());
+    fireEvent.click(silenceAction());
 
     // Autosave runs on tab-hide as well as on its timer.
     Object.defineProperty(document, 'visibilityState', {

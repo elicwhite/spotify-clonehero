@@ -83,13 +83,23 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
   })),
 }));
 
-// jsdom's Blob has no `arrayBuffer()`; `encodeWavBlob` (used inside
-// `usePaddedAudio`'s build) relies on it. Node's Blob has it.
+// jsdom's Blob has no `arrayBuffer()`; `encodeWavBlob` (used by the padded
+// export path) relies on it. Node's Blob has it.
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
 // The editor decodes the project's audio files into PCM for
 // `usePaddedAudio`; jsdom has neither OfflineAudioContext nor the soxr
 // resampler behind the real decode.
+jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+  decodeAtRate: jest.fn(async () => ({
+    numberOfChannels: 2,
+    length: 8,
+    sampleRate: 44100,
+    duration: 8 / 44100,
+    getChannelData: () => new Float32Array(8),
+  })),
+  nativeDecodeRate: jest.fn(() => 44100),
+}));
 jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => ({
     numberOfChannels: 2,

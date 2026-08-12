@@ -33,7 +33,9 @@ export interface ProjectMetadata {
   charter: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
-  durationSeconds: number;
+  /** Length of the project's audio. Null until something has decoded it —
+   *  an import doesn't, because the editor it hands off to is about to. */
+  durationSeconds: number | null;
   sourceFormat: SourceFormat;
   originalName: string;
   sngMetadata?: Record<string, string> | undefined;
@@ -84,7 +86,7 @@ export interface ProjectSummary {
   charter: string;
   createdAt: string;
   updatedAt: string;
-  durationSeconds: number;
+  durationSeconds: number | null;
   /** The namespace whose directory this project was found in. */
   namespace: string;
   origin?: ProjectOrigin | undefined;
@@ -199,7 +201,9 @@ export function createOpfsProjectStore(
     name: string;
     artist: string;
     charter: string;
-    durationSeconds: number;
+    /** Omitted by a caller that hasn't decoded the audio; whoever does
+     *  decodes it writes the real figure back. */
+    durationSeconds?: number | undefined;
     sourceFormat: SourceFormat;
     originalName: string;
     sngMetadata?: Record<string, string> | undefined;
@@ -223,7 +227,7 @@ export function createOpfsProjectStore(
       charter: opts.charter,
       createdAt: now,
       updatedAt: now,
-      durationSeconds: opts.durationSeconds,
+      durationSeconds: opts.durationSeconds ?? null,
       sourceFormat: opts.sourceFormat,
       originalName: opts.originalName,
       sngMetadata: opts.sngMetadata,

@@ -53,6 +53,10 @@ if (!('arrayBuffer' in File.prototype)) {
 // `usePaddedAudio.test.tsx` uses for the click track. A relative path
 // (not the `@/` alias) — jest.mock can't resolve the alias at hoist time.
 const mockInterleaved = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+  decodeAtRate: jest.fn(async () => ({}) as unknown),
+  nativeDecodeRate: jest.fn(() => 44100),
+}));
 jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => ({}) as unknown),
   interleaveAudioBuffer: jest.fn(() => mockInterleaved),

@@ -81,6 +81,12 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
     sampleRate: 8000,
   })),
 }));
+jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+  decodeAtRate: jest.fn(async () => {
+    throw new Error('a project with no audio must not decode anything');
+  }),
+  nativeDecodeRate: jest.fn(() => 44100),
+}));
 jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => {
     throw new Error('a project with no audio must not decode anything');

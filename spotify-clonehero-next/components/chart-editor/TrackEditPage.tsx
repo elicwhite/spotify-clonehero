@@ -46,13 +46,15 @@ import ChartEditor from './ChartEditor';
 import type {AlbumArtFile} from '@/lib/album-art';
 import type {AudioSource} from './ExportDialog';
 import {chartDocToChartText, useChartPackageEditor} from './chartPackage';
+import {audioSamples} from './audioSamples';
+import {stemOriginsOf} from './sidebar/StemsMixer';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
 import {anchorPadSamples, usePaddedAudio} from './hooks/usePaddedAudio';
 import {
   decodeChartPackageAudio,
   padPackageAudio,
-  PACKAGE_AUDIO_META,
+  PACKAGE_AUDIO_CHANNELS,
   type DecodedPackageAudio,
 } from './hooks/projectAudio';
 import {useSeparatedStems} from './hooks/useSeparatedStems';
@@ -279,19 +281,13 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           throw new Error('No audio files found in chart package');
         }
 
-        // Estimate duration from audio (decode one file to get duration)
-        const audioCtx = new AudioContext({sampleRate: 44100});
-        let durationSeconds = 180; // fallback
-        try {
-          const firstAudio = audioFiles[0];
-          const buffer = firstAudio.data.slice(0).buffer;
-          const decoded = await audioCtx.decodeAudioData(buffer as ArrayBuffer);
-          durationSeconds = decoded.duration;
-        } catch {
-          console.warn('Could not decode audio for duration estimation');
-        } finally {
-          await audioCtx.close();
-        }
+        // The project's duration is left unset here. It is a property of the
+        // audio, and the editor this import is on its way to decodes that
+        // audio properly moments from now and writes the real figure back —
+        // so decoding it here too would only be a second copy of the most
+        // expensive thing in the whole flow, in front of the user, before
+        // anything can render. On an album-length song that is most of the
+        // wait.
 
         // Force .chart output format (input may have been .mid)
         chartDoc.parsedChart.format = 'chart';
@@ -302,7 +298,6 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           name,
           artist,
           charter,
-          durationSeconds,
           sourceFormat,
           originalName,
           sngMetadata,
@@ -590,6 +585,10 @@ function TrackEditEditor({
   // Whether the project has audio right now. Starts from the record and
   // flips the moment a dropped file is attached, without a reload.
   const [hasAudio, setHasAudio] = useState(initialHasAudio);
+  // The project's audio is still being read and decoded. The editor is open
+  // and editable throughout — this only drives the "not here yet" affordances
+  // on the surfaces that need the samples.
+  const [audioLoading, setAudioLoading] = useState(initialHasAudio);
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
@@ -709,32 +708,16 @@ function TrackEditEditor({
           });
         }
 
-        // 5. Load audio files from OPFS. A chart created with no audio has
-        // none to load; `usePaddedAudio` builds a click-only manager
-        // spanning the chart's own `song_length` instead.
-        if (meta.hasAudio ?? true) {
-          setLoadingStep('Loading audio...');
-          const audioFiles = await store.loadAudioFiles(projectId);
-          if (cancelled) return;
-
-          if (audioFiles.length === 0) {
-            throw new Error('No audio files found in project storage');
-          }
-
-          // 6. Decode the package's audio into ORIGINAL (unpadded) PCM.
-          // `usePaddedAudio` builds the AudioManager from it (full mix +
-          // stems + the synthesized click, chart delay applied) once the
-          // chart doc below lands, and rebuilds it whenever the chart's
-          // `audioAnchor` or the stem list changes.
-          setLoadingStep('Preparing audio playback...');
-          const decodedAudio = await decodeChartPackageAudio(audioFiles);
-          if (cancelled) return;
-          setPackageAudio(decodedAudio);
-        }
-        setHasAudio(meta.hasAudio ?? true);
-
-        // 7. Update editor state. ChartDoc carries the parsed chart;
-        // consumers derive the active track via selectActiveTrack().
+        // 5. Open the editor. Everything above is the chart, and the chart is
+        // what the editor is for: the highway, the piano roll, the matrix and
+        // every edit command work from here on. Decoding the song is seconds
+        // of work on an album-length package and none of that needs it, so it
+        // runs beside the open editor (step 6) instead of in front of it.
+        // Until it lands, `usePaddedAudio` gives the transport a click-only
+        // manager spanning the chart's own `song_length`.
+        const projectHasAudio = meta.hasAudio ?? true;
+        setHasAudio(projectHasAudio);
+        setAudioLoading(projectHasAudio);
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         // The editor starts with every instrument's highest charted
         // difficulty visible. Other tracks remain available in the sidebar
@@ -745,6 +728,44 @@ function TrackEditEditor({
         });
         setLoadingState('ready');
         onReady();
+
+        // 6. Decode the package's audio into ORIGINAL (unpadded) PCM.
+        // `usePaddedAudio` rebuilds the AudioManager around it when it
+        // arrives (full mix + stems + the synthesized click, chart delay
+        // applied), carrying the playhead and play state across, and rebuilds
+        // again whenever the chart's `audioAnchor` or the stem list changes.
+        if (!projectHasAudio) return;
+        try {
+          const audioFiles = await store.loadAudioFiles(projectId);
+          if (cancelled) return;
+          if (audioFiles.length === 0) {
+            throw new Error('No audio files found in project storage');
+          }
+          const decodedAudio = await decodeChartPackageAudio(audioFiles);
+          if (cancelled) return;
+          setPackageAudio(decodedAudio);
+
+          // The project record's duration is a display denormalization of
+          // exactly this, and an import leaves it unset rather than decoding
+          // the song twice — so whoever decodes it owns writing it back.
+          const durationSeconds =
+            decodedAudio.fullMixPcm.length /
+            decodedAudio.meta.channels /
+            decodedAudio.meta.sampleRate;
+          if (meta.durationSeconds !== durationSeconds) {
+            setProjectMeta(prev => (prev ? {...prev, durationSeconds} : prev));
+            await store.updateProject(projectId, {durationSeconds});
+          }
+        } catch (err) {
+          if (cancelled) return;
+          // The chart is already open and editable; losing the audio is not
+          // worth throwing that away, so it is reported and the editor plays
+          // on against the click alone.
+          console.error('Could not load this project’s audio:', err);
+          toast.error('Could not load this project’s audio');
+        } finally {
+          if (!cancelled) setAudioLoading(false);
+        }
       } catch (err) {
         if (cancelled) return;
         const msg =
@@ -876,10 +897,12 @@ function TrackEditEditor({
     () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
     [dispatch],
   );
-  // With no audio, the chart's own `song.ini` length is what the transport,
-  // the click track and the beat grid span.
+  // Until there is decoded audio — a project that has none, or one whose
+  // audio is still being read — the chart's own `song.ini` length is what the
+  // transport, the click track and the beat grid span. That is what lets the
+  // editor open on the chart and pick the song up when it arrives.
   const songLengthMs = state.chartDoc?.parsedChart.metadata.song_length;
-  const silentDurationSeconds = hasAudio
+  const silentDurationSeconds = packageAudio
     ? undefined
     : songLengthMs && songLengthMs > 0
       ? songLengthMs / 1000
@@ -892,7 +915,7 @@ function TrackEditEditor({
     rebuilding: audioRebuilding,
   } = usePaddedAudio({
     chartDoc: state.chartDoc,
-    audioMeta: packageAudio ? PACKAGE_AUDIO_META : null,
+    audioMeta: packageAudio?.meta ?? null,
     fullMixPcm: packageAudio?.fullMixPcm ?? null,
     // A package with no `song` file promotes one of its own (guitar, bass)
     // into the full-mix slot; the mixer row has to carry that file's name,
@@ -900,8 +923,21 @@ function TrackEditEditor({
     fullMixName: packageAudio?.fullMixName ?? 'song',
     stems,
     silentDurationSeconds,
+    // Audio that is merely still decoding is not a silent project: the click
+    // must come up at its usual zero, or it would be carried across the
+    // rebuild that installs the song and play over it.
+    silentProject: !hasAudio,
     onSongEnded,
   });
+
+  const stemOrigins = useMemo(() => stemOriginsOf(paddedStems), [paddedStems]);
+
+  // Wrapped once per buffer: consumers depend on this value, and a fresh
+  // wrapper per render would rebuild every waveform (see `audioSamples.ts`).
+  const audioData = useMemo(
+    () => audioSamples(paddedFullMixPcm),
+    [paddedFullMixPcm],
+  );
 
   /**
    * Export audio. With no leading silence applied the package's own files
@@ -915,33 +951,45 @@ function TrackEditEditor({
   const rawAudioSources = chartPackage.getAudioSources;
   const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
     const anchor = state.chartDoc ? getAudioAnchor(state.chartDoc) : null;
-    const padSamples = anchorPadSamples(anchor, PACKAGE_AUDIO_META.sampleRate);
-    if (padSamples <= 0 || !packageAudio) return rawAudioSources();
+    if (!packageAudio) return rawAudioSources();
+    const padSamples = anchorPadSamples(anchor, packageAudio.meta.sampleRate);
+    if (padSamples <= 0) return rawAudioSources();
     return padPackageAudio(packageAudio, padSamples);
   }, [state.chartDoc, packageAudio, rawAudioSources]);
 
   /**
    * Chart Assist wiring for this host, on top of the chart-package defaults:
    * the sample rate of the decoded audio (the leading-silence pad quantizes
-   * to it) and a busy reason while the padded AudioManager rebuilds. No
-   * leading-silence disabled reason is declared — this editor pads playback
-   * through `usePaddedAudio` and pads its exported audio to match, so the
-   * action is honest here.
+   * to it) and a busy reason while the song is still being read or the padded
+   * AudioManager is rebuilding. No leading-silence disabled reason is
+   * declared — this editor pads playback through `usePaddedAudio` and pads
+   * its exported audio to match, so the action is honest here.
    */
+  const audioSampleRate = packageAudio?.meta.sampleRate;
   const chartAssist = useMemo(
     () =>
       hasAudio
         ? {
             ...chartPackage.chartAssist,
-            audioSampleRate: PACKAGE_AUDIO_META.sampleRate,
-            audioBusyReason: audioRebuilding ? 'Rebuilding audio' : undefined,
+            audioSampleRate,
+            audioBusyReason: audioLoading
+              ? 'Loading audio'
+              : audioRebuilding
+                ? 'Rebuilding audio'
+                : undefined,
           }
         : // With no audio there is nothing for the audio-backed cards to run
           // on, so they are withheld rather than offered and failed. Every
           // card in the section needs audio, so the section is simply absent
           // until a file is attached.
           {},
-    [chartPackage.chartAssist, audioRebuilding, hasAudio],
+    [
+      chartPackage.chartAssist,
+      audioLoading,
+      audioRebuilding,
+      audioSampleRate,
+      hasAudio,
+    ],
   );
 
   // The song-details dialog has already written its edit into the chart doc,
@@ -985,8 +1033,8 @@ function TrackEditEditor({
         const decoded = await decodeChartPackageAudio(audioFiles);
         const durationSeconds =
           decoded.fullMixPcm.length /
-          PACKAGE_AUDIO_META.channels /
-          PACKAGE_AUDIO_META.sampleRate;
+          decoded.meta.channels /
+          decoded.meta.sampleRate;
         await store.updateProject(projectId, {durationSeconds});
         setProjectMeta(prev => (prev ? {...prev, durationSeconds} : prev));
         setPackageAudio(decoded);
@@ -1046,11 +1094,11 @@ function TrackEditEditor({
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col">
       <ChartEditor
-        metadata={cloneHeroMetadata}
         chart={chart}
         audioManager={audioManager}
-        audioData={paddedFullMixPcm ?? undefined}
-        audioChannels={PACKAGE_AUDIO_META.channels}
+        audioData={audioData}
+        audioChannels={PACKAGE_AUDIO_CHANNELS}
+        audioLoading={audioLoading}
         durationSeconds={
           audioDurationSeconds || (projectMeta?.durationSeconds ?? 0)
         }
@@ -1070,9 +1118,10 @@ function TrackEditEditor({
         albumArt={albumArtSlot}
         chartAssist={chartAssist}
         stemsMixer={{
-          stemOrigins: paddedStems,
+          stemOrigins: stemOrigins,
           onAddStem: input => void handleAddStem(input),
-          emptyState: !hasAudio,
+          emptyState: !hasAudio && !audioLoading,
+          loadingAudio: audioLoading,
         }}
         headerExtra={headerExtra}
         leftPanelChildren={leftPanelChildren}
