@@ -28,7 +28,7 @@ jest.mock('../../../../lib/audio-pipeline/decode-audio', () => ({
   nativeDecodeRate: jest.fn(),
 }));
 jest.mock('../../../../lib/drum-transcription/audio/decoder', () => ({
-  interleaveAudioBuffer: jest.fn(),
+  interleaveAudioBufferYielding: jest.fn(),
 }));
 
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
@@ -36,12 +36,12 @@ import {
   decodeAtRate,
   nativeDecodeRate,
 } from '@/lib/audio-pipeline/decode-audio';
-import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
+import {interleaveAudioBufferYielding} from '@/lib/drum-transcription/audio/decoder';
 
 const mockOpus = encodePcmToOpus as jest.Mock;
 const mockDecode = decodeAtRate as jest.Mock;
 const mockNativeRate = nativeDecodeRate as jest.Mock;
-const mockInterleave = interleaveAudioBuffer as jest.Mock;
+const mockInterleave = interleaveAudioBufferYielding as jest.Mock;
 
 /** jsdom's Blob has no `arrayBuffer()`; Node's does. */
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
@@ -127,7 +127,7 @@ describe('decodeChartPackageAudio', () => {
   beforeEach(() => {
     mockDecode.mockResolvedValue({});
     mockNativeRate.mockReturnValue(48000);
-    mockInterleave.mockImplementation(() => new Float32Array(4));
+    mockInterleave.mockImplementation(async () => new Float32Array(4));
   });
 
   it('decodes every file at the full mix’s own native rate, and reports it', async () => {

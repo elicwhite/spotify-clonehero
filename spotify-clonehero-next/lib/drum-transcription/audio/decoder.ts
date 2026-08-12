@@ -12,6 +12,7 @@
  */
 
 import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
+import {runSliced} from '@/lib/sliced-work';
 import {TARGET_CHANNELS} from './types';
 
 /**
@@ -45,17 +46,45 @@ export async function decodeAudio(
  * The output always has TARGET_CHANNELS (2) channels interleaved.
  */
 export function interleaveAudioBuffer(audioBuffer: AudioBuffer): Float32Array {
-  const numSamples = audioBuffer.length;
-  const interleaved = new Float32Array(numSamples * TARGET_CHANNELS);
+  const {interleaved, step, frames} = startInterleave(audioBuffer);
+  step(0, frames);
+  return interleaved;
+}
+
+/**
+ * {@link interleaveAudioBuffer}, in slices that yield to the event loop.
+ *
+ * A whole decoded song is a quarter of a billion samples to move, most of a
+ * second on an album-length chart. The chart editor does this while it is
+ * already open and possibly playing, where a second of straight-line copying
+ * reads as the highway freezing. Callers that interleave during a processing
+ * screen have nothing to yield to and should use the synchronous form.
+ */
+export async function interleaveAudioBufferYielding(
+  audioBuffer: AudioBuffer,
+): Promise<Float32Array> {
+  const {interleaved, step, frames} = startInterleave(audioBuffer);
+  await runSliced(frames, step);
+  return interleaved;
+}
+
+/** The interleave, as a resumable range copy plus the buffer it fills. */
+function startInterleave(audioBuffer: AudioBuffer) {
+  const frames = audioBuffer.length;
+  const interleaved = new Float32Array(frames * TARGET_CHANNELS);
 
   const left = audioBuffer.getChannelData(0);
   const right =
     audioBuffer.numberOfChannels >= 2 ? audioBuffer.getChannelData(1) : left; // Mono: duplicate left channel
 
-  for (let i = 0; i < numSamples; i++) {
-    interleaved[i * 2] = left[i];
-    interleaved[i * 2 + 1] = right[i];
-  }
-
-  return interleaved;
+  return {
+    interleaved,
+    frames,
+    step(from: number, to: number): void {
+      for (let i = from; i < to; i++) {
+        interleaved[i * 2] = left[i];
+        interleaved[i * 2 + 1] = right[i];
+      }
+    },
+  };
 }

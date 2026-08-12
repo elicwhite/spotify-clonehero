@@ -92,6 +92,7 @@ jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
     throw new Error('a project with no audio must not decode anything');
   }),
   interleaveAudioBuffer: jest.fn(() => new Float32Array(16)),
+  interleaveAudioBufferYielding: jest.fn(async () => new Float32Array(16)),
 }));
 
 let fixtureChartText = '';

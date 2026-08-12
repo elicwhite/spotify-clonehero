@@ -13,7 +13,7 @@ import {
   decodeAtRate,
   nativeDecodeRate,
 } from '@/lib/audio-pipeline/decode-audio';
-import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
+import {interleaveAudioBufferYielding} from '@/lib/drum-transcription/audio/decoder';
 import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
@@ -100,7 +100,7 @@ export async function decodeChartPackageAudio(
       let name = base;
       for (let n = 2; usedNames.has(name); n++) name = `${base}-${n}`;
       usedNames.add(name);
-      const pcm = interleaveAudioBuffer(audioBuffer);
+      const pcm = await interleaveAudioBufferYielding(audioBuffer);
       // Playback wants these samples back in exactly the buffer they just
       // came out of, so hand `AudioManager` the buffer instead of making it
       // de-interleave the whole song again.

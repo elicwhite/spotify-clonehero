@@ -123,6 +123,7 @@ jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
     getChannelData: () => new Float32Array(8),
   })),
   interleaveAudioBuffer: jest.fn(() => new Float32Array(16)),
+  interleaveAudioBufferYielding: jest.fn(async () => new Float32Array(16)),
 }));
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,8 @@
  * Pure, no canvas/DOM — the component owns sampling per screen column.
  */
 
+import {runSliced} from '@/lib/sliced-work';
+
 /** Finest (level 0) bucket width in ms. */
 export const BASE_BIN_MS = 5;
 
@@ -128,30 +130,6 @@ function startScan(
   };
 }
 
-/** Hand control back to the event loop. A `MessageChannel` round trip rather
- *  than a timer: timers are clamped to a second in a background tab, which
- *  would leave a half-built waveform sitting there for minutes. */
-function yieldToEventLoop(): Promise<void> {
-  return new Promise(resolve => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      channel.port1.close();
-      resolve();
-    };
-    channel.port2.postMessage(null);
-  });
-}
-
-/** How long a slice may run before yielding. Comfortably inside a frame. */
-const SLICE_MS = 6;
-
-/**
- * {@link buildAmpPyramid}, in slices, so a live editor keeps rendering and
- * playing while a song's peaks are computed.
- *
- * `isCancelled` is polled between slices: a caller whose audio changed again
- * mid-scan gets `null` rather than a pyramid for the previous source.
- */
 export async function buildAmpPyramidYielding(
   audioData: Float32Array | undefined,
   channels: number,
@@ -162,24 +140,16 @@ export async function buildAmpPyramidYielding(
   if (!audioData || audioData.length === 0 || durationMs <= 0 || channels < 1) {
     return EMPTY_PYRAMID;
   }
-  if (Math.floor(audioData.length / channels) <= 0) return EMPTY_PYRAMID;
+  const totalSamples = Math.floor(audioData.length / channels);
+  if (totalSamples <= 0) return EMPTY_PYRAMID;
 
   const scan = startScan(audioData, channels, durationMs, baseBinMs);
-  // Start small and adapt: the right slice size depends entirely on the
-  // machine, and guessing it wrong either yields far too often or blocks.
-  let budget = 200_000;
-  while (!scan.done) {
-    if (isCancelled()) return null;
-    const started = performance.now();
-    scan.step(budget);
-    const elapsed = performance.now() - started;
-    budget = Math.max(
-      50_000,
-      Math.round(budget * (elapsed > 0 ? SLICE_MS / elapsed : 2)),
-    );
-    if (!scan.done) await yieldToEventLoop();
-  }
-  return isCancelled() ? null : scan.finish();
+  const completed = await runSliced(
+    totalSamples,
+    (from, to) => scan.step(to - from),
+    isCancelled,
+  );
+  return completed ? scan.finish() : null;
 }
 
 /** Index of the finest level whose bucket width is ⩽ `targetBinMs` (falls

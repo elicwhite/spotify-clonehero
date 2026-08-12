@@ -60,6 +60,7 @@ jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
 jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => ({}) as unknown),
   interleaveAudioBuffer: jest.fn(() => mockInterleaved),
+  interleaveAudioBufferYielding: jest.fn(async () => mockInterleaved),
 }));
 
 class FakeAudioManager {
