@@ -28,6 +28,11 @@ const createJestConfig = nextJest({dir: './'});
 
 // Any custom config you want to pass to Jest
 const customJestConfig = {
+  // Jest defaults its transform cache to a temp dir, which Vercel does not
+  // carry between builds — so CI transforms every file from cold every time.
+  // `.next/cache` is the directory Vercel restores for a Next.js project, and
+  // `next build` preserves it, so parking the cache here survives a deploy.
+  cacheDirectory: '<rootDir>/.next/cache/jest',
   setupFiles: ['<rootDir>/jest.setup.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup-after-env.js'],
   testMatch: [
