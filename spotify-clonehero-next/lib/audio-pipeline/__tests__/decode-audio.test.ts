@@ -26,9 +26,9 @@ describe('nativeDecodeRate', () => {
 
   it('reads an ISO base media file as 48k', () => {
     // A leading box size, then 'ftyp' at offset 4 — .mp4 / .m4a.
-    expect(
-      nativeDecodeRate(bytes(0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70)),
-    ).toBe(48000);
+    expect(nativeDecodeRate(bytes(0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70))).toBe(
+      48000,
+    );
   });
 
   it('falls back to 44.1k for everything else', () => {

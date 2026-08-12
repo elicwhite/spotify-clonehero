@@ -143,7 +143,6 @@ function makeVocalsDoc(): ChartDocument {
   return doc;
 }
 
-
 const fakeAudioManager = {} as AudioManager;
 
 function Harness({
@@ -200,10 +199,7 @@ function renderScoped(doc: ChartDocument, scope: EditorScope) {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     return (
-      <HighwayEditor
-        chart={doc.parsedChart}
-        audioManager={fakeAudioManager}
-      />
+      <HighwayEditor chart={doc.parsedChart} audioManager={fakeAudioManager} />
     );
   }
 

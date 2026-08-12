@@ -21,7 +21,11 @@ import {
 } from '@/lib/audio-pipeline/pcm-client';
 
 /** Bytes `magic` starts at `offset`. */
-function startsWith(data: Uint8Array, offset: number, magic: number[]): boolean {
+function startsWith(
+  data: Uint8Array,
+  offset: number,
+  magic: number[],
+): boolean {
   if (data.length < offset + magic.length) return false;
   return magic.every((byte, i) => data[offset + i] === byte);
 }

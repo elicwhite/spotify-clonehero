@@ -142,8 +142,6 @@ function makeMultiInstrumentDoc(): ChartDocument {
   return doc;
 }
 
-
-
 const fakeAudioManager = {} as AudioManager;
 
 function noteHit(noteId: string): HitResult {

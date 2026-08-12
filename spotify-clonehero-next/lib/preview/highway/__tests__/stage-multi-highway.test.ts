@@ -104,7 +104,6 @@ beforeEach(() => {
   renderCalls.length = 0;
 });
 
-
 function makeTrack(instrument: Track['instrument']): Track {
   return {
     instrument,

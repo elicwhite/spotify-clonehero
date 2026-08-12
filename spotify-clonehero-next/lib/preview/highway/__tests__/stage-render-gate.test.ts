@@ -70,7 +70,6 @@ jest.mock('three', () => {
   };
 });
 
-
 function makeChart(): ParsedChart {
   const chart = createEmptyChart({
     bpm: 120,

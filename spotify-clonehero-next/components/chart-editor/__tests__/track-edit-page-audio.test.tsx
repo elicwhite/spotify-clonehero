@@ -353,7 +353,6 @@ describe('/chart-editor Stems list', () => {
       expect(screen.queryByTestId('stem-row-drums')).not.toBeInTheDocument();
     });
   });
-
 });
 
 describe('/chart-editor when the audio cannot be loaded', () => {

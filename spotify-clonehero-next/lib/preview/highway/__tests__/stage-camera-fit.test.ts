@@ -72,7 +72,6 @@ jest.mock('three', () => {
   };
 });
 
-
 /** Widest highway floor of the two the editor mounts (five-fret 1.1). */
 const HALF_WIDTHS: Record<string, number> = {
   guitar: 0.55,
