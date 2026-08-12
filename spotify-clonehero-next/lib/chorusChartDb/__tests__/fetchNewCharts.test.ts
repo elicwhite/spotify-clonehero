@@ -1,4 +1,4 @@
-import fetchNewCharts from '../fetchNewCharts';
+import fetchNewCharts, {filterKeys} from '../fetchNewCharts';
 
 const mockFetchAdvanced = jest.fn();
 
@@ -47,6 +47,29 @@ afterEach(() => {
 });
 
 describe('fetchNewCharts', () => {
+  it('keeps Chorus track-level instrument metadata while removing hashes', () => {
+    const filtered = filterKeys({
+      md5: 'chart',
+      notesData: {
+        instruments: ['drums'],
+        drumType: 1,
+        trackHashes: [
+          {instrument: 'drums', difficulty: 'expert', hash: 'secret'},
+        ],
+        noteCounts: [{instrument: 'drums', difficulty: 'expert', count: 1}],
+      },
+    });
+
+    expect(filtered).toEqual({
+      md5: 'chart',
+      notesData: {
+        instruments: ['drums'],
+        drumType: 1,
+        trackHashes: [{instrument: 'drums', difficulty: 'expert'}],
+      },
+    });
+  });
+
   it('pages until the API stops returning charts', async () => {
     respondWith([
       [chart({chartId: 1}), chart({chartId: 2})],

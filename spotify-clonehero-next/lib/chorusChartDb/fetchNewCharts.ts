@@ -166,8 +166,8 @@ const saveKeys = [
 
 type SaveKeys = (typeof saveKeys)[number];
 
-function filterKeys(chart: Object) {
-  const result: {[key: string]: number | string | [{[key: string]: any}]} = {};
+export function filterKeys(chart: Object) {
+  const result: Record<string, any> = {};
   for (const key in chart) {
     if (saveKeys.includes(key as SaveKeys)) {
       // @ts-ignore
@@ -176,18 +176,24 @@ function filterKeys(chart: Object) {
   }
 
   // @ts-ignore
-  if (Array.isArray(result['notesData']?.trackHashes)) {
-    // @ts-ignore
-    result['notesData'] = {
-      // @ts-ignore
-      trackHashes: result['notesData']['trackHashes'].map(
-        // @ts-ignore
-        (track: {instrument: string; difficulty: string; hash: string}) => ({
+  const notesData = result['notesData'];
+  if (notesData != null && typeof notesData === 'object') {
+    const filteredNotesData: Record<string, unknown> = {};
+    if (Array.isArray(notesData['instruments'])) {
+      filteredNotesData['instruments'] = notesData['instruments'];
+    }
+    if ('drumType' in notesData) {
+      filteredNotesData['drumType'] = notesData['drumType'];
+    }
+    if (Array.isArray(notesData['trackHashes'])) {
+      filteredNotesData['trackHashes'] = notesData['trackHashes'].map(
+        (track: {instrument: string; difficulty: string}) => ({
           instrument: track.instrument,
           difficulty: track.difficulty,
         }),
-      ),
-    };
+      );
+    }
+    result['notesData'] = filteredNotesData;
   }
 
   return result;
