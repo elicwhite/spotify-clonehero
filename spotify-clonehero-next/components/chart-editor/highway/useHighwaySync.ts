@@ -22,6 +22,7 @@ import type {ChartDocument} from '@/lib/chart-edit';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {LoopRegion} from '@/lib/preview/loopRegion';
 import type {ToolMode} from '@/lib/chart-editor-core';
+import type {AudioSamples} from '../audioSamples';
 
 export interface HighwaySyncInputs {
   stageHandleRef: RefObject<StageHighwayHandle | null>;
@@ -37,7 +38,7 @@ export interface HighwaySyncInputs {
   durationSeconds: number | undefined;
 
   // Audio waveform
-  audioData: Float32Array | undefined;
+  audioData: AudioSamples | undefined;
   audioChannels: number;
 
   // Highway mode (classic/waveform)
@@ -80,7 +81,7 @@ export function useHighwaySync(inputs: HighwaySyncInputs): void {
     const handle = stageHandleRef.current;
     if (!handle || !audioData || !durationSeconds) return;
     handle.setWaveformData({
-      audioData,
+      audioData: audioData.data,
       channels: audioChannels,
       durationMs: durationSeconds * 1000,
     });

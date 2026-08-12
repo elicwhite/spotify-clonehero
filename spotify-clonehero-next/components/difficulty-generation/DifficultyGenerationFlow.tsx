@@ -35,7 +35,6 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {readChartForEditing, findTrack} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {
   AudioServiceProvider,
   useAudioServiceContext,
@@ -75,6 +74,7 @@ import {
 import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
+import {audioSamples} from '@/components/chart-editor/audioSamples';
 
 /** Only the two instruments this route model offers a generation route for.
  *  Bass generation ships disabled everywhere (plan 0074 Design D) and is not
@@ -486,20 +486,11 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
     [chartPackage.chartAssist, audio.audioSampleRate],
   );
 
-  const metadata = useMemo(
-    () =>
-      ({
-        name: candidate.meta.name,
-        artist: candidate.meta.artist,
-        charter: candidate.meta.charter,
-        md5: '',
-        hasVideoBackground: false,
-        albumArtMd5: '',
-        notesData: {} as any,
-        modifiedTime: new Date().toISOString(),
-        file: '',
-      }) as ChartResponseEncore,
-    [candidate.meta],
+  // Wrapped once per buffer — see `components/chart-editor/audioSamples.ts`.
+  // Above the early return: hook order can't depend on the chart.
+  const samples = useMemo(
+    () => audioSamples(audio.audioData),
+    [audio.audioData],
   );
 
   const chart = state.chartDoc?.parsedChart;
@@ -508,10 +499,9 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
   return (
     <div className="flex-1 min-h-0 w-full flex h-screen flex-col">
       <ChartEditor
-        metadata={metadata}
         chart={chart}
         audioManager={audio.audioManager}
-        audioData={audio.audioData}
+        audioData={samples}
         audioChannels={audio.audioChannels}
         durationSeconds={durationSeconds}
         sections={chart.sections}

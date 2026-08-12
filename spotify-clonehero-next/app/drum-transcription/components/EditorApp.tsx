@@ -76,6 +76,8 @@ import type {
 } from '@/components/chart-editor/ExportDialog';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
+import {audioSamples} from '@/components/chart-editor/audioSamples';
+import {stemOriginsOf} from '@/components/chart-editor/sidebar/StemsMixer';
 
 type LoadingState = 'loading' | 'ready' | 'error';
 
@@ -487,9 +489,9 @@ export default function EditorApp({
   // Adds a dropped stem (StemsMixer's drop-zone row) to the padded-audio
   // stem list, which rebuilds the AudioManager to include it. The mixer
   // always hands over 44.1 kHz stereo PCM, while `buildPaddedAudioManager`
-  // WAV-encodes it with this project's `audioMeta` — a mismatch would write
-  // a header that misdescribes the samples and play the stem at the wrong
-  // speed, so reject it instead.
+  // describes every track it builds with this project's `audioMeta` — a
+  // mismatch would hand these samples to Web Audio under the wrong rate and
+  // play the stem at the wrong speed, so reject it instead.
   const handleAddStem = useCallback(
     (input: {name: string; pcm: Float32Array; origin: 'user-added'}) => {
       if (
@@ -519,6 +521,16 @@ export default function EditorApp({
     onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
   });
   const drumStemPcm = stemPcm(audioStems, 'drums');
+  // Wrapped once per buffer — see `components/chart-editor/audioSamples.ts`.
+  const fullMixSamples = useMemo(() => audioSamples(audioPcm), [audioPcm]);
+  const drumStemSamples = useMemo(
+    () => audioSamples(drumStemPcm),
+    [drumStemPcm],
+  );
+  const vocalsSamples = useMemo(
+    () => audioSamples(vocalsStemPcm),
+    [vocalsStemPcm],
+  );
 
   // Build a minimal metadata object for CloneHeroRenderer.
   const cloneHeroMetadata = useMemo(
@@ -778,13 +790,12 @@ export default function EditorApp({
 
   return (
     <ChartEditor
-      metadata={cloneHeroMetadata}
       chart={chart}
       audioManager={audioManager}
-      audioData={audioPcm ?? undefined}
-      highwayAudioData={drumStemPcm ?? undefined}
+      audioData={fullMixSamples}
+      highwayAudioData={drumStemSamples}
       audioChannels={audioChannels}
-      lyricsWaveData={vocalsStemPcm ?? undefined}
+      lyricsWaveData={vocalsSamples}
       lyricsWaveChannels={2}
       durationSeconds={durationSeconds}
       decodedOnsets={decodedOnsets}
@@ -814,7 +825,7 @@ export default function EditorApp({
         onLyricsAlignedFromCachedVocals: refreshVocalsStem,
       }}
       stemsMixer={{
-        stemOrigins: audioStems,
+        stemOrigins: stemOriginsOf(audioStems),
         onAddStem: handleAddStem,
         // The drums track is locked while a transcribe-drums run is
         // rewriting it — mirrors the Chart Matrix's own busy treatment for

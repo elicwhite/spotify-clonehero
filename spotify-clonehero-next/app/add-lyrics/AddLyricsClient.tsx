@@ -63,6 +63,7 @@ import {
   type AddLyricsInput,
 } from '@/lib/assist/tasks/add-lyrics';
 import {isAbortError} from '@/lib/workers/abortable-worker';
+import {audioSamples} from '@/components/chart-editor/audioSamples';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -238,6 +239,11 @@ function LyricsAlignInner() {
     null,
   );
   const [editorData, setEditorData] = useState<EditorData | null>(null);
+  // Wrapped once per buffer — see `components/chart-editor/audioSamples.ts`.
+  const samples = useMemo(
+    () => audioSamples(editorData?.audioData),
+    [editorData?.audioData],
+  );
   const [showIntroModal, setShowIntroModal] = useState(false);
   const initStartedRef = useRef(false);
 
@@ -638,10 +644,9 @@ function LyricsAlignInner() {
         <div className="flex-1 min-h-0">
           {editorData && cloneHeroMetadata && editorChart ? (
             <ChartEditor
-              metadata={cloneHeroMetadata}
               chart={editorChart}
               audioManager={editorData.audioManager}
-              audioData={editorData.audioData}
+              audioData={samples}
               audioChannels={editorData.audioChannels}
               durationSeconds={editorData.durationSeconds}
               sections={editorChart.sections}

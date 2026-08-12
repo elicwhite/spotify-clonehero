@@ -22,7 +22,6 @@
 import '@testing-library/jest-dom';
 import {render, screen} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {fakeAudioManager} from './fakeAudioManager';
 import SiteHeader from '@/components/SiteChrome';
 import {ChartEditorProvider} from '../ChartEditorContext';
@@ -51,7 +50,6 @@ jest.mock('../TransportControls', () => ({
   __esModule: true,
   default: () => <div data-testid="transport-controls-stub" />,
 }));
-const metadata = {} as ChartResponseEncore;
 const audioManager = fakeAudioManager();
 
 function editor(props: {hideHeader?: boolean} = {}) {
@@ -59,7 +57,6 @@ function editor(props: {hideHeader?: boolean} = {}) {
     <AudioServiceProvider>
       <ChartEditorProvider>
         <ChartEditor
-          metadata={metadata}
           chart={createEmptyChart({bpm: 120, resolution: 480})}
           audioManager={audioManager}
           durationSeconds={180}

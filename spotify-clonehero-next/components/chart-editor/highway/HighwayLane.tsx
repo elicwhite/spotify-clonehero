@@ -73,6 +73,7 @@ import {useStageHighway} from './useStageHighway';
 import {parseChartFile} from '@eliwhite/scan-chart';
 import {scopePaneKey, trackKeyFromScope, type EditorScope} from '../scope';
 import {trackLabel} from '../trackLabels';
+import type {AudioSamples} from '../audioSamples';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -85,7 +86,7 @@ export interface HighwayLaneProps {
   /** This lane's slice of the shared canvas, in CSS pixels. */
   rect: HighwayRect | undefined;
   chart: ParsedChart;
-  audioData?: Float32Array | undefined;
+  audioData?: AudioSamples | undefined;
   audioChannels: number;
   durationSeconds?: number | undefined;
   state: ChartEditorState;

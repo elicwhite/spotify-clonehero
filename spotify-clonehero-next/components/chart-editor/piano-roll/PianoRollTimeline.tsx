@@ -222,7 +222,7 @@ import {
   loadPanelHeight,
   savePanelHeight,
 } from './panelHeight';
-import {buildAmpPyramid, type AmpPyramid} from './wavePeaks';
+import {buildAmpPyramidYielding, type AmpPyramid} from './wavePeaks';
 import {resolveEscapeTier} from './escapeRouting';
 import {
   isInsideLoopShade,
@@ -275,6 +275,7 @@ import {
   drawTempoLane,
   drawWave,
 } from './draw';
+import type {AudioSamples} from '../audioSamples';
 
 /** Half-width (px) of a note's pointer hit box around its glyph center. */
 const NOTE_HIT_HALF_WIDTH = 8;
@@ -504,7 +505,7 @@ export interface PianoRollTimelineProps {
   /** Total song duration in seconds. */
   durationSeconds: number;
   /** Drum-stem PCM for the waveform row (Float32 interleaved). */
-  audioData?: Float32Array | undefined;
+  audioData?: AudioSamples | undefined;
   /** Number of audio channels (1 or 2). */
   audioChannels?: number | undefined;
   /**
@@ -523,7 +524,7 @@ export interface PianoRollTimelineProps {
   /** Vocals-stem PCM for the lyrics row's background waveform (plan 0063
    *  Round 2 §5, Float32 interleaved). Absent on legacy projects with no
    *  cached vocals stem — the row still works, just without the waveform. */
-  lyricsWaveData?: Float32Array | undefined;
+  lyricsWaveData?: AudioSamples | undefined;
   /** Channel count for `lyricsWaveData`. */
   lyricsWaveChannels?: number | undefined;
   /** Render all supported instrument/difficulty lanes in one shared canvas. */
@@ -610,6 +611,13 @@ export default function PianoRollTimeline({
   // no project id reaches the panel, so nothing is persisted to localStorage).
   const [waveSources, setWaveSources] = useState<WaveformSource[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  /** The manager `selectedSourceId` was resolved against. Until it names the
+   *  live one, the selection still describes the previous manager's tracks —
+   *  and rebuilding the peaks against it would scan the whole song for a
+   *  source that is about to be replaced. */
+  const [sourcesManager, setSourcesManager] = useState<AudioManager | null>(
+    null,
+  );
   useEffect(() => {
     let cancelled = false;
     Promise.resolve(audioManager.ready).then(() => {
@@ -621,6 +629,7 @@ export default function PianoRollTimeline({
           ? prev
           : defaultWaveformSourceId(list),
       );
+      setSourcesManager(audioManager);
     });
     return () => {
       cancelled = true;
@@ -635,13 +644,23 @@ export default function PianoRollTimeline({
   const wavePcm = useMemo<{
     data: Float32Array | undefined;
     channels: number;
-  }>(() => {
+  } | null>(() => {
+    // Null while the source list is still catching up with a manager swap:
+    // the peaks below cost a pass over every sample in the song, and the
+    // answer would be thrown away a tick later.
+    if (sourcesManager !== audioManager) return null;
     if (selectedSourceId) {
       const pcm = audioManager.getTrackPcm?.(selectedSourceId);
       if (pcm) return pcm;
     }
-    return {data: audioData, channels: audioChannels};
-  }, [selectedSourceId, audioData, audioChannels, audioManager]);
+    return {data: audioData?.data, channels: audioChannels};
+  }, [
+    selectedSourceId,
+    sourcesManager,
+    audioData,
+    audioChannels,
+    audioManager,
+  ]);
 
   // -- Panel height (§1): resizable via a top-edge drag handle, persisted to
   // localStorage under one key shared across every host page. Lazily read
@@ -943,26 +962,47 @@ export default function PianoRollTimeline({
   // -- Waveform peak mip-map (only rebuilt when the audio changes; perf pass —
   // "peaks per zoom bucket" §11, not a single fixed-resolution envelope) -----
   useEffect(() => {
-    ampRef.current = buildAmpPyramid(
-      wavePcm.data,
-      wavePcm.channels,
-      durationSeconds * 1000,
-    );
-    dirtyRef.current = true;
-    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+    // No source resolved yet — leave the peaks that are already drawn alone
+    // rather than blanking the row for a frame.
+    if (!wavePcm) return;
+    let cancelled = false;
+    void (async () => {
+      const pyramid = await buildAmpPyramidYielding(
+        wavePcm.data,
+        wavePcm.channels,
+        durationSeconds * 1000,
+        () => cancelled,
+      );
+      if (!pyramid) return;
+      ampRef.current = pyramid;
+      dirtyRef.current = true;
+      drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [wavePcm, durationSeconds, audioManager]);
 
   // -- Vocals-stem waveform mip-map for the lyrics row (Round 2 §5). Reuses
   // the same peak-pyramid machinery as the bottom waveform row; empty when
   // `lyricsWaveData` is absent (legacy projects with no cached vocals stem).
   useEffect(() => {
-    vocalsAmpRef.current = buildAmpPyramid(
-      lyricsWaveData,
-      lyricsWaveChannels,
-      durationSeconds * 1000,
-    );
-    dirtyRef.current = true;
-    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+    let cancelled = false;
+    void (async () => {
+      const pyramid = await buildAmpPyramidYielding(
+        lyricsWaveData?.data,
+        lyricsWaveChannels,
+        durationSeconds * 1000,
+        () => cancelled,
+      );
+      if (!pyramid) return;
+      vocalsAmpRef.current = pyramid;
+      dirtyRef.current = true;
+      drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [lyricsWaveData, lyricsWaveChannels, durationSeconds, audioManager]);
 
   // -- Selection push (shared with the highway) ------------------------------

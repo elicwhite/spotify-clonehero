@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useMemo} from 'react';
 import {Loader2, AlertCircle} from 'lucide-react';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
@@ -20,6 +20,7 @@ import {
   useAudioServiceContext,
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
+import {audioSamples} from '@/components/chart-editor/audioSamples';
 
 export interface PreviewChart {
   metadata: ChartResponseEncore;
@@ -50,6 +51,8 @@ function PreviewViewerInner({chart}: {chart: PreviewChart}) {
   const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [audioManager, setAudioManager] = useState<AudioManager | null>(null);
   const [audioData, setAudioData] = useState<Float32Array | null>(null);
+  // Wrapped once per buffer — see `components/chart-editor/audioSamples.ts`.
+  const samples = useMemo(() => audioSamples(audioData), [audioData]);
   const [audioChannels, setAudioChannels] = useState(2);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
@@ -159,10 +162,9 @@ function PreviewViewerInner({chart}: {chart: PreviewChart}) {
 
   return (
     <ChartEditor
-      metadata={chart.metadata}
       chart={parsedChart}
       audioManager={audioManager}
-      audioData={audioData ?? undefined}
+      audioData={samples}
       audioChannels={audioChannels}
       durationSeconds={durationSeconds}
       sections={parsedChart.sections}

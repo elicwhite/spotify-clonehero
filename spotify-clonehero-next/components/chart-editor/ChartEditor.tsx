@@ -3,7 +3,6 @@
 import {type ReactNode, useCallback, useMemo, useState} from 'react';
 import {Pencil} from 'lucide-react';
 import {parseChartFile} from '@eliwhite/scan-chart';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {
   applySongIniMetadata,
   computeTrackStamp,
@@ -27,6 +26,7 @@ import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useEditorDensity} from './hooks/useEditorDensity';
 import {useLoopRegionSync} from './hooks/useLoopRegionSync';
+import type {AudioSamples} from './audioSamples';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -36,28 +36,32 @@ interface Section {
 }
 
 export interface ChartEditorProps {
-  /** Chart metadata for the highway renderer. */
-  metadata: ChartResponseEncore;
   /** Parsed chart data. */
   chart: ParsedChart;
   /** The AudioManager instance driving playback. */
   audioManager: AudioManager;
   /** Raw PCM audio data (Float32 interleaved) for waveform display. */
-  audioData?: Float32Array | undefined;
+  audioData?: AudioSamples | undefined;
   /**
    * PCM used for the highway's waveform surface (e.g. an isolated drum
    * stem). Falls back to `audioData` when omitted; must share its channel
    * count and duration.
    */
-  highwayAudioData?: Float32Array | undefined;
+  highwayAudioData?: AudioSamples | undefined;
   /** Number of audio channels (1 or 2). */
   audioChannels?: number | undefined;
+  /**
+   * The host is still decoding this project's audio. The editor is open and
+   * editable throughout — this only lets the surfaces that draw the song say
+   * so instead of looking empty.
+   */
+  audioLoading?: boolean | undefined;
   /**
    * PCM for the piano-roll lyrics row's background vocals waveform (plan
    * 0063 Round 2 §5, Float32 interleaved). Absent when the project has no
    * cached vocals stem — the row still works, just without the waveform.
    */
-  lyricsWaveData?: Float32Array | undefined;
+  lyricsWaveData?: AudioSamples | undefined;
   /** Channel count for `lyricsWaveData`. */
   lyricsWaveChannels?: number | undefined;
   /** Total song duration in seconds. */
@@ -223,12 +227,12 @@ function SongIdentity({
 }
 
 export default function ChartEditor({
-  metadata,
   chart,
   audioManager,
   audioData,
   highwayAudioData,
   audioChannels = 2,
+  audioLoading,
   lyricsWaveData,
   lyricsWaveChannels,
   durationSeconds,
@@ -419,11 +423,11 @@ export default function ChartEditor({
         className="flex min-w-0 min-h-0 overflow-hidden bg-background">
         <div className="relative flex-1 min-w-0 min-h-0">
           <HighwayEditor
-            metadata={metadata}
             chart={chart}
             audioManager={audioManager}
             className="h-full w-full"
             audioData={highwayAudioData ?? audioData}
+            audioLoading={audioLoading}
             audioChannels={audioChannels}
             durationSeconds={durationSeconds}
             stackedPianoRoll={stackedPianoRoll && hasMultipleStackedTracks}

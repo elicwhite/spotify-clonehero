@@ -44,7 +44,6 @@ import {
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {HitResult} from '@/lib/preview/highway';
 import {
   createFakeStage as mockCreateFakeStage,
@@ -143,13 +142,7 @@ function makeMultiInstrumentDoc(): ChartDocument {
   return doc;
 }
 
-/** Stable identity: the stage is keyed on `metadata`, so a fresh object per
- *  render would tear the whole stage down and rebuild it mid-test. */
-const metadata = {song_length: 60_000} as ChartResponseEncore;
 
-function makeMetadata(): ChartResponseEncore {
-  return metadata;
-}
 
 const fakeAudioManager = {} as AudioManager;
 
@@ -184,7 +177,6 @@ function Harness({
 
   return (
     <HighwayEditor
-      metadata={makeMetadata()}
       chart={chartDoc.parsedChart}
       audioManager={fakeAudioManager}
     />
@@ -418,7 +410,6 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       }, []);
       return (
         <HighwayEditor
-          metadata={makeMetadata()}
           chart={doc.parsedChart}
           audioManager={fakeAudioManager}
           stackedPianoRoll
@@ -616,7 +607,6 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       }, []);
       return (
         <HighwayEditor
-          metadata={makeMetadata()}
           chart={doc.parsedChart}
           audioManager={fakeAudioManager}
         />
@@ -669,7 +659,6 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
         }, []);
         return (
           <HighwayEditor
-            metadata={makeMetadata()}
             chart={doc.parsedChart}
             audioManager={fakeAudioManager}
           />
@@ -712,7 +701,6 @@ describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
       }, [visible.join(',')]);
       return (
         <HighwayEditor
-          metadata={makeMetadata()}
           chart={doc.parsedChart}
           audioManager={fakeAudioManager}
         />
@@ -1084,7 +1072,6 @@ describe('single-track piano roll ↔ highway selection (plan 0074 Phase 3)', ()
       return (
         <>
           <HighwayEditor
-            metadata={makeMetadata()}
             chart={doc.parsedChart}
             audioManager={fakeAudioManager}
           />

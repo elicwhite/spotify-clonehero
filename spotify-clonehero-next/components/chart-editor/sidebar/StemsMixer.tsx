@@ -33,7 +33,7 @@
 
 import {useEffect, useMemo, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
-import {AudioWaveform, Timer, Upload} from 'lucide-react';
+import {AudioWaveform, Loader2, Timer, Upload} from 'lucide-react';
 import {toast} from 'sonner';
 
 import type {AudioManager} from '@/lib/preview/audioManager';
@@ -65,6 +65,16 @@ import {
  *  `usePaddedAudio` stem list straight through. */
 export type StemOriginEntry = Pick<AudioStem, 'name' | 'origin'>;
 
+/** The origin entries for a set of live stems — name and origin ONLY. Taking
+ *  the projection rather than passing `AudioStem`s straight through is what
+ *  keeps each stem's whole decoded buffer out of the component tree; see
+ *  `components/chart-editor/audioSamples.ts` for why that matters. */
+export function stemOriginsOf(
+  stems: ReadonlyArray<AudioStem>,
+): StemOriginEntry[] {
+  return stems.map(({name, origin}) => ({name, origin}));
+}
+
 /** Host-supplied wiring, threaded through `ChartEditor`/`LeftSidebar` from
  *  the page (`EditorApp`, `TrackEditPage`, ...). Every field is optional —
  *  a host with nothing to add simply renders the mixer against
@@ -80,7 +90,7 @@ export interface StemsMixerHostProps {
    * `pcm` is always interleaved 44.1 kHz stereo (what `decodeAudio` +
    * `interleaveAudioBuffer` produce, whatever the dropped file was). A host
    * whose `PaddedAudioMeta` says otherwise must reject the stem rather than
-   * WAV-encode this data under a header that misdescribes it. A host with no
+   * play these samples at a rate that isn't theirs. A host with no
    * `PaddedAudioMeta` at all has nothing to conflict with: the file it
    * accepts is what establishes the project's audio format.
    *
@@ -105,6 +115,12 @@ export interface StemsMixerHostProps {
    * audible, since it is the only thing there is to hear.
    */
   emptyState?: boolean | undefined;
+  /**
+   * The project's own audio is still being read and decoded. The rows that
+   * exist (the click) stay live; this only says that more are coming, so the
+   * short list isn't mistaken for the whole mix.
+   */
+  loadingAudio?: boolean | undefined;
   /** Track names an in-flight assist run has locked (e.g. `'drums'` during a
    *  drum-transcription re-run). Locked rows keep their current values but
    *  disable their slider/mute/solo controls; unrelated rows, and the rest
@@ -198,6 +214,7 @@ export default function StemsMixer({
   onAddStem,
   lockedTrackNames,
   emptyState = false,
+  loadingAudio = false,
 }: StemsMixerProps) {
   const trackNames = audioManager.trackNames;
   const originByName = useMemo(() => {
@@ -318,7 +335,7 @@ export default function StemsMixer({
     }
   };
 
-  if (trackNames.length === 0) return null;
+  if (trackNames.length === 0 && !loadingAudio) return null;
 
   const dropTargetLabel = emptyState
     ? 'Drop an audio file here to add it to this chart'
@@ -331,12 +348,24 @@ export default function StemsMixer({
        *  (plan 0076 item 17) — it's the same convention as the piano roll
        *  and A/B loop markers. */}
       <SectionHeading title="Stems">
-        {anySolo && (
+        {loadingAudio && (
+          <Loader2
+            className="ml-auto h-3 w-3 animate-spin text-muted-foreground"
+            aria-label="Loading audio"
+          />
+        )}
+        {!loadingAudio && anySolo && (
           <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.05em] text-green-600 dark:text-green-400">
             Solo
           </span>
         )}
       </SectionHeading>
+
+      {loadingAudio && (
+        <p className="px-1 text-[11px] text-muted-foreground">
+          Loading this song’s audio…
+        </p>
+      )}
 
       <div className="space-y-0.5">
         {orderedNames.map(name => {

@@ -39,7 +39,6 @@ import {ADD_LYRICS_CAPABILITIES} from '../capabilities';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {EditorScope} from '../scope';
 import {setupStage} from '@/lib/preview/highway';
 import {
@@ -144,9 +143,6 @@ function makeVocalsDoc(): ChartDocument {
   return doc;
 }
 
-/** Stable identity: the stage is keyed on `metadata`, so a fresh object per
- *  render would rebuild the stage and inflate the call count. */
-const metadata = {song_length: 60_000} as ChartResponseEncore;
 
 const fakeAudioManager = {} as AudioManager;
 
@@ -171,7 +167,6 @@ function Harness({
   }, [visibleKey, dispatch]);
   return (
     <HighwayEditor
-      metadata={metadata}
       chart={chartDoc.parsedChart}
       audioManager={fakeAudioManager}
       className="test-highway"
@@ -206,7 +201,6 @@ function renderScoped(doc: ChartDocument, scope: EditorScope) {
     }, []);
     return (
       <HighwayEditor
-        metadata={metadata}
         chart={doc.parsedChart}
         audioManager={fakeAudioManager}
       />

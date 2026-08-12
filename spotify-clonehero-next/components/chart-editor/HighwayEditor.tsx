@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import {Loader2} from 'lucide-react';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useAudioManager} from './AudioServiceContext';
 import {parseTrackKeyId, selectRenderDoc} from '@/lib/chart-editor-core';
@@ -19,20 +20,26 @@ import {useStageSync} from './highway/useStageSync';
 import {setupStage, type HighwayStage} from '@/lib/preview/highway';
 import {computeStageLayout} from '@/lib/preview/highway/layout';
 import {DEFAULT_VOCALS_PART, snapTickToGrid} from '@/lib/chart-edit';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {TrackKey} from '@/lib/chart-edit';
 import {parseChartFile} from '@eliwhite/scan-chart';
 type ParsedChart = ReturnType<typeof parseChartFile>;
 import {cn} from '@/lib/utils';
+import type {AudioSamples} from './audioSamples';
 
 interface HighwayEditorProps {
-  metadata: ChartResponseEncore;
   chart: ParsedChart;
   audioManager: AudioManager;
   className?: string | undefined;
   /** Raw PCM audio data for waveform highway surface. */
-  audioData?: Float32Array | undefined;
+  audioData?: AudioSamples | undefined;
+  /**
+   * The host is still decoding the audio. Only the waveform surface needs it
+   * — a classic highway is drawn entirely from the chart — so this decides
+   * the wording of the waveform mode's placeholder, not whether the highway
+   * renders.
+   */
+  audioLoading?: boolean | undefined;
   /** Number of audio channels. */
   audioChannels?: number | undefined;
   /** Total duration in seconds. */
@@ -84,11 +91,11 @@ interface HighwayEditorProps {
  * the stage.
  */
 export default function HighwayEditor({
-  metadata,
   chart,
   audioManager,
   className,
   audioData,
+  audioLoading = false,
   audioChannels = 2,
   durationSeconds,
   stackedPianoRoll = false,
@@ -207,13 +214,22 @@ export default function HighwayEditor({
   // set re-adds itself onto the new context.
   const [stageGeneration, setStageGeneration] = useState(0);
 
+  // The stage reads the playback clock through this, so swapping the
+  // AudioManager (the chart editor does, when a project's audio finishes
+  // decoding behind the open editor) does not rebuild the WebGL context and
+  // every highway on it.
+  const audioManagerRef = useRef(audioManager);
+  useEffect(() => {
+    audioManagerRef.current = audioManager;
+  });
+  const getAudioManager = useCallback(() => audioManagerRef.current, []);
+
   useEffect(() => {
     const created = setupStage(
-      metadata,
       chartRef.current,
       sizingRef,
       canvasHostRef,
-      audioManager,
+      getAudioManager,
     );
     const unsubscribe = created.onContextLost(() => {
       setStageGeneration(generation => generation + 1);
@@ -225,7 +241,7 @@ export default function HighwayEditor({
       setStage(null);
       created.destroy();
     };
-  }, [metadata, audioManager, stageGeneration]);
+  }, [getAudioManager, stageGeneration]);
 
   // ---------------------------------------------------------------------------
   // Measurement -> layout. React measures the canvas host once for the whole
@@ -307,6 +323,22 @@ export default function HighwayEditor({
         className,
       )}>
       <div ref={canvasHostRef} className="absolute inset-0" />
+
+      {/* Waveform mode draws the song itself, so it has nothing to show until
+       *  the samples are here. Classic mode is drawn from the chart alone and
+       *  is fully usable meanwhile, so it is never covered. */}
+      {lanes.length > 0 && state.highwayMode === 'waveform' && !audioData && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center gap-2 bg-[var(--ed-surface)]/80 text-sm text-[color:var(--ed-surface-fg-muted)]">
+          {audioLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading audio for the waveform…</span>
+            </>
+          ) : (
+            <span>No audio to draw a waveform from.</span>
+          )}
+        </div>
+      )}
 
       {lanes.length === 0 && (
         // Reachable through the UI: the matrix lets the user hide every

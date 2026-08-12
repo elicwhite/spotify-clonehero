@@ -22,6 +22,7 @@ import {
 import {makeFixtureDoc} from '../../__tests__/fixtures';
 import {retimeChart} from '@/lib/chart-edit';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import {AudioSamples} from '../../audioSamples';
 
 /** Distinct PCM per track, so a wrong pick is visible in the request log. */
 const PCM: Record<string, {data: Float32Array; channels: number}> = {
@@ -100,7 +101,7 @@ async function mount(requested: string[]) {
         durationSeconds={10}
         audioChannels={2}
         // What the chart editor passes: the full mix, whatever is selected.
-        audioData={PCM['song'].data}
+        audioData={new AudioSamples(PCM['song'].data)}
       />
     </ChartEditorProvider>,
   );
