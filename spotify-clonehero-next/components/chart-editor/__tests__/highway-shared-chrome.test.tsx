@@ -85,16 +85,34 @@ function lastPushedKinds(index: number): string[] {
  * polls inside `act`, which holds those queued updates until the wait settles
  * - so waiting on the pushes themselves deadlocks. Flushing act directly lets
  * the handshake land.
+ *
+ * Each turn yields to the macrotask queue as well as the microtask queue. The
+ * handshake settles on the first turn locally, but it is not purely
+ * microtask-bound, and a loaded CI runner has exhausted a fixed count of bare
+ * microtask flushes — so this waits on a clock instead of a turn count.
+ *
+ * Giving up throws. Returning quietly on timeout leaves the caller asserting
+ * against a lane that never pushed, which surfaces as a baffling "expected
+ * Set {bpm, section, ts}, received Set {}" rather than as the timeout it is.
  */
 async function flushLanePushes(laneCount: number): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt++) {
+  const deadlineMs = Date.now() + 5000;
+  for (;;) {
     const stage = setupStageMock.mock.results.length > 0 ? theStage() : null;
     const pushed =
       stage?.highways
         .slice(0, laneCount)
         .filter(h => h.reconciler.setElements.mock.calls.length > 0) ?? [];
     if (pushed.length === laneCount) return;
-    await act(async () => {});
+    if (Date.now() >= deadlineMs) {
+      throw new Error(
+        `flushLanePushes(${laneCount}) timed out after 5s: only ` +
+          `${pushed.length} of ${laneCount} lanes pushed an element set.`,
+      );
+    }
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
   }
 }
 
