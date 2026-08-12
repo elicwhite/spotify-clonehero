@@ -20,14 +20,14 @@ here, and it happens to careful people. That is why tests now fail on it.
 
 Read only what your task needs.
 
-| You are…                                                                                                         | Load                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Building or editing a marketing / tool landing page, hero, section, comparison table, or trust line              | the **`landing-pages`** skill                                                               |
-| Adding or editing an `opengraph-image.tsx`, or touching brand colours, gradients, or type sizes on a social card | the **`og-images`** skill                                                                   |
-| Changing a page's outer gutter, or making a page full-bleed                                                      | `references/page-shells.md`, "The gutter contract" — the answer is one `ROUTE_CHROME` entry |
-| Working on a dashboard shell, or the editor's compact density tokens                                             | `references/page-shells.md`, "Density" and "Dashboard layouts"                              |
-| Wondering why one page deliberately differs from another                                                         | `../docs/design-system-audit.md` — every difference has a recorded verdict                  |
-| Adding a rule, or wondering what stops drift                                                                     | `references/guardrails.md`                                                                  |
+| You are…                                                                                                        | Load                                                                                        |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Building or editing a marketing / tool landing page, hero, section, comparison table, or trust line             | the **`landing-pages`** skill                                                               |
+| Adding or editing an `opengraph-image.tsx`, or touching brand colors, gradients, or type sizes on a social card | the **`og-images`** skill                                                                   |
+| Changing a page's outer gutter, or making a page full-bleed                                                     | `references/page-shells.md`, "The gutter contract" — the answer is one `ROUTE_CHROME` entry |
+| Working on a dashboard shell, or the editor's compact density tokens                                            | `references/page-shells.md`, "Density" and "Dashboard layouts"                              |
+| Wondering why one page deliberately differs from another                                                        | `../docs/design-system-audit.md` — every difference has a recorded verdict                  |
+| Adding a rule, or wondering what stops drift                                                                    | `references/guardrails.md`                                                                  |
 
 If you are about to write a container `<div>` with a `max-w-*` and vertical
 rhythm on it, stop and load `landing-pages` first. That div almost certainly

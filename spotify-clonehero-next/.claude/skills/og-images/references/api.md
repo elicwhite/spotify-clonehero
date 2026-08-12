@@ -14,7 +14,7 @@ Everything in `lib/og/`.
 
 ## Tokens
 
-`lib/og/tokens.ts` is the only place a brand colour, gradient, lane colour, or
+`lib/og/tokens.ts` is the only place a brand color, gradient, lane color, or
 type size is written down for social cards.
 
 ### `OG_SIZE`
@@ -58,7 +58,7 @@ reintroduce it.
 
 ### `OG_LANES`
 
-The five drum-lane gem colours: `kick`, `red`, `yellow`, `blue`, `green`.
+The five drum-lane gem colors: `kick`, `red`, `yellow`, `blue`, `green`.
 
 These restate the **dark** `.landing-lanes` values from `app/globals.css`.
 Satori renders outside the DOM and cannot read CSS custom properties, and OG
@@ -83,7 +83,7 @@ scale lacks adds a step to `OG_TYPE`.
 ```
 
 The card root: brand background, `56px 68px` padding, font stack, flex column.
-`center` centres the column both ways, for brand-only cards with no
+`center` centers the column both ways, for brand-only cards with no
 illustration.
 
 ### `OgBrandRow`
@@ -93,7 +93,7 @@ illustration.
 ```
 
 The "MUSIC CHARTS TOOLS" line across the top, with an optional right-aligned
-per-tool label (rendered in the accent colour at `eyebrowTool` size).
+per-tool label (rendered in the accent color at `eyebrowTool` size).
 
 ### `OgEyebrow`
 

@@ -11,7 +11,7 @@ browser window**, where macOS overlay scrollbars leave the layout viewport at
 full width. `emulate`'s viewport override instead reserves ~15 CSS px for a
 classic scrollbar.
 
-The two differ in layout width, so every centred element lands ~7.5px apart and
+The two differ in layout width, so every centered element lands ~7.5px apart and
 the whole page reads as changed. Diffing a fresh capture against those PNGs
 will show a large difference that means nothing.
 

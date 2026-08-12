@@ -41,7 +41,7 @@ hanging content directly off `LandingPage` compiles but loses both.
 Sections are not numbered — a landing page's sections are not a pipeline.
 
 `LandingPage` owns the measure, the vertical rhythm, the `.landing-lanes`
-colour scope, and a `TooltipProvider`. The provider is not decoration: the copy
+color scope, and a `TooltipProvider`. The provider is not decoration: the copy
 guide requires every number to reach its own source, and `StatChip`/`StatCell`
 need a provider ancestor to show provenance. Owning it here means a page cannot
 put a measured figure on screen without one.

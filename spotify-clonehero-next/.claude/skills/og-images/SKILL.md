@@ -1,6 +1,6 @@
 ---
 name: og-images
-description: Build and edit Open Graph / social card images for Music Charts Tools routes using the shared frame and tokens in lib/og (OgFrame, OgBrandRow, OgTitle, OgSubtitle, OgPanel, OgEyebrow, createToolOgImage, OG_TYPE, OG_COLORS, OG_LANES). Use this whenever adding a new route's opengraph-image.tsx, editing an existing social card, changing a card's title size, background, brand colour, or lane colours, or debugging a card that renders wrong or blank. Also use it whenever writing next/og ImageResponse code in this repo, since Satori only supports a subset of CSS and raw hex or font sizes at the call site will fail a test.
+description: Build and edit Open Graph / social card images for Music Charts Tools routes using the shared frame and tokens in lib/og (OgFrame, OgBrandRow, OgTitle, OgSubtitle, OgPanel, OgEyebrow, createToolOgImage, OG_TYPE, OG_COLORS, OG_LANES). Use this whenever adding a new route's opengraph-image.tsx, editing an existing social card, changing a card's title size, background, brand color, or lane colors, or debugging a card that renders wrong or blank. Also use it whenever writing next/og ImageResponse code in this repo, since Satori only supports a subset of CSS and raw hex or font sizes at the call site will fail a test.
 ---
 
 # OG images
@@ -98,7 +98,7 @@ and type scale are shared.
   gradient to a CSS background and give the path an explicit `fill`.
 - Text renders as written — write literal caps rather than `textTransform`.
 
-**Sizes and colours come from tokens, never the call site.** The `style` prop on
+**Sizes and colors come from tokens, never the call site.** The `style` prop on
 these primitives is typed to exclude `display`, `fontSize`, `fontWeight`,
 `letterSpacing`, and `color`, so spacing and alignment stay adjustable and the
 scale cannot be quietly overridden. If you need a size the scale lacks, **add a
@@ -108,14 +108,14 @@ exactly how seven ad-hoc title sizes accumulated before.
 Pick a named title step — `display`, `title`, `titleCompact`, `titleInset` —
 described in `references/api.md`. Weight and tracking are uniform everywhere.
 
-## Lane colours
+## Lane colors
 
 `OG_LANES` restates the dark `.landing-lanes` values from `app/globals.css`,
 because Satori renders outside the DOM and cannot read CSS custom properties.
 OG cards are always dark, so the dark block is the one that governs.
 
 A test parses the stylesheet and pins both `OG_LANES` and
-`components/landing/lanes.ts`'s `LANE_FALLBACKS` to it. **Change the colours in
+`components/landing/lanes.ts`'s `LANE_FALLBACKS` to it. **Change the colors in
 `globals.css` and the test tells you which copies to update** — do not edit the
 constants alone.
 
@@ -143,4 +143,4 @@ or lane palette; and that the lane copies match the stylesheet.
 including inside a hand-written illustration SVG — those are the old
 page-local lane palette and Spotify green. Reaching for Tailwind's `yellow-400`
 (`#facc15`) for a gem in your own SVG will fail CI. Use `OG_LANES` and
-`OG_COLORS.spotify`. Other illustration-internal colours are fine.
+`OG_COLORS.spotify`. Other illustration-internal colors are fine.

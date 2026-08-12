@@ -36,7 +36,7 @@ All named exports except `SectionDropZone`.
 - [Content](#content) — `StepFlow`, `ComparisonTable`, `ExternalLink`
 - [Numbers](#numbers) — `StatChip`, `InlineStat`, `StatCell`
 - [Call to action](#call-to-action) — `ScrollToStartCta`
-- [Colour](#colour) — `lanes.ts`
+- [Color](#color) — `lanes.ts`
 
 ---
 
@@ -51,7 +51,7 @@ All named exports except `SectionDropZone`.
 The root of any page in this shell. Owns:
 
 - the measure and rhythm (`landing-lanes w-full max-w-4xl space-y-12 py-8 sm:py-12`)
-- the `.landing-lanes` scope, which is where the five drum-lane gem colours are
+- the `.landing-lanes` scope, which is where the five drum-lane gem colors are
   defined (`app/globals.css`), read at runtime by the hero canvases so they
   track the theme
 - a `TooltipProvider`, so provenance tooltips always have an ancestor
@@ -312,16 +312,16 @@ only the verb, because §2 wants a plain instruction with no surrounding hype.
 
 ---
 
-## Colour
+## Color
 
 ### `lanes.ts`
 
-The five Clone Hero drum-lane gem colours as CSS custom-property names
+The five Clone Hero drum-lane gem colors as CSS custom-property names
 (`LANE_VARS`, `LANE_PROPERTIES`) plus `LANE_FALLBACKS` for canvases that paint
 before the stylesheet applies. The values live in `app/globals.css` under
 `.landing-lanes`, one definition per theme.
 
-These are the only illustrative colours the landing pages use, and they are
+These are the only illustrative colors the landing pages use, and they are
 always used for the lane they name. The OG system restates the dark values in
 `lib/og/tokens.ts` because Satori cannot read CSS custom properties; a test
 keeps all three copies pinned to the stylesheet.
