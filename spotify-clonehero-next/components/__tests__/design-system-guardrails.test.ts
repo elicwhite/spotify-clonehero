@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 
 const ROOT = path.join(__dirname, '..', '..');
-const SEARCH_DIRS = ['app', 'components'].map(d => path.join(ROOT, d));
+const SEARCH_DIRS = ['app', 'components', 'lib'].map(d => path.join(ROOT, d));
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -47,10 +47,10 @@ const rel = (file: string) => path.relative(ROOT, file);
 
 describe('no negative margin cancelling the SiteMain gutter', () => {
   /**
-   * `components/SiteChrome.tsx` decides the outer gutter, and it can now say
-   * "no gutter" directly (`FULL_BLEED_ROUTES`). A page reaching back out with
-   * `-m-4` and `w-[calc(100%+2rem)]` is re-creating the hack that broke the
-   * day `SiteMain`'s padding changed.
+   * `components/SiteChrome.tsx` decides the outer gutter, and a route can now
+   * ask for no gutter directly (`ROUTE_CHROME`). A page reaching back out with
+   * `-m-4` and `w-[calc(100%+2rem)]` is re-creating the hack that would have
+   * broken the day `SiteMain`'s padding changed.
    */
   it('no page widens itself past 100% to undo a parent gutter', () => {
     const offenders = files.filter(file =>
@@ -63,12 +63,44 @@ describe('no negative margin cancelling the SiteMain gutter', () => {
   it('no page applies a negative margin on all sides', () => {
     // `-mx-1`/`-ml-1` style nudges are legitimate optical alignment; a
     // negative margin on every side is a container escaping its parent.
+    // The leading `:` catches responsive forms like `sm:-m-4`.
     const offenders = files.filter(file =>
-      /(?:^|["'\s])-m-\d/.test(code(file)),
+      /(?:^|["'\s:])-m-\d/.test(code(file)),
     );
 
     expect(offenders.map(rel)).toEqual([]);
   });
+});
+
+describe('pages compose the landing shell rather than forking it', () => {
+  /**
+   * The reason this guardrail exists: `/why` was written days after the
+   * landing primitives landed and re-forked the shell and hero class strings
+   * character-identically, because `LandingHero` required a `trust` prop it
+   * had no facts for. Guarding the fixed regressions is not enough; the
+   * strings that define the shell have to be unforkable too.
+   */
+  const OWNED_STRINGS: {label: string; pattern: RegExp; owner: string}[] = [
+    {
+      label: 'the landing page shell',
+      pattern: /landing-lanes w-full max-w-4xl/,
+      owner: 'components/landing/LandingPage.tsx',
+    },
+    {
+      label: 'the landing hero title',
+      pattern: /max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl/,
+      owner: 'components/landing/LandingHero.tsx',
+    },
+  ];
+
+  it.each(OWNED_STRINGS)(
+    'only $owner writes $label',
+    ({pattern, owner}: {pattern: RegExp; owner: string}) => {
+      const writers = files.filter(file => pattern.test(code(file)));
+
+      expect(writers.map(rel)).toEqual([owner]);
+    },
+  );
 });
 
 describe('shared landing primitives have one definition', () => {

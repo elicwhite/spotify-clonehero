@@ -16,6 +16,12 @@ import {TrustLine} from './TrustLine';
  * `title` is a `ReactNode` because titles carry typography that is content:
  * `/drum-transcription` sets a non-breaking hyphen so "first-pass" cannot
  * split across lines at the display size.
+ *
+ * `trust` is optional. A tool page states its trust facts in the first
+ * screenful because §4 and §7 require it, but not every page in this shell is
+ * a tool page — `/why` is a position piece with nothing to claim — and making
+ * the slot mandatory is what pushed that page into forking the hero instead
+ * of using it.
  */
 export function LandingHero({
   eyebrow,
@@ -29,7 +35,7 @@ export function LandingHero({
   title: ReactNode;
   lede: ReactNode;
   /** The plain trust facts, one short factual sentence each. */
-  trust: ReactNode[];
+  trust?: ReactNode[];
   /** The hero canvas. Page-owned content; the hero only gives it a slot. */
   illustration?: ReactNode;
   /** Mono caption explaining what the illustration shows. */
@@ -44,7 +50,7 @@ export function LandingHero({
       <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
         {lede}
       </p>
-      <TrustLine items={trust} />
+      {trust && trust.length > 0 ? <TrustLine items={trust} /> : null}
       {illustration}
       {caption ? (
         <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">

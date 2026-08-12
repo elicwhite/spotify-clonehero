@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import type {ReactNode} from 'react';
 
-import {Eyebrow} from '@/components/landing/Eyebrow';
+import {ExternalLink} from '@/components/landing/ExternalLink';
+import {LandingHero} from '@/components/landing/LandingHero';
+import {LandingPage} from '@/components/landing/LandingPage';
 import {LandingSection} from '@/components/landing/Section';
 
 const DISCORD_URL = 'https://discord.gg/EDxu95B98s';
@@ -49,17 +51,12 @@ function Belief({title, children}: {title: string; children: ReactNode}) {
  */
 export function WhyPage() {
   return (
-    <div className="landing-lanes w-full max-w-4xl space-y-12 py-8 sm:py-12">
-      <header className="space-y-6">
-        <Eyebrow>Why I build these tools</Eyebrow>
-        <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl [text-wrap:balance]">
-          I want the songs people love to be playable, and charted well
-        </h1>
-        <p className="max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Everything on this site comes out of that. I only play Clone Hero
-          drums, so that is the perspective all of it is written from.
-        </p>
-      </header>
+    <LandingPage>
+      <LandingHero
+        eyebrow="Why I build these tools"
+        title="I want the songs people love to be playable, and charted well"
+        lede="Everything on this site comes out of that. I only play Clone Hero drums, so that is the perspective all of it is written from."
+      />
 
       <LandingSection
         title="What I want"
@@ -188,14 +185,7 @@ export function WhyPage() {
             If a tool of mine ever makes it easier to publish something bad than
             to publish something good, that is a defect in what I built, and I
             want to know.{' '}
-            <a
-              href={DISCORD_URL}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-foreground underline underline-offset-2">
-              Tell me on Discord
-            </a>
-            .
+            <ExternalLink href={DISCORD_URL}>Tell me on Discord</ExternalLink>.
           </p>
         </div>
       </LandingSection>
@@ -212,6 +202,6 @@ export function WhyPage() {
           .
         </p>
       </footer>
-    </div>
+    </LandingPage>
   );
 }

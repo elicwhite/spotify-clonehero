@@ -29,9 +29,12 @@ function findOgImageFiles(dir: string): string[] {
 const ogFiles = findOgImageFiles(APP_DIR);
 
 describe('opengraph-image routes', () => {
-  it('finds every route OG file', () => {
-    // Update this count when adding or removing a route OG image.
-    expect(ogFiles).toHaveLength(10);
+  // No hardcoded count. One used to live here and was pure maintenance tax:
+  // it asserted nothing the per-file cases below don't, and adding the /why
+  // card meant editing a number in an unrelated file. An empty list would
+  // make `it.each` throw on its own, so the coverage is unchanged.
+  it('finds route OG files to check', () => {
+    expect(ogFiles.length).toBeGreaterThan(0);
   });
 
   it.each(ogFiles.map(file => [path.relative(APP_DIR, file), file]))(
@@ -67,19 +70,49 @@ describe('opengraph-image routes', () => {
 });
 
 describe('OG lane palette', () => {
-  it('matches the canonical highway gem colors', () => {
-    // LANE_PROPERTIES is in lane order (kick first); LANE_FALLBACKS mirrors
-    // the dark values in globals.css, which OG cards use because they are
-    // always dark.
-    const byProperty = Object.fromEntries(
-      LANE_PROPERTIES.map((prop, i) => [prop, LANE_FALLBACKS[i]]),
+  /**
+   * `app/globals.css` is where the gem colors actually live. Satori cannot
+   * read CSS custom properties, so `OG_LANES` restates them and
+   * `LANE_FALLBACKS` mirrors them again for canvases that paint before the
+   * stylesheet applies. Three copies, so the test parses the stylesheet
+   * rather than comparing two TypeScript constants to each other — which is
+   * what it used to do, and would have stayed green while all three drifted
+   * away from the CSS together.
+   *
+   * OG cards are always dark, so the dark block is the one that governs.
+   */
+  const darkLanes = (() => {
+    const css = fs.readFileSync(path.join(APP_DIR, 'globals.css'), 'utf8');
+    const darkBlock = css.match(
+      /@media \(prefers-color-scheme: dark\) \{\s*\.landing-lanes \{([^}]*)\}/,
     );
+    if (!darkBlock?.[1]) {
+      throw new Error(
+        'Could not find the dark .landing-lanes block in app/globals.css',
+      );
+    }
+    return Object.fromEntries(
+      [...darkBlock[1].matchAll(/(--lane-[a-z]+):\s*([^;]+);/g)].map(m => [
+        m[1],
+        m[2]!.trim(),
+      ]),
+    );
+  })();
+
+  it('restates the dark .landing-lanes values from globals.css', () => {
     expect(OG_LANES).toEqual({
-      kick: byProperty['--lane-kick'],
-      red: byProperty['--lane-red'],
-      yellow: byProperty['--lane-yellow'],
-      blue: byProperty['--lane-blue'],
-      green: byProperty['--lane-green'],
+      kick: darkLanes['--lane-kick'],
+      red: darkLanes['--lane-red'],
+      yellow: darkLanes['--lane-yellow'],
+      blue: darkLanes['--lane-blue'],
+      green: darkLanes['--lane-green'],
     });
+  });
+
+  it('keeps the canvas fallbacks equal to the same values', () => {
+    // LANE_PROPERTIES is in lane order (kick first).
+    expect(LANE_PROPERTIES.map(prop => darkLanes[prop])).toEqual([
+      ...LANE_FALLBACKS,
+    ]);
   });
 });

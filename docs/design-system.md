@@ -4,7 +4,7 @@ type: concept
 scope: Structural components, tokens, and layout rules for Music Charts Tools
 sources:
   - docs/design-system-audit.md (plan 0099 Phase 0)
-  - spotify-clonehero-next/plans/completed/0099-design-system-convergence.md
+  - spotify-clonehero-next/plans/in-progress/0099-design-system-convergence.md
 created: 2026-08-10
 updated: 2026-08-10
 ---
@@ -35,8 +35,8 @@ Compose in this order. Everything lives in `components/landing/`.
 
 | Reach for | When | Notes |
 | --- | --- | --- |
-| `LandingPage` | The root of any tool landing page | Owns the measure (`max-w-4xl`), the section rhythm (`space-y-12`), the `.landing-lanes` colour scope, and the `TooltipProvider`. The provider is not optional: §6 requires every number to reach its own source, and `StatChip`/`StatCell` need a provider ancestor to do it. |
-| `LandingHero` | The first screenful | `{eyebrow, title, lede, trust, illustration, caption}`. `title` is a `ReactNode` because titles carry content-bearing typography (`/drum-transcription` uses a non-breaking hyphen so "first-pass" cannot split). |
+| `LandingPage` | The root of any page in this shell | Owns the measure (`max-w-4xl`), the section rhythm (`space-y-12`), the `.landing-lanes` colour scope, and the `TooltipProvider`. The provider is not optional: §6 requires every number to reach its own source, and `StatChip`/`StatCell` need a provider ancestor to do it. |
+| `LandingHero` | The first screenful | `{eyebrow, title, lede, trust?, illustration?, caption?}`. `title` is a `ReactNode` because titles carry content-bearing typography (`/drum-transcription` uses a non-breaking hyphen so "first-pass" cannot split). `trust` is optional: a tool page always has trust facts, a position page like `/why` does not. |
 | `ToolEntrySection` | The working entry screen | Carries `START_SECTION_ID`. A tool page opens the tool, so this sits above the explanation. |
 | `LandingSection` | Every other section | Title over a hairline rule, optional intro, optional body. |
 | `ComparisonTable` | Measuring against other tools | See variants below. |
@@ -107,7 +107,15 @@ and `alt`, and nothing else.
 | `titleInset` | 56 | A title sharing the card with a full-width framed panel. |
 
 Weight 760 and tracking −0.03em everywhere. Splitting those was drift, not
-intent.
+intent. Subtitles have their own steps: `subtitle` (32) by default,
+`subtitleLead` (46) for the first of two stacked metadata lines, and
+`subtitleLarge` (48) to pair with `display`.
+
+The `style` prop on these primitives is typed to exclude `display`,
+`fontSize`, `fontWeight`, `letterSpacing`, and `color`, so a caller can adjust
+spacing and alignment but cannot quietly reintroduce a per-file size or
+colour. **A route needing a size the scale lacks adds a step to `OG_TYPE`**,
+rather than writing the number at the call site.
 
 **Satori, not a browser.** Every div needs an explicit `display: flex`. CSS
 `<style>` blocks are not applied, which is why the Apple Music tile's gradient
@@ -123,19 +131,26 @@ test keeps that copy equal to `LANE_FALLBACKS` in
 
 ## 3. Page shells and the outer gutter
 
-`components/SiteChrome.tsx` owns two **independent** decisions. Keeping them
-independent is the point; collapsing them into one route check is what forced
-`/find-music` to cancel its gutter with a hard-coded negative margin.
+`components/SiteChrome.tsx` owns two **independent** decisions — which header
+a route renders, and how much gutter `<main>` gives it. Deriving the second
+from the first is what forced `/find-music` to cancel its gutter with a
+hard-coded negative margin.
 
-| Decision | Driven by | Values |
-| --- | --- | --- |
-| Which header | `EDITOR_ROUTES` | Compact site header on editor routes, full site nav everywhere else. |
-| How much gutter `<main>` gives | `EDITOR_ROUTES` + `FULL_BLEED_ROUTES` | `px-3 pb-3` on editor routes, none on full-bleed routes, `p-4` otherwise. |
+Both live as fields of one `ROUTE_CHROME` entry, matched by prefix, first
+match wins:
 
-**If your page wants no gutter, add it to `FULL_BLEED_ROUTES`.** Do not
-subtract the gutter back out in the page. A test fails on
-`w-[calc(100%+…)]` and on an all-sides negative margin anywhere in `app/` or
-`components/`.
+| Field | Values |
+| --- | --- |
+| `header` | `'compact'` (the compact site header, for editor routes) or `'nav'` (the full site nav). |
+| `gutter` | `'px-3 pb-3'` on editor routes, `''` for full-bleed pages that lay out their own header row and panes, `'p-4'` by default. |
+
+One entry per route rather than one list per decision, so "in two lists, one
+silently wins" is unrepresentable.
+
+**If your page wants a different gutter, give it a `ROUTE_CHROME` entry.** Do
+not subtract the gutter back out in the page. A test fails on
+`w-[calc(100%+…)]` and on an all-sides negative margin (including responsive
+forms like `sm:-m-4`) anywhere in `app/`, `components/`, or `lib/`.
 
 ### Density
 
