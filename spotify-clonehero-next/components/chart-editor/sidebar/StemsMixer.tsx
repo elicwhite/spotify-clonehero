@@ -121,6 +121,13 @@ export interface StemsMixerHostProps {
    * short list isn't mistaken for the whole mix.
    */
   loadingAudio?: boolean | undefined;
+  /**
+   * Reading or decoding the project's own audio failed. The rows that exist
+   * (the click) still work, so the section stays — but a lone click row is
+   * indistinguishable from a chart that never had audio, and this is not
+   * that.
+   */
+  audioError?: boolean | undefined;
   /** Track names an in-flight assist run has locked (e.g. `'drums'` during a
    *  drum-transcription re-run). Locked rows keep their current values but
    *  disable their slider/mute/solo controls; unrelated rows, and the rest
@@ -215,6 +222,7 @@ export default function StemsMixer({
   lockedTrackNames,
   emptyState = false,
   loadingAudio = false,
+  audioError = false,
 }: StemsMixerProps) {
   const trackNames = audioManager.trackNames;
   const originByName = useMemo(() => {
@@ -335,7 +343,7 @@ export default function StemsMixer({
     }
   };
 
-  if (trackNames.length === 0 && !loadingAudio) return null;
+  if (trackNames.length === 0 && !loadingAudio && !audioError) return null;
 
   const dropTargetLabel = emptyState
     ? 'Drop an audio file here to add it to this chart'
@@ -364,6 +372,12 @@ export default function StemsMixer({
       {loadingAudio && (
         <p className="px-1 text-[11px] text-muted-foreground">
           Loading this song’s audio…
+        </p>
+      )}
+
+      {audioError && (
+        <p className="px-1 text-[11px] text-destructive">
+          Could not load this song’s audio. Reload the project to try again.
         </p>
       )}
 

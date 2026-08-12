@@ -15,6 +15,7 @@ import {
   decodeChartPackageAudio,
   packageHasDrumsAudio,
   padPackageAudio,
+  planExportAudio,
   PACKAGE_AUDIO_CHANNELS,
   type DecodedPackageAudio,
 } from '../projectAudio';
@@ -221,5 +222,30 @@ describe('encodeWavBlob header assumption', () => {
   it('writes the 44-byte canonical header this suite reads frames from', async () => {
     const blob = encodeWavBlob(new Float32Array(4 * channels), 44100, channels);
     expect(wavFrames(await blob.arrayBuffer())).toBe(4);
+  });
+});
+
+describe('planExportAudio', () => {
+  it('ships the package files as they are when nothing has shifted', () => {
+    expect(planExportAudio(makePackage(), null)).toEqual({kind: 'raw'});
+    expect(planExportAudio(makePackage(), {ms: 0})).toEqual({kind: 'raw'});
+  });
+
+  it('pads, quantized to the package’s own rate, when the chart has shifted', () => {
+    expect(planExportAudio(makePackage(), {ms: 1000})).toEqual({
+      kind: 'padded',
+      padSamples: SAMPLE_RATE,
+    });
+  });
+
+  it('needs no audio in memory to export a chart that never shifted', () => {
+    expect(planExportAudio(null, null)).toEqual({kind: 'raw'});
+  });
+
+  it('refuses when the chart has shifted and the audio is not loaded', () => {
+    // The editor opens before the song has decoded, and a decode can fail.
+    // Exporting the files unpadded here would pair a chart moved by whole
+    // bars with audio that never moved, and nothing downstream could tell.
+    expect(planExportAudio(null, {ms: 1000})).toEqual({kind: 'blocked'});
   });
 });

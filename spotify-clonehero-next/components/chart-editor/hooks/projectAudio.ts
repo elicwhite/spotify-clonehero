@@ -21,6 +21,7 @@ import {DRUMS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AudioSource} from '../ExportDialog';
+import {anchorPadSamples} from './usePaddedAudio';
 import type {AudioStemInput, PaddedAudioMeta} from './usePaddedAudio';
 
 /** `interleaveAudioBuffer` produces stereo for every file, whatever the
@@ -136,6 +137,34 @@ export function packageHasDrumsAudio(pkg: DecodedPackageAudio): boolean {
     pkg.fullMixName.includes(DRUMS_STEM) ||
     pkg.stems.some(stem => stem.name.includes(DRUMS_STEM))
   );
+}
+
+/**
+ * What an export can do about the chart's leading silence, given the audio
+ * that is actually in memory.
+ *
+ * `raw` — no silence to account for, so the package's files ship verbatim.
+ * `padded` — the chart has moved and the decoded PCM is here to move the
+ * audio with it.
+ * `blocked` — the chart has moved and the PCM is NOT here, because the editor
+ * opens before the song finishes decoding and a decode can fail outright.
+ * There is no honest export in that state: shipping the files unpadded pairs
+ * a chart shifted by whole bars with audio that never moved, and nothing
+ * downstream can tell that happened.
+ */
+export type ExportAudioPlan =
+  | {kind: 'raw'}
+  | {kind: 'padded'; padSamples: number}
+  | {kind: 'blocked'};
+
+export function planExportAudio(
+  pkg: DecodedPackageAudio | null,
+  anchor: {ms: number} | null,
+): ExportAudioPlan {
+  const shifted = anchor != null && anchor.ms > 0;
+  if (!pkg) return shifted ? {kind: 'blocked'} : {kind: 'raw'};
+  const padSamples = anchorPadSamples(anchor, pkg.meta.sampleRate);
+  return padSamples > 0 ? {kind: 'padded', padSamples} : {kind: 'raw'};
 }
 
 /**

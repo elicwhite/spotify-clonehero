@@ -38,6 +38,7 @@ import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
+import {decodeAtRate} from '@/lib/audio-pipeline/decode-audio';
 import TrackEditPage from '../TrackEditPage';
 import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
 
@@ -350,6 +351,42 @@ describe('/chart-editor Stems list', () => {
       expect(screen.getByTestId('stem-row-song')).toBeInTheDocument();
       expect(screen.queryByTestId('stem-row-drums')).not.toBeInTheDocument();
     });
+  });
+
+});
+
+describe('/chart-editor when the audio cannot be loaded', () => {
+  // The editor opens on the chart before the song has decoded, so a decode
+  // that fails arrives at an editor the user is already working in. It stays
+  // open — losing the song is not worth throwing that away — but it must not
+  // look like a chart that simply has no audio, and it must not quietly
+  // export audio that no longer matches the chart.
+  const mockDecode = decodeAtRate as jest.Mock;
+
+  afterEach(() => {
+    mockDecode.mockReset();
+    mockDecode.mockImplementation(async () => ({
+      numberOfChannels: 2,
+      length: 8,
+      sampleRate: 44100,
+      duration: 8 / 44100,
+      getChannelData: () => new Float32Array(8),
+    }));
+  });
+
+  it('says so in the Stems section instead of showing a bare click row', async () => {
+    mockDecode.mockRejectedValue(new Error('corrupt audio'));
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    expect(
+      await screen.findByText(/Could not load this song’s audio/i),
+    ).toBeInTheDocument();
+    // Still editable: the chart is what the editor is for.
+    expect(screen.getByTestId('stem-row-click')).toBeInTheDocument();
   });
 });
 

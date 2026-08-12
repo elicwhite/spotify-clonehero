@@ -50,10 +50,11 @@ import {audioSamples} from './audioSamples';
 import {stemOriginsOf} from './sidebar/StemsMixer';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
-import {anchorPadSamples, usePaddedAudio} from './hooks/usePaddedAudio';
+import {usePaddedAudio} from './hooks/usePaddedAudio';
 import {
   decodeChartPackageAudio,
   padPackageAudio,
+  planExportAudio,
   PACKAGE_AUDIO_CHANNELS,
   type DecodedPackageAudio,
 } from './hooks/projectAudio';
@@ -589,6 +590,11 @@ function TrackEditEditor({
   // and editable throughout — this only drives the "not here yet" affordances
   // on the surfaces that need the samples.
   const [audioLoading, setAudioLoading] = useState(initialHasAudio);
+  // The project has audio, and reading or decoding it failed. The editor
+  // stays open on the chart — losing the song is not worth throwing the work
+  // away — but every surface that draws or plays it has to say so rather than
+  // look like a chart that simply has no audio.
+  const [audioError, setAudioError] = useState(false);
   // Auto-save: write edited chart to OPFS
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
@@ -718,6 +724,7 @@ function TrackEditEditor({
         const projectHasAudio = meta.hasAudio ?? true;
         setHasAudio(projectHasAudio);
         setAudioLoading(projectHasAudio);
+        setAudioError(false);
         dispatch({type: 'SET_CHART_DOC', chartDoc});
         // The editor starts with every instrument's highest charted
         // difficulty visible. Other tracks remain available in the sidebar
@@ -763,6 +770,7 @@ function TrackEditEditor({
           // on against the click alone.
           console.error('Could not load this project’s audio:', err);
           toast.error('Could not load this project’s audio');
+          setAudioError(true);
         } finally {
           if (!cancelled) setAudioLoading(false);
         }
@@ -947,14 +955,26 @@ function TrackEditEditor({
    * the decoded PCM playback already uses and re-encoded. Only the
    * package's own audio is exported — a separated stem is a mixing aid, not
    * part of the chart. The stored audio at rest is never modified.
+   *
+   * Padding needs that decoded PCM, and it is not always there: the editor
+   * opens before the song has finished decoding, and a decode can fail
+   * outright. Shipping the package's files unpadded in that window would put
+   * a chart shifted by whole bars against audio that never moved — wrong in a
+   * way nothing downstream can detect. Refusing is the honest answer.
    */
   const rawAudioSources = chartPackage.getAudioSources;
   const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
     const anchor = state.chartDoc ? getAudioAnchor(state.chartDoc) : null;
-    if (!packageAudio) return rawAudioSources();
-    const padSamples = anchorPadSamples(anchor, packageAudio.meta.sampleRate);
-    if (padSamples <= 0) return rawAudioSources();
-    return padPackageAudio(packageAudio, padSamples);
+    const plan = planExportAudio(packageAudio, anchor);
+    if (plan.kind === 'blocked') {
+      const message =
+        'This chart has leading silence, and its audio is not loaded — an ' +
+        'export would not line up. Wait for the audio, or reload the project.';
+      toast.error(message);
+      throw new Error(message);
+    }
+    if (plan.kind === 'raw') return rawAudioSources();
+    return padPackageAudio(packageAudio!, plan.padSamples);
   }, [state.chartDoc, packageAudio, rawAudioSources]);
 
   /**
@@ -1038,6 +1058,7 @@ function TrackEditEditor({
         await store.updateProject(projectId, {durationSeconds});
         setProjectMeta(prev => (prev ? {...prev, durationSeconds} : prev));
         setPackageAudio(decoded);
+        setAudioError(false);
         if (!hasAudio && state.chartDoc) {
           dispatch({
             type: 'SET_CHART_METADATA',
@@ -1120,8 +1141,9 @@ function TrackEditEditor({
         stemsMixer={{
           stemOrigins: stemOrigins,
           onAddStem: input => void handleAddStem(input),
-          emptyState: !hasAudio && !audioLoading,
+          emptyState: !hasAudio && !audioLoading && !audioError,
           loadingAudio: audioLoading,
+          audioError,
         }}
         headerExtra={headerExtra}
         leftPanelChildren={leftPanelChildren}
