@@ -29,17 +29,17 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 // ---------------------------------------------------------------------------
 
 /**
- * Pads and re-encodes the host's audio for the `audioAnchor` position the
- * chart is ABOUT to have, off the main thread, and holds the result for the
- * rebuild that edit triggers. Published by `usePaddedAudio` (the only owner
- * of the original PCM) and called by the Chart Assist leading-silence run,
- * so the encode happens under a progress card instead of inside the silent
- * rebuild that follows the command.
+ * Pads the host's audio for the `audioAnchor` position the chart is ABOUT to
+ * have, off the main thread, and holds the result for the rebuild that edit
+ * triggers. Published by `usePaddedAudio` (the only owner of the original
+ * PCM) and called by the Chart Assist leading-silence run, so the padding
+ * happens under a progress card instead of inside the silent rebuild that
+ * follows the command.
  *
  * Resolving means the audio is ready, not that anything has changed yet:
  * nothing is installed until the chart's `audioAnchor` actually moves. A
  * held result that no longer matches what the rebuild needs is discarded and
- * the rebuild encodes for itself.
+ * the rebuild pads for itself.
  */
 export type PadAudioAhead = (
   /** Chart ms that original audio sample 0 will sit at after the edit — the

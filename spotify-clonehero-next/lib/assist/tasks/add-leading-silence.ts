@@ -1,24 +1,23 @@
 /**
  * The `add-leading-silence` assist task: work out how many whole bars of
- * silence the chart needs in front (plan 0064), and pad + re-encode the
- * host's audio for that amount off the main thread before anything is
- * applied.
+ * silence the chart needs in front (plan 0064), and pad the host's audio for
+ * that amount off the main thread before anything is applied.
  *
  * Measuring is chart math and costs under a millisecond. The audio is what
- * costs the time: every track has to be re-padded and re-WAV-encoded, about
- * 120 ms per four minutes of 44.1 kHz stereo per track, which is why that
- * half runs in `pad-encode-worker.ts` under a progress card rather than
- * inside the click handler.
+ * costs the time: every track has to be re-padded, which is a fresh buffer
+ * the length of the whole song per track, so that half runs in
+ * `pad-tracks-worker.ts` under a progress card rather than inside the click
+ * handler.
  *
- * The doc is read TWICE — once to size the pad, and once after the encode to
+ * The doc is read TWICE — once to size the pad, and once after the pad to
  * produce the plan that actually gets applied. The gap between them is a
  * second of worker time in which the user can still edit the chart, and a
  * plan measured before a tempo change would pad against a chart that no
  * longer exists. Re-measuring at the end costs nothing and means the applied
  * plan always describes the live doc; if the pad amount moved, the
- * pre-encoded audio simply doesn't match and the rebuild encodes again (also
- * in a worker), rather than the run quietly installing audio for a chart
- * that changed.
+ * pre-padded audio simply doesn't match and the rebuild pads again (also in
+ * a worker), rather than the run quietly installing audio for a chart that
+ * changed.
  */
 
 import {getAudioAnchor, planLeadingSilence} from '@/lib/chart-edit';
@@ -29,8 +28,8 @@ import type {PlannedStep} from '../run-to-steps';
 import type {AssistTaskDef} from './types';
 
 /**
- * Pads and re-encodes the host's audio for the `audioAnchor` position the
- * chart is about to have, ahead of the edit that needs it. Matches
+ * Pads the host's audio for the `audioAnchor` position the chart is about to
+ * have, ahead of the edit that needs it. Matches
  * `PadAudioAhead` in
  * `components/chart-editor/AudioServiceContext.tsx`; declared structurally
  * here so this module stays free of React and of the editor's component

@@ -1,5 +1,10 @@
 import {getBasename} from '../src-shared/utils';
 import {
+  decodedBufferFor,
+  interleavedPcmFor,
+  rememberInterleaved,
+} from './decodedPcm';
+import {
   evaluateLoop,
   isUsableLoopRegion,
   seekEscapesLoop,
@@ -35,14 +40,20 @@ export interface TempoConfig {
 }
 
 /**
- * Mono PCM plus the rate it was rendered at, for audio this app synthesizes
- * rather than decodes. Handing these straight to {@link AudioManager.replaceTrack}
- * skips a WAV encode and a `decodeAudioData` that only ever existed to get
- * synthesized samples back into an `AudioBuffer` they started next to.
+ * Decoded samples plus the rate they are in, for audio this app already holds
+ * as PCM — synthesized (the metronome click) or decoded once and retained (a
+ * chart package's audio, an AI-separated stem). Handing these straight to
+ * {@link AudioManager.replaceTrack} or the constructor skips a WAV encode and
+ * a `decodeAudioData` that only ever existed to get samples back into an
+ * `AudioBuffer` they started next to — on an album-length song that round trip
+ * is several seconds and half a gigabyte of intermediate bytes.
  */
 export interface TrackPcm {
+  /** Interleaved when `channels` > 1: [L0, R0, L1, R1, ...]. */
   samples: Float32Array;
   sampleRate: number;
+  /** Defaults to 1 (mono), which is what the synthesized click is. */
+  channels?: number;
 }
 
 /**
@@ -205,13 +216,40 @@ export class AudioManager {
     }
   }
 
-  #pcmToBuffer({samples, sampleRate}: TrackPcm): AudioBuffer {
+  #pcmToBuffer({samples, sampleRate, channels = 1}: TrackPcm): AudioBuffer {
+    // These samples may already exist as the buffer they were decoded into
+    // (`decodedPcm.ts`), in which case there is nothing to rebuild.
+    const decoded = decodedBufferFor(samples, sampleRate, channels);
+    if (decoded) {
+      rememberInterleaved(decoded, samples, channels);
+      return decoded;
+    }
+
+    // `createBuffer` rejects a zero length, so an empty track becomes one
+    // frame of silence. `wholeFrames` stays the real count so the copy below
+    // never reads past the samples it was given — reading one frame that
+    // isn't there would write `NaN` into the graph rather than silence.
+    const wholeFrames = Math.floor(samples.length / channels);
     const buffer = this.#context.createBuffer(
-      1,
-      Math.max(1, samples.length),
+      channels,
+      Math.max(1, wholeFrames),
       sampleRate,
     );
-    buffer.getChannelData(0).set(samples);
+    if (channels === 1) {
+      buffer.getChannelData(0).set(samples.subarray(0, wholeFrames));
+      rememberInterleaved(buffer, samples, channels);
+      return buffer;
+    }
+    // De-interleave into the buffer's planar channels. This loop is the whole
+    // cost of admitting PCM directly, and it is a fraction of the WAV encode
+    // plus `decodeAudioData` it replaces.
+    for (let channel = 0; channel < channels; channel++) {
+      const out = buffer.getChannelData(channel);
+      for (let frame = 0; frame < wholeFrames; frame++) {
+        out[frame] = samples[frame * channels + channel];
+      }
+    }
+    rememberInterleaved(buffer, samples, channels);
     return buffer;
   }
 
@@ -511,14 +549,24 @@ export class AudioManager {
   /**
    * Interleaved PCM for a track's primary decoded buffer, for waveform
    * display (piano-roll source selector). Returns `null` for an unknown
-   * track or one whose buffer hasn't decoded yet. The data is a copy — the
-   * caller owns it and can't perturb playback.
+   * track or one whose buffer hasn't decoded yet.
+   *
+   * READ-ONLY. A track built from samples the caller already had hands those
+   * same samples back rather than duplicating the song; only a track decoded
+   * from encoded bytes produces a fresh copy.
    */
   getTrackPcm(
     trackName: string,
   ): {data: Float32Array; channels: number} | null {
     const track = this.#tracks[trackName];
-    return track ? track.interleavedPcm() : null;
+    if (!track) return null;
+    // The samples this track was built from, when they are still around —
+    // shared, not copied. Interleaving a whole song back out of Web Audio is
+    // over a second on an album-length chart, and the answer is a buffer the
+    // editor already holds.
+    const buffer = track.primaryBuffer();
+    const known = buffer ? interleavedPcmFor(buffer) : undefined;
+    return known ?? track.interleavedPcm();
   }
 
   get delay() {
@@ -957,6 +1005,11 @@ class AudioTrack {
    * peaks). A copy, so the caller can't perturb the live graph. `null` when
    * no buffer has decoded.
    */
+  /** The buffer this track draws its waveform from, if it has one. */
+  primaryBuffer(): AudioBuffer | null {
+    return this.#audioBuffers[0] ?? null;
+  }
+
   interleavedPcm(): {data: Float32Array; channels: number} | null {
     const buffer = this.#audioBuffers[0];
     if (!buffer) return null;

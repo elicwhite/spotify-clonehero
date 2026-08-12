@@ -6,9 +6,9 @@
  * measures with `AddLeadingSilenceCommand`.
  *
  * The measuring is chart math and is instant. Padding the AUDIO to match is
- * not — every track is re-encoded — so the task does that in a worker, ahead
- * of the command, and the card reports it as a step like every other assist
- * action.
+ * not — every track gets a fresh buffer the length of the whole song — so the
+ * task does that in a worker, ahead of the command, and the card reports it
+ * as a step like every other assist action.
  */
 
 import {useCallback, useEffect, useRef} from 'react';

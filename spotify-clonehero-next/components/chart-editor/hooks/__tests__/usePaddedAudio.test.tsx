@@ -5,17 +5,12 @@
  * `usePaddedAudio` stem-list generalization (plan 0074 Phase 5 Task 5a).
  *
  * `AudioManager` is stubbed at the boundary (`@/lib/preview/audioManager`) —
- * these tests never touch real Web Audio — capturing the audio-file names
- * its fake constructor receives so we can assert one WAV per stem, plus
- * `song.wav` and `click.wav`, is produced for an arbitrary stem list.
+ * these tests never touch real Web Audio — capturing the audio sources its
+ * fake constructor receives, so we can assert one track per stem plus the
+ * full mix and the click, for an arbitrary stem list.
  */
 
 import '@testing-library/jest-dom';
-
-// jsdom's Blob has no `arrayBuffer()`; `encodeWavBlob` (used inside
-// `buildPaddedAudioManager`) relies on it. Node's Blob implementation
-// supports it and is otherwise spec-compatible, so swap it in for tests.
-(globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
 import {act} from 'react';
 import {renderHook, waitFor} from '@testing-library/react';
@@ -23,6 +18,10 @@ import {createEmptyChart} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {setAudioAnchor} from '@/lib/chart-edit';
 import type {AudioStemInput} from '../usePaddedAudio';
+import {
+  decodedBufferFor,
+  rememberDecodedBuffer,
+} from '../../../../lib/preview/decodedPcm';
 import {
   AudioServiceProvider,
   useAudioServiceContext,
@@ -34,7 +33,8 @@ import {
 
 interface CapturedFile {
   fileName: string;
-  data: Uint8Array;
+  pcm?: {samples: Float32Array; sampleRate: number; channels?: number};
+  data?: Uint8Array;
 }
 
 let lastCapturedFiles: CapturedFile[] = [];
@@ -83,17 +83,17 @@ jest.mock('../../../../lib/preview/clickTrack', () => ({
   ),
 }));
 
-// The pad/encode worker client, wrapped so tests can count how many times a
-// build actually encoded. The real implementation runs inline here (jsdom
-// has no Worker), so results stay real; only the call count is observed.
+// The pad worker client, wrapped so tests can count how many times a build
+// actually padded. The real implementation runs inline here (jsdom has no
+// Worker), so results stay real; only the call count is observed.
 const encodeCalls = {count: 0};
-jest.mock('../../../../lib/audio/pad-encode-client', () => {
-  const actual = jest.requireActual('../../../../lib/audio/pad-encode-client');
+jest.mock('../../../../lib/audio/pad-tracks-client', () => {
+  const actual = jest.requireActual('../../../../lib/audio/pad-tracks-client');
   return {
     ...actual,
-    padAndEncodeTracks: jest.fn((tracks: unknown, options: unknown) => {
+    padTracksInWorker: jest.fn((tracks: unknown, options: unknown) => {
       encodeCalls.count++;
-      return actual.padAndEncodeTracks(tracks, options);
+      return actual.padTracksInWorker(tracks, options);
     }),
   };
 });
@@ -135,7 +135,7 @@ describe('buildPaddedAudioManager — N-stem construction (plan 0074 Task 5a)', 
     lastCapturedFiles = [];
   });
 
-  it('produces one WAV per stem, correctly named, plus song.wav and click.wav', async () => {
+  it('produces one track per stem, correctly named, plus song and click', async () => {
     const chartDoc = makeChartDoc();
     const fullMix = interleavedPcm(100);
     const stems = [
@@ -168,7 +168,105 @@ describe('buildPaddedAudioManager — N-stem construction (plan 0074 Task 5a)', 
     expect(fileNames).toHaveLength(4);
   });
 
-  it('produces only song.wav and click.wav for an empty stem list', async () => {
+  it('hands every track to the manager as PCM, never as an encoded file', async () => {
+    // The manager builds its own AudioBuffers from these samples. Encoding a
+    // WAV for it to decode again cost seconds of every album-length load.
+    await buildPaddedAudioManager(
+      0,
+      AUDIO_META,
+      interleavedPcm(100),
+      [{name: 'bass', pcm: interleavedPcm(100), origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+    );
+
+    for (const file of lastCapturedFiles) {
+      expect(file.data).toBeUndefined();
+      expect(file.pcm).toBeDefined();
+    }
+    const song = lastCapturedFiles.find(f => f.fileName === 'song.wav');
+    expect(song!.pcm).toMatchObject({
+      sampleRate: AUDIO_META.sampleRate,
+      channels: AUDIO_META.channels,
+    });
+  });
+
+  it('hands over the source samples themselves when there is no silence to add', async () => {
+    // A zero pad is what every load of a chart without leading silence does.
+    // Nothing is copied, so nothing is spent: the manager gets the very PCM
+    // the host decoded.
+    const fullMix = interleavedPcm(100);
+    const bass = interleavedPcm(100);
+
+    const {paddedFullMixPcm, paddedStems} = await buildPaddedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      [{name: 'bass', pcm: bass, origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+    );
+
+    expect(paddedFullMixPcm).toBe(fullMix);
+    expect(paddedStems[0].pcm).toBe(bass);
+    expect(
+      lastCapturedFiles.find(f => f.fileName === 'song.wav')!.pcm!.samples,
+    ).toBe(fullMix);
+    expect(
+      lastCapturedFiles.find(f => f.fileName === 'bass.wav')!.pcm!.samples,
+    ).toBe(bass);
+  });
+
+  it('releases the decoded buffers of source samples a pad has superseded', async () => {
+    // The manager plays the PADDED copies, so the buffers the host's
+    // originals were decoded into are dead — and each is a second full copy
+    // of the song, held for as long as the host keeps its PCM.
+    const fullMix = interleavedPcm(100);
+    const bass = interleavedPcm(100);
+    const buffer = {
+      sampleRate: AUDIO_META.sampleRate,
+      numberOfChannels: AUDIO_META.channels,
+    } as AudioBuffer;
+    rememberDecodedBuffer(fullMix, buffer);
+    rememberDecodedBuffer(bass, buffer);
+
+    await buildPaddedAudioManager(
+      50,
+      AUDIO_META,
+      fullMix,
+      [{name: 'bass', pcm: bass, origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+    );
+
+    const {sampleRate, channels} = AUDIO_META;
+    expect(decodedBufferFor(fullMix, sampleRate, channels)).toBeUndefined();
+    expect(decodedBufferFor(bass, sampleRate, channels)).toBeUndefined();
+  });
+
+  it('keeps them when there was no pad, since those buffers are what plays', async () => {
+    const fullMix = interleavedPcm(100);
+    const buffer = {
+      sampleRate: AUDIO_META.sampleRate,
+      numberOfChannels: AUDIO_META.channels,
+    } as AudioBuffer;
+    rememberDecodedBuffer(fullMix, buffer);
+
+    await buildPaddedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      [],
+      makeChartDoc(),
+      () => {},
+    );
+
+    expect(
+      decodedBufferFor(fullMix, AUDIO_META.sampleRate, AUDIO_META.channels),
+    ).toBe(buffer);
+  });
+
+  it('produces only the full mix and the click for an empty stem list', async () => {
     const chartDoc = makeChartDoc();
     const fullMix = interleavedPcm(100);
 
@@ -956,7 +1054,8 @@ describe('usePaddedAudio — pre-padding for an anchor change', () => {
     const afterFirst = encodeCalls.count;
 
     // Back to no silence, then to the same 500 ms anchor again: the second
-    // trip has to encode for itself.
+    // trip has to pad for itself. Only the 500 ms trip reaches the worker —
+    // a zero pad has nothing to do and uses the source PCM by reference.
     rerender({chartDoc: makeChartDoc()});
     await waitFor(() =>
       expect(result.current.audio.fullMixPcm?.length).toBe(100 * 2),
@@ -966,7 +1065,7 @@ describe('usePaddedAudio — pre-padding for an anchor change', () => {
       expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
     );
 
-    expect(encodeCalls.count).toBe(afterFirst + 2);
+    expect(encodeCalls.count).toBe(afterFirst + 1);
   });
 
   it('reports pad progress per track', async () => {

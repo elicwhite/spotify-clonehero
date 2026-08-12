@@ -15,12 +15,17 @@
  * so repeated anchor/stem-list changes always re-pad from source rather
  * than compounding padding on top of a previously-padded buffer.
  *
- * The padding and WAV encoding themselves run in `pad-encode-worker.ts`.
- * They are per-sample work over the whole song — around 120 ms per four
- * minutes of 44.1 kHz stereo, per track — and an anchor change is something
- * a user does from a button, so none of it may land on the main thread. A
- * surface that is ABOUT to move the anchor can pay for that encode in
- * advance, under its own progress UI, via {@link PadAudioAhead}.
+ * The padded samples go into `AudioManager` as PCM, not as WAV files: it
+ * builds its `AudioBuffer`s from them directly, so nothing on this path
+ * encodes a container or decodes one back.
+ *
+ * The padding itself runs in `pad-tracks-worker.ts`. It is memory traffic
+ * over the whole song, per track, and an anchor change is something a user
+ * does from a button, so it may not land on the main thread. A surface that
+ * is ABOUT to move the anchor can pay for it in advance, under its own
+ * progress UI, via {@link PadAudioAhead}. A zero anchor — every load of a
+ * chart that has no leading silence — pads nothing and skips the worker
+ * entirely.
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
@@ -32,8 +37,9 @@ import {
   clickTrackSignature,
   generateBeatClickTrackSamples,
 } from '@/lib/preview/clickTrack';
-import {padAndEncodeTracks} from '@/lib/audio/pad-encode-client';
-import type {PadEncodedTrack} from '@/lib/audio/pad-encode';
+import {padTracksInWorker} from '@/lib/audio/pad-tracks-client';
+import type {PaddedTrack} from '@/lib/audio/pad-tracks';
+import {forgetDecodedBuffer} from '@/lib/preview/decodedPcm';
 import {getAudioAnchor} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {useAudioServiceContext} from '../AudioServiceContext';
@@ -82,14 +88,14 @@ interface BuildTarget {
   silentDurationSeconds: number | undefined;
 }
 
-/** What `padAudioAhead` encoded, and what it encoded FROM — a build may only
+/** What `padAudioAhead` padded, and what it padded FROM — a build may only
  *  use it when it is building exactly that. */
 interface PrebuiltPad {
   padSamples: number;
   fullMixPcm: Float32Array | null;
   fullMixName: string;
   stems: ReadonlyArray<AudioStemInput>;
-  encoded: PadEncodedTrack[];
+  padded: PaddedTrack[];
 }
 
 /** The click stem a live `AudioManager` is carrying. */
@@ -170,9 +176,9 @@ function stemsEqual(
   return true;
 }
 
-/** The tracks a build pads and encodes, in the order the results come back:
- *  the full mix first (when there is one), then the stems as given. */
-function tracksToEncode(
+/** The tracks a build pads, in the order the results come back: the full mix
+ *  first (when there is one), then the stems as given. */
+function tracksToPad(
   fullMixPcm: Float32Array | null,
   fullMixName: string,
   stems: ReadonlyArray<AudioStemInput>,
@@ -184,20 +190,35 @@ function tracksToEncode(
 
 /** Extra inputs a build can take beyond the audio itself. */
 export interface BuildPaddedAudioOptions {
-  /** Already-padded, already-encoded tracks for this exact build, from a
-   *  {@link PadAudioAhead} run. Used verbatim when supplied, so the encode
+  /** Already-padded tracks for this exact build, from a
+   *  {@link PadAudioAhead} run. Used verbatim when supplied, so the padding
    *  is not repeated; the caller is responsible for only passing results
    *  that match the pad amount and source PCM being built from. */
-  prebuilt?: ReadonlyArray<PadEncodedTrack> | undefined;
-  /** Forwarded to the pad/encode worker client (tests inject a fake). */
+  prebuilt?: ReadonlyArray<PaddedTrack> | undefined;
+  /** Forwarded to the pad worker client (tests inject a fake). */
   createWorker?: (() => Worker) | null | undefined;
+  /**
+   * The click is all this project will ever have to play, so it starts
+   * audible rather than silent ({@link defaultVolumeFor}). Defaults to
+   * "there is no full mix", which is right for a chart with no audio; a host
+   * whose audio is merely still loading passes `false`, or the metronome
+   * would come up loud and — carried across the rebuild that installs the
+   * song — stay that way.
+   */
+  silentProject?: boolean | undefined;
 }
 
 /**
  * Build a fresh AudioManager from ORIGINAL (unpadded) PCM buffers and a
- * pad-sample count. Pads the full mix and every stem identically and WAV-
- * encodes them (one WAV per stem, named `${stem.name}.wav`) in a worker,
- * then constructs the manager.
+ * pad-sample count. Pads the full mix and every stem identically in a worker,
+ * then constructs the manager from those samples directly — each track's
+ * `AudioBuffer` is filled from its PCM, so no WAV is written and none is
+ * decoded back.
+ *
+ * A zero pad short-circuits the worker: `padPcmStart` would return the source
+ * buffers unchanged, so the build uses them by reference and the round trip
+ * (a copy in, a copy out) is skipped. That is every load of a chart with no
+ * leading silence.
  *
  * `fullMixName` is the mixer/track name the full mix registers under. It
  * defaults to `song`, but a package with no `song` file promotes one of its
@@ -217,7 +238,7 @@ export async function buildPaddedAudioManager(
   onSongEnded: () => void,
   fullMixName = 'song',
   silentDurationSeconds = 0,
-  {prebuilt, createWorker}: BuildPaddedAudioOptions = {},
+  {prebuilt, createWorker, silentProject}: BuildPaddedAudioOptions = {},
 ): Promise<{
   audioManager: AudioManager;
   paddedFullMixPcm: Float32Array | null;
@@ -231,34 +252,53 @@ export async function buildPaddedAudioManager(
    *  manager's duration and the signature would never settle. */
   clickDurationMs: number;
 }> {
-  const encoded =
+  const sources = tracksToPad(fullMixPcm, fullMixName, stems);
+  const padded =
     prebuilt ??
-    (await padAndEncodeTracks(tracksToEncode(fullMixPcm, fullMixName, stems), {
-      padSamples,
-      sampleRate: meta.sampleRate,
-      channels: meta.channels,
-      createWorker,
-    }));
+    (padSamples <= 0
+      ? sources.map(track => ({name: track.name, paddedPcm: track.pcm}))
+      : await padTracksInWorker(sources, {
+          padSamples,
+          channels: meta.channels,
+          createWorker,
+        }));
 
-  const audioFiles: AudioSource[] = [];
-  for (const track of encoded) {
-    audioFiles.push({fileName: `${track.name}.wav`, data: track.wav});
+  // Padding produced fresh buffers, so the `AudioBuffer`s the host's ORIGINAL
+  // samples were decoded into are not what plays any more. Releasing them
+  // hands back a second full copy of the song (a gigabyte on an album-length
+  // chart) that would otherwise stay reachable for the rest of the session,
+  // just in case the anchor ever returns to zero. It costs that one rebuild
+  // a de-interleave.
+  if (padded.some((track, index) => track.paddedPcm !== sources[index]?.pcm)) {
+    for (const track of sources) forgetDecodedBuffer(track.pcm);
   }
 
-  // The full mix leads `encoded` when there is one, so the stems line up
+  const audioFiles: AudioSource[] = [];
+  for (const track of padded) {
+    audioFiles.push({
+      fileName: `${track.name}.wav`,
+      pcm: {
+        samples: track.paddedPcm,
+        sampleRate: meta.sampleRate,
+        channels: meta.channels,
+      },
+    });
+  }
+
+  // The full mix leads `padded` when there is one, so the stems line up
   // with the tail of the list, in order.
   const stemsOffset = fullMixPcm ? 1 : 0;
-  const paddedFullMixPcm = fullMixPcm ? encoded[0].paddedPcm : null;
+  const paddedFullMixPcm = fullMixPcm ? padded[0].paddedPcm : null;
   const paddedStems: AudioStem[] = stems.map((stem, index) => ({
     name: stem.name,
-    pcm: encoded[stemsOffset + index].paddedPcm,
+    pcm: padded[stemsOffset + index].paddedPcm,
     origin: stem.origin,
   }));
 
   // Synthesized metronome click, registered as its own "click" stem so it
   // gets the same playback-speed/seek sync as every other track. Volume is
-  // silent (0) until the user raises it in the stem-volumes UI — the WAV
-  // itself carries fixed relative loudness for accented vs. unaccented
+  // silent (0) until the user raises it in the stem-volumes UI — the samples
+  // themselves carry fixed relative loudness for accented vs. unaccented
   // beats; real-time loudness is controlled entirely via setVolume.
   const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
   const durationMs = paddedFullMixPcm
@@ -276,8 +316,9 @@ export async function buildPaddedAudioManager(
   audioManager.setChartDelay(chartDelayMs / 1000);
   audioManager.setVolume(
     CLICK_TRACK_NAME,
-    defaultVolumeFor(CLICK_TRACK_NAME, {silentProject: !paddedFullMixPcm}) /
-      100,
+    defaultVolumeFor(CLICK_TRACK_NAME, {
+      silentProject: silentProject ?? !paddedFullMixPcm,
+    }) / 100,
   );
   // A stem that arrives muted on the mixer has to be silent from the first
   // sample, not from the mixer's first commit: the manager may resume
@@ -318,11 +359,18 @@ export interface UsePaddedAudioParams {
    *  carries. */
   stems?: ReadonlyArray<AudioStemInput>;
   /**
-   * Build a click-only AudioManager spanning this many seconds when the
-   * project has no audio. Mutually exclusive with `fullMixPcm`: whenever a
-   * full mix is present it decides the length instead.
+   * Build a click-only AudioManager spanning this many seconds when there is
+   * no decoded audio. Mutually exclusive with `fullMixPcm`: whenever a full
+   * mix is present it decides the length instead.
    */
   silentDurationSeconds?: number | undefined;
+  /**
+   * This project has no audio of its own, as opposed to having some that
+   * hasn't finished decoding. Decides only whether the click comes up
+   * audible — see {@link BuildPaddedAudioOptions.silentProject}. Defaults to
+   * "there is no full mix".
+   */
+  silentProject?: boolean | undefined;
   onSongEnded: () => void;
 }
 
@@ -353,6 +401,7 @@ export function usePaddedAudio({
   fullMixName = 'song',
   stems = [],
   silentDurationSeconds,
+  silentProject,
   onSongEnded,
 }: UsePaddedAudioParams): UsePaddedAudioResult {
   const {
@@ -425,16 +474,16 @@ export function usePaddedAudio({
   }, []);
 
   /**
-   * Pads and WAV-encodes the current audio for `padSamples` in a worker and
-   * holds the result for the rebuild the caller is about to trigger. Never
-   * installs anything itself: the AudioManager is only ever swapped by the
-   * build effect below, when the chart's anchor actually moves.
+   * Pads the current audio for `padSamples` in a worker and holds the result
+   * for the rebuild the caller is about to trigger. Never installs anything
+   * itself: the AudioManager is only ever swapped by the build effect below,
+   * when the chart's anchor actually moves.
    */
   const padAudioAhead = useCallback<PadAudioAhead>(
     async (anchorMs, {signal, onProgress}) => {
       const inputs = inputsRef.current;
       const meta = inputs.audioMeta;
-      const tracks = tracksToEncode(
+      const tracks = tracksToPad(
         inputs.fullMixPcm,
         inputs.fullMixName,
         inputs.stems,
@@ -444,9 +493,8 @@ export function usePaddedAudio({
       if (!meta || tracks.length === 0) return;
 
       const padSamples = anchorPadSamples({ms: anchorMs}, meta.sampleRate);
-      const encoded = await padAndEncodeTracks(tracks, {
+      const padded = await padTracksInWorker(tracks, {
         padSamples,
-        sampleRate: meta.sampleRate,
         channels: meta.channels,
         signal,
         onProgress: p =>
@@ -457,7 +505,7 @@ export function usePaddedAudio({
         fullMixPcm: inputs.fullMixPcm,
         fullMixName: inputs.fullMixName,
         stems: inputs.stems,
-        encoded,
+        padded,
       };
     },
     [],
@@ -497,10 +545,10 @@ export function usePaddedAudio({
     const isFirstBuild = builtRef.current === null;
     inFlightRef.current = nextTarget;
 
-    // Claim any pre-encoded audio, but only when it was made for exactly
+    // Claim any pre-padded audio, but only when it was made for exactly
     // this build. A run whose plan changed under it (a tempo edit while the
-    // encode was in flight) leaves a result for a pad amount this build no
-    // longer wants, and the honest response is to encode again rather than
+    // padding was in flight) leaves a result for a pad amount this build no
+    // longer wants, and the honest response is to pad again rather than
     // install audio that doesn't match the chart. Cleared either way, so a
     // stale result never reaches a later build and never keeps a second copy
     // of the song's samples alive.
@@ -512,7 +560,7 @@ export function usePaddedAudio({
       claimed.fullMixPcm === nextTarget.fullMixPcm &&
       claimed.fullMixName === fullMixName &&
       stemsEqual(claimed.stems, stems)
-        ? claimed.encoded
+        ? claimed.padded
         : undefined;
 
     (async () => {
@@ -542,7 +590,7 @@ export function usePaddedAudio({
           onSongEnded,
           fullMixName,
           silentDurationSeconds ?? 0,
-          {prebuilt},
+          {prebuilt, silentProject},
         );
 
         if (!mountedRef.current || token !== rebuildTokenRef.current) {
@@ -597,6 +645,7 @@ export function usePaddedAudio({
     fullMixName,
     stems,
     silentDurationSeconds,
+    silentProject,
     onSongEnded,
     audioManagerRef,
     publishAudioManager,
