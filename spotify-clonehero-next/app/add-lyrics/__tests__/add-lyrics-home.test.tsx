@@ -92,6 +92,14 @@ jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
   decodeAndResampleTo44k: jest.fn(async () => fakeAudioBuffer()),
 }));
 
+// Walking this flow fires analytics, and with no GA script loaded
+// @next/third-parties warns on every event. lib/analytics/track.ts already
+// swallows analytics failures, but a warning is not throwable, so the only
+// way to keep it out of the run is to not reach the real sendGAEvent.
+jest.mock('@next/third-parties/google', () => ({
+  sendGAEvent: jest.fn(),
+}));
+
 jest.mock('../../../lib/audio-pipeline/lyrics-audio', () => ({
   resampleTo16kMono: jest.fn(),
   mixStemsToAudioBuffer: jest.fn(async () => fakeAudioBuffer()),
