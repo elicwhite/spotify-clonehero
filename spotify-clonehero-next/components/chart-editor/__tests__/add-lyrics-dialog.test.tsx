@@ -32,6 +32,15 @@ jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
   readProjectAudioBytes: jest.fn(async () => new ArrayBuffer(4)),
 }));
 
+// Opening the dialog preloads the alignment model, which spawns a worker.
+// jsdom has no Worker, so the real module throws and the preload is swallowed
+// by its own catch — the dialog would never be tested against a preload that
+// succeeds. Stub the boundary like add-lyrics-home.test.tsx does.
+jest.mock('../../../lib/lyrics-align/aligner', () => ({
+  init: jest.fn(async () => {}),
+  alignVocals: jest.fn(),
+}));
+
 interface CapturedRun {
   ctx: any;
   signal: AbortSignal;

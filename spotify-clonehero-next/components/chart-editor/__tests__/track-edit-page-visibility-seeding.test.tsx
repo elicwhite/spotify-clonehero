@@ -65,9 +65,20 @@ jest.mock('../../../lib/preview/audioManager', () => ({
     audioFiles: {fileName: string}[],
   ) {
     this.ready = Promise.resolve();
+    this.duration = 300;
+    this.isPlaying = false;
+    this.chartTime = 0;
     this.trackNames = audioFiles.map(f => f.fileName);
     this.setChartDelay = jest.fn();
     this.setVolume = jest.fn();
+    // usePaddedAudio carries mixer state across a rebuild by reading
+    // getVolume for every name in trackNames, then pauses the old manager.
+    // Without these the rebuild throws on the first track and is swallowed by
+    // its own catch, so the audio under test is silently never rebuilt.
+    this.getVolume = jest.fn(() => 1);
+    this.pause = jest.fn(async () => {});
+    this.resume = jest.fn(async () => {});
+    this.seekToChartTime = jest.fn(async () => {});
     this.setLoopRegion = jest.fn();
     this.destroy = jest.fn();
   }),

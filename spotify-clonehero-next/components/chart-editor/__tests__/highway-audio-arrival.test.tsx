@@ -24,7 +24,7 @@
 
 import '@testing-library/jest-dom';
 import {useEffect} from 'react';
-import {render, screen} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
 import {
   ChartEditorProvider,
@@ -88,7 +88,7 @@ function Harness({
   );
 }
 
-function renderHighway(props: {
+async function renderHighway(props: {
   audioManager: AudioManager;
   audioData?: AudioSamples | undefined;
   audioLoading?: boolean | undefined;
@@ -101,8 +101,23 @@ function renderHighway(props: {
       </ChartEditorProvider>
     </AudioServiceProvider>
   );
-  const result = render(tree(props));
-  return {...result, update: (p: typeof props) => result.rerender(tree(p))};
+  // Mounting a lane starts an async stage handshake that ends in a setState
+  // (useStageHighway's `setVersion`). Rendering inside an async act settles
+  // that before the case asserts. Left unawaited it lands in the microtask
+  // drain after the case body, which React warns about and which puts the
+  // write inside whichever case happens to be running by then.
+  let result!: ReturnType<typeof render>;
+  await act(async () => {
+    result = render(tree(props));
+  });
+  return {
+    ...result,
+    update: async (p: typeof props) => {
+      await act(async () => {
+        result.rerender(tree(p));
+      });
+    },
+  };
 }
 
 beforeEach(() => {
@@ -110,38 +125,38 @@ beforeEach(() => {
 });
 
 describe('highway when audio arrives after the editor is open', () => {
-  it('keeps the same stage when the AudioManager is swapped', () => {
+  it('keeps the same stage when the AudioManager is swapped', async () => {
     const clickOnly = {} as AudioManager;
     const withAudio = {} as AudioManager;
-    const {update} = renderHighway({audioManager: clickOnly});
+    const {update} = await renderHighway({audioManager: clickOnly});
     expect(setupStageMock).toHaveBeenCalledTimes(1);
 
-    update({audioManager: withAudio, audioData: new AudioSamples(pcm())});
+    await update({audioManager: withAudio, audioData: new AudioSamples(pcm())});
 
     // One stage, still. A second call would mean the WebGL context and every
     // highway on it were thrown away and rebuilt.
     expect(setupStageMock).toHaveBeenCalledTimes(1);
   });
 
-  it('reads the clock through a getter, so the stage sees the new manager', () => {
+  it('reads the clock through a getter, so the stage sees the new manager', async () => {
     const clickOnly = {} as AudioManager;
     const withAudio = {} as AudioManager;
-    const {update} = renderHighway({audioManager: clickOnly});
+    const {update} = await renderHighway({audioManager: clickOnly});
 
     const getAudioManager = setupStageMock.mock.calls[0][3] as () => unknown;
     expect(getAudioManager()).toBe(clickOnly);
 
-    update({audioManager: withAudio});
+    await update({audioManager: withAudio});
     expect(getAudioManager()).toBe(withAudio);
   });
 
-  it('leaves a classic highway uncovered while the audio loads', () => {
-    renderHighway({audioManager: {} as AudioManager, audioLoading: true});
+  it('leaves a classic highway uncovered while the audio loads', async () => {
+    await renderHighway({audioManager: {} as AudioManager, audioLoading: true});
     expect(screen.queryByText(/waveform/i)).not.toBeInTheDocument();
   });
 
-  it('tells a waveform highway the audio is still coming', () => {
-    renderHighway({
+  it('tells a waveform highway the audio is still coming', async () => {
+    await renderHighway({
       audioManager: {} as AudioManager,
       audioLoading: true,
       highwayMode: 'waveform',
@@ -151,8 +166,8 @@ describe('highway when audio arrives after the editor is open', () => {
     ).toBeInTheDocument();
   });
 
-  it('says so plainly when a waveform highway has no audio coming at all', () => {
-    renderHighway({
+  it('says so plainly when a waveform highway has no audio coming at all', async () => {
+    await renderHighway({
       audioManager: {} as AudioManager,
       audioLoading: false,
       highwayMode: 'waveform',
@@ -162,8 +177,8 @@ describe('highway when audio arrives after the editor is open', () => {
     ).toBeInTheDocument();
   });
 
-  it('uncovers the waveform highway once the samples are here', () => {
-    renderHighway({
+  it('uncovers the waveform highway once the samples are here', async () => {
+    await renderHighway({
       audioManager: {} as AudioManager,
       audioData: new AudioSamples(pcm()),
       highwayMode: 'waveform',
