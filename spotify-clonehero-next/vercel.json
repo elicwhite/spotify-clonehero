@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "corepack pnpm install",
+  "installCommand": "corepack pnpm install || (sleep 5 && corepack pnpm install)",
   "buildCommand": "corepack pnpm run build",
   "git": {
     "deploymentEnabled": {
