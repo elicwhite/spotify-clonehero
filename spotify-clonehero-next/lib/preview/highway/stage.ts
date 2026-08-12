@@ -1,7 +1,6 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
 import type {ParsedChart} from '../chorus-chart-processing';
-import {ChartResponseEncore} from '../../chartSelection';
 import {AudioManager} from '../audioManager';
 import {
   schemaForTrack,
@@ -176,7 +175,8 @@ interface StageContext {
   textureLoader: THREE.TextureLoader;
   clippingPlanes: HighwayClippingPlanes;
   tomStyle: 'square' | 'round';
-  audioManager: AudioManager;
+  /** The playback clock, read fresh every frame — see `setupStage`. */
+  getAudioManager: () => AudioManager | null;
   /** Chart time minus audio delay, in ms. Shared by every highway. */
   getElapsedMs: () => number;
   /** The stage's tempo map, seeded into a highway as it finishes building. */
@@ -245,6 +245,14 @@ class StageHighway implements StageHighwayHandle {
   private sceneOverlays: SceneOverlays | null = null;
   private interactionManager: InteractionManager | null = null;
   private waveformSurface: WaveformSurface | null = null;
+  /** The waveform's inputs, held until a mode change asks for the surface.
+   *  Building one scans every sample of the song for its peak and paints a
+   *  2048-row texture — well over a second on an album-length chart, and
+   *  entirely wasted while the classic highway is the one on screen. */
+  private waveformConfig: Omit<
+    WaveformSurfaceConfig,
+    'highwayWidth' | 'highwaySpeed'
+  > | null = null;
   private gridOverlay: GridOverlay | null = null;
 
   private overlayState: OverlayState | null = null;
@@ -382,13 +390,22 @@ class StageHighway implements StageHighwayHandle {
   ): Promise<void> {
     await this.ready;
     if (this.disposed) return;
-    if (this.waveformSurface) {
-      this.root.remove(this.waveformSurface.getMesh());
-      this.waveformSurface.dispose();
-      this.waveformSurface = null;
-    }
+    this.waveformConfig = config;
+    this.dropWaveformSurface();
+    // A classic highway never shows this, and the editor hands the audio over
+    // the moment a project's song finishes decoding — which is while the user
+    // is already editing, and possibly playing. Building it there would stall
+    // the frame loop for a second or more to prepare something invisible.
+    if (this.highwayMode === 'waveform') this.buildWaveformSurface();
+    this.ctx.wake();
+  }
+
+  /** Builds the waveform surface from the config last handed over, if any.
+   *  Costly — see {@link waveformConfig}. */
+  private buildWaveformSurface(): void {
+    if (this.waveformSurface || !this.waveformConfig) return;
     this.waveformSurface = createWaveformSurface(this.root, {
-      ...config,
+      ...this.waveformConfig,
       // Slightly inset from the highway floor (0.9) so the gray plane
       // frames the waveform -- left/right edges stay visible at a glance.
       highwayWidth: 0.84,
@@ -396,7 +413,14 @@ class StageHighway implements StageHighwayHandle {
     });
     this.waveformSurface.setVisible(this.highwayMode === 'waveform');
     this.root.syncLayers();
-    this.ctx.wake();
+  }
+
+  private dropWaveformSurface(): void {
+    if (!this.waveformSurface) return;
+    this.root.remove(this.waveformSurface.getMesh());
+    this.waveformSurface.dispose();
+    this.waveformSurface = null;
+    this.root.syncLayers();
   }
 
   async setGridData(
@@ -426,6 +450,9 @@ class StageHighway implements StageHighwayHandle {
 
   setHighwayMode(mode: HighwayMode): void {
     this.highwayMode = mode;
+    // Switching into waveform mode is what pays for the surface, so the cost
+    // lands on a deliberate act instead of on audio quietly arriving.
+    if (mode === 'waveform') this.buildWaveformSurface();
     this.waveformSurface?.setVisible(mode === 'waveform');
     // The classic floor stays visible in both modes: it is the gray plane
     // that frames the highway edges, and the waveform draws on top of it.
@@ -478,7 +505,7 @@ class StageHighway implements StageHighwayHandle {
 
   /** Everything this highway does per frame before its own render pass. */
   update(elapsedTime: number): void {
-    const audioManager = this.ctx.audioManager;
+    const audioManager = this.ctx.getAudioManager();
     const isPlaying = audioManager?.isPlaying && audioManager?.isInitialized;
     if (isPlaying && this.textures) {
       // Update animated textures only during playback.
@@ -562,16 +589,21 @@ function layerForSlot(slot: number): number {
  * N per-viewport cameras into scissored slices of that one canvas.
  *
  * `sizingRef` seeds the canvas size before React's first measurement lands;
- * `canvasHostRef` receives the canvas element. `_metadata` is part of the
- * stage's identity -- the editor rebuilds the stage when it changes -- but
- * nothing inside reads it.
+ * `canvasHostRef` receives the canvas element.
+ *
+ * The playback clock arrives as a GETTER, not an instance. Everything here
+ * reads it per frame (`chartTime`, `delay`, `isPlaying`), never holds it, and
+ * a host may swap its `AudioManager` mid-session — the chart editor does,
+ * when a project's audio finishes decoding behind the already-open editor.
+ * Taking the instance would make that swap part of the stage's identity, and
+ * rebuilding a stage means tearing down the WebGL context and every highway
+ * on it: a visible reload of the editing surface for a clock change.
  */
 export function setupStage(
-  _metadata: ChartResponseEncore,
   chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement | null>,
   canvasHostRef: RefObject<HTMLDivElement | null>,
-  audioManager: AudioManager,
+  getAudioManager: () => AudioManager | null,
   config: StageConfig = {},
 ): HighwayStage {
   const tomStyle = config.tomStyle ?? 'square';
@@ -670,6 +702,7 @@ export function setupStage(
   }
 
   function getElapsedMs(): number {
+    const audioManager = getAudioManager();
     const currentMs = (audioManager?.chartTime ?? 0) * 1000;
     const delay = (audioManager?.delay || 0) * 1000;
     return currentMs - delay;
@@ -715,7 +748,7 @@ export function setupStage(
     textureLoader,
     clippingPlanes,
     tomStyle,
-    audioManager,
+    getAudioManager,
     getElapsedMs,
     getTiming: () => timing,
     wake,
@@ -835,6 +868,7 @@ export function setupStage(
    * otherwise resuming creates a visible jump-back.
    */
   function frameTime(): {elapsedMs: number; isPlaying: boolean} {
+    const audioManager = getAudioManager();
     const isPlaying = Boolean(
       audioManager?.isPlaying && audioManager?.isInitialized,
     );

@@ -20,7 +20,6 @@ import {DEFAULT_LINGER_MS} from '../renderGate';
 import type {ParsedChart} from '../../chorus-chart-processing';
 import type {Track} from '../types';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 
 interface FakeRenderer {
   setAnimationLoop: jest.Mock;
@@ -71,7 +70,6 @@ jest.mock('three', () => {
   };
 });
 
-const metadata = {song_length: 60_000} as ChartResponseEncore;
 
 function makeChart(): ParsedChart {
   const chart = createEmptyChart({
@@ -121,11 +119,10 @@ async function setup(): Promise<Harness> {
   const audio = new FakeAudio();
   const ref = {current: host} as React.RefObject<HTMLDivElement>;
   const stage = setupStage(
-    metadata,
     chart,
     ref,
     ref,
-    audio as unknown as AudioManager,
+    () => audio as unknown as AudioManager,
   );
   await stage.addHighway('drums-expert', {
     track: chart.trackData[0] as Track,

@@ -26,7 +26,6 @@ import {computeStageLayout, toGlRect} from '../layout';
 import type {ParsedChart} from '../../chorus-chart-processing';
 import type {Track} from '../types';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 
 interface RenderCall {
   scene: THREE.Scene;
@@ -105,7 +104,6 @@ beforeEach(() => {
   renderCalls.length = 0;
 });
 
-const metadata = {song_length: 60_000} as ChartResponseEncore;
 
 function makeTrack(instrument: Track['instrument']): Track {
   return {
@@ -150,11 +148,10 @@ describe('three side-by-side highways', () => {
     const chart = makeChart();
     const host = makeHost();
     const stage = setupStage(
-      metadata,
       chart,
       host,
       host,
-      {} as unknown as AudioManager,
+      () => ({}) as unknown as AudioManager,
     );
 
     const handles = [];
@@ -249,11 +246,10 @@ describe('three side-by-side highways', () => {
     const chart = makeChart();
     const host = makeHost();
     const stage = setupStage(
-      metadata,
       chart,
       host,
       host,
-      {} as unknown as AudioManager,
+      () => ({}) as unknown as AudioManager,
     );
 
     const trackFor = (instrument: Track['instrument']) =>
@@ -317,11 +313,10 @@ describe('three side-by-side highways', () => {
     const chart = makeChart();
     const host = makeHost();
     const stage = setupStage(
-      metadata,
       chart,
       host,
       host,
-      {} as unknown as AudioManager,
+      () => ({}) as unknown as AudioManager,
     );
 
     const layout = computeStageLayout({

@@ -133,11 +133,10 @@ function makeRenderer() {
 function makeStage(audioManager: AudioManager = {} as AudioManager) {
   const host = makeHost();
   return setupStage(
-    metadata,
     createEmptyChart({bpm: 120, resolution: 480}),
     host,
     host,
-    audioManager,
+    () => audioManager,
   );
 }
 

@@ -31,7 +31,6 @@ import {STRIKELINE_WORLD_Y} from '../cameraFit';
 import type {ParsedChart} from '../../chorus-chart-processing';
 import type {Track} from '../types';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 
 jest.mock('three', () => {
   const actual = jest.requireActual('three');
@@ -73,7 +72,6 @@ jest.mock('three', () => {
   };
 });
 
-const metadata = {song_length: 60_000} as ChartResponseEncore;
 
 /** Widest highway floor of the two the editor mounts (five-fret 1.1). */
 const HALF_WIDTHS: Record<string, number> = {
@@ -135,11 +133,10 @@ async function mountStrip(canvasWidth: number, count: number) {
   const chart = makeChart();
   const host = makeHost();
   const stage = setupStage(
-    metadata,
     chart,
     host,
     host,
-    {} as unknown as AudioManager,
+    () => ({}) as unknown as AudioManager,
   );
   const ids = LANES.slice(0, count).map((instrument, i) => ({
     id: `${instrument}-${i}`,
