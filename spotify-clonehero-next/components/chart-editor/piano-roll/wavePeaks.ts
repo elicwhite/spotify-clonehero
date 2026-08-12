@@ -55,40 +55,131 @@ export function buildAmpPyramid(
   const totalSamples = Math.floor(audioData.length / channels);
   if (totalSamples <= 0) return EMPTY_PYRAMID;
 
+  const scan = startScan(audioData, channels, durationMs, baseBinMs);
+  scan.step(Infinity);
+  return scan.finish();
+}
+
+/**
+ * The level-0 scan, resumable.
+ *
+ * The scan is one pass over every sample in the song — a second and a half on
+ * an album-length chart, which is a second and a half of frozen highway if it
+ * runs in one go while the editor is live. Splitting it into `step` calls lets
+ * {@link buildAmpPyramidYielding} hand the frame loop back between slices;
+ * {@link buildAmpPyramid} just drains it in one call.
+ */
+function startScan(
+  audioData: Float32Array,
+  channels: number,
+  durationMs: number,
+  baseBinMs: number,
+) {
+  const totalSamples = Math.floor(audioData.length / channels);
   const bins = Math.ceil(durationMs / baseBinMs) + 2;
   const level0 = new Float32Array(bins);
   const sampleRate = totalSamples / (durationMs / 1000);
   const samplesPerBin = Math.max(1, (sampleRate * baseBinMs) / 1000);
-  for (let i = 0; i < totalSamples; i++) {
-    const bin = Math.floor(i / samplesPerBin);
-    if (bin >= bins) break;
-    const base = i * channels;
-    let v = 0;
-    for (let c = 0; c < channels; c++) {
-      const a = Math.abs(audioData[base + c]);
-      if (a > v) v = a;
-    }
-    if (v > level0[bin]) level0[bin] = v;
-  }
+  let i = 0;
 
-  const levels: AmpLevel[] = [{peaks: level0, binMs: baseBinMs}];
-  // Keep doubling until a level has few enough buckets to represent the
-  // coarsest reasonable zoom-out (a handful of buckets across the song).
-  let prev = level0;
-  let binMs = baseBinMs;
-  while (prev.length > 4) {
-    const next = new Float32Array(Math.ceil(prev.length / 2));
-    for (let i = 0; i < next.length; i++) {
-      const a = prev[i * 2];
-      const b = i * 2 + 1 < prev.length ? prev[i * 2 + 1] : 0;
-      next[i] = Math.max(a, b);
-    }
-    binMs *= 2;
-    levels.push({peaks: next, binMs});
-    prev = next;
-  }
+  return {
+    get done(): boolean {
+      return i >= totalSamples;
+    },
+    /** Scan up to `budget` more frames. */
+    step(budget: number): void {
+      const end = Math.min(totalSamples, i + budget);
+      for (; i < end; i++) {
+        const bin = Math.floor(i / samplesPerBin);
+        if (bin >= bins) {
+          i = totalSamples;
+          return;
+        }
+        const base = i * channels;
+        let v = 0;
+        for (let c = 0; c < channels; c++) {
+          const a = Math.abs(audioData[base + c]);
+          if (a > v) v = a;
+        }
+        if (v > level0[bin]) level0[bin] = v;
+      }
+    },
+    /** Max-pool the scanned level into the mip-map. Cheap: every level after
+     *  the first is half the size of the one below it. */
+    finish(): AmpPyramid {
+      const levels: AmpLevel[] = [{peaks: level0, binMs: baseBinMs}];
+      // Keep doubling until a level has few enough buckets to represent the
+      // coarsest reasonable zoom-out (a handful of buckets across the song).
+      let prev = level0;
+      let binMs = baseBinMs;
+      while (prev.length > 4) {
+        const next = new Float32Array(Math.ceil(prev.length / 2));
+        for (let i2 = 0; i2 < next.length; i2++) {
+          const a = prev[i2 * 2];
+          const b = i2 * 2 + 1 < prev.length ? prev[i2 * 2 + 1] : 0;
+          next[i2] = Math.max(a, b);
+        }
+        binMs *= 2;
+        levels.push({peaks: next, binMs});
+        prev = next;
+      }
+      return {levels, durationMs};
+    },
+  };
+}
 
-  return {levels, durationMs};
+/** Hand control back to the event loop. A `MessageChannel` round trip rather
+ *  than a timer: timers are clamped to a second in a background tab, which
+ *  would leave a half-built waveform sitting there for minutes. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+
+/** How long a slice may run before yielding. Comfortably inside a frame. */
+const SLICE_MS = 6;
+
+/**
+ * {@link buildAmpPyramid}, in slices, so a live editor keeps rendering and
+ * playing while a song's peaks are computed.
+ *
+ * `isCancelled` is polled between slices: a caller whose audio changed again
+ * mid-scan gets `null` rather than a pyramid for the previous source.
+ */
+export async function buildAmpPyramidYielding(
+  audioData: Float32Array | undefined,
+  channels: number,
+  durationMs: number,
+  isCancelled: () => boolean,
+  baseBinMs: number = BASE_BIN_MS,
+): Promise<AmpPyramid | null> {
+  if (!audioData || audioData.length === 0 || durationMs <= 0 || channels < 1) {
+    return EMPTY_PYRAMID;
+  }
+  if (Math.floor(audioData.length / channels) <= 0) return EMPTY_PYRAMID;
+
+  const scan = startScan(audioData, channels, durationMs, baseBinMs);
+  // Start small and adapt: the right slice size depends entirely on the
+  // machine, and guessing it wrong either yields far too often or blocks.
+  let budget = 200_000;
+  while (!scan.done) {
+    if (isCancelled()) return null;
+    const started = performance.now();
+    scan.step(budget);
+    const elapsed = performance.now() - started;
+    budget = Math.max(
+      50_000,
+      Math.round(budget * (elapsed > 0 ? SLICE_MS / elapsed : 2)),
+    );
+    if (!scan.done) await yieldToEventLoop();
+  }
+  return isCancelled() ? null : scan.finish();
 }
 
 /** Index of the finest level whose bucket width is ⩽ `targetBinMs` (falls
