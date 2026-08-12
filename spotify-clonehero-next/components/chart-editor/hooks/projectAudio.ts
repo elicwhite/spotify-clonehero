@@ -10,25 +10,28 @@
 
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {
-  decodeAudio,
-  interleaveAudioBuffer,
-} from '@/lib/drum-transcription/audio/decoder';
+  decodeAtRate,
+  nativeDecodeRate,
+} from '@/lib/audio-pipeline/decode-audio';
+import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {DRUMS_STEM} from '@/lib/audio-pipeline/separate-stems';
+import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AudioSource} from '../ExportDialog';
 import type {AudioStemInput, PaddedAudioMeta} from './usePaddedAudio';
 
-/** What `decodeAudio` + `interleaveAudioBuffer` produce for every file,
- *  whatever the package shipped: 44.1 kHz interleaved stereo. Both the WAV
- *  encoding inside `usePaddedAudio` and the padded export below are written
- *  against this, so it is stated once. */
-export const PACKAGE_AUDIO_META: PaddedAudioMeta = {
-  sampleRate: 44100,
-  channels: 2,
-};
+/** `interleaveAudioBuffer` produces stereo for every file, whatever the
+ *  package shipped (a mono source has its one channel duplicated), so the
+ *  channel count is fixed even though the sample rate is not. */
+export const PACKAGE_AUDIO_CHANNELS = 2;
+
+/** Rate assumed for a package with no files at all to sniff. Nothing decodes
+ *  in that case — the load fails right after — but the meta still has to say
+ *  something. */
+const PACKAGE_FALLBACK_SAMPLE_RATE = 44100;
 
 /** The project's audio as `usePaddedAudio` takes it. */
 export interface DecodedPackageAudio {
@@ -37,6 +40,11 @@ export interface DecodedPackageAudio {
   fullMixName: string;
   fullMixPcm: Float32Array;
   stems: AudioStemInput[];
+  /** The format every buffer above is in. The rate is the package's own (see
+   *  {@link decodeChartPackageAudio}), so it has to travel with the PCM
+   *  rather than being assumed: the padding, the transport's duration and the
+   *  padded export all measure against it. */
+  meta: PaddedAudioMeta;
 }
 
 /**
@@ -53,16 +61,35 @@ export interface DecodedPackageAudio {
  *
  * Undecodable files are skipped with a warning rather than failing the load:
  * one bad stem never takes the editor down.
+ *
+ * Everything decodes at ONE rate, the native rate of the file that will
+ * become the full mix — this audio is only ever played, drawn as a waveform
+ * and padded back out, none of which cares what the rate is, and a decoder
+ * asked for a rate the source isn't in resamples every sample on the way
+ * out. On an album-length opus that implicit resample is several seconds of
+ * load. The rate travels back in `meta` so the rest of the editor measures
+ * against the audio it actually got. A package whose files disagree (an
+ * opus full mix beside an mp3 stem) still lands on one rate, since the whole
+ * package has to pad and mix as one set.
  */
 export async function decodeChartPackageAudio(
   files: Files,
 ): Promise<DecodedPackageAudio> {
+  // Chosen before anything decodes, so every file lands at the same rate.
+  // Which file leads is decided by name here and re-derived from the decoded
+  // set below; they only disagree when the `song` file fails to decode, and
+  // the fallback is then a correct-but-resampled decode, not a wrong one.
+  const primary =
+    files.find(file => getBasename(file.fileName) === 'song') ?? files[0];
+  const sampleRate = primary
+    ? nativeDecodeRate(primary.data)
+    : PACKAGE_FALLBACK_SAMPLE_RATE;
+
   const decoded: {name: string; pcm: Float32Array}[] = [];
   const usedNames = new Set<string>();
   for (const file of files) {
     try {
-      const buffer = file.data.slice(0).buffer as ArrayBuffer;
-      const audioBuffer = await decodeAudio(buffer);
+      const audioBuffer = await decodeAtRate(file.data, sampleRate);
       // AudioManager keys tracks by file basename, so two files that share
       // one (song.ogg + song.mp3) would collapse into a single track and
       // lose audio. Uniquify instead, with a suffix that is still a clean
@@ -72,7 +99,12 @@ export async function decodeChartPackageAudio(
       let name = base;
       for (let n = 2; usedNames.has(name); n++) name = `${base}-${n}`;
       usedNames.add(name);
-      decoded.push({name, pcm: interleaveAudioBuffer(audioBuffer)});
+      const pcm = interleaveAudioBuffer(audioBuffer);
+      // Playback wants these samples back in exactly the buffer they just
+      // came out of, so hand `AudioManager` the buffer instead of making it
+      // de-interleave the whole song again.
+      rememberDecodedBuffer(pcm, audioBuffer);
+      decoded.push({name, pcm});
     } catch (err) {
       console.warn(`Could not decode ${file.fileName}:`, err);
     }
@@ -91,6 +123,7 @@ export async function decodeChartPackageAudio(
       pcm: entry.pcm,
       origin: 'chart-file' as const,
     })),
+    meta: {sampleRate, channels: PACKAGE_AUDIO_CHANNELS},
   };
 }
 
@@ -120,7 +153,7 @@ export async function padPackageAudio(
   pkg: DecodedPackageAudio,
   padSamples: number,
 ): Promise<AudioSource[]> {
-  const {sampleRate, channels} = PACKAGE_AUDIO_META;
+  const {sampleRate, channels} = pkg.meta;
   const sources: AudioSource[] = [];
   for (const {name, pcm} of [
     {name: pkg.fullMixName, pcm: pkg.fullMixPcm},

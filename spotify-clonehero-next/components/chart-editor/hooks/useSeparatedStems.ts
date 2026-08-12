@@ -23,15 +23,19 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 
-import {loadStem, loadStemOpus} from '@/lib/audio-pipeline/stem-cache';
+import {
+  loadStem,
+  loadStemOpus,
+  STEM_CACHE_SAMPLE_RATE,
+} from '@/lib/audio-pipeline/stem-cache';
 import type {StereoStem} from '@/lib/audio-pipeline/stem-cache';
 import {DRUMS_STEM, VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
+import {resampleStereoInWorker} from '@/lib/audio-pipeline/pcm-client';
 import {resolveStemFingerprint} from '@/lib/assist/tasks/types';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
-import {
-  decodeAudio,
-  interleaveAudioBuffer,
-} from '@/lib/drum-transcription/audio/decoder';
+import {decodeAtRate} from '@/lib/audio-pipeline/decode-audio';
+import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
+import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
 import {packageHasDrumsAudio, type DecodedPackageAudio} from './projectAudio';
@@ -54,6 +58,31 @@ function interleaveStereoStem(stem: StereoStem): Float32Array {
     interleaved[i * 2 + 1] = stem.right[i];
   }
   return interleaved;
+}
+
+/**
+ * A cached stem as interleaved PCM at the package's own rate.
+ *
+ * The cache is always at {@link STEM_CACHE_SAMPLE_RATE} — it holds what the
+ * separator produced — while a package plays at whatever rate its own files
+ * decode at. Every track in one `AudioManager` build is padded and measured
+ * against a single rate, so a stem that doesn't match has to be brought to
+ * the package's, or it would play at the wrong speed under the mixer.
+ */
+async function stemAtPackageRate(
+  stem: StereoStem,
+  sampleRate: number,
+): Promise<Float32Array> {
+  if (sampleRate === STEM_CACHE_SAMPLE_RATE) return interleaveStereoStem(stem);
+  // Copies: the caller's channels stay usable, and the worker detaches what
+  // it is given.
+  const resampled = await resampleStereoInWorker(
+    stem.left.slice(),
+    stem.right.slice(),
+    STEM_CACHE_SAMPLE_RATE,
+    sampleRate,
+  );
+  return interleaveStereoStem(resampled);
 }
 
 /** Two stem lists carry the same stems, by name. Used to leave the live list
@@ -139,13 +168,14 @@ export function useSeparatedStems({
         }
         fingerprintRef.current = fingerprint;
 
+        const {sampleRate} = pkg.meta;
         const next: AudioStemInput[] = [];
         if (wantDrums) {
           const drums = await loadStem(fingerprint, DRUMS_STEM);
           if (drums) {
             next.push({
               name: DRUMS_STEM,
-              pcm: interleaveStereoStem(drums),
+              pcm: await stemAtPackageRate(drums, sampleRate),
               origin: 'ai-separated',
             });
           }
@@ -153,17 +183,13 @@ export function useSeparatedStems({
         if (wantVocals) {
           const vocalsOpus = await loadStemOpus(fingerprint, VOCALS_STEM);
           if (vocalsOpus) {
-            const decoded = await decodeAudio(
-              vocalsOpus.buffer.slice(
-                vocalsOpus.byteOffset,
-                vocalsOpus.byteOffset + vocalsOpus.byteLength,
-              ) as ArrayBuffer,
-            );
-            next.push({
-              name: VOCALS_STEM,
-              pcm: interleaveAudioBuffer(decoded),
-              origin: 'ai-separated',
-            });
+            // Decoded straight at the package's rate: this is only ever
+            // played and drawn, so the decoder's own resample is the whole
+            // conversion.
+            const decoded = await decodeAtRate(vocalsOpus, sampleRate);
+            const pcm = interleaveAudioBuffer(decoded);
+            rememberDecodedBuffer(pcm, decoded);
+            next.push({name: VOCALS_STEM, pcm, origin: 'ai-separated'});
           }
         }
         setStems(prev => (sameStemNames(prev, next) ? prev : next));

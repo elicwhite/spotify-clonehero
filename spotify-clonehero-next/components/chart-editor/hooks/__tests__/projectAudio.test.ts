@@ -15,32 +15,38 @@ import {
   decodeChartPackageAudio,
   packageHasDrumsAudio,
   padPackageAudio,
-  PACKAGE_AUDIO_META,
+  PACKAGE_AUDIO_CHANNELS,
   type DecodedPackageAudio,
 } from '../projectAudio';
 
 jest.mock('../../../../lib/audio/opus-encoder', () => ({
   encodePcmToOpus: jest.fn(),
 }));
+jest.mock('../../../../lib/audio-pipeline/decode-audio', () => ({
+  decodeAtRate: jest.fn(),
+  nativeDecodeRate: jest.fn(),
+}));
 jest.mock('../../../../lib/drum-transcription/audio/decoder', () => ({
-  decodeAudio: jest.fn(),
   interleaveAudioBuffer: jest.fn(),
 }));
 
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {
-  decodeAudio,
-  interleaveAudioBuffer,
-} from '@/lib/drum-transcription/audio/decoder';
+  decodeAtRate,
+  nativeDecodeRate,
+} from '@/lib/audio-pipeline/decode-audio';
+import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 
 const mockOpus = encodePcmToOpus as jest.Mock;
-const mockDecode = decodeAudio as jest.Mock;
+const mockDecode = decodeAtRate as jest.Mock;
+const mockNativeRate = nativeDecodeRate as jest.Mock;
 const mockInterleave = interleaveAudioBuffer as jest.Mock;
 
 /** jsdom's Blob has no `arrayBuffer()`; Node's does. */
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
-const {channels} = PACKAGE_AUDIO_META;
+const channels = PACKAGE_AUDIO_CHANNELS;
+const SAMPLE_RATE = 48000;
 
 /** A two-file package: a `song` full mix plus one `guitar` stem. */
 function makePackage(): DecodedPackageAudio {
@@ -54,6 +60,7 @@ function makePackage(): DecodedPackageAudio {
         origin: 'chart-file',
       },
     ],
+    meta: {sampleRate: SAMPLE_RATE, channels},
   };
 }
 
@@ -99,6 +106,7 @@ describe('padPackageAudio', () => {
           origin: 'chart-file',
         },
       ],
+      meta: {sampleRate: SAMPLE_RATE, channels},
     };
     const sources = await padPackageAudio(pkg, 10);
     expect(sources.map(s => s.fileName)).toEqual(['guitar.opus', 'drums.opus']);
@@ -117,7 +125,21 @@ describe('padPackageAudio', () => {
 describe('decodeChartPackageAudio', () => {
   beforeEach(() => {
     mockDecode.mockResolvedValue({});
+    mockNativeRate.mockReturnValue(48000);
     mockInterleave.mockImplementation(() => new Float32Array(4));
+  });
+
+  it('decodes every file at the full mix’s own native rate, and reports it', async () => {
+    const decoded = await decodeChartPackageAudio([
+      {fileName: 'guitar.ogg', data: new Uint8Array([1])},
+      {fileName: 'song.ogg', data: new Uint8Array([2])},
+    ]);
+    // The rate is sniffed from the file that becomes the full mix, not from
+    // whichever file happens to come first.
+    expect(mockNativeRate).toHaveBeenCalledTimes(1);
+    expect(mockNativeRate.mock.calls[0][0]).toEqual(new Uint8Array([2]));
+    expect(decoded.meta).toEqual({sampleRate: 48000, channels});
+    for (const call of mockDecode.mock.calls) expect(call[1]).toBe(48000);
   });
 
   it('promotes the `song` file to the full mix and keeps the rest as stems', async () => {

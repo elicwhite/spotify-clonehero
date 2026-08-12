@@ -6,6 +6,13 @@
  * Audio's lossy resampler before any of our (libsoxr) resampling runs,
  * which measurably drifts model logits. Most chart audio is opus, which
  * decodes natively at 48 kHz.
+ *
+ * The forced rate is also the slow one, by a wide margin: on an album-length
+ * opus, decoding at 48 kHz takes about half as long as asking the same
+ * decoder for 44.1 kHz. A caller that only wants audio to PLAY should decode
+ * at the native rate ({@link nativeDecodeRate} + {@link decodeAtRate}) and
+ * keep it there — {@link decodeAndResampleTo44k} exists for the pipelines
+ * that need one fixed rate to feed a model.
  */
 
 import {
@@ -13,24 +20,41 @@ import {
   type PcmWorkerOptions,
 } from '@/lib/audio-pipeline/pcm-client';
 
-export async function decodeNativeRate(data: Uint8Array): Promise<AudioBuffer> {
-  // Probe context just to learn the file's natural decode rate is not
-  // possible with Web Audio — decodeAudioData resamples to the context rate.
-  // Opus/webm/ogg decode natively at 48k; mp3/wav usually 44.1k. Use 48k for
-  // opus/ogg containers and 44.1k otherwise, which avoids the implicit
-  // resample for the dominant cases.
-  const u8 = data;
+/**
+ * The rate `data` decodes at with no implicit resample.
+ *
+ * A probe context, just to learn the file's natural decode rate, is not
+ * possible with Web Audio — `decodeAudioData` always resamples to the
+ * context rate. Opus/webm/ogg decode natively at 48k; mp3/wav usually
+ * 44.1k, so the container's magic bytes decide.
+ */
+export function nativeDecodeRate(data: Uint8Array): number {
   const isOgg =
-    u8.length >= 4 &&
-    u8[0] === 0x4f &&
-    u8[1] === 0x67 &&
-    u8[2] === 0x67 &&
-    u8[3] === 0x53;
-  const rate = isOgg ? 48000 : 44100;
+    data.length >= 4 &&
+    data[0] === 0x4f &&
+    data[1] === 0x67 &&
+    data[2] === 0x67 &&
+    data[3] === 0x53;
+  return isOgg ? 48000 : 44100;
+}
+
+/** Decode `data` into an `AudioBuffer` at exactly `rate`, resampling through
+ *  Web Audio's own decoder when the source isn't already there. */
+export async function decodeAtRate(
+  data: Uint8Array,
+  rate: number,
+): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, 1, rate);
   // Copy into a fresh ArrayBuffer — decodeAudioData detaches the buffer.
-  const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+  const buf = data.buffer.slice(
+    data.byteOffset,
+    data.byteOffset + data.byteLength,
+  );
   return ctx.decodeAudioData(buf as ArrayBuffer);
+}
+
+export function decodeNativeRate(data: Uint8Array): Promise<AudioBuffer> {
+  return decodeAtRate(data, nativeDecodeRate(data));
 }
 
 /**

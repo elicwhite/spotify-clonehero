@@ -27,6 +27,11 @@
 
 const NAMESPACE = 'audio-pipeline';
 
+/** The rate every cached stem is stored at — the separator's own, and the
+ *  one a reader has to assume, since neither the gzipped planar format nor
+ *  the fingerprint carries a rate. */
+export const STEM_CACHE_SAMPLE_RATE = 44100;
+
 /** Directory name under the namespace holding fingerprint-keyed stems. */
 export const STEM_CACHE_DIR = 'stem-cache';
 
