@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:webpack": "next dev --webpack",
-    "build": "NODE_ENV=test jest --ci && next build",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsgo --noEmit",
     "typecheck:tsc": "tsc --noEmit",

@@ -1,0 +1,150 @@
+name: CI
+
+# The deployment gate. Production used to come straight from Vercel's Git
+# integration, which meant the only check standing between a push and
+# musiccharts.tools was whatever `pnpm build` happened to run — jest, and
+# nothing else. Next 16 dropped build-time linting, so eslint and the
+# typechecker were not gating anything at all.
+#
+# Now `vercel.json` turns off Vercel's own deployments from `main`
+# (`git.deploymentEnabled`), and production ships from the `deploy` job below,
+# which cannot start until test + lint + typecheck have all gone green. The
+# gate is structural: there is no path from a push to production that skips
+# them. Preview deployments for other branches still come from Vercel's Git
+# integration and are deliberately left ungated.
+#
+# The three check jobs run concurrently on their own runners, so the wall
+# clock is the slowest one (jest) rather than the sum — which is also why the
+# suite is no longer in `pnpm build`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded PR push is worth cancelling. A superseded push to main is not:
+# cancelling mid-`vercel deploy` can leave a half-promoted deployment.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+defaults:
+  run:
+    working-directory: spotify-clonehero-next
+
+jobs:
+  test:
+    name: Jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # jest.config.js parks the transform cache in .next/cache/jest so Vercel
+      # keeps it between builds; do the same here rather than transforming all
+      # 384 test files from cold on every run.
+      - name: Restore jest transform cache
+        uses: actions/cache@v4
+        with:
+          path: spotify-clonehero-next/.next/cache/jest
+          key: jest-${{ runner.os }}-${{ hashFiles('spotify-clonehero-next/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            jest-${{ runner.os }}-${{ hashFiles('spotify-clonehero-next/pnpm-lock.yaml') }}-
+            jest-${{ runner.os }}-
+
+      - name: Run tests
+        run: pnpm test --ci
+        env:
+          NODE_ENV: test
+
+  lint:
+    name: ESLint + Prettier
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  deploy:
+    name: Deploy to production
+    needs: [test, lint, typecheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      # The Vercel CLI is run from the repository root, not from
+      # spotify-clonehero-next: the project's Root Directory setting is part of
+      # what `vercel pull` fetches, and the CLI applies it itself. Running from
+      # inside the app directory would apply it twice.
+      - name: Pull Vercel project settings
+        working-directory: .
+        run: npx vercel@58 pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build
+        working-directory: .
+        run: npx vercel@58 build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy
+        id: deploy
+        working-directory: .
+        run: |
+          url="$(npx vercel@58 deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $url" >> "$GITHUB_STEP_SUMMARY"
