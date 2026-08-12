@@ -20,22 +20,33 @@ import {
   type PcmWorkerOptions,
 } from '@/lib/audio-pipeline/pcm-client';
 
+/** Bytes `magic` starts at `offset`. */
+function startsWith(data: Uint8Array, offset: number, magic: number[]): boolean {
+  if (data.length < offset + magic.length) return false;
+  return magic.every((byte, i) => data[offset + i] === byte);
+}
+
 /**
  * The rate `data` decodes at with no implicit resample.
  *
  * A probe context, just to learn the file's natural decode rate, is not
- * possible with Web Audio — `decodeAudioData` always resamples to the
- * context rate. Opus/webm/ogg decode natively at 48k; mp3/wav usually
- * 44.1k, so the container's magic bytes decide.
+ * possible with Web Audio — `decodeAudioData` always resamples to the context
+ * rate, so the container's magic bytes have to decide.
+ *
+ * The 48k containers are the ones that carry Opus: Ogg (`OggS`), WebM/Matroska
+ * (EBML), and the ISO base media boxes that a `.mp4`/`.m4a` Opus file uses.
+ * Everything else — mp3, wav, flac, AAC — is 44.1k far more often than not,
+ * and guessing wrong only costs the resample this exists to avoid, never
+ * correctness.
  */
 export function nativeDecodeRate(data: Uint8Array): number {
-  const isOgg =
-    data.length >= 4 &&
-    data[0] === 0x4f &&
-    data[1] === 0x67 &&
-    data[2] === 0x67 &&
-    data[3] === 0x53;
-  return isOgg ? 48000 : 44100;
+  // 'OggS'
+  if (startsWith(data, 0, [0x4f, 0x67, 0x67, 0x53])) return 48000;
+  // EBML header — WebM and Matroska.
+  if (startsWith(data, 0, [0x1a, 0x45, 0xdf, 0xa3])) return 48000;
+  // ISO base media: a leading box whose type is 'ftyp', at offset 4.
+  if (startsWith(data, 4, [0x66, 0x74, 0x79, 0x70])) return 48000;
+  return 44100;
 }
 
 /** Decode `data` into an `AudioBuffer` at exactly `rate`, resampling through
