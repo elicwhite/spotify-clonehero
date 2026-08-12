@@ -15,6 +15,7 @@ function makeState(overrides: Partial<RunState> = {}): RunState {
   return {
     afterTime: '2011-01-01T00:00:00.000Z',
     runStartTime: '2026-01-01T00:00:00.000Z',
+    baseVersion: null,
     lastChartId: 1,
     batchCount: 0,
     complete: false,

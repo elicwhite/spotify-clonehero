@@ -47,8 +47,19 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
+      # This job is the one that genuinely needs the postinstall scripts: the
+      # local-db and drum-fills suites run against better-sqlite3, which has to
+      # be built. supabase's postinstall pulls a binary from GitHub releases in
+      # the same pass and can come back with a connection reset, so retry
+      # rather than fail the whole gate on a flaky download.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for i in 1 2 3; do
+            pnpm install --frozen-lockfile && exit 0
+            echo "install attempt $i failed, retrying in $((i * 10))s"
+            sleep $((i * 10))
+          done
+          exit 1
 
       # jest.config.js parks the transform cache in .next/cache/jest so Vercel
       # keeps it between builds; do the same here rather than transforming all
@@ -81,8 +92,11 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
+      # eslint and prettier need no native binaries, so skip the postinstall
+      # scripts: it is faster, and it avoids supabase's postinstall download
+      # from GitHub releases, which is what failed this job's first run.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Lint
         run: pnpm lint
@@ -101,8 +115,9 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
+      # tsgo needs no native binaries either — see the lint job above.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Typecheck
         run: pnpm typecheck
