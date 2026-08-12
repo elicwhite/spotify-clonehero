@@ -153,18 +153,23 @@ jobs:
       # spotify-clonehero-next: the project's Root Directory setting is part of
       # what `vercel pull` fetches, and the CLI applies it itself. Running from
       # inside the app directory would apply it twice.
+      # --scope is not redundant with VERCEL_ORG_ID. A local `vercel login`
+      # carries a current team that the CLI falls back on; a token carries no
+      # such context, so on a team-owned project the same env vars that
+      # resolve fine on a laptop return "Could not retrieve Project Settings"
+      # here. Naming the scope explicitly is what makes token auth resolve it.
       - name: Pull Vercel project settings
         working-directory: .
-        run: npx vercel@58 pull --yes --environment=production
+        run: npx vercel@58 pull --yes --environment=production --scope "$VERCEL_ORG_ID"
 
       - name: Build
         working-directory: .
-        run: npx vercel@58 build --prod
+        run: npx vercel@58 build --prod --scope "$VERCEL_ORG_ID"
 
       - name: Deploy
         id: deploy
         working-directory: .
         run: |
-          url="$(npx vercel@58 deploy --prebuilt --prod)"
+          url="$(npx vercel@58 deploy --prebuilt --prod --scope "$VERCEL_ORG_ID")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $url" >> "$GITHUB_STEP_SUMMARY"
