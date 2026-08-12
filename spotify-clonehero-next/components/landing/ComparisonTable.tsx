@@ -2,8 +2,13 @@ import type {ReactNode} from 'react';
 
 import {StatCell, type LandingMetric} from './StatChip';
 
-/** One measured row: a row header and one figure per compared system. */
-interface ComparisonTableRow {
+/**
+ * One measured row: a row header and one figure per compared system.
+ *
+ * Exported so a page that builds its rows in a helper can annotate the return
+ * type — `/drum-transcription` maps its metrics into groups that way.
+ */
+export interface ComparisonTableRow {
   /** The row header, in the reader's vocabulary ("Kick", "Whole chart"). */
   header: string;
   /** One metric per column, in `columns` order. */

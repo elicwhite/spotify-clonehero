@@ -96,16 +96,20 @@ lib/drum-transcription/            # Core logic (testable, no React)
 | UI components                                                                                                                                                                                    | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, etc.)     |
 | Landing/marketing page structure (`LandingPage`, `LandingHero`, `LandingSection`, `ComparisonTable`, `ToolEntrySection`, `ScrollToStartCta`, `TrustLine`, `Eyebrow`, `StatChip`, `ExternalLink`) | `components/landing/` — see `docs/design-system.md` §1                    |
 | Open Graph images (frame, palette, type scale)                                                                                                                                                   | `lib/og/` → `tokens.ts` + `layout.tsx` + `createToolOgImage`              |
-| Page header + outer gutter (which header a route gets, how much padding `<main>` gives)                                                                                                          | `components/SiteChrome.tsx` → `EDITOR_ROUTES` / `FULL_BLEED_ROUTES`       |
+| Page header + outer gutter (which header a route gets, how much padding `<main>` gives)                                                                                                          | `components/SiteChrome.tsx` → `ROUTE_CHROME`                              |
 | CSS class merging                                                                                                                                                                                | `lib/utils.ts` → `cn()`                                                   |
 | Toasts                                                                                                                                                                                           | `sonner` (configured in root layout)                                      |
 
 **Before building a new page,** read `docs/design-system.md` (structure: which
 component to reach for, which tokens exist, what the documented variants mean)
 and `docs/landing-page-style-guide.md` (copy). A new page composes the existing
-primitives rather than opening with a bespoke container. If a page needs no
-outer gutter, add it to `FULL_BLEED_ROUTES` in `components/SiteChrome.tsx`;
-never cancel the gutter with a negative margin (a test enforces this).
+primitives rather than opening with a bespoke container. If a page needs a
+different outer gutter, give it a `ROUTE_CHROME` entry in
+`components/SiteChrome.tsx`; never cancel the gutter with a negative margin (a
+test enforces this).
+
+There are also three skills covering this: `design-system` (start here),
+`landing-pages`, and `og-images`.
 
 ### Reference Projects
 
