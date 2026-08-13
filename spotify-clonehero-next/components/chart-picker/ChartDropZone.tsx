@@ -8,12 +8,14 @@ import {cn} from '@/lib/utils';
 import DropZoneShell, {OrDivider} from './DropZoneShell';
 import {
   readChartDirectory,
+  readChartFile,
   readChartFileList,
-  readZipFile,
-  readSngFile,
+  readDroppedChart,
   detectFormat,
   type LoadedFiles,
 } from '@/lib/chart-files/chart-package';
+
+const NOT_A_CHART_MESSAGE = 'Drop a chart folder, a .zip, or a .sng';
 
 interface ChartDropZoneProps {
   onLoaded: (result: LoadedFiles) => void;
@@ -56,12 +58,10 @@ export default function ChartDropZone({
     async (file: File) => {
       const format = detectFormat(file);
       if (!format) {
-        toast.error('Please drop a .zip or .sng file');
+        toast.error(NOT_A_CHART_MESSAGE);
         return;
       }
-      await runLoad(() =>
-        format === 'zip' ? readZipFile(file) : readSngFile(file),
-      );
+      await runLoad(() => readChartFile(file, format));
     },
     [runLoad],
   );
@@ -72,10 +72,16 @@ export default function ChartDropZone({
       setIsDragging(false);
       if (disabled || isLoading) return;
 
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      // Called before the await inside: `dataTransfer` is emptied as soon as
+      // this handler returns.
+      const dropped = readDroppedChart(e.dataTransfer);
+      void runLoad(async () => {
+        const result = await dropped;
+        if (result.kind !== 'chart') throw new Error(NOT_A_CHART_MESSAGE);
+        return result.loaded;
+      });
     },
-    [handleFile, disabled, isLoading],
+    [runLoad, disabled, isLoading],
   );
 
   const handleDragOver = useCallback(
@@ -144,7 +150,7 @@ export default function ChartDropZone({
         label={
           isLoading
             ? 'Reading files...'
-            : 'Drop a .zip or .sng file here, or click to browse'
+            : 'Drop a chart folder, .zip or .sng here, or click to browse'
         }
         isDragging={isDragging}
         inert={Boolean(disabled) || isLoading}

@@ -117,9 +117,11 @@ describe('readChartFileList', () => {
     });
 
     it('when the folder holds only dotfiles', async () => {
+      // Nothing wrong with the browser or the depth — the folder is empty as
+      // far as a chart is concerned, and the message should say that.
       await expect(
         readChartFileList([directoryFile('Song Name/.DS_Store')]),
-      ).rejects.toThrow(NOT_A_FOLDER_MESSAGE);
+      ).rejects.toThrow(EMPTY_FOLDER_MESSAGE);
     });
   });
 

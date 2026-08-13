@@ -1,6 +1,6 @@
 # 0104 — One way in for chart packages
 
-Status: in-progress
+Status: completed
 
 A chart package reaches this app as a folder, a .zip or a .sng, through a drop,
 a folder picker or a file picker. There are currently three separate

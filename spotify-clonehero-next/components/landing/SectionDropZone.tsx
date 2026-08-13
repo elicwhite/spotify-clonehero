@@ -6,10 +6,12 @@
  * the section is currently showing (the two-button chooser, or the audio /
  * chart sub-screen) and routes a dropped payload to the flow it belongs to:
  *
- *   audio file          -> `onAudioFile`
- *   .zip / .sng file    -> `onChartLoaded` (read here, same as ChartDropZone)
- *   folder              -> `onChartLoaded` via `readChartDirectory`
- *   anything else       -> a toast, and nothing else happens
+ *   chart folder / .zip / .sng -> `onChartLoaded`
+ *   audio file                 -> `onAudioFile`
+ *   anything else              -> a toast, and nothing else happens
+ *
+ * `readDroppedChart` does the reading and the telling apart; this decides
+ * where each answer goes.
  *
  * The sub-screens have their own drop zones (AudioUploader, ChartDropZone) and
  * those keep their own behaviour — including their own "that isn't an audio
@@ -23,12 +25,12 @@ import {toast} from 'sonner';
 
 import {cn} from '@/lib/utils';
 import {
-  detectFormat,
-  readChartDirectory,
-  readSngFile,
-  readZipFile,
+  readDroppedChart,
   type LoadedFiles,
 } from '@/lib/chart-files/chart-package';
+
+const UNRECOGNIZED_MESSAGE =
+  'Drop an audio file, a chart folder, a .zip, or a .sng';
 
 /** Same test AudioUploader applies to a picked file. */
 const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|m4a|webm|opus|wma)$/i;
@@ -73,31 +75,6 @@ export default function SectionDropZone({
   const [isReading, setIsReading] = useState(false);
   const inert = Boolean(disabled) || isReading;
 
-  const routeFile = useCallback(
-    async (file: File) => {
-      if (isAudioFile(file)) {
-        onAudioFile(file);
-        return;
-      }
-      const format = detectFormat(file);
-      if (!format) {
-        toast.error('Drop an audio file, a chart folder, a .zip, or a .sng');
-        return;
-      }
-      setIsReading(true);
-      try {
-        onChartLoaded(
-          format === 'zip' ? await readZipFile(file) : await readSngFile(file),
-        );
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to read file');
-      } finally {
-        setIsReading(false);
-      }
-    },
-    [onAudioFile, onChartLoaded],
-  );
-
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       if (isOverNestedZone(e)) return;
@@ -105,56 +82,31 @@ export default function SectionDropZone({
       setIsDragging(false);
       if (inert) return;
 
-      // `dataTransfer` is emptied once this handler returns, so everything the
-      // async work below needs is taken from it synchronously — including
-      // `getAsFileSystemHandle()`, which only has to be *called* here.
-      const item = e.dataTransfer.items[0] as DataTransferItem | undefined;
-      const file = e.dataTransfer.files[0] as File | undefined;
-      const handlePromise =
-        item?.kind === 'file' &&
-        typeof item.getAsFileSystemHandle === 'function'
-          ? item.getAsFileSystemHandle()
-          : null;
+      // Called before the await below: `dataTransfer` is emptied as soon as
+      // this handler returns.
+      const dropped = readDroppedChart(e.dataTransfer);
 
       void (async () => {
-        // Chromium-only: a dropped *folder* can only be read through
-        // `getAsFileSystemHandle`. Elsewhere (or if it fails) the drop falls
-        // back to the plain File, which for a folder has no usable content —
-        // it lands in the "unrecognized" toast rather than crashing.
-        if (handlePromise) {
-          let handle: FileSystemHandle | null = null;
-          try {
-            handle = await handlePromise;
-          } catch {
-            handle = null;
+        setIsReading(true);
+        try {
+          const result = await dropped;
+          if (result.kind === 'chart') {
+            onChartLoaded(result.loaded);
+          } else if (result.kind === 'file' && isAudioFile(result.file)) {
+            onAudioFile(result.file);
+          } else {
+            toast.error(UNRECOGNIZED_MESSAGE);
           }
-          if (handle?.kind === 'directory') {
-            setIsReading(true);
-            try {
-              onChartLoaded(
-                await readChartDirectory(handle as FileSystemDirectoryHandle),
-              );
-            } catch (err) {
-              toast.error(
-                err instanceof Error
-                  ? err.message
-                  : 'Failed to read that folder',
-              );
-            } finally {
-              setIsReading(false);
-            }
-            return;
-          }
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : UNRECOGNIZED_MESSAGE,
+          );
+        } finally {
+          setIsReading(false);
         }
-
-        if (!file) {
-          toast.error('Drop an audio file, a chart folder, a .zip, or a .sng');
-          return;
-        }
-        await routeFile(file);
       })();
     },
-    [inert, onChartLoaded, routeFile],
+    [inert, onAudioFile, onChartLoaded],
   );
 
   const handleDragOver = useCallback(

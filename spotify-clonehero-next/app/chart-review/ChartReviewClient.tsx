@@ -7,10 +7,7 @@ import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {Slider} from '@/components/ui/slider';
-import {
-  readChartDirectory,
-  readSngFile,
-} from '@/lib/chart-files/chart-package';
+import {readChartDirectory, readSngFile} from '@/lib/chart-files/chart-package';
 import {
   findAudioFiles,
   findChartData,

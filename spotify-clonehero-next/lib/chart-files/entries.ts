@@ -18,10 +18,11 @@ function getFile(entry: FileSystemFileEntry): Promise<File> {
   return new Promise((resolve, reject) => entry.file(resolve, reject));
 }
 
-/** Read all entries of a directory, looping because readEntries() is batched. */
-function readDirEntries(
-  reader: FileSystemDirectoryReader,
+/** Read every child of a directory, looping because readEntries() is batched. */
+export function readDirectoryEntries(
+  directory: FileSystemDirectoryEntry,
 ): Promise<FileSystemEntry[]> {
+  const reader = directory.createReader();
   return new Promise((resolve, reject) => {
     const all: FileSystemEntry[] = [];
     const readBatch = () => {
@@ -48,8 +49,9 @@ async function walkEntry(entry: FileSystemEntry): Promise<FileEntry[]> {
   }
 
   if (entry.isDirectory) {
-    const reader = (entry as FileSystemDirectoryEntry).createReader();
-    const children = await readDirEntries(reader);
+    const children = await readDirectoryEntries(
+      entry as FileSystemDirectoryEntry,
+    );
     const nested = await Promise.all(children.map(walkEntry));
     return nested.flat();
   }
