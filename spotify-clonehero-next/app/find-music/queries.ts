@@ -68,13 +68,35 @@ function identityKey(artistNormalized: string, nameNormalized: string) {
 
 /**
  * Charts are keyed on md5, so a charter re-uploading a fix leaves both
- * revisions in the mirror sharing one group_id. Only the newest revision of a
- * group is a distinct version to choose between. group_id 0 means Chorus
- * reported no group, so those rows stand alone.
+ * revisions in the mirror sharing one group_id. Only the newest is a distinct
+ * version to choose between; group_id 0 means Chorus reported no group, so
+ * those rows stand alone.
+ *
+ * Resolved in SQL rather than after the fact so radar scoring and chart
+ * hydration see the same revision. Scoring over every revision and then
+ * hydrating only the newest let a song advertise instruments that vanished
+ * from the rows beneath it.
  */
-function chartGroupKey(row: Pick<ChartRow, 'group_id' | 'md5'>): string {
-  const groupId = Number(row.group_id);
-  return groupId === 0 ? `md5:${row.md5}` : `group:${groupId}`;
+function currentChorusChartsCte() {
+  return sql`
+    current_chorus_charts AS (
+      SELECT chart.*
+      FROM chorus_charts AS chart
+      WHERE chart.group_id = 0
+        OR NOT EXISTS (
+          SELECT 1
+          FROM chorus_charts AS newer
+          WHERE newer.group_id = chart.group_id
+            AND (
+              newer.modified_time > chart.modified_time
+              OR (
+                newer.modified_time = chart.modified_time
+                AND newer.md5 > chart.md5
+              )
+            )
+        )
+    )
+  `;
 }
 
 async function resolveDb(db?: Kysely<DB>): Promise<Kysely<DB>> {
@@ -120,7 +142,8 @@ export async function getFindMusicSongs(
   const database = await resolveDb(db);
 
   const chartResult = await sql<ChartRow>`
-    WITH current_spotify_track_ids AS (
+    WITH ${currentChorusChartsCte()},
+    current_spotify_track_ids AS (
       SELECT link.track_id
       FROM spotify_playlist_tracks AS link
       INNER JOIN spotify_playlists AS playlist ON playlist.id = link.playlist_id
@@ -235,7 +258,7 @@ export async function getFindMusicSongs(
           AND local_song.song_normalized = chart.name_normalized
       ) THEN 1 ELSE 0 END AS is_song_installed
     FROM direct_songs
-    INNER JOIN chorus_charts AS chart
+    INNER JOIN current_chorus_charts AS chart
       ON chart.artist_normalized = direct_songs.artist_normalized
       AND chart.name_normalized = direct_songs.name_normalized
     ORDER BY
@@ -335,8 +358,6 @@ export async function getFindMusicSongs(
   const albumsBySong = groupEvidenceNames(albumResult.rows);
   const actionsBySong = groupProviderActions(actionResult.rows);
   const songs = new Map<string, FindMusicSong>();
-  const seenChartGroups = new Map<string, Set<string>>();
-
   for (const row of chartResult.rows) {
     const key = identityKey(row.artist_normalized, row.name_normalized);
     let song = songs.get(key);
@@ -361,12 +382,6 @@ export async function getFindMusicSongs(
       };
       songs.set(key, song);
     }
-    // Rows arrive newest-first within a song, so the first row of a group wins.
-    const groups = seenChartGroups.get(key) ?? new Set<string>();
-    const groupKey = chartGroupKey(row);
-    if (groups.has(groupKey)) continue;
-    groups.add(groupKey);
-    seenChartGroups.set(key, groups);
     song.charts.push(toChart(row));
   }
 
@@ -446,7 +461,8 @@ export async function getRadarSongs(
   if (safeLimit === 0) return [];
 
   const candidateResult = await sql<RadarCandidateSummaryRow>`
-    WITH current_spotify_track_ids AS (
+    WITH ${currentChorusChartsCte()},
+    current_spotify_track_ids AS (
       SELECT link.track_id
       FROM spotify_playlist_tracks AS link
       INNER JOIN spotify_playlists AS playlist ON playlist.id = link.playlist_id
@@ -562,7 +578,7 @@ export async function getRadarSongs(
           THEN CAST(SUBSTR(chart.modified_time, 1, 4) AS INTEGER)
         ELSE 0
       END) AS newest_chart_year
-    FROM chorus_charts AS chart
+    FROM current_chorus_charts AS chart
     INNER JOIN artist_signals AS signals
       ON signals.artist_normalized = chart.artist_normalized
     WHERE chart.name_normalized IS NOT NULL
@@ -621,7 +637,8 @@ export async function getRadarSongs(
       sql`, `,
     );
     const chartResult = await sql<ChartRow>`
-      WITH winning_songs(artist_normalized, name_normalized) AS (
+      WITH ${currentChorusChartsCte()},
+      winning_songs(artist_normalized, name_normalized) AS (
         VALUES ${winnerValues}
       )
       SELECT
@@ -657,7 +674,7 @@ export async function getRadarSongs(
             AND local_song.song_normalized = chart.name_normalized
         ) THEN 1 ELSE 0 END AS is_song_installed
       FROM winning_songs AS winner
-      INNER JOIN chorus_charts AS chart
+      INNER JOIN current_chorus_charts AS chart
         ON chart.artist_normalized = winner.artist_normalized
         AND chart.name_normalized = winner.name_normalized
       ORDER BY
@@ -686,17 +703,11 @@ export async function getRadarSongs(
       },
     ]),
   );
-  const seenChartGroups = new Map<string, Set<string>>();
   for (const row of chartRows) {
     const key = identityKey(row.artist_normalized, row.name_normalized);
     const song = songs.get(key);
     if (!song) continue;
     song.hasInstalledChart ||= Boolean(row.is_song_installed);
-    const groups = seenChartGroups.get(key) ?? new Set<string>();
-    const groupKey = chartGroupKey(row);
-    if (groups.has(groupKey)) continue;
-    groups.add(groupKey);
-    seenChartGroups.set(key, groups);
     song.charts.push(toChart(row));
   }
 

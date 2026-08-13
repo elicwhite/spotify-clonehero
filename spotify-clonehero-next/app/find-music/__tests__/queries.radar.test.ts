@@ -754,7 +754,7 @@ describe('find-music Radar queries', () => {
       },
     ]);
     const detailQuery = queryLog.find(entry =>
-      entry.sql.includes('WITH winning_songs'),
+      entry.sql.includes('winning_songs('),
     );
     expect(detailQuery?.parameters).toEqual(['zulu four', 'recommendation']);
   });

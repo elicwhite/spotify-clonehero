@@ -99,6 +99,28 @@ it('renormalizes stored identities that predate the edition-suffix rules', async
   }
 });
 
+it('indexes chorus_charts for the group-revision lookup', async () => {
+  const db = makeDb();
+  try {
+    await new Migrator({
+      db,
+      provider: {
+        async getMigrations() {
+          return migrations;
+        },
+      },
+    }).migrateToLatest();
+    const indexes = await sql<{name: string}>`
+      PRAGMA index_list('chorus_charts')
+    `.execute(db);
+    expect(indexes.rows.map(row => row.name)).toContain(
+      'idx_chorus_charts_group_revision',
+    );
+  } finally {
+    await db.destroy();
+  }
+});
+
 it('adds instrument presence columns to a populated pre-019 database', async () => {
   const db = makeDb();
   try {
