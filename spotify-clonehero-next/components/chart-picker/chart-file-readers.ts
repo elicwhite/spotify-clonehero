@@ -47,6 +47,85 @@ export async function readChartDirectory(
   return {files, sourceFormat: 'folder', originalName: dirHandle.name};
 }
 
+/** Thrown when the selection is not something a chart can be read out of. */
+export const NOT_A_FOLDER_MESSAGE =
+  'Your browser did not return a folder. Select a .zip or .sng file instead.';
+export const SELECT_SONG_FOLDER_MESSAGE =
+  'Select the song’s own folder: the one with the chart file in it.';
+export const EMPTY_FOLDER_MESSAGE = 'That folder has no files in it.';
+
+/**
+ * Folder reader for browsers without the File System Access API, fed by an
+ * `<input type="file" webkitdirectory>` selection. That input hands back every
+ * file in the tree at once, each carrying its path below the selected folder in
+ * `webkitRelativePath`, so the directory structure `readChartDirectory` gets
+ * from a handle has to be recovered from those paths.
+ *
+ * Every way this can fail throws with a message about the folder, because the
+ * alternative — returning no files — surfaces to the user as a chart parsing
+ * error, which is not what went wrong.
+ */
+export async function readChartFileList(
+  selection: File[],
+): Promise<LoadedFiles> {
+  const entries = selection
+    // A path of one segment is a file the browser did not report a folder for.
+    // Nothing below can place such a file, so they are rejected outright rather
+    // than silently dropped.
+    .map(file => ({file, segments: (file.webkitRelativePath ?? '').split('/')}))
+    .filter(({segments}) => segments.length > 1)
+    // Skip dotfiles as readChartDirectory does, and dot-directories with them.
+    // The selected folder's own name is exempt: the user chose it, and a chart
+    // kept in a hidden folder is still the chart they meant.
+    .filter(
+      ({segments}) => !segments.slice(1).some(name => name.startsWith('.')),
+    );
+
+  if (entries.length === 0) {
+    throw new Error(
+      selection.length === 0 ? EMPTY_FOLDER_MESSAGE : NOT_A_FOLDER_MESSAGE,
+    );
+  }
+
+  // Files directly inside the selected folder, matching readChartDirectory,
+  // which reads one level and does not recurse.
+  let chartEntries = entries.filter(({segments}) => segments.length === 2);
+
+  if (chartEntries.length === 0) {
+    // The selected folder holds no files of its own. If everything lives under
+    // a single subdirectory, the user picked the parent of the song folder —
+    // a common enough slip that the zip reader already tolerates its
+    // equivalent — so read that subdirectory instead. Anything less certain
+    // than that (several subfolders, or a still deeper tree) is the user's to
+    // resolve; guessing at which song they meant would be worse than asking.
+    const subdirectories = new Set(entries.map(({segments}) => segments[1]));
+    chartEntries =
+      subdirectories.size === 1
+        ? entries.filter(({segments}) => segments.length === 3)
+        : [];
+    if (chartEntries.length === 0) {
+      throw new Error(SELECT_SONG_FOLDER_MESSAGE);
+    }
+  }
+
+  const files: FileEntry[] = await Promise.all(
+    chartEntries.map(async ({file, segments}) => ({
+      fileName: segments[segments.length - 1],
+      data: new Uint8Array(await file.arrayBuffer()),
+    })),
+  );
+
+  // Named after the folder the chart was actually read from, not the one the
+  // user happened to select: this is the export's filename and the project's
+  // fallback song name, so descending into a subfolder has to carry its name.
+  const chartPath = chartEntries[0].segments;
+  return {
+    files,
+    sourceFormat: 'folder',
+    originalName: chartPath[chartPath.length - 2],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // ZIP
 // ---------------------------------------------------------------------------
