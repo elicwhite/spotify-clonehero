@@ -1,5 +1,7 @@
 # Music Charts Tools (spotify-clonehero-next)
 
+Always talk in ASD-STE100 Simplified Technical English.
+
 Next.js 16 app of browser-based Clone Hero chart tools. Everything runs
 client-side; there is no application backend beyond Supabase auth.
 
