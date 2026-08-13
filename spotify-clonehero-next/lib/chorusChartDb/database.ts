@@ -1,28 +1,24 @@
 import {useState, useCallback} from 'react';
 import type {ChorusChartProgress} from '.';
 import {getServerChartsDataVersion} from './serverVersions';
-import {ChartResponseEncore} from '../chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 import {loadChartDbDump} from './chartDbAssets';
 import {
   upsertCharts,
-  clearAllCharts,
   getChartsDataVersion,
-  setChartsDataVersion,
+  replaceChorusCatalog,
   createScanSession,
   updateScanProgress,
   completeScanSession,
 } from '@/lib/local-db/chorus';
 import {getLastScanSession} from '../local-db/chorus/scanning';
 import {getLocalDb} from '@/lib/local-db/client';
-import {Transaction} from 'kysely';
-import {DB} from '@/lib/local-db/types';
 
 const DEBUG = true;
 
 export function useChorusChartDb(): [
   ChorusChartProgress,
-  (abort: AbortController) => Promise<ChartResponseEncore[]>,
+  (abort: AbortController) => Promise<void>,
 ] {
   const [progress, setProgress] = useState<ChorusChartProgress>({
     status: 'idle',
@@ -30,68 +26,97 @@ export function useChorusChartDb(): [
     numTotal: 0,
   });
 
-  const run = useCallback(
-    async (_abort: AbortController): Promise<ChartResponseEncore[]> => {
-      setProgress(progress => ({
-        ...progress,
-        status: 'fetching',
-      }));
+  const run = useCallback(async (abort: AbortController): Promise<void> => {
+    if (abort.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    setProgress(progress => ({
+      ...progress,
+      status: 'fetching',
+    }));
 
-      try {
-        debugLog('Checking for server data updates');
-        // Get the latest data version from database metadata
-        const localDataVersion = await getChartsDataVersion();
-        const serverDataVersion = await getServerChartsDataVersion();
+    try {
+      debugLog('Checking for server data updates');
+      const localDataVersion = await getChartsDataVersion();
+      const serverDataVersion = await getServerChartsDataVersion();
 
-        if (localDataVersion !== serverDataVersion) {
-          setProgress(progress => ({
-            ...progress,
-            status: 'fetching-dump',
-          }));
+      if (localDataVersion !== serverDataVersion) {
+        setProgress(progress => ({
+          ...progress,
+          status: 'fetching-dump',
+        }));
 
-          const db = await getLocalDb();
-
-          await db.transaction().execute(async trx => {
-            // Clear all data and set the new data version
-            await clearAllCharts(trx);
-            await setChartsDataVersion(trx, serverDataVersion);
-
-            // Fetch initial dump and store it
-            await fetchInitialDump(trx);
-          });
+        const locks = getCatalogLocks();
+        if (!locks) {
+          throw new Error(
+            'This browser does not support cross-tab catalog synchronization',
+          );
         }
 
-        setProgress(progress => ({
-          ...progress,
-          status: 'updating-db',
-        }));
-        debugLog('Fetching updated charts');
+        const installCatalog = async () => {
+          // Another tab may have completed the replacement while this tab
+          // waited for the lock. Re-check before downloading or writing.
+          if ((await getChartsDataVersion()) === serverDataVersion) {
+            return;
+          }
 
-        await getUpdatedCharts((_, stats) => {
-          setProgress(progress => ({
-            ...progress,
-            numFetched: stats.totalSongsFound,
-            numTotal: stats.totalSongsToFetch,
-          }));
-        });
-        debugLog('Done fetching charts');
-      } catch (error) {
-        setProgress(progress => ({
-          ...progress,
-          status: 'error',
-        }));
-        throw error;
+          // Download and validate the complete dump before touching the
+          // current catalog. A failed fetch therefore preserves old data.
+          const dump = await loadChartDbDump();
+          if (abort.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+          }
+
+          const db = await getLocalDb();
+          await db.transaction().execute(async trx => {
+            await replaceChorusCatalog(
+              trx,
+              dump.charts,
+              serverDataVersion,
+              dump.lastRun,
+            );
+          });
+        };
+
+        await withCatalogLock(installCatalog, locks);
+      }
+
+      const locks = getCatalogLocks();
+      if (!locks) {
+        throw new Error(
+          'This browser does not support cross-tab catalog synchronization',
+        );
       }
 
       setProgress(progress => ({
         ...progress,
-        status: 'complete',
+        status: 'updating-db',
       }));
+      debugLog('Fetching updated charts');
 
-      return [];
-    },
-    [],
-  );
+      await withCatalogLock(
+        () =>
+          getUpdatedCharts((_, stats) => {
+            setProgress(progress => ({
+              ...progress,
+              numFetched: stats.totalSongsFound,
+              numTotal: stats.totalSongsToFetch,
+            }));
+          }),
+        locks,
+      );
+      debugLog('Done fetching charts');
+    } catch (error) {
+      setProgress(progress => ({
+        ...progress,
+        status: 'error',
+      }));
+      throw error;
+    }
+
+    setProgress(progress => ({
+      ...progress,
+      status: 'complete',
+    }));
+  }, []);
 
   return [progress, run];
 }
@@ -123,7 +148,7 @@ async function getUpdatedCharts(
     await fetchNewCharts(scan_since_time, last_chart_id, (json, stats) => {
       // Store charts and update scan progress
       updatePromises = updatePromises.then(async () => {
-        await upsertCharts(trx, json as unknown as ChartResponseEncore[]);
+        await upsertCharts(trx, json);
         last_chart_id = stats.lastChartId;
         await updateScanProgress(trx, id, stats.lastChartId);
       });
@@ -138,20 +163,33 @@ async function getUpdatedCharts(
   });
 }
 
-async function fetchInitialDump(db: Transaction<DB>) {
-  const {charts, lastRun} = await loadChartDbDump();
-
-  // The scan session is recorded as already complete as of the dump's cutoff,
-  // so the client's own scanning picks up from there rather than refetching
-  // everything the dump already covers.
-  await upsertCharts(db, charts as unknown as ChartResponseEncore[]);
-  const id = await createScanSession(db, new Date(lastRun), 1);
-  await completeScanSession(db, id, lastRun);
-  return {charts, lastRun};
-}
-
 function debugLog(message: string) {
   if (DEBUG) {
     console.log(message);
   }
+}
+
+type LockManagerLike = {
+  request<T>(
+    name: string,
+    options: {mode: 'exclusive'},
+    callback: () => Promise<T>,
+  ): Promise<T>;
+};
+
+function getCatalogLocks(): LockManagerLike | undefined {
+  return typeof navigator !== 'undefined'
+    ? (navigator as Navigator & {locks?: LockManagerLike}).locks
+    : undefined;
+}
+
+async function withCatalogLock<T>(
+  work: () => Promise<T>,
+  locks: LockManagerLike,
+): Promise<T> {
+  return locks.request(
+    'spotify-clonehero-chorus-catalog',
+    {mode: 'exclusive'},
+    work,
+  );
 }

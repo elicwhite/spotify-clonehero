@@ -1,6 +1,6 @@
 import {Kysely, SqliteDialect, sql} from 'kysely';
 
-import type {ChartResponseEncore} from '@/lib/chartSelection';
+import type {ChorusChartDbRow} from '@/lib/chorusChartDb/types';
 import type {DB} from '@/lib/local-db/types';
 import {upsertCharts} from '../index';
 
@@ -61,11 +61,11 @@ function makeDb() {
 
 function chart(
   difficulties: Pick<
-    ChartResponseEncore,
+    ChorusChartDbRow,
     'diff_drums' | 'diff_guitar' | 'diff_bass' | 'diff_keys' | 'diff_drums_real'
   >,
-  overrides: Partial<ChartResponseEncore> & {pro_drums?: boolean} = {},
-): ChartResponseEncore {
+  overrides: Partial<ChorusChartDbRow> & {pro_drums?: boolean} = {},
+): ChorusChartDbRow {
   return {
     md5: 'f3aed706fd4f7ab4723a95be70ddc3b6',
     artist: 'Franz Ferdinand',
@@ -74,8 +74,7 @@ function chart(
     modifiedTime: '2024-01-08T06:20:56.000Z',
     hasVideoBackground: false,
     albumArtMd5: '',
-    notesData: {} as ChartResponseEncore['notesData'],
-    file: '',
+    notesData: {},
     groupId: 1,
     ...difficulties,
     ...overrides,
@@ -162,7 +161,7 @@ it('persists track-level presence when Chorus has no numeric intensity', async (
                 {instrument: 'guitar', difficulty: 'expert'},
                 {instrument: 'bass', difficulty: 'expert'},
               ],
-            } as ChartResponseEncore['notesData'],
+            },
           },
         ),
       ]),
@@ -211,7 +210,7 @@ it('does not infer drums from a stale pro_drums modifier', async () => {
                 {instrument: 'guitar', difficulty: 'expert'},
                 {instrument: 'guitarghl', difficulty: 'expert'},
               ],
-            } as ChartResponseEncore['notesData'],
+            },
           },
         ),
       ]),
@@ -249,7 +248,7 @@ it('uses the actual drums track when drum intensity is unavailable', async () =>
             notesData: {
               instruments: ['drums'],
               trackHashes: [{instrument: 'drums', difficulty: 'expert'}],
-            } as ChartResponseEncore['notesData'],
+            },
           },
         ),
       ]),

@@ -1,6 +1,6 @@
 import {getLocalDb} from '../client';
 import {DB} from '../types';
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import type {ChorusChartDbRow} from '@/lib/chorusChartDb/types';
 import {Kysely, Transaction, sql} from 'kysely';
 import {normalizeStrForMatching} from '../normalize';
 import {
@@ -20,7 +20,7 @@ function nowIso(): string {
 // Chart operations
 export async function upsertCharts(
   trx: Transaction<DB>,
-  charts: ChartResponseEncore[],
+  charts: ChorusChartDbRow[],
 ): Promise<void> {
   if (charts.length === 0) return;
   const before = performance.now();
@@ -210,11 +210,6 @@ export async function upsertCharts(
   console.log('Upserted charts in', (after - before) / 1000, 'seconds');
 }
 
-export async function clearAllCharts(db: Kysely<DB>): Promise<void> {
-  await db.deleteFrom('chorus_charts').execute();
-  await recalculateTrackChartMatches(db);
-}
-
 // Metadata operations
 export async function getMetadata(key: string): Promise<string | null> {
   const db = await getLocalDb();
@@ -260,6 +255,26 @@ export async function setChartsDataVersion(
 ): Promise<void> {
   console.log('Setting charts data version to', version);
   await setMetadata(db, 'charts_data_version', version.toString());
+}
+
+export async function replaceChorusCatalog(
+  db: Transaction<DB>,
+  charts: ChorusChartDbRow[],
+  dataVersion: number,
+  lastRun: string,
+): Promise<void> {
+  await db.deleteFrom('chorus_charts').execute();
+  await db.deleteFrom('spotify_track_chart_matches').execute();
+  await db.deleteFrom('chorus_scan_sessions').execute();
+  await db
+    .deleteFrom('chorus_metadata')
+    .where('key', '=', 'charts_data_version')
+    .execute();
+  await recalculateTrackChartMatches(db);
+  await upsertCharts(db, charts);
+  const scanId = await createScanSession(db, new Date(lastRun), 1);
+  await completeScanSession(db, scanId, lastRun);
+  await setChartsDataVersion(db, dataVersion);
 }
 
 export async function clearAllData(): Promise<void> {
