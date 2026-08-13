@@ -135,6 +135,7 @@ jest.mock('../FindMusicSidebar', () => ({
     localStatus,
     chorusStatus,
     onRefreshAppleMusic,
+    onRefreshChorus,
   }: {
     musicCount: number;
     view: 'music' | 'radar';
@@ -147,6 +148,7 @@ jest.mock('../FindMusicSidebar', () => ({
     localStatus: SourceStatus;
     chorusStatus: SourceStatus;
     onRefreshAppleMusic: () => void;
+    onRefreshChorus: () => void;
   }) => (
     <aside
       data-testid="sidebar"
@@ -173,6 +175,9 @@ jest.mock('../FindMusicSidebar', () => ({
       </button>
       <button type="button" onClick={onRefreshAppleMusic}>
         Refresh Apple Music test
+      </button>
+      <button type="button" onClick={onRefreshChorus}>
+        Rescan Chorus test
       </button>
     </aside>
   ),
@@ -531,6 +536,39 @@ it('opens the local index with a full-page spinner on first activation', async (
   expect(
     await screen.findByText('Opening your local music index'),
   ).toBeInTheDocument();
+});
+
+it('returns to the results after a manual Chorus rescan', async () => {
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalledTimes(1));
+
+  let releaseRescan = () => {};
+  mockRefreshChorus.mockImplementation(
+    () =>
+      new Promise<never[]>(resolve => {
+        releaseRescan = () => resolve([]);
+      }),
+  );
+
+  fireEvent.click(screen.getByRole('button', {name: 'Rescan Chorus test'}));
+
+  // A rescan never reopens the index, so it must not claim to.
+  expect(
+    await screen.findByText('Refreshing your Chorus index'),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText('Opening your local music index'),
+  ).not.toBeInTheDocument();
+
+  await act(async () => {
+    releaseRescan();
+  });
+
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
 });
 
 it('keeps other sources interactive while one source scans', async () => {

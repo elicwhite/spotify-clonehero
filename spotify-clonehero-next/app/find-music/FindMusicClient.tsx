@@ -300,8 +300,11 @@ export default function FindMusicClient() {
     }
   }, [refreshChorusIndex, stageSnapshot]);
 
+  // Only the first snapshot lowers `initializing`, so only the run that opens
+  // the index may raise it. Every refresh after that is gated by
+  // `catalogState`, which also names what is actually running.
   const loadCatalog = useCallback(async () => {
-    setInitializing(true);
+    if (!initializedRef.current) setInitializing(true);
     setCatalogState('refreshing');
     try {
       await runChorusRefresh();
