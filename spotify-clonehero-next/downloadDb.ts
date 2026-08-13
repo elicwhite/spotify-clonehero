@@ -56,14 +56,9 @@ async function loadBaseManifest(): Promise<ChartDbManifest | null> {
     return null;
   }
 
+  let manifest: ChartDbManifest;
   try {
-    const manifest = await fetchChartDbManifest();
-    if (manifest.dataVersion !== CHART_DB_DATA_VERSION) {
-      throw new Error(
-        `Published dump is data version ${manifest.dataVersion}; expected ${CHART_DB_DATA_VERSION}`,
-      );
-    }
-    return manifest;
+    manifest = await fetchChartDbManifest();
   } catch (error) {
     if (error instanceof Error && error.message.includes('status 404')) {
       console.log('No published dump found; falling back to a full crawl');
@@ -71,6 +66,20 @@ async function loadBaseManifest(): Promise<ChartDbManifest | null> {
     }
     throw error;
   }
+
+  // A generation bump means the published rows are missing something the
+  // current code carries, and narrowing them again cannot invent it — only a
+  // re-crawl can. Falling back rather than failing is what lets the bump
+  // itself drive the rebuild.
+  if (manifest.dataVersion !== CHART_DB_DATA_VERSION) {
+    console.log(
+      `Published dump is generation ${manifest.dataVersion}, this build wants ` +
+        `${CHART_DB_DATA_VERSION}; falling back to a full crawl`,
+    );
+    return null;
+  }
+
+  return manifest;
 }
 
 async function loadBaseCharts(
