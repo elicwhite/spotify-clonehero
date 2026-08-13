@@ -1,4 +1,4 @@
-import {ChartDbManifest} from './chartDbAssets';
+import {ChartDbManifest, chartDbDumpKey} from './chartDbAssets';
 import {
   ENCORE_BOOLEAN_FIELDS,
   INI_BOOLEAN_FIELDS,
@@ -21,14 +21,47 @@ export const DUMP_CACHE_CONTROL = 'public, max-age=31536000, immutable';
  */
 export const MANIFEST_CACHE_CONTROL = 'no-cache, must-revalidate';
 
+/**
+ * Fields the previous release's parser requires and this one ignores.
+ *
+ * That parser rejects a manifest missing any of them, and it is still what
+ * runs in every browser until the next deploy sticks. Publishing without them
+ * means a Next.js rollback — or a chart publish that lands while the deploy
+ * fails — leaves every client unable to read the catalog at all, recoverable
+ * only by restoring the old manifest by hand with R2 credentials.
+ *
+ * Three fields buy a rollback that needs no coordination. Delete them once the
+ * release that stopped reading them can no longer be rolled back to.
+ */
+type LegacyManifestFields = {
+  /** Derived from `version` now. */
+  key: string;
+  /** Never read. */
+  bytes: number;
+  /**
+   * Hash of the gzipped object, which the old parser required present but
+   * never verified — Cloudflare recompresses in transit, so it never could.
+   * `contentSha256` replaced it for that reason.
+   */
+  sha256: string;
+};
+
 export function buildManifest(input: {
   version: string;
   dataVersion: number;
   lastRun: string;
   totalSongs: number;
   contentSha256: string;
-}): ChartDbManifest {
-  return {...input};
+  compressedBytes: number;
+  compressedSha256: string;
+}): ChartDbManifest & LegacyManifestFields {
+  const {compressedBytes, compressedSha256, ...manifest} = input;
+  return {
+    ...manifest,
+    key: chartDbDumpKey(input.version),
+    bytes: compressedBytes,
+    sha256: compressedSha256,
+  };
 }
 
 /**

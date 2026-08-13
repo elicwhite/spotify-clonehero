@@ -114,6 +114,11 @@ async function run() {
     lastRun: metadata.lastRun,
     totalSongs: metadata.totalSongs,
     contentSha256,
+    compressedBytes: compressed.byteLength,
+    compressedSha256: crypto
+      .createHash('sha256')
+      .update(compressed)
+      .digest('hex'),
   });
 
   console.log(

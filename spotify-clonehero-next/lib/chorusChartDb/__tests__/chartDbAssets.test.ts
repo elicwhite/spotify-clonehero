@@ -58,17 +58,35 @@ describe('chart DB asset addressing', () => {
     );
   });
 
-  it('round-trips a built manifest through the parser', () => {
-    const built = buildManifest({
+  function build() {
+    return buildManifest({
       version: manifest.version,
       dataVersion: manifest.dataVersion,
       lastRun: manifest.lastRun,
       totalSongs: manifest.totalSongs,
       contentSha256: manifest.contentSha256,
+      compressedBytes: 8594962,
+      compressedSha256: 'gzip-digest',
     });
+  }
 
-    expect(built).toEqual(manifest);
-    expect(parseChartDbManifest(built)).toEqual(manifest);
+  it('round-trips a built manifest through the parser', () => {
+    expect(parseChartDbManifest(build())).toMatchObject(manifest);
+  });
+
+  // The previously deployed parser requires these and rejects a manifest
+  // without them. Until that release can no longer be rolled back to, dropping
+  // one turns a Next.js rollback into an outage: every client re-checks its
+  // catalog version, re-fetches the manifest, and cannot read it.
+  it.each(['key', 'bytes', 'sha256'])(
+    'keeps %s, which the previous release still requires',
+    field => {
+      expect(build()).toHaveProperty(field);
+    },
+  );
+
+  it('derives the legacy key from the version', () => {
+    expect(build().key).toBe(chartDbDumpKey(manifest.version));
   });
 
   it.each([
