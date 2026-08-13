@@ -121,9 +121,7 @@ export function LoggedIn() {
 
   const [spotifyLibraryProgress, updateSpotifyLibrary] =
     useSpotifyLibraryUpdate();
-  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb(
-    true /* force database */,
-  );
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
 
   const runInProgress = useRef(false);
 

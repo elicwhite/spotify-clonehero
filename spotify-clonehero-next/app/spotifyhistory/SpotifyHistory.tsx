@@ -197,7 +197,7 @@ export function SpotifyHistory({authenticated}: {authenticated: boolean}) {
     status: 'not-started',
     songsCounted: 0,
   });
-  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb(true);
+  const [chorusChartProgress, fetchChorusCharts] = useChorusChartDb();
   const runInProgress = useRef(false);
 
   const handler = useCallback(async () => {

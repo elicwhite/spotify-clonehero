@@ -10,7 +10,7 @@ const mockGetChartsDataVersion = jest.fn(async () => 1);
 const mockFetchNewCharts = jest.fn();
 const mockGetLastScanSession = jest.fn(async () => null);
 
-jest.mock('../index', () => ({
+jest.mock('../serverVersions', () => ({
   getServerChartsDataVersion: () => mockGetServerChartsDataVersion(),
 }));
 

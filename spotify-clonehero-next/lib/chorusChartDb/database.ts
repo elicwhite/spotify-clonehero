@@ -1,5 +1,6 @@
 import {useState, useCallback} from 'react';
-import {ChorusChartProgress, getServerChartsDataVersion} from '.';
+import type {ChorusChartProgress} from '.';
+import {getServerChartsDataVersion} from './serverVersions';
 import {ChartResponseEncore} from '../chartSelection';
 import fetchNewCharts from './fetchNewCharts';
 import {loadChartDbDump} from './chartDbAssets';

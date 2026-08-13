@@ -113,7 +113,7 @@ export default function FindMusicClient() {
 
   const [spotifyProgress, refreshSpotifyLibrary] =
     useSpotifyLibraryUpdate(sourceAccessEnabled);
-  const [chorusProgress, refreshChorusIndex] = useChorusChartDb(true);
+  const [chorusProgress, refreshChorusIndex] = useChorusChartDb();
 
   const historyStatus = useMemo<SourceStatus>(
     () =>
