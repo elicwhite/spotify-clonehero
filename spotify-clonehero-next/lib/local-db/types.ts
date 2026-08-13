@@ -19,13 +19,16 @@ export interface ChorusCharts {
   diff_bass: number | null;
   diff_drums: number | null;
   diff_drums_real: number | null;
+  drum_type: number | null;
   diff_guitar: number | null;
   diff_keys: number | null;
   first_seen: string | null;
   group_id: number;
   has_bass: number;
+  has_drums: number;
   has_guitar: number;
   has_keys: number;
+  has_other_instruments: number;
   has_pro_drums: number;
   has_video_background: number;
   md5: string;

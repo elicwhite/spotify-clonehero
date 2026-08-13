@@ -17,6 +17,7 @@ import {migration_015_chorus_chart_instruments} from './015_chorus_chart_instrum
 import {migration_016_apple_music_library} from './016_apple_music_library';
 import {migration_017_renormalize_editions_and_features} from './017_renormalize_editions_and_features';
 import {migration_018_find_music_ranking_signals} from './018_find_music_ranking_signals';
+import {migration_019_find_music_drums} from './019_find_music_drums';
 
 export const migrations: Record<string, Migration> = {
   '001_initial': InitialMigration,
@@ -38,4 +39,5 @@ export const migrations: Record<string, Migration> = {
   '017_renormalize_editions_and_features':
     migration_017_renormalize_editions_and_features,
   '018_find_music_ranking_signals': migration_018_find_music_ranking_signals,
+  '019_find_music_drums': migration_019_find_music_drums,
 };

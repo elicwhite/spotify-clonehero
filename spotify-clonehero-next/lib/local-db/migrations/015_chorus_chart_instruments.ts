@@ -1,8 +1,9 @@
 import {sql, type Kysely, type Migration} from 'kysely';
 
 /**
- * Chorus' numeric intensity fields are optional metadata. Track hashes remain
- * authoritative for instrument presence when those intensities are missing.
+ * Chorus' numeric intensity fields are optional metadata. Track-level metadata
+ * remains authoritative for instrument presence when those intensities are
+ * stale or missing.
  */
 export const migration_015_chorus_chart_instruments: Migration = {
   async up(db: Kysely<any>) {

@@ -1,6 +1,9 @@
 import {getLocalDb} from '../client';
 import {DB} from '../types';
-import type {ChorusChartDbRow} from '@/lib/chorusChartDb/types';
+import {
+  CORE_INSTRUMENTS,
+  type ChorusChartDbRow,
+} from '@/lib/chorusChartDb/types';
 import {Kysely, Transaction, sql} from 'kysely';
 import {normalizeStrForMatching} from '../normalize';
 import {
@@ -30,65 +33,65 @@ export async function upsertCharts(
   // from the conflict update below.
   const scanStartedAt = nowIso();
 
-  const BATCH_SIZE = Math.floor(MAX_VARIABLE_NUMBER / 22);
-  const chartRows = charts
-    .filter(
-      // Some charts seem to have invalid data.
-      // Like d060a6baec3c135b60f533a610bafad0
-      chart =>
-        chart.artist != null &&
-        chart.name != null &&
-        chart.charter != null &&
-        chart.md5 != null,
-    )
-    .map(chart => {
-      const trackInstruments = new Set([
-        ...(chart.notesData?.instruments ?? []),
-        ...(chart.notesData?.trackHashes?.map(track => track.instrument) ?? []),
-      ]);
+  const chartRows = charts.map(chart => {
+    const trackInstruments = new Set<string>();
+    for (const instrument of chart.notesData?.instruments ?? []) {
+      if (typeof instrument === 'string') trackInstruments.add(instrument);
+    }
+    for (const track of chart.notesData?.trackHashes ?? []) {
+      if (typeof track.instrument === 'string') {
+        trackInstruments.add(track.instrument);
+      }
+    }
+    // Anything outside the rendered four counts as "other", including an
+    // instrument Encore adds before this code knows about it.
+    const hasOtherInstruments = [...trackInstruments].some(
+      instrument =>
+        !(CORE_INSTRUMENTS as readonly string[]).includes(instrument),
+    );
 
-      return {
-        md5: chart.md5,
-        name: chart.name,
-        artist: chart.artist,
-        charter: chart.charter,
-        artist_normalized: normalizeStrForMatching(chart.artist),
-        charter_normalized: normalizeStrForMatching(chart.charter),
-        name_normalized: normalizeStrForMatching(chart.name),
-        diff_drums: chart.diff_drums ?? null,
-        diff_guitar: chart.diff_guitar ?? null,
-        diff_bass: chart.diff_bass ?? null,
-        diff_keys: chart.diff_keys ?? null,
-        diff_drums_real: chart.diff_drums_real ?? null,
-        has_guitar:
-          (chart.diff_guitar != null && chart.diff_guitar >= 0) ||
-          trackInstruments.has('guitar')
-            ? 1
-            : 0,
-        has_bass:
-          (chart.diff_bass != null && chart.diff_bass >= 0) ||
-          trackInstruments.has('bass')
-            ? 1
-            : 0,
-        has_keys:
-          (chart.diff_keys != null && chart.diff_keys >= 0) ||
-          trackInstruments.has('keys')
-            ? 1
-            : 0,
-        has_pro_drums:
-          (chart.diff_drums_real != null && chart.diff_drums_real >= 0) ||
-          trackInstruments.has('drums')
-            ? 1
-            : 0,
-        modified_time: chart.modifiedTime,
-        song_length: chart.song_length ?? null,
-        // types currently define boolean columns as numbers in generated types
-        has_video_background: chart.hasVideoBackground ? 1 : 0,
-        album_art_md5: chart.albumArtMd5 ?? null,
-        group_id: chart.groupId ?? 0,
-        first_seen: scanStartedAt,
-      };
-    });
+    return {
+      md5: chart.md5,
+      name: chart.name,
+      artist: chart.artist,
+      charter: chart.charter,
+      artist_normalized: normalizeStrForMatching(chart.artist),
+      charter_normalized: normalizeStrForMatching(chart.charter),
+      name_normalized: normalizeStrForMatching(chart.name),
+      diff_drums: chart.diff_drums ?? null,
+      diff_guitar: chart.diff_guitar ?? null,
+      diff_bass: chart.diff_bass ?? null,
+      diff_keys: chart.diff_keys ?? null,
+      diff_drums_real: chart.diff_drums_real ?? null,
+      has_guitar: trackInstruments.has('guitar') ? 1 : 0,
+      has_bass: trackInstruments.has('bass') ? 1 : 0,
+      has_keys: trackInstruments.has('keys') ? 1 : 0,
+      has_drums: trackInstruments.has('drums') ? 1 : 0,
+      has_other_instruments: hasOtherInstruments ? 1 : 0,
+      drum_type: chart.notesData?.drumType ?? null,
+      // Still read by Find Music's badges; removed with that reader.
+      has_pro_drums:
+        (chart.diff_drums_real != null && chart.diff_drums_real >= 0) ||
+        trackInstruments.has('drums')
+          ? 1
+          : 0,
+      modified_time: chart.modifiedTime,
+      song_length: chart.song_length ?? null,
+      // types currently define boolean columns as numbers in generated types
+      has_video_background: chart.hasVideoBackground ? 1 : 0,
+      album_art_md5: chart.albumArtMd5 ?? null,
+      group_id: chart.groupId,
+      first_seen: scanStartedAt,
+    };
+  });
+
+  if (chartRows.length === 0) return;
+
+  // Derived from the row rather than hard-coded so adding or removing a column
+  // cannot silently push a batch past SQLite's bound-variable limit.
+  const BATCH_SIZE = Math.floor(
+    MAX_VARIABLE_NUMBER / Object.keys(chartRows[0]).length,
+  );
 
   const tempTable = '_temp_chorus_charts';
 
@@ -138,6 +141,9 @@ export async function upsertCharts(
       'has_guitar',
       'has_bass',
       'has_keys',
+      'has_drums',
+      'has_other_instruments',
+      'drum_type',
       'has_pro_drums',
       'modified_time',
       'song_length',
@@ -165,6 +171,9 @@ export async function upsertCharts(
           'has_guitar',
           'has_bass',
           'has_keys',
+          'has_drums',
+          'has_other_instruments',
+          'drum_type',
           'has_pro_drums',
           'modified_time',
           'song_length',
@@ -191,6 +200,9 @@ export async function upsertCharts(
         has_guitar: eb.ref('excluded.has_guitar'),
         has_bass: eb.ref('excluded.has_bass'),
         has_keys: eb.ref('excluded.has_keys'),
+        has_drums: eb.ref('excluded.has_drums'),
+        has_other_instruments: eb.ref('excluded.has_other_instruments'),
+        drum_type: eb.ref('excluded.drum_type'),
         has_pro_drums: eb.ref('excluded.has_pro_drums'),
         modified_time: eb.ref('excluded.modified_time'),
         song_length: eb.ref('excluded.song_length'),
@@ -208,6 +220,11 @@ export async function upsertCharts(
 
   const after = performance.now();
   console.log('Upserted charts in', (after - before) / 1000, 'seconds');
+}
+
+export async function clearAllCharts(db: Kysely<DB>): Promise<void> {
+  await db.deleteFrom('chorus_charts').execute();
+  await recalculateTrackChartMatches(db);
 }
 
 // Metadata operations
