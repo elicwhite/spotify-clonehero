@@ -11,6 +11,7 @@ import {
   chartDbVersionFromDate,
 } from '../lib/chorusChartDb/chartDbAssets';
 import {
+  assertPublishableDump,
   buildManifest,
   DUMP_CACHE_CONTROL,
   MANIFEST_CACHE_CONTROL,
@@ -92,6 +93,9 @@ async function run() {
       `${METADATA_FILE} is missing lastRun or totalSongs; re-run the download`,
     );
   }
+
+  // Every row is checked here, once, so clients never have to.
+  assertPublishableDump(JSON.parse(charts.toString()));
 
   const version = chartDbVersionFromDate(new Date(metadata.lastRun));
   const key = chartDbDumpKey(version);

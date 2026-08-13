@@ -9,7 +9,7 @@ import {
   loadChartDbDump,
   parseChartDbManifest,
 } from '../chartDbAssets';
-import {buildManifest} from '../chartDbPublish';
+import {assertPublishableDump, buildManifest} from '../chartDbPublish';
 
 const manifest: ChartDbManifest = {
   version: '2026-08-09T17-14-53-098Z',
@@ -130,6 +130,43 @@ describe('lifecycle-rule safety', () => {
     expect(CHART_DB_MANIFEST_KEY.startsWith(CHART_DB_DUMP_PREFIX)).toBe(false);
     expect('models/beat_this.onnx'.startsWith(CHART_DB_DUMP_PREFIX)).toBe(
       false,
+    );
+  });
+});
+
+describe('assertPublishableDump', () => {
+  const row = {
+    md5: 'chart',
+    name: 'Song',
+    artist: 'Artist',
+    charter: 'Charter',
+    modifiedTime: '2026-01-01T00:00:00.000Z',
+    groupId: -1,
+  };
+
+  it('accepts a well-formed dump', () => {
+    expect(() =>
+      assertPublishableDump([row, {...row, md5: 'b'}]),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ['a missing md5', {...row, md5: undefined}],
+    ['a non-string artist', {...row, artist: 42}],
+    ['an unparseable modifiedTime', {...row, modifiedTime: 'whenever'}],
+    ['no groupId', {...row, groupId: undefined}],
+    [
+      'a free-text year filterKeys should have dropped',
+      {...row, year: '1969 (September 26)'},
+    ],
+    ['a non-numeric intensity', {...row, diff_drums: 'hard'}],
+  ])('refuses to publish a dump with %s', (_label, bad) => {
+    expect(() => assertPublishableDump([row, bad])).toThrow();
+  });
+
+  it('names the offending row so a failed publish is diagnosable', () => {
+    expect(() => assertPublishableDump([row, row, {...row, md5: 7}])).toThrow(
+      'row 2',
     );
   });
 });

@@ -1,4 +1,10 @@
 import {ChartDbManifest, chartDbDumpKey} from './chartDbAssets';
+import {
+  ENCORE_BOOLEAN_FIELDS,
+  INI_BOOLEAN_FIELDS,
+  INI_NUMBER_FIELDS,
+  type ChorusChartDbRow,
+} from './types';
 
 /**
  * Pure helpers for publishing a dump to R2. The S3 calls live in
@@ -30,4 +36,50 @@ export function buildManifest(input: {
     bytes: input.bytes,
     sha256: input.sha256,
   };
+}
+
+/**
+ * The exhaustive row check, run once here rather than in every browser.
+ *
+ * Clients verify the dump's checksum and then trust its shape, so this is the
+ * only thing standing between a malformed row and 100,000 broken catalogs.
+ * A failure fails the publish; the previous dump stays live and nobody
+ * notices. Throwing is right *here* for the same reason it is wrong there.
+ */
+export function assertPublishableDump(
+  rows: unknown,
+): asserts rows is ChorusChartDbRow[] {
+  if (!Array.isArray(rows)) throw new Error('Dump is not an array');
+  rows.forEach((value, index) => {
+    const where = `row ${index}`;
+    if (typeof value !== 'object' || value == null) {
+      throw new Error(`${where} is not an object`);
+    }
+    const row = value as Record<string, unknown>;
+    for (const field of ['md5', 'name', 'artist', 'charter', 'modifiedTime']) {
+      if (typeof row[field] !== 'string' || row[field] === '') {
+        throw new Error(`${where} has no ${field}`);
+      }
+    }
+    if (Number.isNaN(Date.parse(row['modifiedTime'] as string))) {
+      throw new Error(`${where} has an unparseable modifiedTime`);
+    }
+    if (typeof row['groupId'] !== 'number') {
+      throw new Error(`${where} has no groupId`);
+    }
+    if (row['year'] != null && !Number.isInteger(row['year'])) {
+      throw new Error(`${where} has a non-integer year: ${row['year']}`);
+    }
+    for (const field of INI_NUMBER_FIELDS) {
+      const v = row[field];
+      if (v != null && (typeof v !== 'number' || !Number.isFinite(v))) {
+        throw new Error(`${where} has an invalid ${field}`);
+      }
+    }
+    for (const field of [...INI_BOOLEAN_FIELDS, ...ENCORE_BOOLEAN_FIELDS]) {
+      if (row[field] != null && typeof row[field] !== 'boolean') {
+        throw new Error(`${where} has an invalid ${field}`);
+      }
+    }
+  });
 }
