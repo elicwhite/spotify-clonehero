@@ -273,7 +273,11 @@ export default function FindMusicClient() {
       setChorusError(null);
       try {
         await refreshChorusIndex(controller);
-        await stageSnapshot();
+        // The hold exists so a new snapshot never reorders a list the reader
+        // is looking at. `catalogState` has replaced that list with the
+        // refreshing card for the whole of this run, so there is nothing to
+        // hold, and staging would restore the card to an unchanged list.
+        await replaceSnapshot();
         setCatalogState('ready');
         setChorusError(null);
       } catch (error) {
@@ -298,7 +302,7 @@ export default function FindMusicClient() {
     } finally {
       chorusRefreshInFlightRef.current = null;
     }
-  }, [refreshChorusIndex, stageSnapshot]);
+  }, [refreshChorusIndex, replaceSnapshot]);
 
   // Only the first snapshot lowers `initializing`, so only the run that opens
   // the index may raise it. Every refresh after that is gated by

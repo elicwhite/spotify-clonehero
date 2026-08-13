@@ -571,6 +571,27 @@ it('returns to the results after a manual Chorus rescan', async () => {
   expect(await screen.findByTestId('music-table')).toBeInTheDocument();
 });
 
+it('shows the charts a manual Chorus rescan finds without a second click', async () => {
+  mockGetFindMusicSongs
+    .mockResolvedValueOnce([song('alpha', 'Alpha')])
+    .mockResolvedValue([song('alpha', 'Alpha'), song('beta', 'Beta')]);
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toHaveTextContent(/^Alpha$/);
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalledTimes(1));
+
+  fireEvent.click(screen.getByRole('button', {name: 'Rescan Chorus test'}));
+
+  await waitFor(() =>
+    expect(screen.getByTestId('music-table')).toHaveTextContent('Alpha,Beta'),
+  );
+  expect(screen.queryByTestId('held-matches')).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', {name: 'Re-rank now'}),
+  ).not.toBeInTheDocument();
+});
+
 it('keeps other sources interactive while one source scans', async () => {
   mockAppleSetupState = 'authorized';
   mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
