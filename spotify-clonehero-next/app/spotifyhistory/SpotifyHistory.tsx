@@ -23,6 +23,7 @@ import SpotifyTableDownloader, {
   SpotifyPlaysRecommendations,
 } from '../SpotifyTableDownloader';
 import {createClient} from '@/lib/supabase/client';
+import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {Button} from '@/components/ui/button';
 import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
@@ -69,8 +70,6 @@ export default function Page() {
     })();
   }, [supabase]);
 
-  const authRedirectUrl = `/auth/callback?next=${encodeURIComponent('/spotifyhistory')}`;
-
   const auth = !user ? (
     <div>
       <Button
@@ -78,7 +77,7 @@ export default function Page() {
           const {data, error} = await supabase.auth.signInWithOAuth({
             provider: 'spotify',
             options: {
-              redirectTo: `${window.location.origin}${authRedirectUrl}`,
+              redirectTo: getAuthCallbackUrl('/spotifyhistory'),
             },
           });
           if (!error && data?.url) {
@@ -97,7 +96,7 @@ export default function Page() {
             // @ts-ignore
             provider: 'spotify',
             options: {
-              redirectTo: `${window.location.origin}${authRedirectUrl}`,
+              redirectTo: getAuthCallbackUrl('/spotifyhistory'),
             },
           });
         }}>

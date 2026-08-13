@@ -8,6 +8,7 @@ import {
 import {ProtectedAccessToken} from '../spotify-server/tokens';
 import ProvidedAccessTokenStrategy from '../spotify-server/ProvidedAccessTokenStrategy';
 import {createClient} from '@/lib/supabase/client';
+import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 
 export class RateLimitError extends Error {
   public status: number;
@@ -71,10 +72,9 @@ export class MyErrorHandler implements IHandleErrors {
   public async handleErrors(error: any): Promise<boolean> {
     if (error.message.includes('Bad or expired token')) {
       const supabase = createClient();
-      const redirectUrl = `${window.location.origin}/auth/callback}`;
       await supabase.auth.signInWithOAuth({
         provider: 'spotify',
-        options: {redirectTo: redirectUrl},
+        options: {redirectTo: getAuthCallbackUrl()},
       });
       return true;
     }

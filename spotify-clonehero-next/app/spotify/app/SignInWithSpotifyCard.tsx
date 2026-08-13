@@ -12,6 +12,7 @@ import Image from 'next/image';
 import spotifyLogoBlack from '@/public/assets/spotify/logo_black.png';
 import spotifyLogoWhite from '@/public/assets/spotify/logo_white.png';
 import {SupabaseClient} from '@supabase/supabase-js';
+import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 
 export function SignInWithSpotifyCard({
@@ -59,7 +60,7 @@ export function SignInWithSpotifyCard({
       <CardContent className="space-y-4">
         <Button
           onClick={async () => {
-            const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`;
+            const redirectUrl = getAuthCallbackUrl(redirectPath);
 
             let result;
             if (needsToLink) {

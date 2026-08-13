@@ -8,6 +8,7 @@ import type {User} from '@supabase/supabase-js';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 import {createClient} from '@/lib/supabase/client';
+import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
 import {
   CHORUS_UNAVAILABLE_MESSAGE,
@@ -422,7 +423,7 @@ export default function FindMusicClient() {
   const connectSpotify = useCallback(async () => {
     activateSourceAccessForNavigation();
     const currentFindMusicPath = findMusicPathForView(view);
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(currentFindMusicPath)}`;
+    const redirectTo = getAuthCallbackUrl(currentFindMusicPath);
     const result = user
       ? await supabase.auth.linkIdentity({
           provider: 'spotify',

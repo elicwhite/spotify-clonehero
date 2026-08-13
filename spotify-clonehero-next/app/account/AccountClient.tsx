@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import {Star, Music, LogOut, Trash2} from 'lucide-react';
 import {createClient} from '@/lib/supabase/client';
+import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {unfavoriteSongByHash} from './actions';
 import {Icons} from '@/components/icons';
 import {
@@ -60,7 +61,7 @@ export default function AccountClient({
   };
 
   const handleSpotifyConnect = async () => {
-    const redirectUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/account')}`;
+    const redirectUrl = getAuthCallbackUrl('/account');
     const {error} = await supabase.auth.linkIdentity({
       // @ts-ignore
       provider: 'spotify',

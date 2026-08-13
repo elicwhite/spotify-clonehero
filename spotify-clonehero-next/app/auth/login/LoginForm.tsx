@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import {createClient} from '@/lib/supabase/client';
+import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
@@ -47,11 +48,7 @@ export function LoginForm({
     setMessage('');
 
     try {
-      // Get the next parameter from the URL
-      const nextParam = searchParams.get('next');
-      const redirectUrl = nextParam
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
-        : `${window.location.origin}/auth/callback`;
+      const redirectUrl = getAuthCallbackUrl(searchParams.get('next'));
 
       const {error} = await supabase.auth.signInWithOtp({
         email,
@@ -78,12 +75,7 @@ export function LoginForm({
       setError('');
       setMessage('');
 
-      // Get the next parameter from the URL
-      const nextParam = searchParams.get('next');
-
-      const redirectUrl = nextParam
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextParam)}`
-        : `${window.location.origin}/auth/callback`;
+      const redirectUrl = getAuthCallbackUrl(searchParams.get('next'));
 
       const scopes =
         provider === 'spotify'
