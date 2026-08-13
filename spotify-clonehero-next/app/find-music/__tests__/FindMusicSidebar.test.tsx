@@ -293,6 +293,31 @@ describe('FindMusicSidebar', () => {
     expect(onConnectSpotify).toHaveBeenCalledTimes(1);
   });
 
+  it('always offers a retry after a failed refresh', () => {
+    // The error state exists to be recovered from. Gating it on taste sources
+    // left the card reporting a failure above a button that refused to retry.
+    render(
+      <FindMusicSidebar
+        {...makeProps({
+          authenticated: true,
+          hasSpotify: true,
+          spotifyLibraryStatus: idle,
+          chorusStatus: {
+            phase: 'error',
+            summary: 'Index refresh failed',
+            detail: 'Chart DB manifest has no data version',
+          },
+        })}
+      />,
+    );
+
+    expect(
+      within(screen.getByTestId('source-chorus')).getByRole('button', {
+        name: 'Try again',
+      }),
+    ).toBeEnabled();
+  });
+
   it('does not allow an index download before a taste source is connected', () => {
     render(
       <FindMusicSidebar

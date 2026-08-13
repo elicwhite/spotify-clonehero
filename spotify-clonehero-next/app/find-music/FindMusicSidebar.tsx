@@ -639,15 +639,20 @@ export default function FindMusicSidebar({
             </SourceGlyph>
           }
           status={chorusStatus}
+          // A failed refresh always offers a retry, taste sources or not.
+          // Gating that on them left the card showing an error above a button
+          // that refused to do anything about it, with no way out.
           actionLabel={
-            !tasteSourceConnected
-              ? 'Connect taste sources first'
-              : chorusStatus.phase === 'error'
-                ? 'Try again'
+            chorusStatus.phase === 'error'
+              ? 'Try again'
+              : !tasteSourceConnected
+                ? 'Connect taste sources first'
                 : 'Refresh index'
           }
           onAction={onRefreshChorus}
-          actionDisabled={!tasteSourceConnected}
+          actionDisabled={
+            chorusStatus.phase !== 'error' && !tasteSourceConnected
+          }
         />
       </section>
     </aside>

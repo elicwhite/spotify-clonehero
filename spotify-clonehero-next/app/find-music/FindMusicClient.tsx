@@ -573,7 +573,10 @@ export default function FindMusicClient() {
     if (spotifyProgress.updateStatus === 'error') {
       return {phase: 'error', summary: 'Spotify library refresh failed'};
     }
-    if (initializing || catalogState === 'refreshing') {
+    // Only `initializing` belongs here. A Chorus catalog refresh says nothing
+    // about the state of the Spotify library, and reporting it on this card
+    // spins every source in the sidebar for something none of them are doing.
+    if (initializing) {
       return {phase: 'loading', summary: 'Checking saved local data…'};
     }
     if ((stats.spotifyLibraryTracks ?? 0) > 0) {
@@ -587,14 +590,7 @@ export default function FindMusicClient() {
       phase: 'idle',
       summary: authChecked && hasSpotify ? 'Ready to scan' : 'Not connected',
     };
-  }, [
-    authChecked,
-    catalogState,
-    hasSpotify,
-    initializing,
-    spotifyProgress,
-    stats,
-  ]);
+  }, [authChecked, hasSpotify, initializing, spotifyProgress, stats]);
 
   const chorusStatus = useMemo<SourceStatus>(() => {
     if (initializing || catalogState === 'refreshing') {
