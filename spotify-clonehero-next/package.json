@@ -18,6 +18,7 @@
     "test:onnx-parity": "NODE_OPTIONS=--experimental-vm-modules RUN_ONNX_PARITY=1 jest crnn-logits-reference",
     "dump:product-pipeline-fixtures": "tsx scripts/dump_product_pipeline_fixtures.ts",
     "render:sheet": "tsx scripts/render-sheet.ts",
+    "ga": "tsx ./scripts/ga-query.ts",
     "update:db": "tsx ./downloadDb.ts",
     "publish:db": "tsx ./scripts/uploadChartDb.ts",
     "update:db-types": "kysely-codegen --out-file ./lib/local-db/types.ts",
@@ -94,6 +95,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
+    "@google-analytics/data": "^7.0.0",
     "@jest/globals": "29.7.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
