@@ -38,7 +38,7 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {
   LoadedFiles,
   SourceFormat,
-} from '@/components/chart-picker/chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import SectionDropZone from '@/components/landing/SectionDropZone';
 import AudioUploader from '@/app/drum-transcription/components/AudioUploader';

@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/card';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import {OrDivider} from '@/components/chart-picker/DropZoneShell';
-import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
+import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {
   chartDocToFolderFiles,

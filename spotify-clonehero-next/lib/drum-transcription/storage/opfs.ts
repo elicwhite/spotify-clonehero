@@ -48,7 +48,7 @@ import {
   interleaveAudioBuffer,
 } from '@/lib/drum-transcription/audio/decoder';
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
-import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
+import type {SourceFormat} from '@/lib/chart-files/chart-package';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from '@/lib/project-storage/types';
 

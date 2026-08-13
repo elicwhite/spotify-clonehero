@@ -18,7 +18,7 @@
 
 import {writeFile, readJsonFile, readTextFile} from '@/lib/fileSystemHelpers';
 import {isAlbumArtFileName} from '@/lib/album-art';
-import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
+import type {SourceFormat} from '@/lib/chart-files/chart-package';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from './types';
 

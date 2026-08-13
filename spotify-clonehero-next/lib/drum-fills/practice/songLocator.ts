@@ -3,7 +3,7 @@
  * read all of a matched song's files for practice playback.
  *
  * Uses the shared library walker (`scanLocalCharts`) + chart readers
- * (`chart-file-readers`). The pure matching logic lives in ./songMatch.ts.
+ * (`lib/chart-files`). The pure matching logic lives in ./songMatch.ts.
  */
 
 import scanLocalCharts, {
@@ -12,7 +12,7 @@ import scanLocalCharts, {
 import {
   readChartDirectory,
   readSngFile,
-} from '@/components/chart-picker/chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {matchSong, type SongRef} from './songMatch';
 

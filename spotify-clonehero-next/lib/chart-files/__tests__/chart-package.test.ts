@@ -3,7 +3,7 @@ import {
   NOT_A_FOLDER_MESSAGE,
   SELECT_SONG_FOLDER_MESSAGE,
   readChartFileList,
-} from '../chart-file-readers';
+} from '../chart-package';
 
 /**
  * A file as an `<input type="file" webkitdirectory>` hands it back: named by

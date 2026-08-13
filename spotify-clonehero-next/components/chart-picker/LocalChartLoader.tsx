@@ -3,7 +3,7 @@
 import {useCallback} from 'react';
 import {toast} from 'sonner';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
+import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import {readChart, type ChartDocument} from '@/lib/chart-edit';
 import {
   findAudioFiles,

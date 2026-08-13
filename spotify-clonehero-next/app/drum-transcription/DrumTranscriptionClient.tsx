@@ -23,7 +23,7 @@ import {Button} from '@/components/ui/button';
 import SectionDropZone from '@/components/landing/SectionDropZone';
 import SourcePicker from './components/SourcePicker';
 import {DrumTranscriptionLanding} from './landing/DrumTranscriptionLanding';
-import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
+import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import {readChart} from '@/lib/chart-edit';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {pickPrimaryAudioFile} from '@/lib/audio/pickPrimaryAudioFile';

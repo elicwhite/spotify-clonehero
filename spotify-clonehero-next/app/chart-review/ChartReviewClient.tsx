@@ -10,7 +10,7 @@ import {Slider} from '@/components/ui/slider';
 import {
   readChartDirectory,
   readSngFile,
-} from '@/components/chart-picker/chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 import {
   findAudioFiles,
   findChartData,

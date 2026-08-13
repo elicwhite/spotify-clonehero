@@ -28,7 +28,7 @@ import {
   readSngFile,
   readZipFile,
   type LoadedFiles,
-} from '@/components/chart-picker/chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 
 /** Same test AudioUploader applies to a picked file. */
 const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|m4a|webm|opus|wma)$/i;

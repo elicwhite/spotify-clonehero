@@ -39,7 +39,7 @@ import {
   readZipFile,
   type LoadedFiles,
   type SourceFormat,
-} from '@/components/chart-picker/chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import {
@@ -109,7 +109,7 @@ function loadChartFromFiles(loaded: LoadedFiles): LoadedChart {
   const {files, sourceFormat, originalName, sngMetadata} = loaded;
 
   // chart-edit's readChart expects { fileName, data }
-  // Our chart-file-readers already produce that shape
+  // Our chart-files readers already produce that shape
   const chartDoc = readChart(files);
 
   // Find audio files using shared helper

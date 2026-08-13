@@ -29,7 +29,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
+import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {Files} from '@/lib/preview/chorus-chart-processing';

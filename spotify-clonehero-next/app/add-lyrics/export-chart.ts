@@ -14,7 +14,7 @@ import {
   packageChartFiles,
   type PackageFormat,
 } from '@/lib/chart-export';
-import type {SourceFormat} from '@/components/chart-picker/chart-file-readers';
+import type {SourceFormat} from '@/lib/chart-files/chart-package';
 
 export interface ChartExport {
   blob: Blob;

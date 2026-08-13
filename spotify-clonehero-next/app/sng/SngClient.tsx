@@ -3,7 +3,7 @@
 import {useCallback, useState} from 'react';
 import {toast} from 'sonner';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
-import {readSngFile} from '@/components/chart-picker/chart-file-readers';
+import {readSngFile} from '@/lib/chart-files/chart-package';
 import {exportAsSng, exportAsZip} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {mergeByName} from '@/lib/sng/file-utils';

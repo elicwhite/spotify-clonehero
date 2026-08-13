@@ -4,7 +4,7 @@ import {useState} from 'react';
 import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles} from '@/components/chart-picker/chart-file-readers';
+import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import AudioUploader from './AudioUploader';
 
 interface SourcePickerProps {

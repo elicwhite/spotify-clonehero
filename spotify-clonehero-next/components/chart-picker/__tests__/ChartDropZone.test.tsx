@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import ChartDropZone from '../ChartDropZone';
-import {SELECT_SONG_FOLDER_MESSAGE} from '../chart-file-readers';
+import {SELECT_SONG_FOLDER_MESSAGE} from '@/lib/chart-files/chart-package';
 
 jest.mock('sonner', () => ({toast: {error: jest.fn(), success: jest.fn()}}));
 const {toast} = jest.requireMock('sonner');

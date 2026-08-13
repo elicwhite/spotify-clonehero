@@ -6,12 +6,12 @@ import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
-import {readChartDirectory} from '@/components/chart-picker/chart-file-readers';
+import {readChartDirectory} from '@/lib/chart-files/chart-package';
 import {
   pickFiles,
   readDroppedItems,
   readFileList,
-} from '@/lib/sng/read-dropped-entries';
+} from '@/lib/chart-files/entries';
 
 interface DropZoneProps {
   onAdd: (files: FileEntry[]) => void;

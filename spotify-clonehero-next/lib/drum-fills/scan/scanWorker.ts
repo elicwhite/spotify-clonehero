@@ -2,7 +2,7 @@
  * Library-scan web worker.
  *
  * Receives a `FileSystemDirectoryHandle`, walks the Clone Hero library (reusing
- * `scanLocalCharts`), reads + parses each chart (reusing `chart-file-readers`
+ * `scanLocalCharts`), reads + parses each chart (reusing `lib/chart-files`
  * and `parseChartAndIni`), runs Expert-drums fill detection, and streams
  * progress + batched results back to the main thread.
  *
@@ -24,7 +24,7 @@ import scanLocalCharts, {
 import {
   readChartDirectory,
   readSngFile,
-} from '@/components/chart-picker/chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 
 import {detectFillsForChart} from './detectForChart';
 import type {
@@ -152,7 +152,7 @@ async function processSong(song: SongAccumulator): Promise<ScannedFill[]> {
 /**
  * Resolve a song's handle from its `handleInfo` and read only the chart/ini
  * files needed for detection. Folder charts and .sng files are handled by the
- * shared `chart-file-readers` helpers.
+ * shared `lib/chart-files` helpers.
  */
 async function readSongChartFiles(song: SongAccumulator): Promise<ChartFile[]> {
   const {parentDir, fileName} = song.handleInfo;

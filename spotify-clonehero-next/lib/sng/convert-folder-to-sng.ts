@@ -8,7 +8,7 @@
  */
 
 import pMap from 'p-map';
-import {readChartDirectory} from '@/components/chart-picker/chart-file-readers';
+import {readChartDirectory} from '@/lib/chart-files/chart-package';
 import {exportAsSng} from '@/lib/chart-export';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 

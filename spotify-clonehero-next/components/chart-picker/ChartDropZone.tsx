@@ -13,7 +13,7 @@ import {
   readSngFile,
   detectFormat,
   type LoadedFiles,
-} from './chart-file-readers';
+} from '@/lib/chart-files/chart-package';
 
 interface ChartDropZoneProps {
   onLoaded: (result: LoadedFiles) => void;
