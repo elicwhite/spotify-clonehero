@@ -59,6 +59,7 @@ import {
 } from './types';
 
 type Snapshot = {music: FindMusicSong[]; radar: RadarSong[]};
+type CatalogState = 'opening' | 'refreshing' | 'ready' | 'degraded';
 
 const EMPTY_STATS: FindMusicStats = {
   historySongs: 0,
@@ -93,7 +94,7 @@ export default function FindMusicClient() {
   const [initializing, setInitializing] = useState(true);
   const [sourceAccessChecked, setSourceAccessChecked] = useState(false);
   const [sourceAccessEnabled, setSourceAccessEnabled] = useState(false);
-  const [catalogConsent, setCatalogConsent] = useState(false);
+  const [catalogState, setCatalogState] = useState<CatalogState>('opening');
   const [historyStatusOverride, setHistoryStatus] =
     useState<SourceStatus | null>(null);
   const [localStatusOverride, setLocalStatus] = useState<SourceStatus | null>(
@@ -102,11 +103,10 @@ export default function FindMusicClient() {
   const [chorusError, setChorusError] = useState<string | null>(null);
   const initializedRef = useRef(false);
   const committedRef = useRef<Snapshot>({music: [], radar: []});
-  const chorusStartedRef = useRef(false);
   const sourceAccessEnabledRef = useRef(false);
   const activeControllersRef = useRef<AbortController[]>([]);
-  const refreshInFlightRef = useRef<Promise<void> | null>(null);
-  const refreshAgainRef = useRef(false);
+  const snapshotQueueRef = useRef(Promise.resolve());
+  const chorusRefreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const view: FindMusicView =
     pathname === FIND_MUSIC_RECOMMENDATIONS_PATH ? 'radar' : 'music';
@@ -156,11 +156,6 @@ export default function FindMusicClient() {
     stats.appleMusicLibraryTracks > 0 ||
     stats.libraryTracks > 0 ||
     stats.historySongs > 0;
-  const hasIndexedTasteData =
-    stats.spotifyLibraryTracks > 0 ||
-    stats.appleMusicLibraryTracks > 0 ||
-    stats.historySongs > 0;
-
   // `initializing` means "the local index has not been opened yet", which is a
   // page-wide condition every source card reports as loading. It belongs to the
   // effect that opens the index, so it is always cleared by the same code that
@@ -169,7 +164,6 @@ export default function FindMusicClient() {
   const enableSourceAccess = useCallback(() => {
     sourceAccessEnabledRef.current = true;
     setSourceAccessEnabled(true);
-    setCatalogConsent(true);
   }, []);
 
   const activateSourceAccess = useCallback(() => {
@@ -190,60 +184,61 @@ export default function FindMusicClient() {
     return {music, radar};
   }, []);
 
-  const stageSnapshot = useCallback(async () => {
-    if (refreshInFlightRef.current) {
-      refreshAgainRef.current = true;
-      return refreshInFlightRef.current;
-    }
+  const enqueueSnapshot = useCallback(
+    <T,>(operation: () => Promise<T>): Promise<T> => {
+      const queued = snapshotQueueRef.current.then(operation, operation);
+      snapshotQueueRef.current = queued.then(
+        () => undefined,
+        () => undefined,
+      );
+      return queued;
+    },
+    [],
+  );
 
-    const run = (async () => {
-      try {
-        do {
-          refreshAgainRef.current = false;
-          const [next, nextStats] = await Promise.all([
-            querySnapshot(),
-            getFindMusicStats(),
-          ]);
-          setStats(nextStats);
+  const stageSnapshot = useCallback(
+    () =>
+      enqueueSnapshot(async () => {
+        const [next, nextStats] = await Promise.all([
+          querySnapshot(),
+          getFindMusicStats(),
+        ]);
+        setStats(nextStats);
 
-          if (!initializedRef.current) {
-            initializedRef.current = true;
-            committedRef.current = next;
-            setCommitted(next);
-            setInitializing(false);
-            continue;
-          }
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+          committedRef.current = next;
+          setCommitted(next);
+          setInitializing(false);
+          return;
+        }
 
-          const counts = diffSnapshots(committedRef.current, next);
-          if (counts.added > 0 || counts.changed > 0) {
-            setPending(next);
-            setPendingCounts(counts);
-          }
-        } while (refreshAgainRef.current);
-      } finally {
-        // Released with no await between it and the loop's exit check, so a
-        // source finishing here cannot join a run that will never re-query.
-        refreshInFlightRef.current = null;
-      }
-    })();
+        const counts = diffSnapshots(committedRef.current, next);
+        if (counts.added > 0 || counts.changed > 0) {
+          setPending(next);
+          setPendingCounts(counts);
+        }
+      }),
+    [enqueueSnapshot, querySnapshot],
+  );
 
-    refreshInFlightRef.current = run;
-    await run;
-  }, [querySnapshot]);
-
-  const replaceSnapshot = useCallback(async () => {
-    const [next, nextStats] = await Promise.all([
-      querySnapshot(),
-      getFindMusicStats(),
-    ]);
-    initializedRef.current = true;
-    committedRef.current = next;
-    setCommitted(next);
-    setStats(nextStats);
-    setPending(null);
-    setPendingCounts({added: 0, changed: 0});
-    setInitializing(false);
-  }, [querySnapshot]);
+  const replaceSnapshot = useCallback(
+    () =>
+      enqueueSnapshot(async () => {
+        const [next, nextStats] = await Promise.all([
+          querySnapshot(),
+          getFindMusicStats(),
+        ]);
+        initializedRef.current = true;
+        committedRef.current = next;
+        setCommitted(next);
+        setStats(nextStats);
+        setPending(null);
+        setPendingCounts({added: 0, changed: 0});
+        setInitializing(false);
+      }),
+    [enqueueSnapshot, querySnapshot],
+  );
 
   const spotifyPreviewAvailable = authChecked && hasSpotify;
   const {viewModel: appleMusicSource, actions: appleMusicActions} =
@@ -268,27 +263,53 @@ export default function FindMusicClient() {
   }, [pending]);
 
   const runChorusRefresh = useCallback(async () => {
-    if (!hasIndexedTasteData) return;
-    const controller = new AbortController();
-    activeControllersRef.current.push(controller);
-    setChorusError(null);
-    try {
-      await refreshChorusIndex(controller);
-      await stageSnapshot();
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        if (isChorusUnavailableError(error)) {
-          setChorusError(CHORUS_UNAVAILABLE_MESSAGE);
-          toast.error(CHORUS_UNAVAILABLE_MESSAGE);
-        } else {
-          setChorusError(
-            error instanceof Error ? error.message : String(error),
-          );
-          toast.error('Could not refresh the Chorus index');
-        }
-      }
+    if (chorusRefreshInFlightRef.current) {
+      return chorusRefreshInFlightRef.current;
     }
-  }, [hasIndexedTasteData, refreshChorusIndex, stageSnapshot]);
+
+    const run = (async () => {
+      const controller = new AbortController();
+      activeControllersRef.current.push(controller);
+      setChorusError(null);
+      try {
+        await refreshChorusIndex(controller);
+        await stageSnapshot();
+        setCatalogState('ready');
+        setChorusError(null);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          if (isChorusUnavailableError(error)) {
+            setChorusError(CHORUS_UNAVAILABLE_MESSAGE);
+            toast.error(CHORUS_UNAVAILABLE_MESSAGE);
+          } else {
+            setChorusError(
+              error instanceof Error ? error.message : String(error),
+            );
+            toast.error('Could not refresh the Chorus index');
+          }
+          setCatalogState('degraded');
+        }
+        throw error;
+      }
+    })();
+    chorusRefreshInFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      chorusRefreshInFlightRef.current = null;
+    }
+  }, [refreshChorusIndex, stageSnapshot]);
+
+  const loadCatalog = useCallback(async () => {
+    setInitializing(true);
+    setCatalogState('refreshing');
+    try {
+      await runChorusRefresh();
+    } catch {
+      // runChorusRefresh owns the visible error state and toast.
+      setInitializing(false);
+    }
+  }, [runChorusRefresh]);
 
   useEffect(() => {
     let canceled = false;
@@ -359,7 +380,6 @@ export default function FindMusicClient() {
       sourceAccessEnabledRef.current = shouldEnableSourceAccess;
       setSourceAccessEnabled(shouldEnableSourceAccess);
       if (!shouldEnableSourceAccess) setInitializing(false);
-      setCatalogConsent(current => current || navigationActivation);
       setSourceAccessChecked(true);
     })();
     return () => {
@@ -369,25 +389,14 @@ export default function FindMusicClient() {
 
   useEffect(() => {
     if (!sourceAccessChecked || !sourceAccessEnabled) return;
-    if (!initializedRef.current) setInitializing(true);
-    void stageSnapshot().catch(error => {
-      console.error('Could not load Find Music data', error);
-      setInitializing(false);
-      toast.error('Could not read the local music database');
+    let canceled = false;
+    queueMicrotask(() => {
+      if (!canceled) void loadCatalog();
     });
-  }, [sourceAccessChecked, sourceAccessEnabled, stageSnapshot]);
-
-  useEffect(() => {
-    if (
-      !initializedRef.current ||
-      !catalogConsent ||
-      !hasIndexedTasteData ||
-      chorusStartedRef.current
-    )
-      return;
-    chorusStartedRef.current = true;
-    void runChorusRefresh();
-  }, [catalogConsent, hasIndexedTasteData, initializing, runChorusRefresh]);
+    return () => {
+      canceled = true;
+    };
+  }, [loadCatalog, sourceAccessChecked, sourceAccessEnabled]);
 
   useEffect(() => {
     if (spotifyProgress.updateStatus !== 'fetching') return;
@@ -564,7 +573,7 @@ export default function FindMusicClient() {
     if (spotifyProgress.updateStatus === 'error') {
       return {phase: 'error', summary: 'Spotify library refresh failed'};
     }
-    if (initializing) {
+    if (initializing || catalogState === 'refreshing') {
       return {phase: 'loading', summary: 'Checking saved local data…'};
     }
     if ((stats.spotifyLibraryTracks ?? 0) > 0) {
@@ -578,24 +587,31 @@ export default function FindMusicClient() {
       phase: 'idle',
       summary: authChecked && hasSpotify ? 'Ready to scan' : 'Not connected',
     };
-  }, [authChecked, hasSpotify, initializing, spotifyProgress, stats]);
+  }, [
+    authChecked,
+    catalogState,
+    hasSpotify,
+    initializing,
+    spotifyProgress,
+    stats,
+  ]);
 
   const chorusStatus = useMemo<SourceStatus>(() => {
-    if (initializing) {
+    if (initializing || catalogState === 'refreshing') {
       return {phase: 'loading', summary: 'Checking saved local data…'};
-    }
-    if (!hasTasteSource && stats.chorusCharts === 0) {
-      return {
-        phase: 'idle',
-        summary:
-          'Connect Spotify, Apple Music, or History to download the index',
-      };
     }
     if (chorusError) {
       return {
         phase: 'error',
         summary: 'Index refresh failed',
         detail: chorusError,
+      };
+    }
+    if (!hasTasteSource && stats.chorusCharts === 0) {
+      return {
+        phase: 'idle',
+        summary:
+          'Connect Spotify, Apple Music, or History to download the index',
       };
     }
     if (
@@ -633,11 +649,13 @@ export default function FindMusicClient() {
     chorusProgress,
     hasTasteSource,
     initializing,
+    catalogState,
     stats.chorusCharts,
   ]);
 
   const busy =
     initializing ||
+    catalogState === 'refreshing' ||
     historyStatus.phase === 'loading' ||
     spotifyLibraryStatus.phase === 'loading' ||
     appleMusicSource.refreshing ||
@@ -668,7 +686,7 @@ export default function FindMusicClient() {
     onRefreshSpotifyLibrary: runLibraryRefresh,
     onRefreshAppleMusic: appleMusicActions.refresh,
     onScanLocal: runLocalScan,
-    onRefreshChorus: runChorusRefresh,
+    onRefreshChorus: loadCatalog,
   };
 
   return (
@@ -775,14 +793,42 @@ export default function FindMusicClient() {
               </div>
             )}
 
-            {initializing ? (
+            {initializing || catalogState === 'refreshing' ? (
               <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border bg-card p-8">
                 <div className="text-center">
                   <Sparkles className="mx-auto mb-3 h-6 w-6 animate-pulse text-primary" />
-                  <p className="font-medium">Opening your local music index</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Reading the shared OPFS SQLite database…
+                  <p className="font-medium">
+                    {initializing
+                      ? 'Opening your local music index'
+                      : chorusError
+                        ? 'Could not refresh your Chorus index'
+                        : 'Refreshing your Chorus index'}
                   </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {initializing
+                      ? 'Reading the shared OPFS SQLite database…'
+                      : (chorusError ??
+                        'Updating chart metadata before showing your matches…')}
+                  </p>
+                </div>
+              </div>
+            ) : catalogState === 'degraded' ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border border-destructive/40 bg-card p-8">
+                <div className="text-center">
+                  <Sparkles className="mx-auto mb-3 h-6 w-6 text-destructive" />
+                  <p className="font-medium">
+                    Your Chorus index needs a refresh
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    The stored catalog could not be updated, so its instrument
+                    metadata is being kept hidden until the refresh succeeds.
+                  </p>
+                  <Button
+                    type="button"
+                    className="mt-4"
+                    onClick={() => void loadCatalog()}>
+                    Try again
+                  </Button>
                 </div>
               </div>
             ) : committed.music.length === 0 &&

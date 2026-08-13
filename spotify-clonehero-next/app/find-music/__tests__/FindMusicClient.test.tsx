@@ -47,7 +47,10 @@ jest.mock('../../../lib/supabase/client', () => ({
 }));
 
 const mockRefreshChorus = jest.fn(async () => []);
+const mockGetServerChartsDataVersion = jest.fn(async () => 6);
+let releaseRefresh = () => {};
 jest.mock('../../../lib/chorusChartDb', () => ({
+  getServerChartsDataVersion: () => mockGetServerChartsDataVersion(),
   useChorusChartDb: () => [
     {status: 'idle', numFetched: 0, numTotal: 0},
     mockRefreshChorus,
@@ -55,8 +58,12 @@ jest.mock('../../../lib/chorusChartDb', () => ({
 }));
 
 const mockLocalDbExists = jest.fn(async () => true);
+const mockGetChartsDataVersion = jest.fn(async () => 0);
 jest.mock('../../../lib/local-db/client', () => ({
   localDbExists: () => mockLocalDbExists(),
+}));
+jest.mock('../../../lib/local-db/chorus', () => ({
+  getChartsDataVersion: () => mockGetChartsDataVersion(),
 }));
 
 jest.mock('../../../lib/spotify-sdk/SpotifyFetching', () => ({
@@ -267,9 +274,12 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.sessionStorage.setItem(FIND_MUSIC_ACTIVATION_KEY, 'true');
   mockLocalDbExists.mockResolvedValue(true);
+  mockGetChartsDataVersion.mockResolvedValue(0);
+  mockGetServerChartsDataVersion.mockResolvedValue(6);
   mockGetFindMusicStats.mockResolvedValue(stats);
   mockGetRadarSongs.mockResolvedValue([]);
   mockRefreshChorus.mockImplementation(async () => []);
+  releaseRefresh = () => {};
 });
 
 it('tells the user to try again later when Chorus is unavailable', async () => {
@@ -338,7 +348,7 @@ it('preserves provider-return activation through React Strict Mode effect replay
   expect(window.sessionStorage.getItem(FIND_MUSIC_ACTIVATION_KEY)).toBeNull();
 });
 
-it('loads an existing local index without automatically refreshing Chorus', async () => {
+it('refreshes an existing local index before showing its matches', async () => {
   window.sessionStorage.clear();
   mockLocalDbExists.mockResolvedValue(true);
   mockGetFindMusicSongs.mockResolvedValue([song('saved', 'Saved')]);
@@ -346,9 +356,79 @@ it('loads an existing local index without automatically refreshing Chorus', asyn
 
   render(<FindMusicClient />);
 
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
   expect(await screen.findByTestId('music-table')).toHaveTextContent('Saved');
   expect(mockGetFindMusicStats).toHaveBeenCalled();
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+});
+
+it('shows a current local index while its background refresh runs', async () => {
+  window.sessionStorage.clear();
+  mockGetChartsDataVersion.mockResolvedValue(6);
+  mockLocalDbExists.mockResolvedValue(true);
+  mockGetFindMusicSongs.mockResolvedValue([song('saved', 'Saved')]);
+  mockGetFindMusicStats.mockResolvedValue(stats);
+  mockRefreshChorus.mockImplementation(
+    () =>
+      new Promise<never[]>(resolve => {
+        releaseRefresh = () => resolve([]);
+      }),
+  );
+
+  render(<FindMusicClient />);
+
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+  expect(screen.queryByTestId('music-table')).not.toBeInTheDocument();
+  expect(
+    screen.getByText('Opening your local music index'),
+  ).toBeInTheDocument();
+
+  await act(async () => {
+    releaseRefresh();
+  });
+  expect(await screen.findByTestId('music-table')).toHaveTextContent('Saved');
+});
+
+it('does not expose a stale existing snapshot while the catalog refreshes', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(true);
+  mockGetFindMusicSongs.mockResolvedValue([song('saved', 'Fresh')]);
+  mockGetFindMusicStats.mockResolvedValue(stats);
+  mockRefreshChorus.mockImplementation(
+    () =>
+      new Promise<never[]>(resolve => {
+        releaseRefresh = () => resolve([]);
+      }),
+  );
+
+  render(<FindMusicClient />);
+
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+  expect(screen.queryByTestId('music-table')).not.toBeInTheDocument();
+  expect(
+    screen.getByText('Opening your local music index'),
+  ).toBeInTheDocument();
+
+  await act(async () => {
+    releaseRefresh();
+  });
+  expect(await screen.findByTestId('music-table')).toHaveTextContent('Fresh');
+});
+
+it('waits for first-time taste data before consuming automatic refresh', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(false);
+  mockGetFindMusicSongs.mockResolvedValue([]);
+  mockGetFindMusicStats.mockResolvedValue({...stats, chorusCharts: 2});
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('find-music-welcome')).toBeInTheDocument();
   expect(mockRefreshChorus).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('button', {name: 'Connect Apple Music'}));
+
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalledTimes(1));
 });
 
 it('keeps the loaded snapshot warm while the route changes', async () => {
@@ -358,7 +438,7 @@ it('keeps the loaded snapshot warm while the route changes', async () => {
 
   expect(await screen.findByTestId('music-table')).toBeInTheDocument();
   expect(screen.getByTestId('sidebar')).toHaveAttribute('data-view', 'music');
-  await waitFor(() => expect(mockGetFindMusicSongs).toHaveBeenCalledTimes(2));
+  expect(mockGetFindMusicSongs).toHaveBeenCalledTimes(1);
 
   const queryCounts = {
     songs: mockGetFindMusicSongs.mock.calls.length,
@@ -505,7 +585,7 @@ it('uses the full setup guide when no taste source has been loaded', async () =>
     }),
   ).toBeInTheDocument();
   expect(screen.queryByTestId('music-table')).not.toBeInTheDocument();
-  expect(mockRefreshChorus).not.toHaveBeenCalled();
+  expect(mockRefreshChorus).toHaveBeenCalledTimes(1);
   expect(
     screen.getAllByText(
       'Connect Spotify, Apple Music, or History to download the index',
@@ -706,6 +786,8 @@ it('moves the sidebar into a dismissible hamburger drawer on small screens', asy
 });
 
 it('holds source-driven matches until the user explicitly re-ranks', async () => {
+  mockLocalDbExists.mockResolvedValue(false);
+  mockAppleSetupState = 'authorized';
   mockGetFindMusicSongs
     .mockResolvedValueOnce([song('alpha', 'Alpha')])
     .mockResolvedValue([song('alpha', 'Alpha'), song('beta', 'Beta')]);
@@ -726,6 +808,10 @@ it('holds source-driven matches until the user explicitly re-ranks', async () =>
   );
 
   expect(await screen.findByTestId('music-table')).toHaveTextContent('Alpha');
+
+  fireEvent.click(
+    screen.getByRole('button', {name: 'Refresh Apple Music test'}),
+  );
 
   const hold = await screen.findByTestId('held-matches');
   expect(mockRefreshChorus).toHaveBeenCalledTimes(1);
