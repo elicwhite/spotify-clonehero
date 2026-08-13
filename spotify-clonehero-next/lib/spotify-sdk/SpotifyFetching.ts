@@ -619,13 +619,14 @@ export function useSpotifyLibraryUpdate(
           updateStatus: 'fetching',
         }));
 
+        const playlistCount = Object.keys(playlistMetadata).length;
         console.log(
           '[Spotify] Integrity check starting for',
-          playlistMetadata['length'],
+          playlistCount,
           'playlists',
         );
         const integrity = {
-          total: playlistMetadata['length'],
+          total: playlistCount,
           complete: 0,
           resume: 0,
           fresh: 0,
