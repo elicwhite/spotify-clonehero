@@ -54,8 +54,8 @@ const DRY_RUN = process.argv.includes('--dry-run');
 /**
  * Write the catalog into `public/` instead of R2, so `pnpm dev` serves it and
  * the browser exercises the real manifest, checksum and ingest against a dump
- * you built. Pair with NEXT_PUBLIC_CHART_DB_ASSET_BASE_URL= (empty) in
- * .env.local, which resolves the asset URLs same-origin.
+ * you built. A development build prefers this over R2 automatically; delete
+ * `public/charts/` to go back to production data.
  */
 const LOCAL = process.argv.includes('--local');
 const LOCAL_DIR = path.join('.', 'public', CHART_DB_KEY_PREFIX);
@@ -160,9 +160,7 @@ async function run() {
       JSON.stringify(manifest, null, 2),
     );
     console.log(`Wrote public/${CHART_DB_MANIFEST_KEY} and public/${key}`);
-    console.log(
-      'Set NEXT_PUBLIC_CHART_DB_ASSET_BASE_URL= (empty) in .env.local, then reload.',
-    );
+    console.log('Reload the dev server and it will prefer this over R2.');
     return;
   }
 

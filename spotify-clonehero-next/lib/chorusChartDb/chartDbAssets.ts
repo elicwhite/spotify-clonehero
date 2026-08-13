@@ -19,15 +19,7 @@ import type {ChorusChartDbRow} from './types';
  * code, so the publishing credentials never need delete permission.
  */
 
-/**
- * Where the manifest and dumps are read from. Overridable so a dev server can
- * point at a catalog it published locally (`pnpm publish:db --local` writes
- * one under `public/charts/`, and an empty base resolves to same-origin) and
- * exercise the real download, checksum and ingest without touching R2.
- */
-export const CHART_DB_ASSET_BASE_URL =
-  process.env['NEXT_PUBLIC_CHART_DB_ASSET_BASE_URL'] ??
-  'https://assets.musiccharts.tools';
+export const CHART_DB_ASSET_BASE_URL = 'https://assets.musiccharts.tools';
 export const CHART_DB_KEY_PREFIX = 'charts';
 export const CHART_DB_MANIFEST_KEY = `${CHART_DB_KEY_PREFIX}/manifest.json`;
 /**
@@ -63,6 +55,39 @@ export type ChartDbManifest = {
 
 export function chartDbAssetUrl(key: string): string {
   return `${CHART_DB_ASSET_BASE_URL}/${key}`;
+}
+
+/**
+ * A dev server serving `public/charts/` takes precedence over R2, so
+ * `pnpm publish:db --local` is the whole setup: publish, reload, and the
+ * browser exercises the real manifest, checksum and ingest against a catalog
+ * you built. Delete `public/charts/` and it goes back to production data.
+ *
+ * The probe costs one HEAD request, once, and only in a development build in a
+ * browser — the first condition is statically false in a production bundle, so
+ * none of this survives the build.
+ */
+let localCatalogBase: Promise<string> | undefined;
+
+async function resolveAssetBase(fetchImpl: typeof fetch): Promise<string> {
+  if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') {
+    return CHART_DB_ASSET_BASE_URL;
+  }
+  localCatalogBase ??= (async () => {
+    try {
+      const response = await fetchImpl(`/${CHART_DB_MANIFEST_KEY}`, {
+        method: 'HEAD',
+      });
+      if (response.ok) {
+        console.log('Using the catalog published to public/charts/');
+        return '';
+      }
+    } catch {
+      // No dev server route for it; production data is the right answer.
+    }
+    return CHART_DB_ASSET_BASE_URL;
+  })();
+  return localCatalogBase;
 }
 
 export function chartDbDumpKey(version: string): string {
@@ -107,7 +132,8 @@ export function parseChartDbManifest(value: unknown): ChartDbManifest {
 export async function fetchChartDbManifest(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ChartDbManifest> {
-  const response = await fetchImpl(chartDbAssetUrl(CHART_DB_MANIFEST_KEY), {
+  const base = await resolveAssetBase(fetchImpl);
+  const response = await fetchImpl(`${base}/${CHART_DB_MANIFEST_KEY}`, {
     cache: 'no-cache',
   });
 
@@ -130,7 +156,9 @@ export async function fetchChartDbDump(
   fetchImpl: typeof fetch = fetch,
   expectedContentSha256: string,
 ): Promise<ChorusChartDbRow[]> {
-  const response = await fetchImpl(chartDbAssetUrl(key));
+  const response = await fetchImpl(
+    `${await resolveAssetBase(fetchImpl)}/${key}`,
+  );
 
   if (!response.ok) {
     throw new Error(
