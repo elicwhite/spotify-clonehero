@@ -33,137 +33,161 @@ export const NOT_A_FOLDER_MESSAGE =
 export const SELECT_SONG_FOLDER_MESSAGE =
   'Select the song’s own folder: the one with the chart file in it.';
 export const EMPTY_FOLDER_MESSAGE = 'That folder has no files in it.';
+export const ONE_CHART_AT_A_TIME_MESSAGE =
+  'Drop one chart at a time: a single folder, .zip or .sng.';
+
+/** A file inside a folder, read only if it turns out to be part of the chart. */
+interface FolderFile {
+  name: string;
+  read: () => Promise<Uint8Array>;
+}
 
 /**
- * A file inside a picked folder, and the path segments locating it below that
- * folder — `['Song Name', 'notes.chart']`. The root segment is the folder the
- * user chose. Every way of picking a folder can produce these: a directory
- * handle by walking it, a `webkitdirectory` input from `webkitRelativePath`, a
- * drop from its `FileSystemEntry`s.
+ * A folder, however it was picked. Every source can list its immediate
+ * children — a directory handle by iterating it, a dropped entry through its
+ * reader, a `webkitdirectory` selection by grouping paths — and that is all
+ * `readFolder` needs to find the chart.
+ *
+ * `list` is called only when the folder's contents are actually needed, so a
+ * library folder of hundreds of songs is never enumerated past the level that
+ * shows it is not one song.
  */
-export interface FolderEntry {
-  segments: string[];
-  read: () => Promise<Uint8Array>;
+interface FolderSource {
+  name: string;
+  list: () => Promise<{files: FolderFile[]; subfolders: FolderSource[]}>;
+}
+
+/** Dotfiles are never part of a chart: .DS_Store, .git, and friends. */
+function visible<T extends {name: string}>(items: T[]): T[] {
+  return items.filter(item => !item.name.startsWith('.'));
+}
+
+async function packageFrom(
+  name: string,
+  files: FolderFile[],
+): Promise<LoadedFiles> {
+  // Every file goes through: the chart and ini become the parsed structure and
+  // everything else (audio stems, album art, background.png, video) lands in
+  // `chartDoc.assets`, so writeChartFolder can round-trip the package.
+  return {
+    files: await Promise.all(
+      files.map(async file => ({fileName: file.name, data: await file.read()})),
+    ),
+    sourceFormat: 'folder',
+    // Named after the folder the chart was actually read from, not the one the
+    // user happened to choose: this is the export's filename and the project's
+    // fallback song name, so a descent has to carry the name with it.
+    originalName: name,
+  };
 }
 
 /**
  * The one place that decides which of a folder's files are the chart.
  *
  * Reads a single level, because a chart package is flat. If the chosen folder
- * has no files of its own but everything sits under one subfolder, that
- * subfolder is read instead: picking the parent of a song folder is an easy
- * slip, and the zip reader already tolerates the equivalent. Anything less
- * certain than that — several subfolders, or a deeper tree — is the user's to
- * resolve, since guessing at which song they meant would be worse than asking.
+ * has no files of its own but holds exactly one subfolder, that subfolder is
+ * read instead: picking the parent of a song folder is an easy slip, and the
+ * zip reader already tolerates the equivalent. Anything less certain than that
+ * — several subfolders, or a deeper tree — is the user's to resolve, since
+ * guessing at which song they meant would be worse than asking.
  *
  * Every failure throws with a message about the folder. Returning no files
  * instead surfaces to the user as a chart parsing error, which is not what
  * went wrong.
  */
-export async function readFolderEntries(
-  entries: FolderEntry[],
-): Promise<LoadedFiles> {
-  // Dotfiles are skipped, and dot-directories with them. The chosen folder's
-  // own name is exempt: a chart kept in a hidden folder is still the chart the
-  // user asked for.
-  const visible = entries.filter(
-    ({segments}) => !segments.slice(1).some(name => name.startsWith('.')),
-  );
+async function readFolder(source: FolderSource): Promise<LoadedFiles> {
+  const {files, subfolders} = await source.list();
 
-  if (visible.length === 0) throw new Error(EMPTY_FOLDER_MESSAGE);
+  const ownFiles = visible(files);
+  if (ownFiles.length > 0) return packageFrom(source.name, ownFiles);
 
-  let chartEntries = visible.filter(({segments}) => segments.length === 2);
+  const candidates = visible(subfolders);
+  if (candidates.length === 0) throw new Error(EMPTY_FOLDER_MESSAGE);
+  if (candidates.length > 1) throw new Error(SELECT_SONG_FOLDER_MESSAGE);
 
-  if (chartEntries.length === 0) {
-    const subdirectories = new Set(visible.map(({segments}) => segments[1]));
-    chartEntries =
-      subdirectories.size === 1
-        ? visible.filter(({segments}) => segments.length === 3)
-        : [];
-    if (chartEntries.length === 0) {
-      throw new Error(SELECT_SONG_FOLDER_MESSAGE);
-    }
-  }
-
-  // Every file goes through: the chart and ini become the parsed structure and
-  // everything else (audio stems, album art, background.png, video) lands in
-  // `chartDoc.assets`, so writeChartFolder can round-trip the package.
-  const files: FileEntry[] = await Promise.all(
-    chartEntries.map(async ({segments, read}) => ({
-      fileName: segments[segments.length - 1],
-      data: await read(),
-    })),
-  );
-
-  // Named after the folder the chart was actually read from, not the one the
-  // user happened to choose: this is the export's filename and the project's
-  // fallback song name, so descending into a subfolder has to carry its name.
-  const chartPath = chartEntries[0].segments;
-  return {
-    files,
-    sourceFormat: 'folder',
-    originalName: chartPath[chartPath.length - 2],
-  };
+  const [subfolder] = candidates;
+  const inside = visible((await subfolder.list()).files);
+  // One descent, not a search: a chart two or more levels down is as likely to
+  // be the wrong one as the right one.
+  if (inside.length === 0) throw new Error(SELECT_SONG_FOLDER_MESSAGE);
+  return packageFrom(subfolder.name, inside);
 }
 
-/** A file handle, as the entry `readFolderEntries` works in. */
-function handleEntry(
-  segments: string[],
-  handle: FileSystemFileHandle,
-): FolderEntry {
+/** A File System Access directory handle as a folder source (Chromium). */
+function handleSource(handle: FileSystemDirectoryHandle): FolderSource {
   return {
-    segments,
-    read: async () =>
-      new Uint8Array(await (await handle.getFile()).arrayBuffer()),
+    name: handle.name,
+    list: async () => {
+      const files: FolderFile[] = [];
+      const subfolders: FolderSource[] = [];
+      for await (const [name, child] of handle.entries()) {
+        if (child.kind === 'file') {
+          const fileHandle = child as FileSystemFileHandle;
+          files.push({
+            name,
+            read: async () =>
+              new Uint8Array(await (await fileHandle.getFile()).arrayBuffer()),
+          });
+        } else {
+          subfolders.push(handleSource(child as FileSystemDirectoryHandle));
+        }
+      }
+      return {files, subfolders};
+    },
   };
 }
 
 /** Folder reader for a File System Access directory handle (Chromium). */
-export async function readChartDirectory(
+export function readChartDirectory(
   dirHandle: FileSystemDirectoryHandle,
 ): Promise<LoadedFiles> {
-  const entries: FolderEntry[] = [];
-  const subdirectories: FileSystemDirectoryHandle[] = [];
+  return readFolder(handleSource(dirHandle));
+}
 
-  for await (const [name, handle] of dirHandle.entries()) {
-    if (handle.kind === 'file') {
-      entries.push(handleEntry([dirHandle.name, name], handle));
-    } else {
-      subdirectories.push(handle as FileSystemDirectoryHandle);
-    }
-  }
+/**
+ * A `webkitdirectory` selection as a folder source. That input hands back
+ * every file in the tree at once, each carrying its path below the chosen
+ * folder in `webkitRelativePath`, so the tree is regrouped from those paths.
+ */
+interface PathEntry {
+  segments: string[];
+  read: () => Promise<Uint8Array>;
+}
 
-  // A lone subfolder is only descended into when the chosen folder has no
-  // files of its own, so its contents are listed only in that case — a library
-  // folder of hundreds of songs should not be enumerated just to be rejected.
-  if (entries.length === 0 && subdirectories.length === 1) {
-    const [subdirectory] = subdirectories;
-    for await (const [name, handle] of subdirectory.entries()) {
-      if (handle.kind !== 'file') continue;
-      entries.push(
-        handleEntry(
-          [dirHandle.name, subdirectory.name, name],
-          handle as FileSystemFileHandle,
+function pathSource(
+  name: string,
+  entries: PathEntry[],
+  depth: number,
+): FolderSource {
+  return {
+    name,
+    list: async () => {
+      const files = entries
+        .filter(entry => entry.segments.length === depth + 1)
+        .map(entry => ({name: entry.segments[depth], read: entry.read}));
+
+      const deeper = entries.filter(entry => entry.segments.length > depth + 1);
+      const subfolders = Array.from(
+        new Set(deeper.map(entry => entry.segments[depth])),
+      ).map(childName =>
+        pathSource(
+          childName,
+          deeper.filter(entry => entry.segments[depth] === childName),
+          depth + 1,
         ),
       );
-    }
-  } else if (entries.length === 0 && subdirectories.length > 1) {
-    throw new Error(SELECT_SONG_FOLDER_MESSAGE);
-  }
 
-  return readFolderEntries(entries);
+      return {files, subfolders};
+    },
+  };
 }
 
 /**
  * Folder reader for browsers without the File System Access API, fed by an
- * `<input type="file" webkitdirectory>` selection. That input hands back every
- * file in the tree at once, each carrying its path below the chosen folder in
- * `webkitRelativePath`.
+ * `<input type="file" webkitdirectory>` selection.
  */
-export async function readChartFileList(
-  selection: File[],
-): Promise<LoadedFiles> {
-  const entries: FolderEntry[] = selection
+export function readChartFileList(selection: File[]): Promise<LoadedFiles> {
+  const entries: PathEntry[] = selection
     .map(file => ({
       segments: (file.webkitRelativePath ?? '').split('/'),
       read: async () => new Uint8Array(await file.arrayBuffer()),
@@ -172,13 +196,15 @@ export async function readChartFileList(
     .filter(({segments}) => segments.length > 1);
 
   // Which is a different failure from an empty folder, and only this adapter
-  // can tell them apart: by the time readFolderEntries sees them, both are no
-  // entries at all.
+  // can tell them apart: by the time readFolder sees them, both are nothing.
   if (entries.length === 0 && selection.length > 0) {
-    throw new Error(NOT_A_FOLDER_MESSAGE);
+    return Promise.reject(new Error(NOT_A_FOLDER_MESSAGE));
+  }
+  if (entries.length === 0) {
+    return Promise.reject(new Error(EMPTY_FOLDER_MESSAGE));
   }
 
-  return readFolderEntries(entries);
+  return readFolder(pathSource(entries[0].segments[0], entries, 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -303,17 +329,21 @@ export type DroppedChart =
 export async function readDroppedChart(
   dataTransfer: DataTransfer,
 ): Promise<DroppedChart> {
-  const entries = directoryEntries(dataTransfer);
+  const folders = droppedFolders(dataTransfer);
   const file: File | undefined = dataTransfer.files[0];
 
-  if (entries.length > 0) {
-    return {
-      kind: 'chart',
-      loaded: await readFolderEntries(await walkFolder(entries[0])),
-    };
+  // One package at a time. Reading the first of several and saying nothing
+  // would look like the rest had been merged into it, and drop order is not
+  // something the user controls.
+  if (folders.length > 1) throw new Error(ONE_CHART_AT_A_TIME_MESSAGE);
+  if (folders.length === 1) {
+    return {kind: 'chart', loaded: await readFolder(folders[0])};
   }
 
   if (!file) return {kind: 'nothing'};
+  if (dataTransfer.files.length > 1) {
+    throw new Error(ONE_CHART_AT_A_TIME_MESSAGE);
+  }
 
   const format = detectFormat(file);
   return format
@@ -321,62 +351,40 @@ export async function readDroppedChart(
     : {kind: 'file', file};
 }
 
-/** The dropped items that are directories, as filesystem entries. */
-function directoryEntries(
-  dataTransfer: DataTransfer,
-): FileSystemDirectoryEntry[] {
+/** The dropped items that are directories, as folder sources. */
+function droppedFolders(dataTransfer: DataTransfer): FolderSource[] {
   return Array.from(dataTransfer.items)
     .map(item => (item.kind === 'file' ? item.webkitGetAsEntry?.() : null))
     .filter((entry): entry is FileSystemDirectoryEntry =>
       Boolean(entry?.isDirectory),
-    );
+    )
+    .map(entrySource);
 }
 
-/** A dropped file entry, as the entry `readFolderEntries` works in. */
-function droppedEntry(
-  segments: string[],
-  entry: FileSystemFileEntry,
-): FolderEntry {
+/** A dropped directory entry as a folder source. */
+function entrySource(directory: FileSystemDirectoryEntry): FolderSource {
   return {
-    segments,
-    read: async () => {
-      const file = await new Promise<File>((resolve, reject) =>
-        entry.file(resolve, reject),
-      );
-      return new Uint8Array(await file.arrayBuffer());
+    name: directory.name,
+    list: async () => {
+      const children = await readDirectoryEntries(directory);
+      return {
+        files: children
+          .filter((child): child is FileSystemFileEntry => child.isFile)
+          .map(child => ({
+            name: child.name,
+            read: async () => {
+              const file = await new Promise<File>((resolve, reject) =>
+                child.file(resolve, reject),
+              );
+              return new Uint8Array(await file.arrayBuffer());
+            },
+          })),
+        subfolders: children
+          .filter(
+            (child): child is FileSystemDirectoryEntry => child.isDirectory,
+          )
+          .map(entrySource),
+      };
     },
   };
-}
-
-/**
- * A dropped directory as `FolderEntry`s: its own files, or those of a lone
- * subfolder — the same shape, and the same reasoning, as the directory handle
- * reader above.
- */
-async function walkFolder(
-  directory: FileSystemDirectoryEntry,
-): Promise<FolderEntry[]> {
-  const children = await readDirectoryEntries(directory);
-  const files = children.filter(
-    (child): child is FileSystemFileEntry => child.isFile,
-  );
-  if (files.length > 0) {
-    return files.map(child =>
-      droppedEntry([directory.name, child.name], child),
-    );
-  }
-
-  const subdirectories = children.filter(
-    (child): child is FileSystemDirectoryEntry => child.isDirectory,
-  );
-  if (subdirectories.length > 1) throw new Error(SELECT_SONG_FOLDER_MESSAGE);
-  if (subdirectories.length === 0) return [];
-
-  const [subdirectory] = subdirectories;
-  const grandchildren = await readDirectoryEntries(subdirectory);
-  return grandchildren
-    .filter((child): child is FileSystemFileEntry => child.isFile)
-    .map(child =>
-      droppedEntry([directory.name, subdirectory.name, child.name], child),
-    );
 }

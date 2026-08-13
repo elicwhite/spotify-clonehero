@@ -3,6 +3,11 @@
  * entries. Dropping a folder pulls in every file it contains, recursively;
  * only the basename is kept (the SNG/zip package is a flat list of files).
  *
+ * This is deliberately not `readDroppedChart`: /sng's package builder takes
+ * whatever you give it and adds all of it, where reading a chart means
+ * finding the one song folder and refusing the ambiguous cases. Same gesture,
+ * different questions.
+ *
  * Uses the non-standard but widely supported `webkitGetAsEntry()` so that
  * dropped *directories* can be traversed — `DataTransfer.files` alone only
  * exposes top-level files, not folder contents.
@@ -40,7 +45,7 @@ export function readDirectoryEntries(
 }
 
 async function walkEntry(entry: FileSystemEntry): Promise<FileEntry[]> {
-  // Skip dotfiles like .DS_Store, matching readChartDirectory.
+  // Skip dotfiles like .DS_Store; they are never part of a package.
   if (entry.name.startsWith('.')) return [];
 
   if (entry.isFile) {

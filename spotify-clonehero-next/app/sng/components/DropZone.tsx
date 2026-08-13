@@ -9,6 +9,7 @@ import type {File as FileEntry} from '@eliwhite/scan-chart';
 import {
   readChartDirectory,
   readChartFileList,
+  type LoadedFiles,
 } from '@/lib/chart-files/chart-package';
 import {
   pickFiles,
@@ -68,7 +69,7 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
   }, [busy, onAdd]);
 
   const addFolder = useCallback(
-    async (read: () => Promise<{files: FileEntry[]}>) => {
+    async (read: () => Promise<LoadedFiles>) => {
       setIsReading(true);
       try {
         onAdd((await read()).files);

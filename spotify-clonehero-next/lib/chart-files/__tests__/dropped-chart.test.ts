@@ -1,5 +1,7 @@
 import {strToU8, zipSync} from 'fflate';
 import {
+  EMPTY_FOLDER_MESSAGE,
+  ONE_CHART_AT_A_TIME_MESSAGE,
   SELECT_SONG_FOLDER_MESSAGE,
   readChartDirectory,
   readDroppedChart,
@@ -16,7 +18,7 @@ function fileEntry(name: string, contents = 'x'): FileSystemFileEntry {
     isDirectory: false,
     name,
     file: (onSuccess: (file: File) => void) =>
-      onSuccess(new File([contents], name)),
+      setTimeout(() => onSuccess(new File([contents], name)), 0),
   } as unknown as FileSystemFileEntry;
 }
 
@@ -29,26 +31,36 @@ function folderEntry(
     isDirectory: true,
     name,
     createReader: () => {
-      // readEntries is batched: it yields its children once, then an empty
-      // array to signal the end. Reproduced so the reader's loop is exercised.
-      let drained = false;
+      // The real readEntries hands back at most 100 entries per call and
+      // signals the end with an empty batch, which is the only reason the
+      // reader loops. Two at a time here so that loop is actually exercised,
+      // and asynchronously, as the browser calls back.
+      let next = 0;
       return {
         readEntries: (onSuccess: (entries: FileSystemEntry[]) => void) => {
-          const batch = drained ? [] : children;
-          drained = true;
-          onSuccess(batch);
+          const batch = children.slice(next, next + 2);
+          next += batch.length;
+          setTimeout(() => onSuccess(batch), 0);
         },
       };
     },
   } as unknown as FileSystemDirectoryEntry;
 }
 
+/**
+ * A drop. A real DataTransfer exposes an item per dropped thing — files
+ * included, each with a FileSystemFileEntry — alongside the plain file list,
+ * so files are given both here rather than only a `files` entry.
+ */
 function drop(entries: FileSystemEntry[], files: File[] = []): DataTransfer {
   return {
-    items: entries.map(entry => ({
-      kind: 'file',
-      webkitGetAsEntry: () => entry,
-    })),
+    items: [
+      ...entries.map(entry => ({kind: 'file', webkitGetAsEntry: () => entry})),
+      ...files.map(file => ({
+        kind: 'file',
+        webkitGetAsEntry: () => fileEntry(file.name),
+      })),
+    ],
     files,
   } as unknown as DataTransfer;
 }
@@ -142,6 +154,34 @@ describe('readDroppedChart', () => {
     expect(result.loaded.files.map(f => f.fileName)).toEqual(['notes.chart']);
   });
 
+  it('descends past a .DS_Store sitting in the parent folder', async () => {
+    // The dotfile is not a file the folder "has": every Mac folder that has
+    // been opened in Finder holds one, and it must not stop the descent.
+    const result = await readDroppedChart(
+      drop([
+        folderEntry('Charts', [
+          fileEntry('.DS_Store'),
+          folderEntry('Song Name', [fileEntry('notes.chart')]),
+        ]),
+      ]),
+    );
+
+    if (result.kind !== 'chart') throw new Error('expected a chart');
+    expect(result.loaded.originalName).toBe('Song Name');
+    expect(result.loaded.files.map(f => f.fileName)).toEqual(['notes.chart']);
+  });
+
+  it('refuses several folders at once rather than reading one of them', async () => {
+    await expect(
+      readDroppedChart(
+        drop([
+          folderEntry('Song One', [fileEntry('notes.chart')]),
+          folderEntry('Song Two', [fileEntry('notes.chart')]),
+        ]),
+      ),
+    ).rejects.toThrow(ONE_CHART_AT_A_TIME_MESSAGE);
+  });
+
   it('hands back a file that is not a chart package, for the caller to route', async () => {
     const song = new File(['audio'], 'song.mp3');
     const result = await readDroppedChart(drop([], [song]));
@@ -158,7 +198,7 @@ describe('readDroppedChart', () => {
     // always there, and the archive readers only ever needed that.
     const zip = zipSync({'Song Name/notes.chart': strToU8('[Song]')});
     const result = await readDroppedChart(
-      drop([], [new File([zip], 'Song Name.zip')]),
+      drop([], [new File([zip.slice()], 'Song Name.zip')]),
     );
 
     if (result.kind !== 'chart') throw new Error('expected a chart');
@@ -198,6 +238,35 @@ describe('readChartDirectory', () => {
         directoryHandle('Charts', [
           directoryHandle('Song One', [fileHandle('notes.chart')]),
           directoryHandle('Song Two', [fileHandle('notes.chart')]),
+        ]),
+      ),
+    ).rejects.toThrow(SELECT_SONG_FOLDER_MESSAGE);
+  });
+
+  it('descends past a .DS_Store sitting in the chosen folder', async () => {
+    const song = directoryHandle('Song Name', [fileHandle('notes.chart')]);
+    const loaded = await readChartDirectory(
+      directoryHandle('Charts', [fileHandle('.DS_Store'), song]),
+    );
+
+    expect(loaded.originalName).toBe('Song Name');
+    expect(loaded.files.map(f => f.fileName)).toEqual(['notes.chart']);
+  });
+
+  it('reports an empty folder as empty', async () => {
+    await expect(
+      readChartDirectory(directoryHandle('Song Name', [])),
+    ).rejects.toThrow(EMPTY_FOLDER_MESSAGE);
+  });
+
+  it('asks for the song folder when the chart is deeper still', async () => {
+    // Two levels down is as likely to be the wrong chart as the right one.
+    await expect(
+      readChartDirectory(
+        directoryHandle('Library', [
+          directoryHandle('Charts', [
+            directoryHandle('Song Name', [fileHandle('notes.chart')]),
+          ]),
         ]),
       ),
     ).rejects.toThrow(SELECT_SONG_FOLDER_MESSAGE);
