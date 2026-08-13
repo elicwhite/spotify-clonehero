@@ -5,6 +5,7 @@ import zlib from 'zlib';
 import {promisify} from 'util';
 import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 import {
+  CHART_DB_KEY_PREFIX,
   CHART_DB_MANIFEST_KEY,
   CHART_DB_DATA_VERSION,
   chartDbAssetUrl,
@@ -17,6 +18,7 @@ import {
   DUMP_CACHE_CONTROL,
   MANIFEST_CACHE_CONTROL,
 } from '../lib/chorusChartDb/chartDbPublish';
+import {toChorusChartDbRow} from '../lib/chorusChartDb/types';
 
 /**
  * Publishes what `downloadDb.ts` wrote to the R2 bucket behind
@@ -24,6 +26,7 @@ import {
  *
  *   pnpm publish:db              upload
  *   pnpm publish:db --dry-run    report what would happen, touch nothing
+ *   pnpm publish:db --local      write it into public/ for the dev server
  *
  * The dump is uploaded to an immutable key and the manifest is written LAST, so
  * a failure part way through leaves clients on the previous dump rather than
@@ -48,6 +51,14 @@ const CHART_FILE = path.join('.', 'public', 'data', 'charts.json');
 const METADATA_FILE = path.join('.', 'public', 'data', 'metadata.json');
 
 const DRY_RUN = process.argv.includes('--dry-run');
+/**
+ * Write the catalog into `public/` instead of R2, so `pnpm dev` serves it and
+ * the browser exercises the real manifest, checksum and ingest against a dump
+ * you built. Pair with NEXT_PUBLIC_CHART_DB_ASSET_BASE_URL= (empty) in
+ * .env.local, which resolves the asset URLs same-origin.
+ */
+const LOCAL = process.argv.includes('--local');
+const LOCAL_DIR = path.join('.', 'public', CHART_DB_KEY_PREFIX);
 
 /**
  * The R2 credentials live only in GitHub Actions secrets, so publishing is a CI
@@ -95,19 +106,28 @@ async function run() {
     );
   }
 
+  // A local catalog re-narrows its rows first, so a dump written under an
+  // older contract can be served today without a five-hour crawl to rebuild
+  // it. That is the same transformation an incremental run applies to its
+  // seeds, so the result matches what CI would publish. The real publish path
+  // stays strict: there, a stale row means the pipeline is wrong.
+  const rows: unknown = LOCAL
+    ? (JSON.parse(charts.toString()) as unknown[])
+        .map(toChorusChartDbRow)
+        .filter(row => row != null)
+    : JSON.parse(charts.toString());
+  const body = LOCAL ? asBytes(Buffer.from(JSON.stringify(rows))) : charts;
+
   // Every row is checked here, once, so clients never have to.
-  assertPublishableDump(JSON.parse(charts.toString()));
+  assertPublishableDump(rows);
 
   const version = chartDbVersionFromDate(new Date(metadata.lastRun));
   const key = chartDbDumpKey(version);
 
   const compressed = asBytes(
-    await gzip(charts, {level: zlib.constants.Z_BEST_COMPRESSION}),
+    await gzip(body, {level: zlib.constants.Z_BEST_COMPRESSION}),
   );
-  const contentSha256 = crypto
-    .createHash('sha256')
-    .update(charts)
-    .digest('hex');
+  const contentSha256 = crypto.createHash('sha256').update(body).digest('hex');
   const manifest = buildManifest({
     version,
     dataVersion: CHART_DB_DATA_VERSION,
@@ -123,8 +143,28 @@ async function run() {
 
   console.log(
     `Publishing ${metadata.totalSongs.toLocaleString()} songs as ${version}: ` +
-      `${(charts.byteLength / 1e6).toFixed(1)}MB raw, ${(compressed.byteLength / 1e6).toFixed(1)}MB gzipped`,
+      `${(body.byteLength / 1e6).toFixed(1)}MB raw, ${(compressed.byteLength / 1e6).toFixed(1)}MB gzipped`,
   );
+
+  if (LOCAL) {
+    // Written uncompressed under the .gz name the manifest points at. The dev
+    // server serves it without Content-Encoding, so fetch hands back exactly
+    // these bytes — which is what contentSha256 covers. Storing it gzipped
+    // here would fail the checksum, not pass it.
+    const dumpPath = path.join('.', 'public', key);
+    fs.mkdirSync(path.dirname(dumpPath), {recursive: true});
+    fs.writeFileSync(dumpPath, body);
+    fs.mkdirSync(LOCAL_DIR, {recursive: true});
+    fs.writeFileSync(
+      path.join('.', 'public', CHART_DB_MANIFEST_KEY),
+      JSON.stringify(manifest, null, 2),
+    );
+    console.log(`Wrote public/${CHART_DB_MANIFEST_KEY} and public/${key}`);
+    console.log(
+      'Set NEXT_PUBLIC_CHART_DB_ASSET_BASE_URL= (empty) in .env.local, then reload.',
+    );
+    return;
+  }
 
   if (DRY_RUN) {
     console.log('--dry-run, not uploading. Manifest would be:');

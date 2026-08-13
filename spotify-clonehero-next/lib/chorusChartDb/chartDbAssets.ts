@@ -19,7 +19,15 @@ import type {ChorusChartDbRow} from './types';
  * code, so the publishing credentials never need delete permission.
  */
 
-export const CHART_DB_ASSET_BASE_URL = 'https://assets.musiccharts.tools';
+/**
+ * Where the manifest and dumps are read from. Overridable so a dev server can
+ * point at a catalog it published locally (`pnpm publish:db --local` writes
+ * one under `public/charts/`, and an empty base resolves to same-origin) and
+ * exercise the real download, checksum and ingest without touching R2.
+ */
+export const CHART_DB_ASSET_BASE_URL =
+  process.env['NEXT_PUBLIC_CHART_DB_ASSET_BASE_URL'] ??
+  'https://assets.musiccharts.tools';
 export const CHART_DB_KEY_PREFIX = 'charts';
 export const CHART_DB_MANIFEST_KEY = `${CHART_DB_KEY_PREFIX}/manifest.json`;
 /**

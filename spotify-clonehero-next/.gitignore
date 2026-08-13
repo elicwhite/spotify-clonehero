@@ -50,6 +50,8 @@ public/models/guitar-reduction-v1/
 
 # Test sng files
 public/*.sng
+# pnpm publish:db --local writes a catalog here for the dev server
+public/charts/
 
 # Real-charts test reports (generated, user-specific)
 real-charts-report.json
