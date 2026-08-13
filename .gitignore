@@ -7,3 +7,4 @@ spotify-clonehero-next/raw_db_files
 spotify-clonehero-next/public/data/charts.json
 spotify-clonehero-next/public/data/metadata.json
 /.pnpm-store
+/.tmpx
