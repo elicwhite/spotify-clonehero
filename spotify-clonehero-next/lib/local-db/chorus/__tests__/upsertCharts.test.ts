@@ -1,7 +1,9 @@
-import {Kysely, SqliteDialect, sql} from 'kysely';
+import {Kysely, Migrator, SqliteDialect, sql} from 'kysely';
 
 import type {ChorusChartDbRow} from '@/lib/chorusChartDb/types';
 import type {DB} from '@/lib/local-db/types';
+import {migrations} from '../../migrations';
+import {normalizeStrForMatching} from '../../normalize';
 import {
   clearAllCharts,
   replaceChorusCatalog,
@@ -13,70 +15,38 @@ jest.mock('sqlocal/kysely', () => ({SQLocalKysely: jest.fn()}), {
   virtual: true,
 });
 
-const Database = require('better-sqlite3') as new (path: string) => unknown;
+const Database = require('better-sqlite3') as new (path: string) => {
+  function(name: string, fn: (value: string) => string): unknown;
+};
 
-function makeDb() {
-  const sqlite = new Database(':memory:') as {
-    exec: (sql: string) => void;
-  };
-  sqlite.exec(`
-    CREATE TABLE chorus_charts (
-      md5 TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      artist TEXT NOT NULL,
-      charter TEXT NOT NULL,
-      diff_drums INTEGER,
-      diff_guitar INTEGER,
-      diff_bass INTEGER,
-      diff_keys INTEGER,
-      diff_drums_real INTEGER,
-      has_guitar INTEGER NOT NULL DEFAULT 0,
-      has_bass INTEGER NOT NULL DEFAULT 0,
-      has_keys INTEGER NOT NULL DEFAULT 0,
-      has_drums INTEGER NOT NULL DEFAULT 0,
-      has_other_instruments INTEGER NOT NULL DEFAULT 0,
-      drum_type INTEGER,
-      modified_time TEXT NOT NULL,
-      song_length INTEGER,
-      has_video_background INTEGER NOT NULL,
-      album_art_md5 TEXT,
-      group_id INTEGER NOT NULL,
-      first_seen TEXT,
-      artist_normalized TEXT,
-      name_normalized TEXT,
-      charter_normalized TEXT
-    );
-    CREATE TABLE spotify_tracks (
-      id TEXT PRIMARY KEY,
-      artist TEXT NOT NULL,
-      name TEXT NOT NULL,
-      artist_normalized TEXT,
-      name_normalized TEXT,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE spotify_track_chart_matches (
-      spotify_id TEXT NOT NULL,
-      chart_md5 TEXT NOT NULL,
-      matched_at INTEGER NOT NULL,
-      UNIQUE (spotify_id, chart_md5)
-    );
-    CREATE TABLE chorus_metadata (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE chorus_scan_sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      status TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      scan_since_time TEXT NOT NULL,
-      completed_at TEXT,
-      last_chart_id INTEGER
-    );
-  `);
-  return new Kysely<DB>({
+/**
+ * Built by running the real migrations rather than by hand. A hand-written
+ * CREATE TABLE drifts from the schema users actually have, and drift here is
+ * invisible: a migration that drops a column upsertCharts still writes would
+ * pass against a fixture that never had the column in the first place.
+ */
+async function makeDb() {
+  const sqlite = new Database(':memory:');
+  // The real client registers this scalar function on the connection; the
+  // renormalize migrations call it.
+  sqlite.function('normalize', (value: string) =>
+    normalizeStrForMatching(value ?? ''),
+  );
+  const db = new Kysely<DB>({
     dialect: new SqliteDialect({database: sqlite as never}),
   });
+
+  const {error} = await new Migrator({
+    db,
+    provider: {
+      async getMigrations() {
+        return migrations;
+      },
+    },
+  }).migrateToLatest();
+  if (error) throw error;
+
+  return db;
 }
 
 function chart(
@@ -102,7 +72,7 @@ function chart(
 }
 
 it('updates an existing Chorus chart when refreshed instrument data arrives', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(trx =>
@@ -158,7 +128,7 @@ it('updates an existing Chorus chart when refreshed instrument data arrives', as
 });
 
 it('rolls back the destructive reset when dump ingestion fails', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(async trx => {
@@ -198,7 +168,7 @@ it('rolls back the destructive reset when dump ingestion fails', async () => {
 });
 
 it('replaces the catalog and seeds the scan cutoff atomically', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     const replacement = chart(
@@ -258,7 +228,7 @@ it('replaces the catalog and seeds the scan cutoff atomically', async () => {
 });
 
 it('persists track-level presence when Chorus has no numeric intensity', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(trx =>
@@ -305,7 +275,7 @@ it('persists track-level presence when Chorus has no numeric intensity', async (
 });
 
 it('does not infer drums from a stale pro_drums modifier', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(trx =>
@@ -349,7 +319,7 @@ it('does not infer drums from a stale pro_drums modifier', async () => {
 });
 
 it('uses the actual drums track when drum intensity is unavailable', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(trx =>
@@ -387,7 +357,7 @@ it('uses the actual drums track when drum intensity is unavailable', async () =>
 });
 
 it('uses track-backed presence instead of numeric intensity metadata', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(trx =>
@@ -500,7 +470,7 @@ it('uses track-backed presence instead of numeric intensity metadata', async () 
 });
 
 it('records unsupported track types without treating them as core instruments', async () => {
-  const db = makeDb();
+  const db = await makeDb();
 
   try {
     await db.transaction().execute(trx =>
