@@ -19,7 +19,7 @@ describe('find music filter persistence', () => {
     const storage = memoryStorage();
     saveFindMusicFilters(storage, {
       install: 'hide-installed',
-      instruments: new Set(['guitar', 'proDrums']),
+      instruments: new Set(['guitar', 'drums']),
       query: 'Incubus Drive',
       exclusions: ['blink', 'Charter Name'],
       exclusionDraft: 'fall out',
@@ -31,7 +31,7 @@ describe('find music filter persistence', () => {
     );
     expect(loadFindMusicFilters(storage)).toEqual({
       install: 'hide-installed',
-      instruments: new Set(['guitar', 'proDrums']),
+      instruments: new Set(['guitar', 'drums']),
       query: 'Incubus Drive',
       exclusions: ['blink', 'Charter Name'],
       exclusionDraft: 'fall out',
@@ -53,11 +53,21 @@ describe('find music filter persistence', () => {
 
     expect(loadFindMusicFilters(storage)).toEqual({
       install: 'all',
-      instruments: new Set(['guitar']),
+      instruments: new Set(['drums', 'guitar']),
       query: '',
       exclusions: ['blink', 'Charter Name'],
       exclusionDraft: '',
     });
+  });
+
+  it('migrates the old pro drums filter id to drums', () => {
+    const storage = memoryStorage(
+      JSON.stringify({instruments: ['proDrums', 'drums']}),
+    );
+
+    expect(loadFindMusicFilters(storage).instruments).toEqual(
+      new Set(['drums']),
+    );
   });
 
   it('falls back to fresh defaults for corrupt or unavailable storage', () => {

@@ -7,12 +7,7 @@ import {
 
 export const FIND_MUSIC_FILTERS_STORAGE_KEY = 'find-music:filters:v1';
 
-const FILTER_INSTRUMENTS: InstrumentId[] = [
-  'guitar',
-  'bass',
-  'keys',
-  'proDrums',
-];
+const FILTER_INSTRUMENTS: InstrumentId[] = ['guitar', 'bass', 'keys', 'drums'];
 
 export function freshEmptyFilters(): FindMusicFilters {
   return {
@@ -43,11 +38,13 @@ export function loadFindMusicFilters(
     const instruments = new Set<InstrumentId>();
     if (Array.isArray(saved['instruments'])) {
       for (const instrument of saved['instruments']) {
+        const migratedInstrument =
+          instrument === 'proDrums' ? 'drums' : instrument;
         if (
-          typeof instrument === 'string' &&
-          FILTER_INSTRUMENTS.includes(instrument as InstrumentId)
+          typeof migratedInstrument === 'string' &&
+          FILTER_INSTRUMENTS.includes(migratedInstrument as InstrumentId)
         ) {
-          instruments.add(instrument as InstrumentId);
+          instruments.add(migratedInstrument as InstrumentId);
         }
       }
     }

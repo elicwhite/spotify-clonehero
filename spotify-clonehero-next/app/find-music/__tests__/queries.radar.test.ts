@@ -88,7 +88,6 @@ function makeDb(queryLog?: QueryLog[]): Kysely<DB> {
       has_guitar INTEGER NOT NULL DEFAULT 0,
       has_bass INTEGER NOT NULL DEFAULT 0,
       has_keys INTEGER NOT NULL DEFAULT 0,
-      has_pro_drums INTEGER NOT NULL DEFAULT 0,
       has_drums INTEGER NOT NULL DEFAULT 0,
       has_other_instruments INTEGER NOT NULL DEFAULT 0,
       drum_type INTEGER,
@@ -179,7 +178,6 @@ function chart(
     has_guitar: 1,
     has_bass: 0,
     has_keys: 0,
-    has_pro_drums: 1,
     has_drums: 1,
     has_other_instruments: 0,
     drum_type: null,
@@ -286,20 +284,25 @@ describe('find-music Radar queries', () => {
         chart('old-rev', 'Revised', 'revised', 'Song', 'song', 'Ana', 'ana', {
           group_id: 7,
           modified_time: '2024-01-01',
+          has_drums: 1,
         }),
         chart('new-rev', 'Revised', 'revised', 'Song', 'song', 'Ana', 'ana', {
           group_id: 7,
           modified_time: '2026-01-01',
+          has_drums: 0,
         }),
         chart('other', 'Revised', 'revised', 'Song', 'song', 'Bo', 'bo', {
           group_id: 8,
+          has_drums: 0,
         }),
         // group_id 0 means Chorus reported no group, so these stand alone
         chart('ungrouped-a', 'Revised', 'revised', 'Song', 'song', 'Cy', 'cy', {
           group_id: 0,
+          has_drums: 0,
         }),
         chart('ungrouped-b', 'Revised', 'revised', 'Song', 'song', 'Di', 'di', {
           group_id: 0,
+          has_drums: 0,
         }),
       ])
       .execute();
@@ -312,6 +315,7 @@ describe('find-music Radar queries', () => {
       'ungrouped-b',
     ]);
     expect(song.chartCount).toBe(4);
+    expect(song.availableInstrumentCount).toBe(1);
   });
 
   it('excludes songs that are already installed locally', async () => {
@@ -754,7 +758,7 @@ describe('find-music Radar queries', () => {
       },
     ]);
     const detailQuery = queryLog.find(entry =>
-      entry.sql.includes('winning_songs('),
+      entry.sql.includes('winning_songs(artist_normalized'),
     );
     expect(detailQuery?.parameters).toEqual(['zulu four', 'recommendation']);
   });

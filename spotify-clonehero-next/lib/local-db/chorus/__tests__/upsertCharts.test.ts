@@ -36,7 +36,6 @@ function makeDb() {
       has_drums INTEGER NOT NULL DEFAULT 0,
       has_other_instruments INTEGER NOT NULL DEFAULT 0,
       drum_type INTEGER,
-      has_pro_drums INTEGER NOT NULL DEFAULT 0,
       modified_time TEXT NOT NULL,
       song_length INTEGER,
       has_video_background INTEGER NOT NULL,

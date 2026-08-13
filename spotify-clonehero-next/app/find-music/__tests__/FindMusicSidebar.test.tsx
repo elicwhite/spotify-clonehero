@@ -167,17 +167,12 @@ describe('FindMusicSidebar', () => {
     });
   });
 
-  it('offers pro drums without a PD label and does not offer regular drums', () => {
+  it('offers drums without a PD label', () => {
     render(<FindMusicSidebar {...makeProps()} />);
 
     expect(
-      screen
-        .getByRole('button', {name: 'Require Pro drums'})
-        .querySelector('img'),
+      screen.getByRole('button', {name: 'Require Drums'}).querySelector('img'),
     ).toHaveAttribute('src', expect.stringContaining('drums.png'));
-    expect(
-      screen.queryByRole('button', {name: 'Require Drums'}),
-    ).not.toBeInTheDocument();
     expect(screen.queryByText('PD')).not.toBeInTheDocument();
   });
 

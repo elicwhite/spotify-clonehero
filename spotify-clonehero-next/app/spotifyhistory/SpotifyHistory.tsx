@@ -44,7 +44,6 @@ type PickedChorusCharts = Pick<
   | 'diff_guitar'
   | 'diff_bass'
   | 'diff_keys'
-  | 'diff_drums_real'
   | 'modified_time'
   | 'song_length'
   | 'has_video_background'
@@ -368,7 +367,6 @@ async function getHistoryData() {
               'chart.diff_guitar as difficulty_guitar',
               'chart.diff_bass as difficulty_bass',
               'chart.diff_keys as difficulty_keys',
-              'chart.diff_drums_real as difficulty_drums_real',
               'chart.modified_time as chart_modified_time',
               'chart.song_length as chart_song_length',
               'chart.has_video_background as has_video_background',
@@ -401,7 +399,6 @@ async function getHistoryData() {
               'diff_guitar',       ${sql.ref('deduped_charts.difficulty_guitar')},
               'diff_bass',         ${sql.ref('deduped_charts.difficulty_bass')},
               'diff_keys',         ${sql.ref('deduped_charts.difficulty_keys')},
-              'diff_drums_real',   ${sql.ref('deduped_charts.difficulty_drums_real')},
               'modified_time',     ${sql.ref('deduped_charts.chart_modified_time')},
               'song_length',       ${sql.ref('deduped_charts.chart_song_length')},
               'hasVideoBackground',${sql.ref('deduped_charts.has_video_background')},

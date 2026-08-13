@@ -19,6 +19,7 @@ import {migration_017_renormalize_editions_and_features} from './017_renormalize
 import {migration_018_find_music_ranking_signals} from './018_find_music_ranking_signals';
 import {migration_019_find_music_drums} from './019_find_music_drums';
 import {migration_020_chorus_group_revision_index} from './020_chorus_group_revision_index';
+import {migration_021_drop_has_pro_drums} from './021_drop_has_pro_drums';
 
 export const migrations: Record<string, Migration> = {
   '001_initial': InitialMigration,
@@ -42,4 +43,5 @@ export const migrations: Record<string, Migration> = {
   '018_find_music_ranking_signals': migration_018_find_music_ranking_signals,
   '019_find_music_drums': migration_019_find_music_drums,
   '020_chorus_group_revision_index': migration_020_chorus_group_revision_index,
+  '021_drop_has_pro_drums': migration_021_drop_has_pro_drums,
 };

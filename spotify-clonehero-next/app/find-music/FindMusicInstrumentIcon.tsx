@@ -10,7 +10,7 @@ const ICON_BY_INSTRUMENT: Record<InstrumentId, AllowedInstrument> = {
   guitar: 'guitar',
   bass: 'bass',
   keys: 'keys',
-  proDrums: 'drums',
+  drums: 'drums',
 };
 
 export default function FindMusicInstrumentIcon({

@@ -3,6 +3,7 @@
  */
 
 import '@testing-library/jest-dom';
+import {drumTypes} from '@eliwhite/scan-chart';
 import {
   fireEvent,
   render,
@@ -107,18 +108,20 @@ function chart(md5: string, name: string, installed = false): FindMusicChart {
     albumArtMd5: null,
     groupId: 1,
     hasVideoBackground: false,
+    hasOtherInstruments: false,
+    drumType: null,
     isInstalled: installed,
     instrumentPresence: {
       guitar: true,
       bass: false,
       keys: false,
-      proDrums: true,
+      drums: true,
     },
     instruments: {
       guitar: 4,
       bass: -1,
       keys: null,
-      proDrums: 3,
+      drums: 3,
     },
   };
 }
@@ -236,13 +239,13 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
   expect(screen.getAllByText(/2025|2026/).length).toBeGreaterThan(0);
   expect(screen.queryByText('3:05')).not.toBeInTheDocument();
   expect(screen.queryByTitle('Bass: not charted')).not.toBeInTheDocument();
-  const proDrumsBadge = screen.getByTitle('Pro drums: intensity 3');
-  expect(proDrumsBadge.querySelector('img')).toHaveAttribute(
+  const drumsBadge = screen.getByTitle('Drums: intensity 3');
+  expect(drumsBadge.querySelector('img')).toHaveAttribute(
     'src',
     expect.stringContaining('drums.png'),
   );
-  expect(proDrumsBadge.querySelector('small')).toHaveClass('text-xs');
-  expect(screen.queryByTitle('Drums: intensity 3')).not.toBeInTheDocument();
+  expect(drumsBadge.querySelector('small')).toHaveClass('text-xs');
+  expect(screen.getByTitle('Drums: intensity 3')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', {name: 'Install'}));
   await waitFor(() => expect(mockDownloadSong).toHaveBeenCalledTimes(1));
@@ -279,12 +282,12 @@ it('renders track-backed instruments with unavailable intensity beneath the song
     {
       ...chart('b26561a9d61bd5f4d2454a9169a42654', 'Violet Hill'),
       charter: 'Vicarious Visions',
-      instruments: {guitar: -1, bass: -1, keys: -1, proDrums: -1},
+      instruments: {guitar: -1, bass: -1, keys: -1, drums: -1},
       instrumentPresence: {
         guitar: true,
         bass: true,
         keys: false,
-        proDrums: false,
+        drums: false,
       },
     },
   ];
@@ -318,6 +321,97 @@ it('renders track-backed instruments with unavailable intensity beneath the song
   ).toHaveClass('pl-2');
 });
 
+it('distinguishes unsupported tracks from missing instrument metadata', async () => {
+  const songWithOtherTracks = song('other', 'Other Tracks', 1);
+  songWithOtherTracks.charts = [
+    {
+      ...chart('ghl-only', 'GHL Only'),
+      hasOtherInstruments: true,
+      instrumentPresence: {
+        guitar: false,
+        bass: false,
+        keys: false,
+        drums: false,
+      },
+      instruments: {guitar: null, bass: null, keys: null, drums: null},
+    },
+    {
+      ...chart('no-metadata', 'No Metadata'),
+      hasOtherInstruments: false,
+      instrumentPresence: {
+        guitar: false,
+        bass: false,
+        keys: false,
+        drums: false,
+      },
+      instruments: {guitar: null, bass: null, keys: null, drums: null},
+    },
+  ];
+
+  render(
+    <FindMusicTable
+      view="music"
+      music={[songWithOtherTracks]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByTestId('song-row'));
+
+  const chartRows = await screen.findAllByTestId('chart-row');
+  expect(chartRows).toHaveLength(2);
+  expect(
+    within(chartRows[0]).getByText('Other instruments'),
+  ).toBeInTheDocument();
+  expect(
+    within(chartRows[1]).getByText('No instrument data'),
+  ).toBeInTheDocument();
+});
+
+it('marks the drums badge from the scanned drum type, not the ini flag', async () => {
+  const drumSong = song('drums', 'Drum Song', 1);
+  const drumsOnly = {
+    instrumentPresence: {guitar: false, bass: false, keys: false, drums: true},
+    instruments: {guitar: null, bass: null, keys: null, drums: 3},
+  };
+  drumSong.charts = [
+    {...chart('pro', 'Pro Kit'), ...drumsOnly, drumType: drumTypes.fourLanePro},
+    {...chart('five', '5-Lane'), ...drumsOnly, drumType: drumTypes.fiveLane},
+    {...chart('plain', 'Plain'), ...drumsOnly, drumType: drumTypes.fourLane},
+  ];
+
+  render(
+    <FindMusicTable
+      view="music"
+      music={[drumSong]}
+      radar={[]}
+      filters={filters}
+      radarLoading={false}
+      {...defaultPreviewProps}
+      spotifyPreviewEnabled={false}
+      onClearFilters={jest.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByTestId('song-row'));
+
+  const chartRows = await screen.findAllByTestId('chart-row');
+  expect(within(chartRows[0]).getByText('PRO')).toBeInTheDocument();
+  expect(
+    within(chartRows[0]).getByTitle('Drums (Pro drums): intensity 3'),
+  ).toBeInTheDocument();
+  expect(within(chartRows[1]).getByText('5L')).toBeInTheDocument();
+  // Four-lane is the unremarkable case and carries no marker.
+  expect(within(chartRows[2]).queryByText('PRO')).not.toBeInTheDocument();
+  expect(within(chartRows[2]).queryByText('5L')).not.toBeInTheDocument();
+  expect(
+    within(chartRows[2]).getByTitle('Drums: intensity 3'),
+  ).toBeInTheDocument();
+});
+
 it('shows only chart versions that satisfy the active instrument filter', () => {
   const filteredSong = song('filtered', 'Filtered Song', 10);
   filteredSong.charts = [
@@ -327,13 +421,13 @@ it('shows only chart versions that satisfy the active instrument filter', () => 
         guitar: 3,
         bass: 0,
         keys: -1,
-        proDrums: 4,
+        drums: 4,
       },
       instrumentPresence: {
         guitar: true,
         bass: true,
         keys: false,
-        proDrums: true,
+        drums: true,
       },
     },
     {
@@ -342,13 +436,13 @@ it('shows only chart versions that satisfy the active instrument filter', () => 
         guitar: null,
         bass: null,
         keys: null,
-        proDrums: 4,
+        drums: 4,
       },
       instrumentPresence: {
         guitar: false,
         bass: false,
         keys: false,
-        proDrums: true,
+        drums: true,
       },
     },
   ];

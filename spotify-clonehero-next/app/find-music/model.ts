@@ -5,6 +5,7 @@ import type {
   InstrumentId,
   RadarSong,
 } from './types';
+import {chartHasInstruments} from './types';
 
 export type ScorePart = {label: string; points: number};
 export type Score = {value: number; parts: ScorePart[]};
@@ -131,21 +132,6 @@ export function scoreRadarSong(song: RadarSong): Score {
 
 function scoreRadarCandidate(candidate: RadarCandidateSummary): Score {
   return scoreRadarEvidence(candidate);
-}
-
-function chartHasInstruments(
-  chart: FindMusicChart,
-  instruments: Set<InstrumentId>,
-): boolean {
-  for (const instrument of instruments) {
-    const difficulty = chart.instruments[instrument];
-    if (
-      (difficulty == null || difficulty < 0) &&
-      !chart.instrumentPresence[instrument]
-    )
-      return false;
-  }
-  return true;
 }
 
 function passesInstallFilter(

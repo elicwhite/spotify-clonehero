@@ -69,12 +69,6 @@ export async function upsertCharts(
       has_drums: trackInstruments.has('drums') ? 1 : 0,
       has_other_instruments: hasOtherInstruments ? 1 : 0,
       drum_type: chart.notesData?.drumType ?? null,
-      // Still read by Find Music's badges; removed with that reader.
-      has_pro_drums:
-        (chart.diff_drums_real != null && chart.diff_drums_real >= 0) ||
-        trackInstruments.has('drums')
-          ? 1
-          : 0,
       modified_time: chart.modifiedTime,
       song_length: chart.song_length ?? null,
       // types currently define boolean columns as numbers in generated types
@@ -144,7 +138,6 @@ export async function upsertCharts(
       'has_drums',
       'has_other_instruments',
       'drum_type',
-      'has_pro_drums',
       'modified_time',
       'song_length',
       'has_video_background',
@@ -174,7 +167,6 @@ export async function upsertCharts(
           'has_drums',
           'has_other_instruments',
           'drum_type',
-          'has_pro_drums',
           'modified_time',
           'song_length',
           'has_video_background',
@@ -203,7 +195,6 @@ export async function upsertCharts(
         has_drums: eb.ref('excluded.has_drums'),
         has_other_instruments: eb.ref('excluded.has_other_instruments'),
         drum_type: eb.ref('excluded.drum_type'),
-        has_pro_drums: eb.ref('excluded.has_pro_drums'),
         modified_time: eb.ref('excluded.modified_time'),
         song_length: eb.ref('excluded.song_length'),
         has_video_background: eb.ref('excluded.has_video_background'),

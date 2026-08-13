@@ -86,7 +86,6 @@ function makeDb(): Kysely<DB> {
       has_guitar INTEGER NOT NULL DEFAULT 0,
       has_bass INTEGER NOT NULL DEFAULT 0,
       has_keys INTEGER NOT NULL DEFAULT 0,
-      has_pro_drums INTEGER NOT NULL DEFAULT 0,
       has_drums INTEGER NOT NULL DEFAULT 0,
       has_other_instruments INTEGER NOT NULL DEFAULT 0,
       drum_type INTEGER,

@@ -23,7 +23,14 @@ type ChartOverrides = Omit<Partial<FindMusicChart>, 'md5' | 'instruments'> & {
 };
 
 function chart(overrides: ChartOverrides): FindMusicChart {
-  const {md5, instruments, ...rest} = overrides;
+  const {md5, instruments, instrumentPresence, ...rest} = overrides;
+  const chartInstruments = {
+    guitar: null,
+    bass: null,
+    keys: null,
+    drums: null,
+    ...instruments,
+  };
   return {
     md5,
     artist: 'Artist',
@@ -33,21 +40,18 @@ function chart(overrides: ChartOverrides): FindMusicChart {
     albumArtMd5: null,
     groupId: 1,
     hasVideoBackground: false,
+    hasOtherInstruments: false,
+    drumType: null,
     isInstalled: false,
     ...rest,
     instrumentPresence: {
-      guitar: false,
-      bass: false,
-      keys: false,
-      proDrums: false,
+      guitar: chartInstruments.guitar != null && chartInstruments.guitar >= 0,
+      bass: chartInstruments.bass != null && chartInstruments.bass >= 0,
+      keys: chartInstruments.keys != null && chartInstruments.keys >= 0,
+      drums: chartInstruments.drums != null && chartInstruments.drums >= 0,
+      ...instrumentPresence,
     },
-    instruments: {
-      guitar: null,
-      bass: null,
-      keys: null,
-      proDrums: null,
-      ...instruments,
-    },
+    instruments: chartInstruments,
   };
 }
 
@@ -80,7 +84,7 @@ function radar(
   const charts = rest.charts ?? [chart({md5: `${key}-chart`})];
   // The candidate query supplies these; mirror what it would report so the
   // fixtures stay consistent with a real row.
-  const instrumentIds = ['guitar', 'bass', 'keys', 'proDrums'] as const;
+  const instrumentIds = ['guitar', 'bass', 'keys', 'drums'] as const;
   return {
     key,
     artist: 'Artist',
@@ -169,7 +173,7 @@ describe('find music scoring', () => {
               guitar: 5,
               bass: 5,
               keys: 5,
-              proDrums: 5,
+              drums: 5,
             },
           }),
           chart({md5: 'alternate'}),
@@ -209,10 +213,10 @@ describe('find music filtering', () => {
   const fullBand = chart({
     md5: 'full-band',
     isInstalled: true,
-    instruments: {proDrums: 5, guitar: 5},
+    instruments: {drums: 5, guitar: 5},
   });
   const splitBand = [
-    chart({md5: 'pro-drums', instruments: {proDrums: 5}}),
+    chart({md5: 'drums', instruments: {drums: 5}}),
     chart({md5: 'guitar', instruments: {guitar: 5}}),
   ];
 
@@ -253,7 +257,7 @@ describe('find music filtering', () => {
       applyMusicFilters(
         [split],
         filters({
-          instruments: new Set(['proDrums', 'guitar']),
+          instruments: new Set(['drums', 'guitar']),
         }),
       ),
     ).toEqual([]);
@@ -261,15 +265,15 @@ describe('find music filtering', () => {
 
   test('keeps only chart versions that contain every selected instrument', () => {
     const guitar = chart({md5: 'guitar', instruments: {guitar: 5}});
-    const proDrums = chart({
+    const drums = chart({
       md5: 'pro-drums',
-      instruments: {proDrums: 4},
+      instruments: {drums: 4},
     });
     const both = chart({
       md5: 'both',
-      instruments: {guitar: 3, proDrums: 3},
+      instruments: {guitar: 3, drums: 3},
     });
-    const source = music({key: 'versions', charts: [guitar, proDrums, both]});
+    const source = music({key: 'versions', charts: [guitar, drums, both]});
 
     const [filtered] = applyMusicFilters(
       [source],
@@ -287,13 +291,10 @@ describe('find music filtering', () => {
   test('treats Chorus difficulty -1 as an instrument not being charted', () => {
     const absent = music({
       key: 'absent',
-      charts: [chart({md5: 'absent', instruments: {proDrums: -1}})],
+      charts: [chart({md5: 'absent', instruments: {drums: -1}})],
     });
     expect(
-      applyMusicFilters(
-        [absent],
-        filters({instruments: new Set(['proDrums'])}),
-      ),
+      applyMusicFilters([absent], filters({instruments: new Set(['drums'])})),
     ).toEqual([]);
   });
 
@@ -468,16 +469,16 @@ describe('find music filtering', () => {
       key: 'radar-versions',
       charts: [
         chart({md5: 'guitar', instruments: {guitar: 4}}),
-        chart({md5: 'pro-drums', instruments: {proDrums: 4}}),
+        chart({md5: 'drums', instruments: {drums: 4}}),
       ],
     });
 
     const [filtered] = applyRadarFilters(
       [source],
-      filters({instruments: new Set(['proDrums'])}),
+      filters({instruments: new Set(['drums'])}),
     );
 
-    expect(filtered.charts.map(item => item.md5)).toEqual(['pro-drums']);
+    expect(filtered.charts.map(item => item.md5)).toEqual(['drums']);
   });
 
   test('radar applies committed and draft exclusions to charter metadata', () => {

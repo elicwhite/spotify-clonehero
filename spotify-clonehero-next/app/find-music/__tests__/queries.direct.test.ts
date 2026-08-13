@@ -86,7 +86,6 @@ function makeDb(): Kysely<DB> {
       has_guitar INTEGER NOT NULL DEFAULT 0,
       has_bass INTEGER NOT NULL DEFAULT 0,
       has_keys INTEGER NOT NULL DEFAULT 0,
-      has_pro_drums INTEGER NOT NULL DEFAULT 0,
       has_drums INTEGER NOT NULL DEFAULT 0,
       has_other_instruments INTEGER NOT NULL DEFAULT 0,
       drum_type INTEGER,
@@ -169,7 +168,6 @@ function chart(
     has_guitar: 1,
     has_bass: 0,
     has_keys: 0,
-    has_pro_drums: 1,
     has_drums: 1,
     has_other_instruments: 0,
     drum_type: null,
@@ -825,7 +823,7 @@ describe('find-music queries', () => {
         guitar: 3,
         bass: 0,
         keys: -1,
-        proDrums: 4,
+        drums: 4,
       },
     });
   });
@@ -860,7 +858,8 @@ describe('find-music queries', () => {
             has_guitar: 1,
             has_bass: 1,
             has_keys: 0,
-            has_pro_drums: 0,
+            has_drums: 0,
+            has_other_instruments: 0,
           },
         ),
       )
@@ -874,7 +873,7 @@ describe('find-music queries', () => {
         guitar: true,
         bass: true,
         keys: false,
-        proDrums: false,
+        drums: false,
       },
     });
   });

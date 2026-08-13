@@ -29,7 +29,6 @@ export interface ChorusCharts {
   has_guitar: number;
   has_keys: number;
   has_other_instruments: number;
-  has_pro_drums: number;
   has_video_background: number;
   md5: string;
   modified_time: string;

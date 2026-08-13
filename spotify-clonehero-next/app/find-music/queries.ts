@@ -1,6 +1,7 @@
 import {sql, type Kysely} from 'kysely';
 
 import type {DB} from '../../lib/local-db/types';
+import {isDrumType} from '@/lib/chorusChartDb/types';
 import type {
   FindMusicChart,
   FindMusicProviderAction,
@@ -38,11 +39,13 @@ type ChartRow = {
   diff_guitar: number | null;
   diff_bass: number | null;
   diff_keys: number | null;
-  diff_drums_real: number | null;
+  diff_drums: number | null;
   has_guitar: number | bigint | boolean;
   has_bass: number | bigint | boolean;
   has_keys: number | bigint | boolean;
-  has_pro_drums: number | bigint | boolean;
+  has_drums: number | bigint | boolean;
+  has_other_instruments: number | bigint | boolean;
+  drum_type: number | null;
   is_installed: number | bigint | boolean;
   is_song_installed: number | bigint | boolean;
 };
@@ -68,14 +71,14 @@ function identityKey(artistNormalized: string, nameNormalized: string) {
 
 /**
  * Charts are keyed on md5, so a charter re-uploading a fix leaves both
- * revisions in the mirror sharing one group_id. Only the newest is a distinct
- * version to choose between; group_id 0 means Chorus reported no group, so
- * those rows stand alone.
- *
- * Resolved in SQL rather than after the fact so radar scoring and chart
- * hydration see the same revision. Scoring over every revision and then
- * hydrating only the newest let a song advertise instruments that vanished
- * from the rows beneath it.
+ * revisions in the mirror sharing one group_id. Only the newest revision of a
+ * group is a distinct version to choose between. group_id 0 means Chorus
+ * reported no group, so those rows stand alone.
+ */
+/**
+ * Radar scoring and chart hydration must see the same revision of each
+ * upload group. Keeping this CTE in one fragment prevents the score from
+ * advertising instruments that disappear when the chart rows are hydrated.
  */
 function currentChorusChartsCte() {
   return sql`
@@ -115,18 +118,20 @@ function toChart(row: ChartRow): FindMusicChart {
     albumArtMd5: row.album_art_md5,
     groupId: Number(row.group_id),
     hasVideoBackground: Boolean(row.has_video_background),
+    hasOtherInstruments: Boolean(row.has_other_instruments),
+    drumType: isDrumType(row.drum_type) ? row.drum_type : null,
     isInstalled: Boolean(row.is_installed),
     instruments: {
       guitar: row.diff_guitar,
       bass: row.diff_bass,
       keys: row.diff_keys,
-      proDrums: row.diff_drums_real,
+      drums: row.diff_drums,
     },
     instrumentPresence: {
       guitar: Boolean(row.has_guitar),
       bass: Boolean(row.has_bass),
       keys: Boolean(row.has_keys),
-      proDrums: Boolean(row.has_pro_drums),
+      drums: Boolean(row.has_drums),
     },
   };
 }
@@ -239,11 +244,13 @@ export async function getFindMusicSongs(
       chart.diff_guitar,
       chart.diff_bass,
       chart.diff_keys,
-      chart.diff_drums_real,
+      chart.diff_drums,
       chart.has_guitar,
       chart.has_bass,
       chart.has_keys,
-      chart.has_pro_drums,
+      chart.has_drums,
+      chart.has_other_instruments,
+      chart.drum_type,
       CASE WHEN EXISTS (
         SELECT 1
         FROM local_charts AS local
@@ -358,6 +365,7 @@ export async function getFindMusicSongs(
   const albumsBySong = groupEvidenceNames(albumResult.rows);
   const actionsBySong = groupProviderActions(actionResult.rows);
   const songs = new Map<string, FindMusicSong>();
+
   for (const row of chartResult.rows) {
     const key = identityKey(row.artist_normalized, row.name_normalized);
     let song = songs.get(key);
@@ -564,13 +572,13 @@ export async function getRadarSongs(
         ELSE 'group:' || chart.group_id
       END) AS chart_count,
       (
-        MAX(CASE WHEN chart.diff_guitar >= 0 OR chart.has_guitar = 1
+        MAX(CASE WHEN chart.has_guitar = 1
           THEN 1 ELSE 0 END) +
-        MAX(CASE WHEN chart.diff_bass >= 0 OR chart.has_bass = 1
+        MAX(CASE WHEN chart.has_bass = 1
           THEN 1 ELSE 0 END) +
-        MAX(CASE WHEN chart.diff_keys >= 0 OR chart.has_keys = 1
+        MAX(CASE WHEN chart.has_keys = 1
           THEN 1 ELSE 0 END) +
-        MAX(CASE WHEN chart.diff_drums_real >= 0 OR chart.has_pro_drums = 1
+        MAX(CASE WHEN chart.has_drums = 1
           THEN 1 ELSE 0 END)
       ) AS available_instrument_count,
       MAX(CASE
@@ -655,11 +663,13 @@ export async function getRadarSongs(
         chart.diff_guitar,
         chart.diff_bass,
         chart.diff_keys,
-        chart.diff_drums_real,
+        chart.diff_drums,
         chart.has_guitar,
         chart.has_bass,
         chart.has_keys,
-        chart.has_pro_drums,
+        chart.has_drums,
+        chart.has_other_instruments,
+        chart.drum_type,
         CASE WHEN EXISTS (
           SELECT 1
           FROM local_charts AS local

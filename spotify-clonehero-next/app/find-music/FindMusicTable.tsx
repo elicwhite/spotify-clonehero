@@ -1,5 +1,6 @@
 'use client';
 
+import {drumTypes} from '@eliwhite/scan-chart';
 import {
   useCallback,
   useContext,
@@ -722,15 +723,12 @@ function relevanceEvidence(
       return `${radar.charts.length.toLocaleString()} chart versions available on Chorus`;
     case 'Instrument coverage': {
       const labels = INSTRUMENTS.filter(([id]) =>
-        radar.charts.some(chart => {
-          const difficulty = chart.instruments[id];
-          return (
-            (difficulty != null && difficulty >= 0) ||
-            chart.instrumentPresence[id]
-          );
-        }),
+        radar.charts.some(chart => chart.instrumentPresence[id]),
       ).map(([, , name]) => name);
-      return labels.length > 0 ? labels.join(', ') : 'No instrument data';
+      if (labels.length > 0) return labels.join(', ');
+      return radar.charts.some(chart => chart.hasOtherInstruments)
+        ? 'Other instruments'
+        : 'No instrument data';
     }
     case 'Chart freshness':
       return `Newest chart updated ${formatDate(latestModified(radar.charts))}`;
@@ -852,34 +850,59 @@ function ChartRow({
   );
 }
 
+/**
+ * Marks what the drums track actually is. Read from scan-chart's `drumType`,
+ * which is derived from the notes themselves — not from the `pro_drums` ini
+ * flag, which charters leave unset on 12,505 charts that do chart pro drums.
+ * A plain four-lane kit gets no marker; it is the unremarkable case.
+ */
+function drumMarker(
+  drumType: FindMusicChart['drumType'],
+): {badge: string; title: string} | null {
+  switch (drumType) {
+    case drumTypes.fourLanePro:
+      return {badge: 'PRO', title: 'Pro drums'};
+    case drumTypes.fiveLane:
+      return {badge: '5L', title: '5-lane drums'};
+    default:
+      return null;
+  }
+}
+
 function InstrumentBadges({chart}: {chart: FindMusicChart}) {
-  const available = INSTRUMENTS.filter(([id]) => {
-    const difficulty = chart.instruments[id];
-    return (
-      (difficulty != null && difficulty >= 0) || chart.instrumentPresence[id]
-    );
-  });
+  const available = INSTRUMENTS.filter(([id]) => chart.instrumentPresence[id]);
   if (available.length === 0) {
-    return <span className="text-muted-foreground">—</span>;
+    return (
+      <span className="text-muted-foreground">
+        {chart.hasOtherInstruments ? 'Other instruments' : 'No instrument data'}
+      </span>
+    );
   }
   return (
     <span className="flex flex-wrap gap-1.5">
       {available.map(([id, , name]) => {
         const difficulty = chart.instruments[id];
         const hasIntensity = difficulty != null && difficulty >= 0;
+        const marker = id === 'drums' ? drumMarker(chart.drumType) : null;
+        const label = marker ? `${name} (${marker.title})` : name;
         return (
           <span
             key={id}
             title={
               hasIntensity
-                ? `${name}: intensity ${difficulty}`
-                : `${name}: intensity unavailable`
+                ? `${label}: intensity ${difficulty}`
+                : `${label}: intensity unavailable`
             }
             className="inline-flex h-8 min-w-11 items-center justify-center gap-1.5 rounded-md border bg-background px-2 text-secondary-foreground">
             <FindMusicInstrumentIcon instrument={id} size={19} />
             <small className="font-mono text-xs font-semibold leading-none text-foreground">
               {hasIntensity ? difficulty : '?'}
             </small>
+            {marker && (
+              <small className="font-mono text-[0.625rem] font-semibold leading-none tracking-wide text-muted-foreground">
+                {marker.badge}
+              </small>
+            )}
           </span>
         );
       })}

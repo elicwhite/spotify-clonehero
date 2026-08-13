@@ -1,9 +1,13 @@
+import type {DrumType} from '@eliwhite/scan-chart';
+import type {CoreInstrument} from '@/lib/chorusChartDb/types';
+
+/** Display metadata for the instruments this page renders: id, badge, label. */
 export const INSTRUMENTS = [
   ['guitar', 'G', 'Guitar'],
   ['bass', 'B', 'Bass'],
   ['keys', 'K', 'Keys'],
-  ['proDrums', 'D', 'Pro drums'],
-] as const;
+  ['drums', 'D', 'Drums'],
+] as const satisfies readonly (readonly [CoreInstrument, string, string])[];
 
 export type InstrumentId = (typeof INSTRUMENTS)[number][0];
 export type InstallFilter = 'all' | 'hide-installed';
@@ -18,6 +22,13 @@ export type FindMusicChart = {
   albumArtMd5: string | null;
   groupId: number;
   hasVideoBackground: boolean;
+  hasOtherInstruments: boolean;
+  /**
+   * What scan-chart observed in the drums track, or null when there isn't one.
+   * This is the pro-drums signal; the `pro_drums` ini flag disagrees with it on
+   * roughly half the catalog and is not used.
+   */
+  drumType: DrumType | null;
   isInstalled: boolean;
   instruments: Record<InstrumentId, number | null>;
   instrumentPresence: Record<InstrumentId, boolean>;
@@ -100,6 +111,16 @@ export type FindMusicFilters = {
   exclusions: string[];
   exclusionDraft: string;
 };
+
+export function chartHasInstruments(
+  chart: FindMusicChart,
+  instruments: Set<InstrumentId>,
+): boolean {
+  for (const instrument of instruments) {
+    if (!chart.instrumentPresence[instrument]) return false;
+  }
+  return true;
+}
 
 export const EMPTY_FILTERS: FindMusicFilters = {
   install: 'all',
