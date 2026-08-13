@@ -10,13 +10,17 @@ type TestChart = {
   chartId: number;
   groupId: number;
   name: string;
+  md5: string;
   modifiedTime: string;
 };
 
 function chart(overrides: Partial<TestChart> & {chartId: number}): TestChart {
   return {
-    groupId: overrides.chartId,
+    // Encore negates the version group id, so a per-chart fixture id is
+    // negative too. Positive ids here would not exercise the real shape.
+    groupId: -overrides.chartId,
     name: `song-${overrides.chartId}`,
+    md5: `md5-${overrides.chartId}`,
     modifiedTime: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
@@ -110,6 +114,72 @@ describe('fetchNewCharts', () => {
     expect(charts.find(c => c.groupId === 7).modifiedTime).toBe(
       '2026-02-01T00:00:00.000Z',
     );
+  });
+
+  // Encore sends groupId as the negated versionGroupId, so every real chart
+  // carries a negative one. Fixtures built from positive ids let a broken
+  // predicate pass here while grouping nothing at all against the live API.
+  it('groups revisions that share a negative Encore groupId', async () => {
+    respondWith([
+      [
+        chart({
+          chartId: 10,
+          groupId: -7,
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        }),
+        chart({
+          chartId: 11,
+          groupId: -7,
+          modifiedTime: '2026-02-01T00:00:00.000Z',
+        }),
+        chart({chartId: 12, groupId: -8}),
+      ],
+    ]);
+
+    const {charts} = await fetchNewCharts(new Date(0), 1, () => {});
+
+    expect(charts).toHaveLength(2);
+    expect(charts.find(c => c.groupId === -7)!.modifiedTime).toBe(
+      '2026-02-01T00:00:00.000Z',
+    );
+  });
+
+  it('keeps ungrouped charts separate when Encore reports no group', async () => {
+    respondWith([
+      [
+        chart({chartId: 10, groupId: 0}),
+        chart({chartId: 11, groupId: 0}),
+        chart({chartId: 12, groupId: 0}),
+      ],
+    ]);
+
+    const {charts} = await fetchNewCharts(new Date(0), 1, () => {});
+
+    expect(charts).toHaveLength(3);
+  });
+
+  it('uses the md5 as a deterministic tie-breaker for equal revisions', async () => {
+    respondWith([
+      [
+        chart({
+          chartId: 10,
+          groupId: -7,
+          md5: 'a-version',
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        }),
+        chart({
+          chartId: 11,
+          groupId: -7,
+          md5: 'z-version',
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        }),
+      ],
+    ]);
+
+    const {charts} = await fetchNewCharts(new Date(0), 1, () => {});
+
+    expect(charts).toHaveLength(1);
+    expect(charts[0].md5).toBe('z-version');
   });
 
   it('stops instead of looping when the chart id cursor stops advancing', async () => {

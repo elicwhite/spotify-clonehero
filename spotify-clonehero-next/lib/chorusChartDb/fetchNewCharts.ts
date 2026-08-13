@@ -42,7 +42,7 @@ export default async function fetchNewCharts(
   onEachResponse: (json: any[], stats: FetchNewChartsStats) => void,
   options: FetchNewChartsOptions = {},
 ) {
-  const results = new Map<number, any>();
+  const results = new Map<string, any>();
   const runStartTime = options.runStartTime ?? new Date();
 
   for (const chart of options.seedCharts ?? []) {
@@ -116,16 +116,42 @@ export default async function fetchNewCharts(
 }
 
 /** Returns true when the chart introduces a song we hadn't seen yet. */
-function mergeChart(results: Map<number, any>, song: any): boolean {
-  const existing = results.get(song.groupId);
+/**
+ * Encore's `groupId` is the negated `versionGroupId`, so it is negative on
+ * every real chart — revisions of one upload share a value. Only `0` means
+ * Encore reported no group, and then the chart stands alone under its own
+ * hash. Keying on the raw id would collapse every ungrouped chart into one
+ * row; testing for a positive id would group nothing at all.
+ */
+function chartGroupKey(song: {groupId: number; md5: string}): string {
+  return song.groupId !== 0 ? `group:${song.groupId}` : `chart:${song.md5}`;
+}
+
+/**
+ * Which of two revisions of the same upload wins. Ties break on md5 so a run
+ * is reproducible: two charts sharing a modifiedTime otherwise resolve by
+ * whichever the API happened to page first.
+ */
+function isNewerChart(candidate: any, current: any): boolean {
+  const candidateTime = Date.parse(candidate.modifiedTime);
+  const currentTime = Date.parse(current.modifiedTime);
+  return (
+    candidateTime > currentTime ||
+    (candidateTime === currentTime && candidate.md5 > current.md5)
+  );
+}
+
+function mergeChart(results: Map<string, any>, song: any): boolean {
+  const key = chartGroupKey(song);
+  const existing = results.get(key);
 
   if (existing == null) {
-    results.set(song.groupId, filterKeys(song));
+    results.set(key, filterKeys(song));
     return true;
   }
 
-  if (new Date(existing.modifiedTime) < new Date(song.modifiedTime)) {
-    results.set(song.groupId, filterKeys(song));
+  if (isNewerChart(song, existing)) {
+    results.set(key, filterKeys(song));
   }
 
   return false;
