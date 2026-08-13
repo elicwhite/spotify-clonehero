@@ -10,18 +10,28 @@ import {
   parseChartDbManifest,
 } from '../chartDbAssets';
 import {assertPublishableDump, buildManifest} from '../chartDbPublish';
+import crypto from 'crypto';
 
 const manifest: ChartDbManifest = {
   version: '2026-08-09T17-14-53-098Z',
+  dataVersion: 6,
   lastRun: '2026-08-09T17:14:53.098Z',
   totalSongs: 94609,
-  key: 'charts/dumps/2026-08-09T17-14-53-098Z/charts.json.gz',
-  bytes: 8950156,
-  sha256: 'abc123',
+  contentSha256: 'content-abc123',
 };
 
 function jsonResponse(body: unknown, ok = true) {
-  return {ok, status: ok ? 200 : 500, json: async () => body} as Response;
+  const bytes = new TextEncoder().encode(JSON.stringify(body));
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => body,
+    arrayBuffer: async () => bytes.buffer,
+  } as Response;
+}
+
+function contentSha256(body: unknown) {
+  return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
 
 describe('chart DB asset addressing', () => {
@@ -51,10 +61,10 @@ describe('chart DB asset addressing', () => {
   it('round-trips a built manifest through the parser', () => {
     const built = buildManifest({
       version: manifest.version,
+      dataVersion: manifest.dataVersion,
       lastRun: manifest.lastRun,
       totalSongs: manifest.totalSongs,
-      bytes: manifest.bytes,
-      sha256: manifest.sha256,
+      contentSha256: manifest.contentSha256,
     });
 
     expect(built).toEqual(manifest);
@@ -63,7 +73,7 @@ describe('chart DB asset addressing', () => {
 
   it.each([
     ['not an object', 'null', null],
-    ['a missing key', 'key', {...manifest, key: undefined}],
+    ['no data version', 'dataVersion', {...manifest, dataVersion: undefined}],
     ['an unparseable lastRun', 'lastRun', {...manifest, lastRun: 'whenever'}],
   ])('rejects a manifest with %s', (_label, _field, value) => {
     expect(() => parseChartDbManifest(value)).toThrow();
@@ -93,17 +103,35 @@ describe('fetchChartDbManifest', () => {
 
 describe('loadChartDbDump', () => {
   it('pairs the dump and cutoff from a single manifest read', async () => {
-    const charts = [{groupId: 1}];
+    const charts = [
+      {
+        md5: 'chart',
+        name: 'Song',
+        artist: 'Artist',
+        charter: 'Charter',
+        modifiedTime: '2026-01-01T00:00:00.000Z',
+        groupId: 1,
+        year: '2023',
+      },
+    ];
     const fetchImpl = jest.fn(async (url: string) =>
       url.endsWith('manifest.json')
-        ? jsonResponse(manifest)
+        ? jsonResponse({
+            ...manifest,
+            totalSongs: charts.length,
+            contentSha256: contentSha256(charts),
+          })
         : jsonResponse(charts),
     );
 
-    const dump = await loadChartDbDump(fetchImpl as unknown as typeof fetch);
+    const dump = await loadChartDbDump(6, fetchImpl as unknown as typeof fetch);
 
+    // Returned as published. The checksum proved these are CI's bytes and CI
+    // validated them, so the client does no per-row work.
     expect(dump).toEqual({charts, lastRun: manifest.lastRun});
-    expect(fetchImpl.mock.calls[1][0]).toBe(chartDbAssetUrl(manifest.key));
+    expect(fetchImpl.mock.calls[1][0]).toBe(
+      chartDbAssetUrl(chartDbDumpKey(manifest.version)),
+    );
   });
 
   it('propagates a failure rather than seeding from nothing', async () => {
@@ -114,8 +142,51 @@ describe('loadChartDbDump', () => {
     // A client that silently started from an empty dump would record a scan
     // session claiming it was current, and never backfill the catalog.
     await expect(
-      loadChartDbDump(fetchImpl as unknown as typeof fetch),
+      loadChartDbDump(6, fetchImpl as unknown as typeof fetch),
     ).rejects.toThrow('offline');
+  });
+
+  it('returns rows exactly as published, without re-checking them', async () => {
+    // The checksum already proved these are the bytes CI validated, so a row
+    // shape this client does not recognise is CI's problem to have caught —
+    // see assertPublishableDump. Re-parsing 94,000 rows in every browser only
+    // moves that failure somewhere it cannot be fixed.
+    const charts = [
+      {md5: 'a', name: 'Song', artist: 42, groupId: -1, year: 'Unknown Year'},
+    ];
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('manifest.json')
+        ? jsonResponse({...manifest, contentSha256: contentSha256(charts)})
+        : jsonResponse(charts),
+    );
+
+    const dump = await loadChartDbDump(6, fetchImpl as unknown as typeof fetch);
+
+    expect(dump.charts).toEqual(charts);
+  });
+
+  it('rejects a dump whose bytes do not match the manifest checksum', async () => {
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('manifest.json')
+        ? jsonResponse({...manifest, contentSha256: 'not-the-digest'})
+        : jsonResponse([{md5: 'a'}]),
+    );
+
+    await expect(
+      loadChartDbDump(6, fetchImpl as unknown as typeof fetch),
+    ).rejects.toThrow('checksum');
+  });
+
+  it('rejects a manifest whose contents version does not match the API', async () => {
+    const fetchImpl = jest.fn(async (url: string) =>
+      url.endsWith('manifest.json')
+        ? jsonResponse({...manifest, dataVersion: 5})
+        : jsonResponse([]),
+    );
+
+    await expect(
+      loadChartDbDump(7, fetchImpl as unknown as typeof fetch),
+    ).rejects.toThrow('expected 7');
   });
 });
 

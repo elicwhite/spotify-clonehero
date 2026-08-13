@@ -6,6 +6,7 @@ import {promisify} from 'util';
 import {PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 import {
   CHART_DB_MANIFEST_KEY,
+  CHART_DB_DATA_VERSION,
   chartDbAssetUrl,
   chartDbDumpKey,
   chartDbVersionFromDate,
@@ -72,7 +73,7 @@ function createClient(): S3Client {
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     // Recent SDK versions attach a CRC32 checksum to every request by default,
     // which not every S3-compatible provider accepts. We verify integrity via
-    // the manifest's sha256 instead.
+    // the manifest's contentSha256 instead.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     credentials: {
       accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
@@ -103,14 +104,16 @@ async function run() {
   const compressed = asBytes(
     await gzip(charts, {level: zlib.constants.Z_BEST_COMPRESSION}),
   );
-  const sha256 = crypto.createHash('sha256').update(compressed).digest('hex');
-
+  const contentSha256 = crypto
+    .createHash('sha256')
+    .update(charts)
+    .digest('hex');
   const manifest = buildManifest({
     version,
+    dataVersion: CHART_DB_DATA_VERSION,
     lastRun: metadata.lastRun,
     totalSongs: metadata.totalSongs,
-    bytes: compressed.byteLength,
-    sha256,
+    contentSha256,
   });
 
   console.log(

@@ -1,3 +1,5 @@
+import type {ChorusChartDbRow} from './types';
+
 /**
  * The Chorus chart dump lives in R2 (the same bucket that serves the ONNX
  * models) rather than in the repo, and is refreshed on a schedule by
@@ -27,18 +29,28 @@ export const CHART_DB_MANIFEST_KEY = `${CHART_DB_KEY_PREFIX}/manifest.json`;
  */
 export const CHART_DB_DUMP_PREFIX = `${CHART_DB_KEY_PREFIX}/dumps`;
 export const CHART_DB_DUMP_FILE_NAME = 'charts.json.gz';
+/**
+ * Bumped whenever a client's stored catalog must be thrown away and re-ingested
+ * — a new row shape, a new derived column, or contents that cannot be healed
+ * incrementally. `/api/data` advertises it and every published manifest carries
+ * it, so a client only ever ingests the dump generation it was built against.
+ * Ordinary daily crawls do not touch it: those are picked up from
+ * `manifest.lastRun` and the client's own incremental scan.
+ */
+export const CHART_DB_DATA_VERSION = 6;
 
 export type ChartDbManifest = {
   /** Identifies this dump; also its key prefix under `charts/`. */
   version: string;
+  /** Catalog generation advertised by `/api/data`. */
+  dataVersion: number;
   /** `modifiedAfter` cutoff a client resumes its own scanning from. */
   lastRun: string;
+  /** Not verified — `contentSha256` already proves the dump byte for byte.
+   *  Carried so the manifest is legible to a human opening it. */
   totalSongs: number;
-  /** Bucket key of the gzipped dump. */
-  key: string;
-  /** Size of the gzipped object, for progress reporting. */
-  bytes: number;
-  sha256: string;
+  /** SHA-256 of the JSON bytes after transparent CDN decompression. */
+  contentSha256: string;
 };
 
 export function chartDbAssetUrl(key: string): string {
@@ -58,28 +70,30 @@ export function chartDbVersionFromDate(date: Date): string {
   return date.toISOString().replace(/[:.]/g, '-');
 }
 
-/** Throws rather than letting a malformed manifest produce `undefined` URLs. */
+/**
+ * The manifest is the one thing here written by a different process at a
+ * different time than the code reading it, so its shape is worth checking.
+ * Only two fields can fail quietly, though: a missing `dataVersion` would skip
+ * the generation check, and an unparseable `lastRun` becomes the client's scan
+ * cutoff and silently leaves a hole in its catalog. A bad `version` 404s and a
+ * bad `contentSha256` fails the checksum, both loudly enough on their own.
+ */
 export function parseChartDbManifest(value: unknown): ChartDbManifest {
   if (typeof value !== 'object' || value == null) {
     throw new Error('Chart DB manifest is not an object');
   }
+  const manifest = value as ChartDbManifest;
 
-  const manifest = value as Partial<ChartDbManifest>;
-  const missing = (
-    ['version', 'lastRun', 'totalSongs', 'key', 'bytes', 'sha256'] as const
-  ).filter(field => manifest[field] == null);
-
-  if (missing.length > 0) {
-    throw new Error(`Chart DB manifest is missing ${missing.join(', ')}`);
+  if (!Number.isInteger(manifest.dataVersion)) {
+    throw new Error('Chart DB manifest has no data version');
   }
-
-  if (Number.isNaN(new Date(manifest.lastRun as string).getTime())) {
+  if (Number.isNaN(Date.parse(manifest.lastRun))) {
     throw new Error(
       `Chart DB manifest has an unparseable lastRun: ${manifest.lastRun}`,
     );
   }
 
-  return manifest as ChartDbManifest;
+  return manifest;
 }
 
 export async function fetchChartDbManifest(
@@ -106,7 +120,8 @@ export async function fetchChartDbManifest(
 export async function fetchChartDbDump(
   key: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<any[]> {
+  expectedContentSha256: string,
+): Promise<ChorusChartDbRow[]> {
   const response = await fetchImpl(chartDbAssetUrl(key));
 
   if (!response.ok) {
@@ -115,23 +130,64 @@ export async function fetchChartDbDump(
     );
   }
 
-  return await response.json();
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const digest = await sha256Hex(bytes);
+  if (digest !== expectedContentSha256) {
+    throw new Error('Chart DB dump checksum does not match its manifest');
+  }
+  const value = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  if (!Array.isArray(value)) {
+    throw new Error('Chart DB dump is not an array');
+  }
+  // Not validated row by row. The checksum above proves these are exactly the
+  // bytes CI published, and CI validated every row before publishing them
+  // (`assertPublishableDump`). Re-checking here would only catch a bug in our
+  // own publisher — in the worst possible place to catch it.
+  return value as ChorusChartDbRow[];
 }
 
 export type ChartDbDump = {
-  charts: any[];
+  charts: ChorusChartDbRow[];
   /** What the client should scan from to catch up with Chorus. */
   lastRun: string;
 };
 
-/** The dump a client with no local data starts from. */
+/**
+ * The dump a client with no local data starts from. The caller passes the
+ * generation `/api/data` advertised, so a manifest published by a newer or
+ * older deploy is refused rather than half-ingested.
+ */
 export async function loadChartDbDump(
+  expectedDataVersion: number,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ChartDbDump> {
   const manifest = await fetchChartDbManifest(fetchImpl);
 
+  if (manifest.dataVersion !== expectedDataVersion) {
+    throw new Error(
+      `Chart DB manifest has data version ${manifest.dataVersion}; expected ${expectedDataVersion}`,
+    );
+  }
+
+  const charts = await fetchChartDbDump(
+    chartDbDumpKey(manifest.version),
+    fetchImpl,
+    manifest.contentSha256,
+  );
+
   return {
-    charts: await fetchChartDbDump(manifest.key, fetchImpl),
+    charts,
     lastRun: manifest.lastRun,
   };
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const buffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest), byte =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
 }

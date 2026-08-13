@@ -6,6 +6,12 @@ import type {ChorusChartDbRow} from './types';
  * On-disk bookkeeping for `downloadDb.ts`. Each run owns a directory holding
  * one JSON file per API response plus a state file, so a run that dies partway
  * through can be resumed instead of restarted.
+ *
+ * An unfinished run directory means "continue this", unconditionally. There is
+ * no flag for ignoring one: delete the directory to start over. A resumed run
+ * that no longer makes sense — its base dump is gone, a batch file is corrupt —
+ * throws rather than quietly degrading into a different run than the one on
+ * disk.
  */
 
 export const STATE_FILE_NAME = 'state.json';
@@ -23,11 +29,13 @@ export type RunState = {
   /** When the run first started, so `metadata.lastRun` survives a resume. */
   runStartTime: string;
   /**
-   * The published dump this run builds on, or null for a full crawl. A resumed
-   * run re-downloads it: the batch files hold only what this run fetched, not
-   * the base it was merging into.
+   * The published dump this run merges into, or null for a full crawl. A
+   * resumed run re-downloads it — the batch files hold only what this run
+   * fetched, not the base it was merging into — so the checksum travels with
+   * the version rather than beside it, and a version without one is
+   * unrepresentable.
    */
-  baseVersion: string | null;
+  base: {version: string; contentSha256: string} | null;
   /** Highest chart id whose response has been written to disk. */
   lastChartId: number;
   /** How many batch files are known-good. Anything past this is a torn write. */

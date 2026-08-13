@@ -27,7 +27,7 @@ function makeState(overrides: Partial<RunState> = {}): RunState {
   return {
     afterTime: '2011-01-01T00:00:00.000Z',
     runStartTime: '2026-01-01T00:00:00.000Z',
-    baseVersion: null,
+    base: null,
     lastChartId: 1,
     batchCount: 0,
     complete: false,
@@ -73,6 +73,26 @@ describe('rawRunFiles', () => {
 
     expect(resumable?.runDir).toBe(path.join(rawDir, 'run-2026-01-03'));
     expect(resumable?.state.lastChartId).toBe(30);
+  });
+
+  it('resumes an incremental run on its own terms whatever the caller asked for', () => {
+    // The run on disk owns its cutoff and base. Resuming it as a full crawl
+    // would leave a hole in the dump.
+    makeRun(
+      'run-2026-01-03',
+      makeState({
+        afterTime: '2026-08-01T00:00:00.000Z',
+        base: {version: 'base-1', contentSha256: 'sha-1'},
+      }),
+    );
+
+    const resumable = findResumableRun(rawDir);
+
+    expect(resumable?.state.afterTime).toBe('2026-08-01T00:00:00.000Z');
+    expect(resumable?.state.base).toEqual({
+      version: 'base-1',
+      contentSha256: 'sha-1',
+    });
   });
 
   it('ignores directories without a readable state file', () => {
@@ -125,7 +145,7 @@ describe('rawRunFiles', () => {
     // A crash between writing the batch and updating the state file.
     fs.writeFileSync(
       path.join(runDir, '00002-250.json'),
-      JSON.stringify([chart(2)]),
+      JSON.stringify([{groupId: 2}]),
     );
 
     expect(readSavedCharts(runDir, state.batchCount)).toEqual([chart(1)]);
@@ -139,7 +159,7 @@ describe('rawRunFiles', () => {
     // Batch 2 hit the disk, then the run died before the state file agreed.
     fs.writeFileSync(
       path.join(runDir, '00002-500.json'),
-      JSON.stringify([chart(99)]),
+      JSON.stringify([{groupId: 'orphan'}]),
     );
 
     // The resumed run refetches batch 2; a chart was deleted upstream, so the

@@ -60,7 +60,7 @@ export function useChorusChartDb(): [
 
           // Download and validate the complete dump before touching the
           // current catalog. A failed fetch therefore preserves old data.
-          const dump = await loadChartDbDump();
+          const dump = await loadChartDbDump(serverDataVersion);
           if (abort.signal.aborted) {
             throw new DOMException('Aborted', 'AbortError');
           }

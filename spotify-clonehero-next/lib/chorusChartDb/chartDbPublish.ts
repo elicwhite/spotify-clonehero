@@ -1,4 +1,4 @@
-import {ChartDbManifest, chartDbDumpKey} from './chartDbAssets';
+import {ChartDbManifest} from './chartDbAssets';
 import {
   ENCORE_BOOLEAN_FIELDS,
   INI_BOOLEAN_FIELDS,
@@ -23,19 +23,12 @@ export const MANIFEST_CACHE_CONTROL = 'no-cache, must-revalidate';
 
 export function buildManifest(input: {
   version: string;
+  dataVersion: number;
   lastRun: string;
   totalSongs: number;
-  bytes: number;
-  sha256: string;
+  contentSha256: string;
 }): ChartDbManifest {
-  return {
-    version: input.version,
-    lastRun: input.lastRun,
-    totalSongs: input.totalSongs,
-    key: chartDbDumpKey(input.version),
-    bytes: input.bytes,
-    sha256: input.sha256,
-  };
+  return {...input};
 }
 
 /**
