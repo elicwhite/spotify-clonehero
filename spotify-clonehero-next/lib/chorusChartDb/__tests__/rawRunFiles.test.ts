@@ -10,6 +10,18 @@ import {
   STATE_FILE_NAME,
   writeRunState,
 } from '../rawRunFiles';
+import type {ChorusChartDbRow} from '../types';
+
+function chart(groupId: number): ChorusChartDbRow {
+  return {
+    groupId,
+    name: `song-${groupId}`,
+    artist: 'artist',
+    md5: `md5-${groupId}`,
+    charter: 'charter',
+    modifiedTime: '2026-01-01T00:00:00.000Z',
+  };
+}
 
 function makeState(overrides: Partial<RunState> = {}): RunState {
   return {
@@ -80,14 +92,14 @@ describe('rawRunFiles', () => {
     const runDir = makeRun('run-2026-01-01', makeState());
     let state = makeState();
 
-    state = saveBatch(runDir, state, [{groupId: 1}], 100);
-    state = saveBatch(runDir, state, [{groupId: 2}], 250);
+    state = saveBatch(runDir, state, [chart(1)], 100);
+    state = saveBatch(runDir, state, [chart(2)], 250);
 
     expect(state.batchCount).toBe(2);
     expect(state.lastChartId).toBe(250);
     expect(readSavedCharts(runDir, state.batchCount)).toEqual([
-      {groupId: 1},
-      {groupId: 2},
+      chart(1),
+      chart(2),
     ]);
     expect(findResumableRun(rawDir)?.state.lastChartId).toBe(250);
   });
@@ -97,7 +109,7 @@ describe('rawRunFiles', () => {
     let state = makeState();
 
     for (let i = 1; i <= 11; i++) {
-      state = saveBatch(runDir, state, [{groupId: i}], i * 10);
+      state = saveBatch(runDir, state, [chart(i)], i * 10);
     }
 
     expect(
@@ -108,32 +120,32 @@ describe('rawRunFiles', () => {
   it('ignores a batch file written after the last state update', () => {
     const runDir = makeRun('run-2026-01-01', makeState());
     let state = makeState();
-    state = saveBatch(runDir, state, [{groupId: 1}], 100);
+    state = saveBatch(runDir, state, [chart(1)], 100);
 
     // A crash between writing the batch and updating the state file.
     fs.writeFileSync(
       path.join(runDir, '00002-250.json'),
-      JSON.stringify([{groupId: 2}]),
+      JSON.stringify([chart(2)]),
     );
 
-    expect(readSavedCharts(runDir, state.batchCount)).toEqual([{groupId: 1}]);
+    expect(readSavedCharts(runDir, state.batchCount)).toEqual([chart(1)]);
   });
 
   it('replaces an orphan batch whose retry lands on a different chart id', () => {
     const runDir = makeRun('run-2026-01-01', makeState());
     let state = makeState();
-    state = saveBatch(runDir, state, [{groupId: 1}], 100);
+    state = saveBatch(runDir, state, [chart(1)], 100);
 
     // Batch 2 hit the disk, then the run died before the state file agreed.
     fs.writeFileSync(
       path.join(runDir, '00002-500.json'),
-      JSON.stringify([{groupId: 'orphan'}]),
+      JSON.stringify([chart(99)]),
     );
 
     // The resumed run refetches batch 2; a chart was deleted upstream, so the
     // page's highest chart id differs from the orphan's.
-    state = saveBatch(runDir, state, [{groupId: 2}], 498);
-    state = saveBatch(runDir, state, [{groupId: 3}], 700);
+    state = saveBatch(runDir, state, [chart(2)], 498);
+    state = saveBatch(runDir, state, [chart(3)], 700);
 
     expect(
       readSavedCharts(runDir, state.batchCount).map(c => c.groupId),
@@ -143,8 +155,8 @@ describe('rawRunFiles', () => {
   it('refuses to resume when a vouched-for batch file is missing', () => {
     const runDir = makeRun('run-2026-01-01', makeState());
     let state = makeState();
-    state = saveBatch(runDir, state, [{groupId: 1}], 100);
-    state = saveBatch(runDir, state, [{groupId: 2}], 200);
+    state = saveBatch(runDir, state, [chart(1)], 100);
+    state = saveBatch(runDir, state, [chart(2)], 200);
     fs.rmSync(path.join(runDir, '00001-100.json'));
 
     expect(() => readSavedCharts(runDir, state.batchCount)).toThrow(

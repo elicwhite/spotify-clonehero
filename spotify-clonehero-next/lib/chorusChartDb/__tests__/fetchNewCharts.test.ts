@@ -1,4 +1,5 @@
-import fetchNewCharts, {filterKeys} from '../fetchNewCharts';
+import fetchNewCharts from '../fetchNewCharts';
+import {filterKeys} from '../types';
 
 const mockFetchAdvanced = jest.fn();
 
@@ -10,17 +11,19 @@ type TestChart = {
   chartId: number;
   groupId: number;
   name: string;
+  artist: string;
   md5: string;
+  charter: string;
   modifiedTime: string;
 };
 
 function chart(overrides: Partial<TestChart> & {chartId: number}): TestChart {
   return {
-    // Encore negates the version group id, so a per-chart fixture id is
-    // negative too. Positive ids here would not exercise the real shape.
-    groupId: -overrides.chartId,
+    groupId: overrides.chartId,
     name: `song-${overrides.chartId}`,
+    artist: 'artist',
     md5: `md5-${overrides.chartId}`,
+    charter: 'charter',
     modifiedTime: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
@@ -74,6 +77,31 @@ describe('fetchNewCharts', () => {
     });
   });
 
+  it('normalizes string years from Chorus API rows', () => {
+    expect(filterKeys({year: '2023'})).toEqual({year: 2023});
+  });
+
+  // song.ini's year is free text — scan-chart types it as `string` for exactly
+  // this reason. These spellings are all real values from the published dump.
+  it.each([
+    'Unknown Year',
+    '1969 (September 26)',
+    '2000s',
+    '1987-1996',
+    'Various',
+    '????',
+    '',
+  ])('drops the unreadable year %p rather than failing the row', year => {
+    expect(filterKeys({name: 'Song', year})).toEqual({name: 'Song'});
+  });
+
+  it('drops a drum type scan-chart does not define', () => {
+    expect(filterKeys({notesData: {drumType: 99}}).notesData).toEqual({});
+    expect(filterKeys({notesData: {drumType: 2}}).notesData).toEqual({
+      drumType: 2,
+    });
+  });
+
   it('pages until the API stops returning charts', async () => {
     respondWith([
       [chart({chartId: 1}), chart({chartId: 2})],
@@ -111,14 +139,14 @@ describe('fetchNewCharts', () => {
     const {charts} = await fetchNewCharts(new Date(0), 1, () => {});
 
     expect(charts).toHaveLength(2);
-    expect(charts.find(c => c.groupId === 7).modifiedTime).toBe(
+    expect(charts.find(c => c.groupId === 7)!.modifiedTime).toBe(
       '2026-02-01T00:00:00.000Z',
     );
   });
 
   // Encore sends groupId as the negated versionGroupId, so every real chart
-  // carries a negative one. Fixtures built from positive ids let a broken
-  // predicate pass here while grouping nothing at all against the live API.
+  // has a negative one. Fixtures using positive ids let a `groupId > 0` test
+  // pass here while grouping nothing at all against the live API.
   it('groups revisions that share a negative Encore groupId', async () => {
     respondWith([
       [
@@ -163,13 +191,13 @@ describe('fetchNewCharts', () => {
       [
         chart({
           chartId: 10,
-          groupId: -7,
+          groupId: 7,
           md5: 'a-version',
           modifiedTime: '2026-01-01T00:00:00.000Z',
         }),
         chart({
           chartId: 11,
-          groupId: -7,
+          groupId: 7,
           md5: 'z-version',
           modifiedTime: '2026-01-01T00:00:00.000Z',
         }),
@@ -211,8 +239,22 @@ describe('fetchNewCharts', () => {
 
     const {charts, metadata} = await fetchNewCharts(new Date(0), 4, () => {}, {
       seedCharts: [
-        {groupId: 1, name: 'song-1', modifiedTime: '2026-01-01T00:00:00.000Z'},
-        {groupId: 2, name: 'song-2', modifiedTime: '2026-01-01T00:00:00.000Z'},
+        {
+          groupId: 1,
+          name: 'song-1',
+          artist: 'artist',
+          md5: 'md5-1',
+          charter: 'charter',
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          groupId: 2,
+          name: 'song-2',
+          artist: 'artist',
+          md5: 'md5-2',
+          charter: 'charter',
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        },
       ],
     });
 
@@ -234,7 +276,14 @@ describe('fetchNewCharts', () => {
 
     const {charts, metadata} = await fetchNewCharts(new Date(0), 4, () => {}, {
       seedCharts: [
-        {groupId: 1, name: 'stale', modifiedTime: '2026-01-01T00:00:00.000Z'},
+        {
+          groupId: 1,
+          name: 'stale',
+          artist: 'artist',
+          md5: 'stale-md5',
+          charter: 'charter',
+          modifiedTime: '2026-01-01T00:00:00.000Z',
+        },
       ],
     });
 

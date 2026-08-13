@@ -1,5 +1,11 @@
 import {parseRateLimit} from 'ratelimit-header-parser';
 import {fetchAdvanced} from '../search-encore';
+import {
+  isNewerChorusChart,
+  toChorusChartDbRow,
+  type ChorusApiChart,
+  type ChorusChartDbRow,
+} from './types';
 
 // Debug variable to limit iterations in the future. Leave for full runs.
 const MAX_ITERATIONS = Number.MAX_SAFE_INTEGER;
@@ -27,7 +33,7 @@ export type FetchNewChartsOptions = {
    * resumed scan returns the full set, not just the charts fetched after the
    * interruption.
    */
-  seedCharts?: any[];
+  seedCharts?: ChorusChartDbRow[];
   /**
    * The time the (possibly interrupted) run originally started. Recorded as
    * `metadata.lastRun` so a resumed run doesn't skip charts modified while it
@@ -39,14 +45,22 @@ export type FetchNewChartsOptions = {
 export default async function fetchNewCharts(
   afterTime: Date,
   scanFromId: number,
-  onEachResponse: (json: any[], stats: FetchNewChartsStats) => void,
+  onEachResponse: (
+    json: ChorusChartDbRow[],
+    stats: FetchNewChartsStats,
+  ) => void,
   options: FetchNewChartsOptions = {},
 ) {
-  const results = new Map<string, any>();
+  const results = new Map<string, ChorusChartDbRow>();
   const runStartTime = options.runStartTime ?? new Date();
 
+  // Seeds come from a dump published by an older generation of this code, so
+  // they are re-narrowed on the way in. This is where a row written under a
+  // previous contract — a `year` that was still free text, say — is brought up
+  // to the shape the next dump promises.
   for (const chart of options.seedCharts ?? []) {
-    mergeChart(results, chart);
+    const row = toChorusChartDbRow(chart);
+    if (row != null) mergeChart(results, row);
   }
 
   let lastChartId = scanFromId;
@@ -103,7 +117,7 @@ export default async function fetchNewCharts(
     });
 
     lastChartId = thisRunLatestChartId;
-    onEachResponse(json.data.map(filterKeys), stats);
+    onEachResponse(json.data, stats);
   } while (hasMoreCharts && iterations < MAX_ITERATIONS);
 
   return {
@@ -115,117 +129,43 @@ export default async function fetchNewCharts(
   };
 }
 
-/** Returns true when the chart introduces a song we hadn't seen yet. */
 /**
  * Encore's `groupId` is the negated `versionGroupId`, so it is negative on
- * every real chart — revisions of one upload share a value. Only `0` means
- * Encore reported no group, and then the chart stands alone under its own
- * hash. Keying on the raw id would collapse every ungrouped chart into one
- * row; testing for a positive id would group nothing at all.
+ * every real chart — charts that are revisions of the same upload share one
+ * value. Only `0` means Encore reported no group, and then the chart stands
+ * alone under its own hash. Testing for a positive id here would group nothing
+ * at all and emit one dump row per chart instead of per upload.
  */
-function chartGroupKey(song: {groupId: number; md5: string}): string {
-  return song.groupId !== 0 ? `group:${song.groupId}` : `chart:${song.md5}`;
+export function chartGroupKey(
+  chart: Pick<ChorusChartDbRow, 'groupId' | 'md5'>,
+): string {
+  return chart.groupId !== 0 ? `group:${chart.groupId}` : `chart:${chart.md5}`;
 }
 
-/**
- * Which of two revisions of the same upload wins. Ties break on md5 so a run
- * is reproducible: two charts sharing a modifiedTime otherwise resolve by
- * whichever the API happened to page first.
- */
-function isNewerChart(candidate: any, current: any): boolean {
-  const candidateTime = Date.parse(candidate.modifiedTime);
-  const currentTime = Date.parse(current.modifiedTime);
-  return (
-    candidateTime > currentTime ||
-    (candidateTime === currentTime && candidate.md5 > current.md5)
-  );
-}
-
-function mergeChart(results: Map<string, any>, song: any): boolean {
+/** Returns true when the chart introduces a song we hadn't seen yet. */
+function mergeChart(
+  results: Map<string, ChorusChartDbRow>,
+  song: ChorusChartDbRow,
+): boolean {
   const key = chartGroupKey(song);
   const existing = results.get(key);
 
   if (existing == null) {
-    results.set(key, filterKeys(song));
+    results.set(key, song);
     return true;
   }
 
-  if (isNewerChart(song, existing)) {
-    results.set(key, filterKeys(song));
+  if (isNewerChorusChart(song, existing)) {
+    results.set(key, song);
   }
 
   return false;
 }
 
-const saveKeys = [
-  'name',
-  'artist',
-  'album',
-  'genre',
-  'year',
-  'albumArtMd5',
-  'md5',
-  'groupId',
-  'charter',
-  'song_length',
-  'diff_band',
-  'diff_guitar',
-  'diff_guitar_coop',
-  'diff_rhythm',
-  'diff_bass',
-  'diff_drums',
-  'diff_drums_real',
-  'diff_keys',
-  'diff_guitarghl',
-  'diff_guitar_coop_ghl',
-  'diff_rhythm_ghl',
-  'diff_bassghl',
-  'diff_vocals',
-  'five_lane_drums',
-  'pro_drums',
-  'hasLyrics',
-  'has2xKick',
-  'hasVideoBackground',
-  'modifiedTime',
-  'notesData',
-] as const;
-
-type SaveKeys = (typeof saveKeys)[number];
-
-export function filterKeys(chart: Object) {
-  const result: Record<string, any> = {};
-  for (const key in chart) {
-    if (saveKeys.includes(key as SaveKeys)) {
-      // @ts-ignore
-      result[key] = chart[key];
-    }
-  }
-
-  // @ts-ignore
-  const notesData = result['notesData'];
-  if (notesData != null && typeof notesData === 'object') {
-    const filteredNotesData: Record<string, unknown> = {};
-    if (Array.isArray(notesData['instruments'])) {
-      filteredNotesData['instruments'] = notesData['instruments'];
-    }
-    if ('drumType' in notesData) {
-      filteredNotesData['drumType'] = notesData['drumType'];
-    }
-    if (Array.isArray(notesData['trackHashes'])) {
-      filteredNotesData['trackHashes'] = notesData['trackHashes'].map(
-        (track: {instrument: string; difficulty: string}) => ({
-          instrument: track.instrument,
-          difficulty: track.difficulty,
-        }),
-      );
-    }
-    result['notesData'] = filteredNotesData;
-  }
-
-  return result;
-}
-
-async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
+async function fetchSongsAfter(
+  date: Date,
+  lastChartId: number,
+): Promise<{found: number; data: ChorusApiChart[]}> {
   const response = await fetchAdvanced({
     // in YYYY-MM-DD format
     modifiedAfter: date.toISOString(),
@@ -280,7 +220,18 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
   // });
 
   if (response.ok) {
-    return await response.json();
+    const body: unknown = await response.json();
+    if (typeof body !== 'object' || body == null) {
+      throw new Error('Chorus returned an invalid chart page');
+    }
+    const source = body as Record<string, unknown>;
+    if (!Array.isArray(source['data'])) {
+      throw new Error('Chorus returned an invalid chart list');
+    }
+    return {
+      found: typeof source['found'] === 'number' ? source['found'] : 0,
+      data: source['data'].map(toApiChart).filter(row => row != null),
+    };
   } else if (response.status == 429) {
     const result = parseRateLimit(response.headers);
     const msTillResult =
@@ -305,4 +256,24 @@ async function fetchSongsAfter(date: Date, lastChartId: number): Promise<any> {
       `Fetching charts from Chorus failed with status ${response.status}: ${response.statusText}`,
     );
   }
+}
+
+/**
+ * `chartId` drives the paging cursor, so a row without a usable one would
+ * silently stall or restart the crawl. That is worth failing loudly for; a
+ * chart whose metadata we cannot use is not.
+ */
+function toApiChart(value: unknown): ChorusApiChart | null {
+  if (typeof value !== 'object' || value == null) {
+    throw new Error('Chorus returned an invalid chart row');
+  }
+  const source = value as Record<string, unknown>;
+  if (
+    typeof source['chartId'] !== 'number' ||
+    !Number.isInteger(source['chartId'])
+  ) {
+    throw new Error('Chorus returned a chart row without a valid chartId');
+  }
+  const row = toChorusChartDbRow(source);
+  return row && {...row, chartId: source['chartId']};
 }

@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import type {ChorusChartDbRow} from './types';
 
 /**
  * On-disk bookkeeping for `downloadDb.ts`. Each run owns a directory holding
@@ -93,7 +94,10 @@ export function newRunDir(rawFileLocation: string, runStartTime: Date): string {
  * batch number in the file name, not by position, so an orphaned file left by
  * a torn write can never displace a real batch.
  */
-export function readSavedCharts(runDir: string, batchCount: number): any[] {
+export function readSavedCharts(
+  runDir: string,
+  batchCount: number,
+): ChorusChartDbRow[] {
   const batchFiles = fs
     .readdirSync(runDir)
     .map(name => ({name, batch: batchNumber(name)}))
@@ -109,10 +113,18 @@ export function readSavedCharts(runDir: string, batchCount: number): any[] {
     );
   }
 
-  const charts: any[] = [];
+  const charts: ChorusChartDbRow[] = [];
   for (const {name} of batchFiles) {
-    const json = JSON.parse(fs.readFileSync(path.join(runDir, name), 'utf8'));
-    charts.push(...json);
+    const json: unknown = JSON.parse(
+      fs.readFileSync(path.join(runDir, name), 'utf8'),
+    );
+    if (!Array.isArray(json)) {
+      throw new Error(`Saved batch ${name} is not an array`);
+    }
+    // This process wrote these rows minutes ago, already narrowed. A torn
+    // write is caught by JSON.parse and by batchCount, not by re-checking
+    // every field of our own output.
+    charts.push(...(json as ChorusChartDbRow[]));
   }
 
   return charts;
@@ -126,7 +138,7 @@ export function readSavedCharts(runDir: string, batchCount: number): any[] {
 export function saveBatch(
   runDir: string,
   state: RunState,
-  charts: any[],
+  charts: ChorusChartDbRow[],
   lastChartId: number,
 ): RunState {
   const batch = state.batchCount + 1;
