@@ -81,8 +81,19 @@ jobs:
             echo "::error::Could not read CHART_DB_DATA_VERSION"
             exit 1
           fi
-          published="$(curl -fsS https://assets.musiccharts.tools/charts/manifest.json \
-            | jq -r '.dataVersion // empty' || true)"
+          # A missing manifest and an unreachable one are different answers.
+          # Treating both as "no generation" would let one flaky request cost a
+          # five-hour crawl, so only a real 404 bootstraps.
+          http_code="$(curl -sS -o /tmp/manifest.json -w '%{http_code}' \
+            https://assets.musiccharts.tools/charts/manifest.json || echo 000)"
+          if [ "$http_code" = "404" ]; then
+            published=""
+          elif [ "$http_code" != "200" ]; then
+            echo "::error::Could not read the published manifest (HTTP $http_code)"
+            exit 1
+          else
+            published="$(jq -r '.dataVersion // empty' /tmp/manifest.json)"
+          fi
 
           if [ "$published" != "$expected" ]; then
             mode="full"

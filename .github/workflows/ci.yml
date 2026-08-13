@@ -127,7 +127,10 @@ jobs:
     needs: [test, lint, typecheck]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Long enough to outlast a full crawl it may be waiting on. The wait ends
+    # early on its own if no rebuild is in flight, so this ceiling is only
+    # reached when one genuinely runs that long.
+    timeout-minutes: 330
     environment:
       name: production
       url: ${{ steps.deploy.outputs.url }}
@@ -158,17 +161,23 @@ jobs:
       # such context, so on a team-owned project the same env vars that
       # resolve fine on a laptop return "Could not retrieve Project Settings"
       # here. Naming the scope explicitly is what makes token auth resolve it.
-      # The published catalog and this build agree on a generation, or clients
-      # get an app that refuses the manifest it is pointed at. update-chart-db
-      # rebuilds automatically when the constant moves, so the usual fix is to
-      # wait for that run; this only stops the deploy from overtaking it.
+      # The published catalog and this build must agree on a generation, or
+      # clients get an app that refuses the manifest it is pointed at.
+      #
+      # A generation bump starts update-chart-db on the same push, and a full
+      # crawl takes hours, so this waits for that run rather than failing and
+      # leaving someone to notice and re-run it. It only waits while a rebuild
+      # is actually in flight: if none is running or queued, nothing is going
+      # to fix the mismatch and waiting would just burn the job's timeout.
       #
       # The constant is read with grep rather than tsx so this job does not
       # have to install the workspace to check one integer. An unreadable value
       # fails the step, so a refactor that breaks the pattern blocks the deploy
       # instead of quietly skipping the check.
-      - name: Require a matching published catalog
+      - name: Wait for a matching published catalog
         working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           expected="$(grep -oE 'CHART_DB_DATA_VERSION = [0-9]+' \
             spotify-clonehero-next/lib/chorusChartDb/chartDbAssets.ts \
@@ -177,13 +186,34 @@ jobs:
             echo "::error::Could not read CHART_DB_DATA_VERSION"
             exit 1
           fi
-          published="$(curl -fsS https://assets.musiccharts.tools/charts/manifest.json \
-            | jq -r '.dataVersion // empty')"
-          if [ "$published" != "$expected" ]; then
-            echo "::error::Published catalog is generation ${published:-none}; this build serves $expected. Run the Update chart DB workflow and let it finish before deploying."
-            exit 1
-          fi
-          echo "Published catalog is generation $published, matching this build."
+
+          published() {
+            curl -fsS https://assets.musiccharts.tools/charts/manifest.json \
+              | jq -r '.dataVersion // empty' || true
+          }
+
+          rebuilds_in_flight() {
+            gh run list --workflow 'Update chart DB' --branch main \
+              --status in_progress --status queued --json databaseId \
+              --jq 'length' 2>/dev/null || echo 0
+          }
+
+          for _ in $(seq 1 300); do
+            current="$(published)"
+            if [ "$current" = "$expected" ]; then
+              echo "Published catalog is generation $current, matching this build."
+              exit 0
+            fi
+            if [ "$(rebuilds_in_flight)" = "0" ]; then
+              echo "::error::Published catalog is generation ${current:-none}; this build serves $expected, and no Update chart DB run is in flight to close the gap. Start one, or revert the generation bump."
+              exit 1
+            fi
+            echo "Catalog is generation ${current:-none}, waiting for $expected (rebuild in flight)..."
+            sleep 60
+          done
+
+          echo "::error::Gave up waiting for generation $expected after 5 hours."
+          exit 1
 
       - name: Pull Vercel project settings
         working-directory: .
