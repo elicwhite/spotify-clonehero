@@ -372,16 +372,35 @@ it('distinguishes unsupported tracks from missing instrument metadata', async ()
   ).toBeInTheDocument();
 });
 
-it('marks the drums badge from the scanned drum type, not the ini flag', async () => {
+it('shows a drums badge only for a four-lane pro kit', () => {
   const drumSong = song('drums', 'Drum Song', 1);
   const drumsOnly = {
-    instrumentPresence: {guitar: false, bass: false, keys: false, drums: true},
     instruments: {guitar: null, bass: null, keys: null, drums: 3},
   };
   drumSong.charts = [
-    {...chart('pro', 'Pro Kit'), ...drumsOnly, drumType: drumTypes.fourLanePro},
-    {...chart('five', '5-Lane'), ...drumsOnly, drumType: drumTypes.fiveLane},
-    {...chart('plain', 'Plain'), ...drumsOnly, drumType: drumTypes.fourLane},
+    {
+      ...chart('pro', 'Pro Kit'),
+      ...drumsOnly,
+      drumType: drumTypes.fourLanePro,
+      instrumentPresence: {
+        guitar: false,
+        bass: false,
+        keys: false,
+        drums: true,
+      },
+    },
+    {
+      ...chart('five', '5-Lane'),
+      ...drumsOnly,
+      drumType: drumTypes.fiveLane,
+      // Five-lane is not drums as far as this page is concerned.
+      instrumentPresence: {
+        guitar: false,
+        bass: false,
+        keys: false,
+        drums: false,
+      },
+    },
   ];
 
   render(
@@ -398,17 +417,13 @@ it('marks the drums badge from the scanned drum type, not the ini flag', async (
   );
   fireEvent.click(screen.getByTestId('song-row'));
 
-  const chartRows = await screen.findAllByTestId('chart-row');
-  expect(within(chartRows[0]).getByText('PRO')).toBeInTheDocument();
+  const chartRows = screen.getAllByTestId('chart-row');
   expect(
-    within(chartRows[0]).getByTitle('Drums (Pro drums): intensity 3'),
+    within(chartRows[0]).getByTitle('Drums: intensity 3'),
   ).toBeInTheDocument();
-  expect(within(chartRows[1]).getByText('5L')).toBeInTheDocument();
-  // Four-lane is the unremarkable case and carries no marker.
-  expect(within(chartRows[2]).queryByText('PRO')).not.toBeInTheDocument();
-  expect(within(chartRows[2]).queryByText('5L')).not.toBeInTheDocument();
+  expect(within(chartRows[1]).queryByTitle('Drums: intensity 3')).toBeNull();
   expect(
-    within(chartRows[2]).getByTitle('Drums: intensity 3'),
+    within(chartRows[1]).getByText('No instrument data'),
   ).toBeInTheDocument();
 });
 

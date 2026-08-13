@@ -1,7 +1,15 @@
 import type {DrumType} from '@eliwhite/scan-chart';
 import type {CoreInstrument} from '@/lib/chorusChartDb/types';
 
-/** Display metadata for the instruments this page renders: id, badge, label. */
+/**
+ * Display metadata for the instruments this page renders: id, badge, label.
+ *
+ * "Drums" means four-lane pro throughout — presence, badge and filter alike.
+ * Clone Hero drummers play pro, it is 23,912 of the 25,598 charted kits, and
+ * carrying the other two types through the UI bought markers and filter
+ * caveats that nobody was asking for. A five-lane or plain four-lane chart
+ * simply has no drums here.
+ */
 export const INSTRUMENTS = [
   ['guitar', 'G', 'Guitar'],
   ['bass', 'B', 'Bass'],

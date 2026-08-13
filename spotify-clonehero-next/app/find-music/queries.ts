@@ -1,6 +1,7 @@
 import {sql, type Kysely} from 'kysely';
 
 import type {DB} from '../../lib/local-db/types';
+import {drumTypes} from '@eliwhite/scan-chart';
 import {isDrumType} from '@/lib/chorusChartDb/types';
 import type {
   FindMusicChart,
@@ -131,7 +132,9 @@ function toChart(row: ChartRow): FindMusicChart {
       guitar: Boolean(row.has_guitar),
       bass: Boolean(row.has_bass),
       keys: Boolean(row.has_keys),
-      drums: Boolean(row.has_drums),
+      // Find Music's "drums" is four-lane pro. See INSTRUMENTS.
+      drums:
+        isDrumType(row.drum_type) && row.drum_type === drumTypes.fourLanePro,
     },
   };
 }
@@ -578,7 +581,7 @@ export async function getRadarSongs(
           THEN 1 ELSE 0 END) +
         MAX(CASE WHEN chart.has_keys = 1
           THEN 1 ELSE 0 END) +
-        MAX(CASE WHEN chart.has_drums = 1
+        MAX(CASE WHEN chart.drum_type = 1
           THEN 1 ELSE 0 END)
       ) AS available_instrument_count,
       MAX(CASE

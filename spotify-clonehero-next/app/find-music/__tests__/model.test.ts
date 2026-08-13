@@ -1,3 +1,4 @@
+import {drumTypes} from '@eliwhite/scan-chart';
 import {
   applyHeld,
   applyMusicFilters,
@@ -41,7 +42,12 @@ function chart(overrides: ChartOverrides): FindMusicChart {
     groupId: 1,
     hasVideoBackground: false,
     hasOtherInstruments: false,
-    drumType: null,
+    // A charted drums track always scans as some drum type; pro is the
+    // overwhelming default, and tests that care override it.
+    drumType:
+      chartInstruments.drums != null && chartInstruments.drums >= 0
+        ? drumTypes.fourLanePro
+        : null,
     isInstalled: false,
     ...rest,
     instrumentPresence: {
@@ -479,6 +485,33 @@ describe('find music filtering', () => {
     );
 
     expect(filtered.charts.map(item => item.md5)).toEqual(['drums']);
+  });
+
+  test('drums means pro drums, so other kits do not satisfy the filter', () => {
+    const source = radar({
+      key: 'kits',
+      charts: [
+        chart({md5: 'pro', instruments: {drums: 4}}),
+        chart({
+          md5: 'five-lane',
+          instruments: {drums: 4},
+          drumType: drumTypes.fiveLane,
+          instrumentPresence: {
+            guitar: false,
+            bass: false,
+            keys: false,
+            drums: false,
+          },
+        }),
+      ],
+    });
+
+    const [filtered] = applyRadarFilters(
+      [source],
+      filters({instruments: new Set(['drums'])}),
+    );
+
+    expect(filtered.charts.map(item => item.md5)).toEqual(['pro']);
   });
 
   test('radar applies committed and draft exclusions to charter metadata', () => {
