@@ -13,6 +13,13 @@ name: Update chart DB
 # stretch of failed runs — if the live dump ages out while the manifest still
 # points at it, first-visit loading breaks.
 on:
+  # A generation bump has to be republished before the app that serves it can
+  # deploy, and ci.yml's deploy job blocks until it is. Starting the rebuild
+  # from the same push is what keeps that block short.
+  push:
+    branches: [main]
+    paths:
+      - 'spotify-clonehero-next/lib/chorusChartDb/chartDbAssets.ts'
   schedule:
     # Daily incremental: only what changed since the published dump.
     - cron: '0 8 * * *'
@@ -60,13 +67,33 @@ jobs:
 
       - name: Resolve mode
         id: mode
-        # A dispatch passes the mode explicitly; a schedule is identified by
-        # which cron fired. Anything unrecognised stays incremental (cheap).
+        # A generation bump outranks everything else: the published rows are
+        # missing something this build carries, and re-narrowing them cannot
+        # invent it, so only a crawl heals the back catalog.
+        #
+        # Otherwise a dispatch passes the mode explicitly and a schedule is
+        # identified by which cron fired. A push that did not move the
+        # generation has nothing to do — the daily run covers it.
         run: |
-          if [ -n "${{ inputs.mode }}" ]; then
+          expected="$(grep -oE 'CHART_DB_DATA_VERSION = [0-9]+' \
+            lib/chorusChartDb/chartDbAssets.ts | grep -oE '[0-9]+$')"
+          if [ -z "$expected" ]; then
+            echo "::error::Could not read CHART_DB_DATA_VERSION"
+            exit 1
+          fi
+          published="$(curl -fsS https://assets.musiccharts.tools/charts/manifest.json \
+            | jq -r '.dataVersion // empty' || true)"
+
+          if [ "$published" != "$expected" ]; then
+            mode="full"
+            echo "Published generation ${published:-none} != $expected: rebuilding from scratch"
+          elif [ -n "${{ inputs.mode }}" ]; then
             mode="${{ inputs.mode }}"
           elif [ "${{ github.event.schedule }}" = "0 9 1 * *" ]; then
             mode="full"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            mode="skip"
+            echo "Generation unchanged at $expected: nothing for this push to do"
           else
             mode="incremental"
           fi
@@ -74,6 +101,7 @@ jobs:
           echo "Running a $mode update"
 
       - name: Download charts
+        if: steps.mode.outputs.mode != 'skip'
         run: |
           if [ "${{ steps.mode.outputs.mode }}" = "full" ]; then
             pnpm update:db
@@ -82,6 +110,7 @@ jobs:
           fi
 
       - name: Publish to R2
+        if: steps.mode.outputs.mode != 'skip'
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}

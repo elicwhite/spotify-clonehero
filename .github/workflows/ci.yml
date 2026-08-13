@@ -158,6 +158,33 @@ jobs:
       # such context, so on a team-owned project the same env vars that
       # resolve fine on a laptop return "Could not retrieve Project Settings"
       # here. Naming the scope explicitly is what makes token auth resolve it.
+      # The published catalog and this build agree on a generation, or clients
+      # get an app that refuses the manifest it is pointed at. update-chart-db
+      # rebuilds automatically when the constant moves, so the usual fix is to
+      # wait for that run; this only stops the deploy from overtaking it.
+      #
+      # The constant is read with grep rather than tsx so this job does not
+      # have to install the workspace to check one integer. An unreadable value
+      # fails the step, so a refactor that breaks the pattern blocks the deploy
+      # instead of quietly skipping the check.
+      - name: Require a matching published catalog
+        working-directory: .
+        run: |
+          expected="$(grep -oE 'CHART_DB_DATA_VERSION = [0-9]+' \
+            spotify-clonehero-next/lib/chorusChartDb/chartDbAssets.ts \
+            | grep -oE '[0-9]+$')"
+          if [ -z "$expected" ]; then
+            echo "::error::Could not read CHART_DB_DATA_VERSION"
+            exit 1
+          fi
+          published="$(curl -fsS https://assets.musiccharts.tools/charts/manifest.json \
+            | jq -r '.dataVersion // empty')"
+          if [ "$published" != "$expected" ]; then
+            echo "::error::Published catalog is generation ${published:-none}; this build serves $expected. Run the Update chart DB workflow and let it finish before deploying."
+            exit 1
+          fi
+          echo "Published catalog is generation $published, matching this build."
+
       - name: Pull Vercel project settings
         working-directory: .
         run: npx vercel@58 pull --yes --environment=production --scope "$VERCEL_ORG_ID"
