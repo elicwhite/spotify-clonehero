@@ -191,6 +191,11 @@ export default function HighwayEditor({
   const laneScopes: EditorScope[] = useMemo(() => {
     if (vocalsScope) return [vocalsScope];
     if (!matrixDrivesLanes) return [activeScope];
+    // With no track shown — the matrix can hide the last one, and a chart
+    // may have none to begin with — the song is still worth looking at. A
+    // global scope draws the highway, its tempo markers and its lyrics, and
+    // no notes, instead of replacing all of it with a message.
+    if (visibleTracks.length === 0) return [{kind: 'global' as const}];
     return visibleTracks.map(track => ({kind: 'track' as const, track}));
   }, [vocalsScope, matrixDrivesLanes, activeScope, visibleTracks]);
 
@@ -337,19 +342,6 @@ export default function HighwayEditor({
           ) : (
             <span>No audio to draw a waveform from.</span>
           )}
-        </div>
-      )}
-
-      {lanes.length === 0 && (
-        // Reachable through the UI: the matrix lets the user hide every
-        // track, including the last one (the approved prototype's "No tracks
-        // shown" state). The theme-independent editor-surface tokens, not
-        // `text-muted-foreground`: this sits on the black highway surface in
-        // both themes, and the muted token is a mid grey tuned for
-        // `--background` - on black it falls under AA.
-        <div className="absolute inset-0 z-20 flex items-center justify-center text-sm text-[color:var(--ed-surface-fg-muted)]">
-          No tracks shown. Click a difficulty in the Chart Matrix to show it
-          here.
         </div>
       )}
 

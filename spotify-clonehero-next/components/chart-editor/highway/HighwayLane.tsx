@@ -53,6 +53,7 @@ import type {
 } from '@/lib/chart-editor-core';
 import {
   DEFAULT_VOCALS_PART,
+  emptyTrack,
   findTrack,
   listNotes,
   schemaForTrack,
@@ -149,6 +150,20 @@ function HighwayLane({
     );
   }, [chart, track]);
 
+  // A global lane has no track of its own, and the bare floor the renderer
+  // draws without one reads as a broken highway rather than an empty song.
+  // An empty guitar track gives it fret lanes to draw. Rendering only: the
+  // track is not in the chart, so notes and interaction still resolve from
+  // `activeTrack` (null) and nothing can be edited into it.
+  const renderTrack = useMemo(
+    () =>
+      activeTrack ??
+      (laneScope.kind === 'global'
+        ? emptyTrack({instrument: 'guitar', difficulty: 'expert'})
+        : null),
+    [activeTrack, laneScope.kind],
+  );
+
   const {
     handleRef: stageHandleRef,
     reconcilerRef,
@@ -157,8 +172,8 @@ function HighwayLane({
   } = useStageHighway({
     stage,
     id: laneId,
-    track: activeTrack,
-    showDrumLanes: capabilities.showDrumLanes && activeTrack != null,
+    track: renderTrack,
+    showDrumLanes: capabilities.showDrumLanes && renderTrack != null,
   });
 
   /** Whether this lane is the last-interacted one. Drives only the

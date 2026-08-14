@@ -271,9 +271,17 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('HighwayEditor multi-pane (plan 0074 Phase 3)', () => {
-  it('renders a safe empty state when no tracks are visible', () => {
+  it('keeps drawing the song when no track is visible, without notes', () => {
     renderHarness({chartDoc: makeMultiInstrumentDoc(), visible: []});
-    expect(screen.getByText(/no tracks shown/i)).toBeInTheDocument();
+
+    // The matrix can hide the last track, and some charts have none. The
+    // highway stays: tempo markers and lyrics belong to the song, not to a
+    // track, so hiding every track is not a reason to blank the view.
+    expect(screen.getByTestId('highway-lane-global')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('highway-lane-drums:expert'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/no tracks shown/i)).not.toBeInTheDocument();
   });
 
   it('renders one pane per visible track, each labeled with instrument · difficulty', async () => {
