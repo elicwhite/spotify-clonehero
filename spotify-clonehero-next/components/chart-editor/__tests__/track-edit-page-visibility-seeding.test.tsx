@@ -155,6 +155,8 @@ class FakeAudioContext {
 // OPFS project store — stubbed to the fixture project built below.
 // ---------------------------------------------------------------------------
 let fixtureChartText = '';
+/** Which entrypoint the fixture project records. Set per test. */
+let fixtureOrigin: string | undefined;
 const fixtureAudioFiles = [{fileName: 'song.ogg', data: new Uint8Array([1])}];
 
 jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
@@ -171,6 +173,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       durationSeconds: 180,
       sourceFormat: 'chart',
       originalName: 'Test Song',
+      origin: fixtureOrigin,
     })),
     readChartFile: jest.fn(async () => ({
       fileName: 'notes.chart',
@@ -246,6 +249,7 @@ function buildFixtureChartText(): string {
 
 beforeEach(() => {
   fixtureChartText = buildFixtureChartText();
+  fixtureOrigin = undefined;
 });
 
 describe('/chart-editor load-path visibility seeding', () => {
@@ -291,6 +295,67 @@ describe('/chart-editor load-path visibility seeding', () => {
       'true',
     );
     expect(screen.getByRole('button', {name: 'Drums Hard'})).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('opens a drum-difficulties project on every charted drum tier, and nothing else', async () => {
+    fixtureOrigin = 'drum-difficulties';
+
+    render(
+      <TooltipProvider>
+        <TrackEditPage
+          {...CHART_EDITOR_CONFIG}
+          leftPanelChildren={<VisibilityProbe />}
+        />
+      </TooltipProvider>,
+    );
+
+    // The tiers that route generated, and not the guitar/bass tracks the
+    // chart also carries.
+    await waitFor(() =>
+      expect(screen.getByTestId('visible-tracks')).toHaveTextContent(
+        'drums:expert,drums:hard',
+      ),
+    );
+    expect(screen.getByTestId('active-scope')).toHaveTextContent(
+      'drums:expert',
+    );
+    expect(screen.getByRole('button', {name: 'Drums Hard'})).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', {name: 'Guitar Hard'})).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByRole('button', {name: 'Bass Easy'})).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('opens a guitar-difficulties project on the guitar tiers instead', async () => {
+    fixtureOrigin = 'guitar-difficulties';
+
+    render(
+      <TooltipProvider>
+        <TrackEditPage
+          {...CHART_EDITOR_CONFIG}
+          leftPanelChildren={<VisibilityProbe />}
+        />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('visible-tracks')).toHaveTextContent(
+        'guitar:hard,guitar:medium',
+      ),
+    );
+    // Focus follows the generated instrument, not the drums default.
+    expect(screen.getByTestId('active-scope')).toHaveTextContent('guitar:hard');
+    expect(screen.getByRole('button', {name: 'Drums Expert'})).toHaveAttribute(
       'aria-pressed',
       'false',
     );

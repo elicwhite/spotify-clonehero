@@ -34,12 +34,14 @@ import {
   documentIdentityFields,
   getAssistProvenance,
   highestDifficultyTrackKeys,
+  TRACK_DIFFICULTIES,
   withAssistProvenance,
   withSongIniFields,
   type SongMetadataValue,
 } from '@/lib/chart-editor-core';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
+import {difficultyInstrumentOf} from '@/lib/project-storage/difficultyOrigins';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {AudioServiceProvider} from './AudioServiceContext';
 import {
@@ -681,9 +683,26 @@ function TrackEditEditor({
         // drums when it's among them, else the first. A chart with no
         // instrument track but with lyrics opens on vocals instead — that is
         // the shape `/add-lyrics` hands over.
-        const seededKeys = highestDifficultyTrackKeys(parsed.trackData);
+        // A project from a difficulty route opens on the work that route
+        // did: every charted difficulty of its one instrument, and nothing
+        // else. Elsewhere it is one track per instrument, at its highest
+        // charted difficulty.
+        const generatedFor = difficultyInstrumentOf(meta.origin);
+        const generatedKeys = generatedFor
+          ? TRACK_DIFFICULTIES.filter(difficulty =>
+              parsed.trackData.some(
+                t =>
+                  t.instrument === generatedFor && t.difficulty === difficulty,
+              ),
+            ).map(difficulty => ({instrument: generatedFor, difficulty}))
+          : [];
+        const seededKeys =
+          generatedKeys.length > 0
+            ? generatedKeys
+            : highestDifficultyTrackKeys(parsed.trackData);
         const scopeTrack =
-          seededKeys.find(k => k.instrument === 'drums') ?? seededKeys[0];
+          seededKeys.find(k => k.instrument === (generatedFor ?? 'drums')) ??
+          seededKeys[0];
         if (!scopeTrack && !hasAnyLyrics(chartDoc)) {
           throw new Error(
             `${NO_SUPPORTED_TRACK_MESSAGE} Available tracks: ` +
@@ -717,9 +736,8 @@ function TrackEditEditor({
         setAudioLoading(projectHasAudio);
         setAudioError(false);
         dispatch({type: 'SET_CHART_DOC', chartDoc});
-        // The editor starts with every instrument's highest charted
-        // difficulty visible. Other tracks remain available in the sidebar
-        // without duplicating the piano roll.
+        // Other tracks remain available in the sidebar without duplicating
+        // the piano roll.
         dispatch({
           type: 'SET_VISIBLE_TRACKS',
           tracks: new Set(seededKeys.map(trackKeyId)),

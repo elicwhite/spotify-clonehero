@@ -35,7 +35,7 @@ import type {
   SourceFormat,
 } from '@/lib/chart-files/chart-package';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
-import type {ProjectOrigin} from '@/lib/project-storage/types';
+import {DIFFICULTY_ORIGIN} from '@/lib/project-storage/difficultyOrigins';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
@@ -96,14 +96,6 @@ interface SongMeta {
   artist: string;
   charter: string;
 }
-
-/** Which entrypoint a project from this flow records. One value per route,
- *  so a project always says which page made it. */
-const DIFFICULTY_ORIGIN: Record<DifficultyGenerationInstrument, ProjectOrigin> =
-  {
-    drums: 'drum-difficulties',
-    guitar: 'guitar-difficulties',
-  };
 
 /** Everything a dropped chart has to yield before a run can start. */
 export interface GenerationCandidate {
