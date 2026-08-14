@@ -241,7 +241,7 @@ async function persistChartPackageDoc(
   doc: ChartDocument,
 ): Promise<void> {
   const {chart, ini} = chartDocToFolderFiles(doc);
-  await chartPackageStore().writeEditedChart(id, chart.data);
+  await chartPackageStore().writeEditedChart(id, chart);
   await chartPackageStore().writeSongIni(id, ini.data);
 }
 

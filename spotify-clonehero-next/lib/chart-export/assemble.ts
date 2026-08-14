@@ -18,6 +18,7 @@ import type {
 } from '@eliwhite/scan-chart';
 
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
+import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
 import {DIFFICULTY_FIELDS, type DifficultyField} from '@/lib/chart-difficulty';
 
 /** Metadata the user supplies (or confirms) at export time. */
@@ -102,6 +103,15 @@ interface ChartSourceOptions {
    * carries would be lost.
    */
   chartDoc?: ChartDocument;
+  /**
+   * The format to write the chart file in, when it differs from the
+   * document's own. Set by the export dialog's chart-file select.
+   *
+   * Applied here rather than by the caller pre-serializing, so a host can
+   * offer the choice and still pass `chartDoc` — the only source that keeps
+   * the fields `song.ini` alone carries.
+   */
+  chartFileFormat?: ChartFileFormat;
   /** Audio stems to bundle alongside the chart. */
   audioSources?: PackageAudioSource[];
   /**
@@ -261,6 +271,7 @@ export function assembleChartFiles({
   chartText,
   chartFile,
   chartDoc: suppliedChartDoc,
+  chartFileFormat,
   metadata,
   audioSources = [],
   extraAssets = [],
@@ -293,11 +304,15 @@ export function assembleChartFiles({
       };
       return readChart([inputFile]);
     })();
-  const stampedParsedChart: ParsedChart = stampMetadata(
+  const stamped: ParsedChart = stampMetadata(
     chartDoc.parsedChart,
     metadata,
     songLengthMs,
   );
+  const stampedParsedChart: ParsedChart =
+    chartFileFormat && chartFileFormat !== stamped.format
+      ? {...stamped, format: chartFileFormat}
+      : stamped;
 
   const entries: FileEntry[] = writeChartFolder({
     parsedChart: stampedParsedChart,

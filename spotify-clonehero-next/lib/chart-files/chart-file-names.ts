@@ -43,9 +43,19 @@ export function editedVariant(baseName: string): string {
   return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
 }
 
-/** Whether a file name is a chart file, in either format. */
-export function isChartFileName(fileName: string): boolean {
-  return chartFileFormatOf(fileName) !== null;
+/**
+ * Whether a file name is *the* chart file of a package, in either format.
+ *
+ * An exact match on the two canonical names, not an extension test. A
+ * package may ship other `.chart` or `.mid` files — a charter's backup, an
+ * alternate take — and those are ordinary assets. Treating them as the chart
+ * would store or export the wrong one.
+ */
+export function isCanonicalChartFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return (
+    lower === CHART_FILE_BASENAMES.chart || lower === CHART_FILE_BASENAMES.mid
+  );
 }
 
 /**

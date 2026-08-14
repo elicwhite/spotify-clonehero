@@ -8,13 +8,11 @@
  * Directory structure (per namespace):
  *   {namespace}/
  *     {projectId}/
- *       metadata.json        - Project metadata
- *       notes.chart | notes.mid            - The chart as loaded, in its
- *                                              own format
- *       notes.edited.chart | notes.edited.mid - The chart as edited, written
- *                                              on save in the same format
+ *       metadata.json         - Project metadata
+ *       notes.{chart|mid}     - The chart as loaded, in its own format
+ *       notes.edited.{chart|mid} - The chart as edited, same format
  *       audio/
- *         {stem}.{ext}        - Original audio files from the loaded chart package
+ *         {stem}.{ext}        - Original audio files from the loaded package
  *       original-files.json   - Manifest of original files for re-export
  */
 
@@ -25,13 +23,18 @@ import {
   CHART_FILE_BASENAMES,
   chartFileFormatOf,
   editedVariant,
-  isChartFileName,
+  isCanonicalChartFileName,
   type ChartFileFormat,
 } from '@/lib/chart-files/chart-file-names';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from './types';
 
 const METADATA_FILE = 'metadata.json';
+
+/** A project written before the store recorded a format holds a `.chart`. */
+function formatOfMetadata(metadata: ProjectMetadata): ChartFileFormat {
+  return metadata.chartFileFormat ?? 'chart';
+}
 const AUDIO_DIR = 'audio';
 const ORIGINAL_FILES_MANIFEST = 'original-files.json';
 
@@ -55,8 +58,8 @@ export interface ProjectMetadata {
    * converting a `.mid` chart would drop vocal note pitches, phrase lengths
    * and harmony parts.
    *
-   * Absent on a project written before the store kept both formats. Those
-   * projects are all `.chart`, because converting is what the store did.
+   * Absent on a project that predates the field. Those projects are all
+   * `.chart`.
    */
   chartFileFormat?: ChartFileFormat | undefined;
   /**
@@ -241,8 +244,12 @@ export function createOpfsProjectStore(
   }): Promise<ProjectMetadata> {
     const id = generateId();
     const now = new Date().toISOString();
-    const chartFileFormat =
-      chartFileFormatOf(opts.chartFile.fileName) ?? 'chart';
+    const chartFileFormat = chartFileFormatOf(opts.chartFile.fileName);
+    if (!chartFileFormat) {
+      throw new Error(
+        `"${opts.chartFile.fileName}" is not a chart file; expected .chart or .mid`,
+      );
+    }
     const metadata: ProjectMetadata = {
       id,
       name: opts.name,
@@ -292,7 +299,7 @@ export function createOpfsProjectStore(
 
     for (const file of opts.allFiles) {
       const lowerName = file.fileName.toLowerCase();
-      if (isChartFileName(lowerName)) {
+      if (isCanonicalChartFileName(lowerName)) {
         // Written above, under the canonical name for its format.
         manifest.push({fileName: file.fileName, storedIn: 'root'});
         continue;
@@ -441,6 +448,14 @@ export function createOpfsProjectStore(
     throw firstError ?? new Error(`Project "${projectId}" not found`);
   }
 
+  async function readMetadata(
+    dir: FileSystemDirectoryHandle,
+  ): Promise<ProjectMetadata> {
+    return (await readJsonFile(
+      await dir.getFileHandle(METADATA_FILE),
+    )) as ProjectMetadata;
+  }
+
   /**
    * Reads a project's chart file, in whatever format it is stored in.
    * Prefers the edited (autosaved) sibling, falls back to the original.
@@ -453,14 +468,24 @@ export function createOpfsProjectStore(
     projectId: string,
   ): Promise<{fileName: string; data: Uint8Array}> {
     const dir = await getProjectDir(projectId);
-    const baseName = CHART_FILE_BASENAMES[await chartFormatOf(projectId)];
-    for (const fileName of [editedVariant(baseName), baseName]) {
-      try {
-        const handle = await dir.getFileHandle(fileName);
-        const file = await handle.getFile();
-        return {fileName, data: new Uint8Array(await file.arrayBuffer())};
-      } catch {
-        continue;
+    const format = formatOfMetadata(await readMetadata(dir));
+    // The recorded format first, then the other one. `createProject` writes
+    // metadata before the chart bytes, so a torn create can leave a project
+    // whose metadata names a file that is not there; the second candidate
+    // pair finds the chart instead of failing the open.
+    const other: ChartFileFormat = format === 'chart' ? 'mid' : 'chart';
+    for (const base of [
+      CHART_FILE_BASENAMES[format],
+      CHART_FILE_BASENAMES[other],
+    ]) {
+      for (const fileName of [editedVariant(base), base]) {
+        try {
+          const handle = await dir.getFileHandle(fileName);
+          const file = await handle.getFile();
+          return {fileName, data: new Uint8Array(await file.arrayBuffer())};
+        } catch {
+          continue;
+        }
       }
     }
     throw new Error(`Project "${projectId}" has no chart file`);
@@ -468,21 +493,19 @@ export function createOpfsProjectStore(
 
   /**
    * The format a project's chart is stored in. A project written before the
-   * store kept both formats has no recorded format and is `.chart`.
+   * store recorded a format is `.chart`.
    */
   async function chartFormatOf(projectId: string): Promise<ChartFileFormat> {
-    const metadata = await getProject(projectId);
-    return metadata.chartFileFormat ?? 'chart';
+    return formatOfMetadata(await getProject(projectId));
   }
 
   /**
    * Reads the project's `song.ini` bytes, or `null` when the imported package
    * carried none.
    *
-   * The editable chart is stored as `.chart` text, which has nowhere to carry
-   * most of `song.ini` (the per-instrument `diff_*` fields, `icon`,
-   * `loading_phrase`, custom keys), so a host that wants the chart's real
-   * metadata reads this alongside the chart text. The file is stored under
+   * Neither chart format can carry most of `song.ini` (the per-instrument
+   * `diff_*` fields, `icon`, `loading_phrase`, custom keys), so a host that
+   * wants the chart's real metadata reads this alongside the chart file. The file is stored under
    * whatever name the package used, so the match is case-insensitive.
    */
   async function readSongIni(projectId: string): Promise<Uint8Array | null> {
@@ -537,23 +560,34 @@ export function createOpfsProjectStore(
   }
 
   /**
-   * Writes the edited chart to OPFS, in the project's own format. Takes
-   * bytes rather than text because a `.mid` chart is binary.
+   * Writes the edited chart to OPFS, beside the original and in the same
+   * format.
+   *
+   * Takes the named file `writeChartFolder` produced, not bare bytes: the
+   * caller knows what it serialized, and a `.chart` body written into
+   * `notes.edited.mid` would fail to parse on the next open. A file whose
+   * format is not the project's is a caller bug, so it throws.
    */
   async function writeEditedChart(
     projectId: string,
-    data: Uint8Array,
+    chartFile: {fileName: string; data: Uint8Array},
   ): Promise<void> {
     const dir = await getProjectDir(projectId);
-    const baseName = CHART_FILE_BASENAMES[await chartFormatOf(projectId)];
-    const handle = await dir.getFileHandle(editedVariant(baseName), {
-      create: true,
-    });
-    await writeFile(handle, data);
-
-    // Update the updatedAt timestamp
     const metaHandle = await dir.getFileHandle(METADATA_FILE);
     const metadata = (await readJsonFile(metaHandle)) as ProjectMetadata;
+    const format = formatOfMetadata(metadata);
+    const written = chartFileFormatOf(chartFile.fileName);
+    if (written !== format) {
+      throw new Error(
+        `Project "${projectId}" stores a .${format} chart, but "${chartFile.fileName}" is not one`,
+      );
+    }
+    const handle = await dir.getFileHandle(
+      editedVariant(CHART_FILE_BASENAMES[format]),
+      {create: true},
+    );
+    await writeFile(handle, chartFile.data);
+
     metadata.updatedAt = new Date().toISOString();
     await writeFile(metaHandle, JSON.stringify(metadata));
   }
@@ -582,64 +616,6 @@ export function createOpfsProjectStore(
   }
 
   /**
-   * Loads all files needed for re-export: chart + audio + other assets.
-   * Reads the edited chart (or original) and all files from the manifest.
-   */
-  async function loadFilesForExport(
-    projectId: string,
-  ): Promise<{fileName: string; data: Uint8Array}[]> {
-    const dir = await getProjectDir(projectId);
-    const files: {fileName: string; data: Uint8Array}[] = [];
-
-    // Read the chart, edited or original, in its own format
-    const chart = await readChartFile(projectId);
-    files.push(chart);
-
-    // Read manifest to know what other files exist
-    try {
-      const manifestHandle = await dir.getFileHandle(ORIGINAL_FILES_MANIFEST);
-      const manifest = (await readJsonFile(
-        manifestHandle,
-      )) as OriginalFileEntry[];
-
-      for (const entry of manifest) {
-        const lowerName = entry.fileName.toLowerCase();
-        // Skip chart files (already added above)
-        if (isChartFileName(lowerName)) continue;
-
-        try {
-          if (entry.storedIn === 'audio') {
-            const audioDir = await dir.getDirectoryHandle(AUDIO_DIR);
-            const handle = await audioDir.getFileHandle(entry.fileName);
-            const file = await handle.getFile();
-            files.push({
-              fileName: entry.fileName,
-              data: new Uint8Array(await file.arrayBuffer()),
-            });
-          } else {
-            const handle = await dir.getFileHandle(entry.fileName);
-            const file = await handle.getFile();
-            files.push({
-              fileName: entry.fileName,
-              data: new Uint8Array(await file.arrayBuffer()),
-            });
-          }
-        } catch {
-          console.warn(
-            `${namespace} export: Could not read file "${entry.fileName}"`,
-          );
-        }
-      }
-    } catch {
-      // No manifest — just return chart + audio files
-      const audioFiles = await loadAudioFiles(projectId);
-      files.push(...audioFiles);
-    }
-
-    return files;
-  }
-
-  /**
    * The package files that are neither the chart nor audio — album art,
    * video, background images, anything else that shipped with the folder.
    *
@@ -656,7 +632,7 @@ export function createOpfsProjectStore(
     for (const entry of await readManifest(dir)) {
       if (entry.storedIn !== 'root') continue;
       const lower = entry.fileName.toLowerCase();
-      if (isChartFileName(lower)) continue;
+      if (isCanonicalChartFileName(lower)) continue;
       if (lower === 'song.ini') continue;
       try {
         const handle = await dir.getFileHandle(entry.fileName);
@@ -690,7 +666,7 @@ export function createOpfsProjectStore(
    * The project's album art, or null when it ships none.
    *
    * Read through the manifest rather than by probing for `album.jpg`: the
-   * manifest is what `loadFilesForExport` walks, so a cover it doesn't list
+   * manifest is what the export path walks, so a cover it doesn't list
    * wouldn't reach the package anyway.
    */
   async function readAlbumArt(
@@ -763,7 +739,6 @@ export function createOpfsProjectStore(
     writeAudioFiles,
     writeEditedChart,
     loadAudioFiles,
-    loadFilesForExport,
     loadPassthroughAssets,
     readAlbumArt,
     writeAlbumArt,

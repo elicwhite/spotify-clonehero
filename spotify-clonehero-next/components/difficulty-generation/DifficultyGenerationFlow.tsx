@@ -163,9 +163,6 @@ export function inspectDroppedChart(
     return {ok: false, error: 'No audio files found in chart package.'};
   }
 
-  // The editor saves and exports .chart, whatever the package arrived as.
-  chartDoc.parsedChart.format = 'chart';
-
   return {
     ok: true,
     candidate: {
@@ -465,7 +462,6 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
     [candidate.audioFiles],
   );
   const chartPackage = useChartPackageEditor({
-    chartDoc: state.chartDoc ?? null,
     loadAudioFiles,
   });
 
@@ -505,6 +501,8 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
         audioChannels={audio.audioChannels}
         durationSeconds={durationSeconds}
         sections={chart.sections}
+        sourceChartFormat={candidate.chartDoc.parsedChart.format}
+        chartFormatSelectable
         songName={candidate.meta.name}
         artistName={candidate.meta.artist}
         charterName={candidate.meta.charter}
@@ -512,7 +510,6 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
         // so the piano roll stacks one row per visible track rather than
         // following `activeScope`'s single track.
         stackedPianoRoll
-        getChartFile={chartPackage.getChartFile}
         getAudioSources={chartPackage.getAudioSources}
         chartAssist={chartAssist}
       />

@@ -32,11 +32,11 @@ import {
   findAudioFiles,
   type Files,
 } from '@/lib/preview/chorus-chart-processing';
-import {readChart} from '@/lib/chart-edit';
+import {chartDocToFolderFiles, readChart} from '@/lib/chart-edit';
+import {chartFileFormatOf} from '@/lib/chart-files/chart-file-names';
 import {isWebGPUAvailable} from '@/lib/drum-transcription/ml/onnx-runtime';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
-import {isChartFileName} from '@/lib/chart-files/chart-file-names';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import SectionDropZone from '@/components/landing/SectionDropZone';
 import AudioUploader from '@/app/drum-transcription/components/AudioUploader';
@@ -90,11 +90,10 @@ function writeAndReparse(
   chart: ParsedChart,
   assets: ScanFile[],
   modifiers: typeof defaultIniChartModifiers,
-): {chart: ParsedChart; files: ScanFile[]} {
+): {chart: ParsedChart; files: ScanFile[]; chartFile: ScanFile} {
   const files = writeChartFolder({parsedChart: chart, assets});
-  const chartFile = files.find(f => isChartFileName(f.fileName));
-  if (!chartFile) throw new Error('Failed to write the new chart');
-  const format = chartFile.fileName.endsWith('.mid') ? 'mid' : 'chart';
+  const chartFile = chartDocToFolderFiles({parsedChart: chart, assets}).chart;
+  const format = chartFileFormatOf(chartFile.fileName) ?? 'chart';
   const chartBytes = new Uint8Array(chartFile.data);
   const reparsed = parseChartFile(chartBytes, format, modifiers);
   // parseChartFile returns the narrow shape; re-stitch the wide ParsedChart
@@ -110,6 +109,7 @@ function writeAndReparse(
       iniChartModifiers: modifiers,
     } as ParsedChart,
     files,
+    chartFile,
   };
 }
 
@@ -271,9 +271,11 @@ export default function TempoClient({
           newChart = built;
         }
 
-        const {chart, files} = writeAndReparse(newChart, chartAssets, modifiers);
-        const chartFile = files.find(f => isChartFileName(f.fileName));
-        if (!chartFile) throw new Error('Failed to build the chart project');
+        const {chart, files, chartFile} = writeAndReparse(
+          newChart,
+          chartAssets,
+          modifiers,
+        );
 
         const meta = await chartPackageStore().createProject({
           name,

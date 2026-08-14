@@ -603,7 +603,7 @@ function TrackEditEditor({
     // reverse order would show stale metadata over fresh content, which reads
     // to the user as a lost edit.
     await store.writeSongIni(projectId, ini.data);
-    await store.writeEditedChart(projectId, chart.data);
+    await store.writeEditedChart(projectId, chart);
     // Mirror the doc's audio anchor into project metadata: a `.chart` file
     // has nowhere to carry it, and without it a reload would show a chart
     // shifted by the leading silence against unpadded audio. Cheap and
@@ -818,7 +818,6 @@ function TrackEditEditor({
   // host wants from the chart-package boundary is the chart text, the raw
   // export sources, and the assist audio loader.
   const chartPackage = useChartPackageEditor({
-    chartDoc: state.chartDoc ?? null,
     loadAudioFiles,
     stemFingerprint: storedStemFingerprint,
   });
@@ -1131,7 +1130,6 @@ function TrackEditEditor({
         artistName={chart.metadata.artist || projectMeta?.artist}
         charterName={chart.metadata.charter || projectMeta?.charter}
         onMetadataChange={handleMetadataChange}
-        getChartFile={chartPackage.getChartFile}
         sourceChartFormat={projectMeta?.chartFileFormat ?? 'chart'}
         chartFormatSelectable
         getAudioSources={getAudioSources}

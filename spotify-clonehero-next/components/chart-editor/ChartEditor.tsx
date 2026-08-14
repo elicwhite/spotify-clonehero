@@ -360,7 +360,7 @@ export default function ChartEditor({
           {headerExtra && (
             <div className="shrink-0 ml-4 flex items-center">{headerExtra}</div>
           )}
-          {(getChartText || getChartFile) && (
+          {(state.chartDoc || getChartText || getChartFile) && (
             <div className="shrink-0 ml-4">
               <ExportDialog
                 songName={songName}

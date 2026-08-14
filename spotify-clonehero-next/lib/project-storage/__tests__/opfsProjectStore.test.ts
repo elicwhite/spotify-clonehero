@@ -11,8 +11,8 @@ describe('createOpfsProjectStore', () => {
     /** A MIDI header plus one empty track — enough to prove the bytes are
      *  stored and read back without a text round trip. */
     const MID_BYTES = new Uint8Array([
-      0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0, 0x60, 0x4d, 0x54,
-      0x72, 0x6b, 0, 0, 0, 4, 0, 0xff, 0x2f, 0x00,
+      0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0, 0x60, 0x4d, 0x54, 0x72,
+      0x6b, 0, 0, 0, 4, 0, 0xff, 0x2f, 0x00,
     ]);
 
     async function createMidProject() {
@@ -41,23 +41,18 @@ describe('createOpfsProjectStore', () => {
       expect(Array.from(chart.data)).toEqual(Array.from(MID_BYTES));
     });
 
-    it('writes a MIDI project\'s autosave to notes.edited.mid', async () => {
+    it("writes a MIDI project's autosave to notes.edited.mid", async () => {
       const {store, meta} = await createMidProject();
       const edited = new Uint8Array([...MID_BYTES, 0x00]);
 
-      await store.writeEditedChart(meta.id, edited);
+      await store.writeEditedChart(meta.id, {
+        fileName: 'notes.mid',
+        data: edited,
+      });
 
       const chart = await store.readChartFile(meta.id);
       expect(chart.fileName).toBe('notes.edited.mid');
       expect(Array.from(chart.data)).toEqual(Array.from(edited));
-    });
-
-    it('exports a MIDI project as notes.mid, not notes.chart', async () => {
-      const {store, meta} = await createMidProject();
-
-      const files = await store.loadFilesForExport(meta.id);
-      expect(files.map(f => f.fileName)).toContain('notes.mid');
-      expect(files.map(f => f.fileName)).not.toContain('notes.chart');
     });
 
     it('reads a project written before the format was recorded as .chart', async () => {
@@ -144,7 +139,10 @@ describe('createOpfsProjectStore', () => {
 
     expect(await chartTextOf(store, meta.id)).toBe('original');
 
-    await store.writeEditedChart(meta.id, new TextEncoder().encode('edited'));
+    await store.writeEditedChart(meta.id, {
+      fileName: 'notes.chart',
+      data: new TextEncoder().encode('edited'),
+    });
     expect(await chartTextOf(store, meta.id)).toBe('edited');
 
     // updatedAt bumped on save.
@@ -203,7 +201,10 @@ describe('createOpfsProjectStore', () => {
     expect(await chartTextOf(store, legacy.id)).toBe('old-chart');
 
     // Saves land on the project where it already lives, not on a copy.
-    await store.writeEditedChart(legacy.id, new TextEncoder().encode('edited-in-place'));
+    await store.writeEditedChart(legacy.id, {
+      fileName: 'notes.chart',
+      data: new TextEncoder().encode('edited-in-place'),
+    });
     expect(await chartTextOf(legacyStore, legacy.id)).toBe('edited-in-place');
 
     // New projects go to the current namespace, and both are listed.
@@ -252,9 +253,9 @@ describe('createOpfsProjectStore', () => {
         sourceFormat: 'sng',
         originalName: 'song.sng',
         chartFile: {
-        fileName: 'notes.chart',
-        data: new TextEncoder().encode('chart'),
-      },
+          fileName: 'notes.chart',
+          data: new TextEncoder().encode('chart'),
+        },
         audioFiles: [],
         allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
       });
@@ -318,9 +319,9 @@ describe('createOpfsProjectStore', () => {
         sourceFormat: 'sng',
         originalName: 'song.sng',
         chartFile: {
-        fileName: 'notes.chart',
-        data: new TextEncoder().encode('[Song]\n{\n}\n'),
-      },
+          fileName: 'notes.chart',
+          data: new TextEncoder().encode('[Song]\n{\n}\n'),
+        },
         audioFiles: [{fileName: 'song.ogg', data: new Uint8Array([1])}],
         allFiles: [
           {fileName: 'notes.chart', data: new Uint8Array([9])},
@@ -353,9 +354,9 @@ describe('createOpfsProjectStore', () => {
         sourceFormat: 'sng',
         originalName: 'song.sng',
         chartFile: {
-        fileName: 'notes.chart',
-        data: new TextEncoder().encode('[Song]\n{\n}\n'),
-      },
+          fileName: 'notes.chart',
+          data: new TextEncoder().encode('[Song]\n{\n}\n'),
+        },
         audioFiles: [],
         allFiles: [{fileName: 'notes.chart', data: new Uint8Array([9])}],
       });
@@ -406,9 +407,9 @@ describe('createOpfsProjectStore', () => {
         sourceFormat: 'sng',
         originalName: 'song.sng',
         chartFile: {
-        fileName: 'notes.chart',
-        data: new TextEncoder().encode('[Song]\n{\n}\n'),
-      },
+          fileName: 'notes.chart',
+          data: new TextEncoder().encode('[Song]\n{\n}\n'),
+        },
         audioFiles: [],
         allFiles: [{fileName: 'notes.chart', data: new Uint8Array([9])}],
       });

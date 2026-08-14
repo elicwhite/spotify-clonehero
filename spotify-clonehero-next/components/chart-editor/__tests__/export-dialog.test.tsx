@@ -9,8 +9,9 @@
  * formats. These tests cover: no metadata inputs and no format dropdown; each
  * large button packages and downloads the format it names, reading
  * name/artist/charter straight from props; the chart source precedence
- * (`getChartFile` over `chartDoc` over `getChartText`); the secondary
- * chart-file-format and stem controls rendering only when the caller opts in;
+ * (`chartDoc` over `getChartFile` over `getChartText`); the chart-file format
+ * reaching the packager; the secondary chart-file-format and stem controls
+ * rendering only when the caller opts in;
  * and the busy state disabling both buttons mid-export.
  */
 
@@ -169,13 +170,20 @@ test('assembles from the live document rather than its .chart text', async () =>
   expect(getChartText).not.toHaveBeenCalled();
 });
 
-test('prefers getChartFile over the live document', async () => {
-  const chartFile = {fileName: 'notes.mid', data: new Uint8Array([1])};
+test('prefers the live document over getChartFile', async () => {
+  // The document is the only source carrying the fields `song.ini` alone
+  // holds, so it outranks pre-serialized bytes. The chart-file format still
+  // reaches `assembleChartFiles`, which applies it.
+  const chartDoc = {parsedChart: {metadata: {}}, assets: []} as never;
+  const getChartFile = jest.fn(async () => ({
+    fileName: 'notes.mid',
+    data: new Uint8Array([1]),
+  }));
   render(
     <ExportDialog
       songName="Song"
-      getChartFile={async () => chartFile}
-      chartDoc={{parsedChart: {metadata: {}}, assets: []} as never}
+      getChartFile={getChartFile}
+      chartDoc={chartDoc}
     />,
   );
   await openDialog();
@@ -187,9 +195,34 @@ test('prefers getChartFile over the live document', async () => {
   });
 
   await waitFor(() => expect(assembleChartFiles).toHaveBeenCalled());
-  expect(assembleChartFiles.mock.calls[0][0]).toMatchObject({chartFile});
-  expect(assembleChartFiles.mock.calls[0][0]).not.toHaveProperty('chartDoc');
+  expect(assembleChartFiles.mock.calls[0][0]).toMatchObject({chartDoc});
+  expect(assembleChartFiles.mock.calls[0][0]).not.toHaveProperty('chartFile');
+  expect(getChartFile).not.toHaveBeenCalled();
 });
+
+test('sends the selected chart-file format to the packager', async () => {
+  const chartDoc = {parsedChart: {metadata: {}}, assets: []} as never;
+  render(
+    <ExportDialog
+      songName="Song"
+      chartDoc={chartDoc}
+      sourceChartFormat="mid"
+    />,
+  );
+  await openDialog();
+
+  await act(async () => {
+    fireEvent.click(
+      screen.getByRole('button', {name: /download \.zip package/i}),
+    );
+  });
+
+  await waitFor(() => expect(assembleChartFiles).toHaveBeenCalled());
+  expect(assembleChartFiles.mock.calls[0][0]).toMatchObject({
+    chartFileFormat: 'mid',
+  });
+});
+
 
 test('hides the chart-file-format control unless the caller opts in', async () => {
   const {rerender} = render(

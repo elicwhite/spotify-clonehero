@@ -54,10 +54,7 @@ async function createProject(store: Store, doc: ChartDocument) {
     durationSeconds: 120,
     sourceFormat: 'folder',
     originalName: 'song',
-    chartFile: {
-        fileName: 'notes.chart',
-        data: new TextEncoder().encode(new TextDecoder().decode(chart.data)),
-      },
+    chartFile: chart,
     audioFiles: [],
     allFiles: [chart, ini],
   });
@@ -72,7 +69,7 @@ async function save(
 ): Promise<void> {
   const {chart, ini} = chartDocToFolderFiles(doc);
   await store.writeSongIni(projectId, ini.data);
-  await store.writeEditedChart(projectId, chart.data);
+  await store.writeEditedChart(projectId, chart);
 }
 
 /** What a host's load does: chart parse, then the project merge. */
@@ -175,10 +172,7 @@ describe('song.ini persistence', () => {
       durationSeconds: 120,
       sourceFormat: 'folder',
       originalName: 'song',
-      chartFile: {
-        fileName: 'notes.chart',
-        data: new TextEncoder().encode(new TextDecoder().decode(chart.data)),
-      },
+      chartFile: chart,
       audioFiles: [],
       // No ini on disk: every project created before the editor wrote one.
       allFiles: [chart],
@@ -215,7 +209,7 @@ describe('song.ini persistence', () => {
       },
     };
     const {chart} = chartDocToFolderFiles(edited);
-    await store.writeEditedChart(projectId, chart.data);
+    await store.writeEditedChart(projectId, chart);
 
     const loaded = await load(store, projectId);
     expect(loaded.parsedChart.metadata.artist).toBe('New Artist');

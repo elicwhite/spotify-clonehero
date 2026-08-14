@@ -16,7 +16,6 @@
 
 import {useCallback, useMemo} from 'react';
 
-import {chartDocToFolderFiles, writeChartFileAs} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {
@@ -35,7 +34,6 @@ import {audioMimeType} from '@/lib/sng/file-utils';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AssistAudio} from '@/lib/assist/tasks/types';
 import {defaultVolumeFor} from './sidebar/mixerBus';
-import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
 import type {AudioSource} from './ExportDialog';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
 
@@ -144,20 +142,8 @@ export async function prepareChartPackageAudio(options: {
 }
 
 // ---------------------------------------------------------------------------
-// Chart text / assist audio
+// Assist audio
 // ---------------------------------------------------------------------------
-
-/** The doc as `notes.chart` text, the format both hosts save and export.
- *  The `song.ini` from the same serialization is what carries the metadata
- *  this text cannot ({@link chartDocToFolderFiles}); a host that persists the
- *  project writes both. */
-export function chartDocToChartText(chartDoc: ChartDocument): string {
-  const {chart} = chartDocToFolderFiles(chartDoc);
-  if (chart.fileName !== 'notes.chart') {
-    throw new Error('writeChartFolder did not produce notes.chart');
-  }
-  return new TextDecoder().decode(chart.data);
-}
 
 /**
  * The package's audio as one file's bytes, for the assist tasks that work
@@ -211,9 +197,6 @@ export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
 // ---------------------------------------------------------------------------
 
 export interface ChartPackageEditorProps {
-  getChartFile: (args: {
-    format: ChartFileFormat;
-  }) => Promise<{fileName: string; data: Uint8Array}>;
   getAudioSources: () => Promise<AudioSource[]>;
   chartAssist: ChartAssistProps;
 }
@@ -242,7 +225,6 @@ export interface ChartPackageEditorProps {
  * dependency of the memoized callbacks handed to the editor.
  */
 export function useChartPackageEditor(args: {
-  chartDoc: ChartDocument | null;
   loadAudioFiles: () => Promise<Files>;
   /**
    * The stem-cache fingerprint this host has persisted for the audio, when
@@ -252,23 +234,7 @@ export function useChartPackageEditor(args: {
    */
   stemFingerprint?: string | undefined;
 }): ChartPackageEditorProps {
-  const {chartDoc, loadAudioFiles, stemFingerprint} = args;
-
-  // Serializes the live document to the format the export dialog asks for,
-  // rather than to `.chart` alone. A project keeps the format its chart
-  // arrived in, so a `.mid` project exports `.mid` unless the user picks
-  // otherwise.
-  const getChartFile = useCallback(
-    async ({
-      format,
-    }: {
-      format: ChartFileFormat;
-    }): Promise<{fileName: string; data: Uint8Array}> => {
-      if (!chartDoc) throw new Error('No chart document');
-      return writeChartFileAs(chartDoc, format);
-    },
-    [chartDoc],
-  );
+  const {loadAudioFiles, stemFingerprint} = args;
 
   const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
     const files = await loadAudioFiles();
@@ -292,5 +258,5 @@ export function useChartPackageEditor(args: {
     [loadAudio],
   );
 
-  return {getChartFile, getAudioSources, chartAssist};
+  return {getAudioSources, chartAssist};
 }

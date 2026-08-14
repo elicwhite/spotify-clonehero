@@ -94,8 +94,11 @@ function buildCleanMetadata(args: {
 }
 
 /** One of the three sources `assembleChartFiles` accepts, resolved from
- * whichever the host supplied — `getChartFile` wins (only it can honour the
- * chart-file format select), then the live document, then `.chart` text. */
+ * whichever the host supplied. The live document wins: it is the only source
+ * that carries the fields `song.ini` alone holds (`icon`, `loading_phrase`,
+ * custom keys). `getChartFile` is the fallback for a host with persisted
+ * bytes and no document. The format select is honoured by
+ * `assembleChartFiles`, so it costs the document branch nothing. */
 type ChartSource =
   | {chartFile: {fileName: string; data: Uint8Array}}
   | {chartDoc: ChartDocument}
@@ -108,10 +111,10 @@ async function resolveChartSource(args: {
   chartFileFormat: ChartFileFormat;
 }): Promise<ChartSource | null> {
   const {getChartFile, chartDoc, getChartText, chartFileFormat} = args;
+  if (chartDoc) return {chartDoc};
   if (getChartFile) {
     return {chartFile: await getChartFile({format: chartFileFormat})};
   }
-  if (chartDoc) return {chartDoc};
   if (getChartText) return {chartText: await getChartText()};
   return null;
 }
@@ -319,7 +322,7 @@ interface ExportDialogProps {
    * format the source chart used. Needed by pages (chart-flow) whose
    * project's persisted chart may be `.mid` — `getChartText`'s `string`
    * return can't carry binary MIDI data without corrupting it. Preferred
-   * over `getChartText` when both are supplied.
+   * over `getChartText`, and used only when the host has no live document.
    */
   getChartFile?:
     | ((options: {
@@ -327,7 +330,7 @@ interface ExportDialogProps {
       }) => Promise<{fileName: string; data: Uint8Array}>)
     | undefined;
   /**
-   * The live document, when the host has one. Preferred over `getChartText`,
+   * The live document, when the host has one. Preferred over both callbacks,
    * whose `.chart` text carries no `song.ini` surface at all: assembling from
    * the document keeps `icon`, `loading_phrase`, `album_track`, a keys
    * difficulty, any custom ini key and the chart's assets. `getChartFile`
@@ -514,6 +517,7 @@ export default function ExportDialog({
         // the encode keeps this preview cheap.
         const fileEntries = assembleChartFiles({
           ...chartSource,
+          chartFileFormat,
           metadata: buildCleanMetadata({
             songName,
             artistName,
@@ -580,6 +584,7 @@ export default function ExportDialog({
         });
         const fileEntries = assembleChartFiles({
           ...chartSource,
+          chartFileFormat,
           metadata: cleanMetadata,
           audioSources: opusAudioSources,
           extraAssets: opusExtraAssets,
