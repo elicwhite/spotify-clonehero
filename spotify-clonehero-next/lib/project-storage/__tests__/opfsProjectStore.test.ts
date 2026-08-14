@@ -7,6 +7,82 @@ describe('createOpfsProjectStore', () => {
     installFakeOPFS();
   });
 
+  describe('chart file format', () => {
+    /** A MIDI header plus one empty track — enough to prove the bytes are
+     *  stored and read back without a text round trip. */
+    const MID_BYTES = new Uint8Array([
+      0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0, 0x60, 0x4d, 0x54,
+      0x72, 0x6b, 0, 0, 0, 4, 0, 0xff, 0x2f, 0x00,
+    ]);
+
+    async function createMidProject() {
+      const store = createOpfsProjectStore('test-namespace');
+      const meta = await store.createProject({
+        name: 'Midi Song',
+        artist: 'A',
+        charter: 'C',
+        sourceFormat: 'folder',
+        originalName: 'midi-song',
+        chartFile: {fileName: 'notes.mid', data: MID_BYTES},
+        audioFiles: [],
+        allFiles: [{fileName: 'notes.mid', data: MID_BYTES}],
+      });
+      return {store, meta};
+    }
+
+    it('keeps a MIDI chart as .mid and returns the same bytes', async () => {
+      const {store, meta} = await createMidProject();
+
+      expect(meta.chartFileFormat).toBe('mid');
+      expect(await store.chartFormatOf(meta.id)).toBe('mid');
+
+      const chart = await store.readChartFile(meta.id);
+      expect(chart.fileName).toBe('notes.mid');
+      expect(Array.from(chart.data)).toEqual(Array.from(MID_BYTES));
+    });
+
+    it('writes a MIDI project\'s autosave to notes.edited.mid', async () => {
+      const {store, meta} = await createMidProject();
+      const edited = new Uint8Array([...MID_BYTES, 0x00]);
+
+      await store.writeEditedChart(meta.id, edited);
+
+      const chart = await store.readChartFile(meta.id);
+      expect(chart.fileName).toBe('notes.edited.mid');
+      expect(Array.from(chart.data)).toEqual(Array.from(edited));
+    });
+
+    it('exports a MIDI project as notes.mid, not notes.chart', async () => {
+      const {store, meta} = await createMidProject();
+
+      const files = await store.loadFilesForExport(meta.id);
+      expect(files.map(f => f.fileName)).toContain('notes.mid');
+      expect(files.map(f => f.fileName)).not.toContain('notes.chart');
+    });
+
+    it('reads a project written before the format was recorded as .chart', async () => {
+      const store = createOpfsProjectStore('test-namespace');
+      const meta = await store.createProject({
+        name: 'Legacy',
+        artist: 'A',
+        charter: 'C',
+        sourceFormat: 'folder',
+        originalName: 'legacy',
+        chartFile: {
+          fileName: 'notes.chart',
+          data: new TextEncoder().encode('[Song]\n{\n}\n'),
+        },
+        audioFiles: [],
+        allFiles: [],
+      });
+      // Strip the field the way a project written before it existed has it.
+      await store.updateProject(meta.id, {chartFileFormat: undefined});
+
+      expect(await store.chartFormatOf(meta.id)).toBe('chart');
+      expect(await chartTextOf(store, meta.id)).toBe('[Song]\n{\n}\n');
+    });
+  });
+
   it('creates, lists, reads, and deletes a project', async () => {
     const store = createOpfsProjectStore('test-namespace');
 
