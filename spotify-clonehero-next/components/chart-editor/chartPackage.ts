@@ -16,7 +16,7 @@
 
 import {useCallback, useMemo} from 'react';
 
-import {chartDocToFolderFiles} from '@/lib/chart-edit';
+import {chartDocToFolderFiles, writeChartFileAs} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {
@@ -35,6 +35,7 @@ import {audioMimeType} from '@/lib/sng/file-utils';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AssistAudio} from '@/lib/assist/tasks/types';
 import {defaultVolumeFor} from './sidebar/mixerBus';
+import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
 import type {AudioSource} from './ExportDialog';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
 
@@ -210,7 +211,9 @@ export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
 // ---------------------------------------------------------------------------
 
 export interface ChartPackageEditorProps {
-  getChartText: () => Promise<string>;
+  getChartFile: (args: {
+    format: ChartFileFormat;
+  }) => Promise<{fileName: string; data: Uint8Array}>;
   getAudioSources: () => Promise<AudioSource[]>;
   chartAssist: ChartAssistProps;
 }
@@ -251,10 +254,21 @@ export function useChartPackageEditor(args: {
 }): ChartPackageEditorProps {
   const {chartDoc, loadAudioFiles, stemFingerprint} = args;
 
-  const getChartText = useCallback(async (): Promise<string> => {
-    if (!chartDoc) throw new Error('No chart document');
-    return chartDocToChartText(chartDoc);
-  }, [chartDoc]);
+  // Serializes the live document to the format the export dialog asks for,
+  // rather than to `.chart` alone. A project keeps the format its chart
+  // arrived in, so a `.mid` project exports `.mid` unless the user picks
+  // otherwise.
+  const getChartFile = useCallback(
+    async ({
+      format,
+    }: {
+      format: ChartFileFormat;
+    }): Promise<{fileName: string; data: Uint8Array}> => {
+      if (!chartDoc) throw new Error('No chart document');
+      return writeChartFileAs(chartDoc, format);
+    },
+    [chartDoc],
+  );
 
   const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
     const files = await loadAudioFiles();
@@ -278,5 +292,5 @@ export function useChartPackageEditor(args: {
     [loadAudio],
   );
 
-  return {getChartText, getAudioSources, chartAssist};
+  return {getChartFile, getAudioSources, chartAssist};
 }

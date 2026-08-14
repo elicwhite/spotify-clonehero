@@ -512,7 +512,7 @@ function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
         // so the piano roll stacks one row per visible track rather than
         // following `activeScope`'s single track.
         stackedPianoRoll
-        getChartText={chartPackage.getChartText}
+        getChartFile={chartPackage.getChartFile}
         getAudioSources={chartPackage.getAudioSources}
         chartAssist={chartAssist}
       />

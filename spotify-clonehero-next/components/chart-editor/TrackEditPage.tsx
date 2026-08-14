@@ -1120,7 +1120,9 @@ function TrackEditEditor({
         artistName={chart.metadata.artist || projectMeta?.artist}
         charterName={chart.metadata.charter || projectMeta?.charter}
         onMetadataChange={handleMetadataChange}
-        getChartText={chartPackage.getChartText}
+        getChartFile={chartPackage.getChartFile}
+        sourceChartFormat={projectMeta?.chartFileFormat ?? 'chart'}
+        chartFormatSelectable
         getAudioSources={getAudioSources}
         getExtraAssets={getExtraAssets}
         albumArt={albumArtSlot}
