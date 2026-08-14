@@ -16,7 +16,8 @@
  * backs it: a chart is loaded once per visit, generated, edited, exported.
  */
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {useRouter} from 'next/navigation';
 import {AlertTriangle, Loader2} from 'lucide-react';
 import {toast} from 'sonner';
 
@@ -29,7 +30,12 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles} from '@/lib/chart-files/chart-package';
+import type {
+  LoadedFiles,
+  SourceFormat,
+} from '@/lib/chart-files/chart-package';
+import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
+import type {ProjectOrigin} from '@/lib/project-storage/types';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
@@ -47,23 +53,18 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '@/components/chart-editor/ChartEditorContext';
-import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
-import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {
-  CHART_PACKAGE_ASSIST_DISABLED_REASONS,
   prepareChartPackageAudio,
-  useChartPackageEditor,
   type PreparedChartPackageAudio,
 } from '@/components/chart-editor/chartPackage';
 import {difficultyGenerationBlockMessage} from '@/components/chart-editor/difficultyGenerationMessages';
 import {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
-  trackKeyId,
 } from '@/components/chart-editor/scope';
 import {GenerateDifficultiesCommand} from '@/components/chart-editor/commands';
 import {INSTRUMENT_LABEL} from '@/components/chart-editor/trackLabels';
-import {computeTrackStamp, TRACK_DIFFICULTIES} from '@/lib/chart-editor-core';
+import {computeTrackStamp} from '@/lib/chart-editor-core';
 import {buildDifficultyGenerationInput} from '@/lib/assist/difficulty-input';
 import type {DifficultyGenerationInput} from '@/lib/assist/difficulty-client';
 import {
@@ -74,7 +75,6 @@ import {
 import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
-import {audioSamples} from '@/components/chart-editor/audioSamples';
 
 /** Only the two instruments this route model offers a generation route for.
  *  Bass generation ships disabled everywhere (plan 0074 Design D) and is not
@@ -97,6 +97,14 @@ interface SongMeta {
   charter: string;
 }
 
+/** Which entrypoint a project from this flow records. One value per route,
+ *  so a project always says which page made it. */
+const DIFFICULTY_ORIGIN: Record<DifficultyGenerationInstrument, ProjectOrigin> =
+  {
+    drums: 'drum-difficulties',
+    guitar: 'guitar-difficulties',
+  };
+
 /** Everything a dropped chart has to yield before a run can start. */
 export interface GenerationCandidate {
   chartDoc: ChartDocument;
@@ -106,6 +114,11 @@ export interface GenerationCandidate {
   /** The Expert track's content stamp as dropped, recorded with the
    *  generated tiers so staleness is measured against what they came from. */
   sourceStamp: string;
+  /** The shape the package arrived in, so the project it becomes can be
+   *  re-exported the same way. */
+  sourceFormat: SourceFormat;
+  originalName: string;
+  sngMetadata?: Record<string, string> | undefined;
 }
 
 export type ChartInspection =
@@ -178,6 +191,9 @@ export function inspectDroppedChart(
       },
       input: built.input,
       sourceStamp: computeTrackStamp(expert.track),
+      sourceFormat: loaded.sourceFormat,
+      originalName: loaded.originalName,
+      sngMetadata: loaded.sngMetadata,
     },
   };
 }
@@ -211,13 +227,14 @@ interface LoadedChart {
 /**
  * One state, so the screens can't disagree about what exists: the picker has
  * no chart, the processing screen has one loaded (and may carry a failure to
- * report in place), the editor has one loaded and generated.
+ * report in place), and the handoff is the moment between a finished run and
+ * the editor this page navigates to.
  */
 type FlowState =
   | {kind: 'picker'; error: string | null}
   | {kind: 'preparing'}
   | {kind: 'generating'; loaded: LoadedChart; error: string | null}
-  | {kind: 'editor'; loaded: LoadedChart};
+  | {kind: 'handoff'};
 
 function DifficultyGenerationFlowInner({
   config,
@@ -231,6 +248,7 @@ function DifficultyGenerationFlowInner({
   const {dispatch} = useChartEditorContext();
   const runner = useAssistRunnerContext();
   const {setAudioManager: publishAudioManager} = useAudioServiceContext();
+  const router = useRouter();
 
   const [flow, setFlow] = useState<FlowState>({kind: 'picker', error: null});
 
@@ -324,20 +342,23 @@ function DifficultyGenerationFlowInner({
           result.tiers,
           candidate.sourceStamp,
         );
-        dispatch({
-          type: 'EXECUTE_COMMAND',
-          command,
-          chartDoc: command.execute(candidate.chartDoc),
+        const generated = command.execute(candidate.chartDoc);
+
+        // The generated tiers become a project, and the editor opens it.
+        // The provenance the command wrote rides along, so the difficulty
+        // card doesn't read this page's own work as never generated.
+        setFlow({kind: 'handoff'});
+        const projectId = await createProjectFromDoc({
+          chartDoc: generated,
+          audioFiles: candidate.audioFiles,
+          origin: DIFFICULTY_ORIGIN[instrument],
+          sourceFormat: candidate.sourceFormat,
+          originalName: candidate.originalName,
+          sngMetadata: candidate.sngMetadata,
+          durationSeconds: loaded.durationSeconds,
         });
-        dispatch({
-          type: 'SET_VISIBLE_TRACKS',
-          tracks: new Set(
-            TRACK_DIFFICULTIES.map(difficulty =>
-              trackKeyId({instrument, difficulty}),
-            ),
-          ),
-        });
-        setFlow({kind: 'editor', loaded});
+        teardown(loaded);
+        router.push(`/chart-editor?project=${projectId}`);
       } catch (e) {
         if (isAbortError(e)) {
           // Cancel: tear down and return to the picker with nothing applied.
@@ -355,18 +376,22 @@ function DifficultyGenerationFlowInner({
         toast.error(msg);
       }
     },
-    [instrument, dispatch, publishAudioManager, runner, task, teardown],
+    [instrument, dispatch, publishAudioManager, router, runner, task, teardown],
   );
 
   // ---------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------
 
-  if (flow.kind === 'preparing') {
+  if (flow.kind === 'preparing' || flow.kind === 'handoff') {
     return (
       <main className="flex min-h-screen items-center justify-center gap-3 text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
-        <span>Loading chart...</span>
+        <span>
+          {flow.kind === 'handoff'
+            ? 'Opening the editor...'
+            : 'Loading chart...'}
+        </span>
       </main>
     );
   }
@@ -392,10 +417,6 @@ function DifficultyGenerationFlowInner({
         />
       </main>
     );
-  }
-
-  if (flow.kind === 'editor') {
-    return <GeneratedChartEditor loaded={flow.loaded} />;
   }
 
   return (
@@ -444,75 +465,3 @@ function DifficultyGenerationFlowInner({
   );
 }
 
-/**
- * The editor half. Mounted only once a chart is loaded and generated, so the
- * editor's keyboard shortcuts are live exactly while its chart is on screen.
- */
-function GeneratedChartEditor({loaded}: {loaded: LoadedChart}) {
-  const {state} = useChartEditorContext();
-  const {candidate, audio, durationSeconds} = loaded;
-
-  // No OPFS project backs this route — the chart lives in memory for the
-  // visit, same as the standalone tool it replaces. Shortcuts still work;
-  // there's simply nothing to autosave to.
-  useEditorKeyboard();
-
-  const loadAudioFiles = useCallback(
-    async () => candidate.audioFiles,
-    [candidate.audioFiles],
-  );
-  const chartPackage = useChartPackageEditor({
-    loadAudioFiles,
-  });
-
-  /**
-   * Chart Assist wiring for this host: the sample rate of the audio it
-   * decoded (the leading-silence pad quantizes to it), plus the reason it
-   * can't offer that action — this route plays the package's audio files
-   * straight and never pads them, so a shifted chart would drift away from
-   * its audio.
-   */
-  const chartAssist = useMemo(
-    () => ({
-      ...chartPackage.chartAssist,
-      audioSampleRate: audio.audioSampleRate,
-      leadingSilenceDisabledReason:
-        CHART_PACKAGE_ASSIST_DISABLED_REASONS.leadingSilence,
-    }),
-    [chartPackage.chartAssist, audio.audioSampleRate],
-  );
-
-  // Wrapped once per buffer — see `components/chart-editor/audioSamples.ts`.
-  // Above the early return: hook order can't depend on the chart.
-  const samples = useMemo(
-    () => audioSamples(audio.audioData),
-    [audio.audioData],
-  );
-
-  const chart = state.chartDoc?.parsedChart;
-  if (!chart) return null;
-
-  return (
-    <div className="flex-1 min-h-0 w-full flex h-screen flex-col">
-      <ChartEditor
-        chart={chart}
-        audioManager={audio.audioManager}
-        audioData={samples}
-        audioChannels={audio.audioChannels}
-        durationSeconds={durationSeconds}
-        sections={chart.sections}
-        sourceChartFormat={candidate.chartDoc.parsedChart.format}
-        chartFormatSelectable
-        songName={candidate.meta.name}
-        artistName={candidate.meta.artist}
-        charterName={candidate.meta.charter}
-        // This route is matrix-driven and lands with four tracks visible,
-        // so the piano roll stacks one row per visible track rather than
-        // following `activeScope`'s single track.
-        stackedPianoRoll
-        getAudioSources={chartPackage.getAudioSources}
-        chartAssist={chartAssist}
-      />
-    </div>
-  );
-}

@@ -48,6 +48,19 @@ class FakeResizeObserver {
   FakeResizeObserver;
 
 // Heavy/canvas children — same stubs chart-editor-layout.test.tsx uses.
+const mockRouterPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({push: mockRouterPush}),
+}));
+
+const createdProjects: {origin: string; chartDoc: unknown}[] = [];
+jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
+  createProjectFromDoc: jest.fn(async (opts: never) => {
+    createdProjects.push(opts);
+    return `project-${createdProjects.length}`;
+  }),
+}));
+
 jest.mock('../../chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
@@ -254,6 +267,8 @@ beforeEach(() => {
   nextLoaded = null;
   fakeWorker = null;
   audioManagers.length = 0;
+  createdProjects.length = 0;
+  mockRouterPush.mockClear();
 });
 
 function renderFlow(
@@ -298,7 +313,7 @@ describe('DifficultyGenerationFlow', () => {
     expect(screen.getByRole('button', {name: 'drop chart'})).toBeEnabled();
   });
 
-  it('runs generation and lands in the editor with Expert/Hard/Medium/Easy all visible', async () => {
+  it('saves the generated tiers as a project and opens it in /chart-editor', async () => {
     nextLoaded = loadedFilesFor(drumsChartDoc());
     renderFlow('drums');
 
@@ -313,19 +328,33 @@ describe('DifficultyGenerationFlow', () => {
 
     fakeWorker!.emit({type: 'result', tiers: drumTiers()});
 
-    const hardCell = await screen.findByRole('button', {name: 'Drums Hard'});
-    expect(hardCell).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', {name: 'Drums Medium'})).toHaveAttribute(
-      'aria-pressed',
-      'true',
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      '/chart-editor?project=project-1',
     );
-    expect(screen.getByRole('button', {name: 'Drums Easy'})).toHaveAttribute(
-      'aria-pressed',
-      'true',
+    expect(createdProjects).toHaveLength(1);
+    expect(createdProjects[0]).toMatchObject({origin: 'drum-difficulties'});
+  });
+
+  it('hands over a document that already carries the generated tiers', async () => {
+    nextLoaded = loadedFilesFor(drumsChartDoc());
+    renderFlow('drums');
+
+    fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
+    await waitFor(() => expect(fakeWorker).not.toBeNull());
+    fakeWorker!.emit({type: 'result', tiers: drumTiers()});
+
+    await waitFor(() => expect(createdProjects).toHaveLength(1));
+    const handedOver = createdProjects[0] as {
+      chartDoc: {parsedChart: {trackData: {difficulty: string}[]}};
+    };
+    const difficulties = handedOver.chartDoc.parsedChart.trackData.map(
+      t => t.difficulty,
     );
-    expect(screen.getByRole('button', {name: 'Drums Expert'})).toHaveAttribute(
-      'aria-pressed',
-      'true',
+    // The project is created from the generated document, not the dropped
+    // one, so the editor opens on all four tiers.
+    expect(difficulties).toEqual(
+      expect.arrayContaining(['expert', 'hard', 'medium', 'easy']),
     );
   });
 
@@ -343,7 +372,7 @@ describe('DifficultyGenerationFlow', () => {
     );
   });
 
-  it('runs guitar generation and lands in the editor with Expert/Hard/Medium/Easy all visible', async () => {
+  it('records the guitar route as its own origin', async () => {
     nextLoaded = loadedFilesFor(guitarChartDoc());
     renderFlow('guitar');
 
@@ -352,11 +381,8 @@ describe('DifficultyGenerationFlow', () => {
     await waitFor(() => expect(fakeWorker).not.toBeNull());
     fakeWorker!.emit({type: 'result', tiers: guitarTiers()});
 
-    for (const difficulty of ['Expert', 'Hard', 'Medium', 'Easy']) {
-      expect(
-        await screen.findByRole('button', {name: `Guitar ${difficulty}`}),
-      ).toHaveAttribute('aria-pressed', 'true');
-    }
+    await waitFor(() => expect(createdProjects).toHaveLength(1));
+    expect(createdProjects[0]).toMatchObject({origin: 'guitar-difficulties'});
   });
 
   it("plays the chart's audio in sync: the chart delay is applied and the metronome click stem is registered", async () => {
@@ -417,20 +443,18 @@ describe('DifficultyGenerationFlow', () => {
     expect(screen.queryByText(/generation failed/i)).not.toBeInTheDocument();
   });
 
-  it('stops the song when the editor is left, rather than playing on over the next page', async () => {
+  it('stops the song before handing off, rather than playing on over the editor', async () => {
     nextLoaded = loadedFilesFor(drumsChartDoc());
-    const {unmount} = renderFlow('drums');
+    renderFlow('drums');
 
     fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
     await waitFor(() => expect(fakeWorker).not.toBeNull());
-    fakeWorker!.emit({type: 'result', tiers: drumTiers()});
-    await screen.findByRole('button', {name: 'Drums Hard'});
-
     expect(audioManagers).toHaveLength(1);
     expect(audioManagers[0].destroy).not.toHaveBeenCalled();
 
-    unmount();
+    fakeWorker!.emit({type: 'result', tiers: drumTiers()});
 
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
     expect(audioManagers[0].destroy).toHaveBeenCalled();
   });
 
