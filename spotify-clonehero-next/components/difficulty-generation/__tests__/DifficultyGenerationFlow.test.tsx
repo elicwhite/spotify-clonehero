@@ -54,8 +54,15 @@ jest.mock('next/navigation', () => ({
 }));
 
 const createdProjects: {origin: string; chartDoc: unknown}[] = [];
+/** Set to make the next project write fail, for the save-failure path. */
+let nextSaveError: Error | null = null;
 jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
   createProjectFromDoc: jest.fn(async (opts: never) => {
+    if (nextSaveError) {
+      const err = nextSaveError;
+      nextSaveError = null;
+      throw err;
+    }
     createdProjects.push(opts);
     return `project-${createdProjects.length}`;
   }),
@@ -157,10 +164,17 @@ class FakeWorker {
 }
 
 let fakeWorker: FakeWorker | null = null;
+/** How many model runs the flow has started, so a retry can prove it did
+ *  not repeat the generation. */
+let workersSpawned = 0;
+function spawnedWorkerCount() {
+  return workersSpawned;
+}
 function scriptedTask() {
   return makeGenerateDifficultiesTask({
     createWorker: () => {
       fakeWorker = new FakeWorker();
+      workersSpawned += 1;
       return fakeWorker as unknown as Worker;
     },
   });
@@ -266,8 +280,10 @@ function guitarTiers() {
 beforeEach(() => {
   nextLoaded = null;
   fakeWorker = null;
+  workersSpawned = 0;
   audioManagers.length = 0;
   createdProjects.length = 0;
+  nextSaveError = null;
   mockRouterPush.mockClear();
 });
 
@@ -441,6 +457,30 @@ describe('DifficultyGenerationFlow', () => {
       screen.queryByRole('button', {name: 'Drums Hard'}),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/generation failed/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the generated tiers when the save fails, and retries the save alone', async () => {
+    nextSaveError = new Error('QuotaExceededError');
+    nextLoaded = loadedFilesFor(drumsChartDoc());
+    renderFlow('drums');
+
+    fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
+    await waitFor(() => expect(fakeWorker).not.toBeNull());
+    fakeWorker!.emit({type: 'result', tiers: drumTiers()});
+
+    // Reported as a save failure, not as a generation failure, and the run
+    // is not repeated to recover.
+    expect(await screen.findByText(/could not be saved/i)).toBeInTheDocument();
+    expect(screen.getByText('QuotaExceededError')).toBeInTheDocument();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(createdProjects).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', {name: /try again/i}));
+
+    // The retry writes the same generated document; no second worker run.
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
+    expect(createdProjects).toHaveLength(1);
+    expect(spawnedWorkerCount()).toBe(1);
   });
 
   it('stops the song before handing off, rather than playing on over the editor', async () => {

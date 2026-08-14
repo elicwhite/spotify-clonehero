@@ -223,7 +223,15 @@ type FlowState =
   | {kind: 'picker'; error: string | null}
   | {kind: 'preparing'}
   | {kind: 'generating'; loaded: LoadedChart; error: string | null}
-  | {kind: 'handoff'};
+  | {kind: 'handoff'}
+  // The tiers are generated and the write failed. The document is still
+  // here, so this retries the write alone rather than the generation.
+  | {
+      kind: 'save-failed';
+      loaded: LoadedChart;
+      generated: ChartDocument;
+      error: string;
+    };
 
 function DifficultyGenerationFlowInner({
   config,
@@ -257,6 +265,35 @@ function DifficultyGenerationFlowInner({
       publishAudioManager(null);
     },
     [publishAudioManager],
+  );
+
+  /**
+   * Writes the generated chart as a project and opens it. Never throws: a
+   * failure keeps the document so the user can retry the write alone.
+   */
+  const saveAndOpen = useCallback(
+    async (loaded: LoadedChart, generated: ChartDocument) => {
+      const {candidate} = loaded;
+      setFlow({kind: 'handoff'});
+      try {
+        const projectId = await createProjectFromDoc({
+          chartDoc: generated,
+          audioFiles: candidate.audioFiles,
+          origin: DIFFICULTY_ORIGIN[instrument],
+          sourceFormat: candidate.sourceFormat,
+          originalName: candidate.originalName,
+          sngMetadata: candidate.sngMetadata,
+          durationSeconds: loaded.durationSeconds,
+        });
+        teardown(loaded);
+        router.push(`/chart-editor?project=${projectId}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Could not save the chart';
+        setFlow({kind: 'save-failed', loaded, generated, error: msg});
+        toast.error(msg);
+      }
+    },
+    [instrument, router, teardown],
   );
 
   useEffect(() => {
@@ -336,18 +373,12 @@ function DifficultyGenerationFlowInner({
         // The generated tiers become a project, and the editor opens it.
         // The provenance the command wrote rides along, so the difficulty
         // card doesn't read this page's own work as never generated.
-        setFlow({kind: 'handoff'});
-        const projectId = await createProjectFromDoc({
-          chartDoc: generated,
-          audioFiles: candidate.audioFiles,
-          origin: DIFFICULTY_ORIGIN[instrument],
-          sourceFormat: candidate.sourceFormat,
-          originalName: candidate.originalName,
-          sngMetadata: candidate.sngMetadata,
-          durationSeconds: loaded.durationSeconds,
-        });
-        teardown(loaded);
-        router.push(`/chart-editor?project=${projectId}`);
+        //
+        // Saving is its own step with its own failure. A full disk is not a
+        // generation failure, and the tiers that just cost the user a model
+        // run are still in memory — losing them to a write error would be
+        // the worst outcome this page has.
+        await saveAndOpen(loaded, generated);
       } catch (e) {
         if (isAbortError(e)) {
           // Cancel: tear down and return to the picker with nothing applied.
@@ -365,7 +396,7 @@ function DifficultyGenerationFlowInner({
         toast.error(msg);
       }
     },
-    [instrument, dispatch, publishAudioManager, router, runner, task, teardown],
+    [instrument, dispatch, publishAudioManager, runner, saveAndOpen, task],
   );
 
   // ---------------------------------------------------------------------
@@ -381,6 +412,41 @@ function DifficultyGenerationFlowInner({
             ? 'Opening the editor...'
             : 'Loading chart...'}
         </span>
+      </main>
+    );
+  }
+
+  if (flow.kind === 'save-failed') {
+    const {loaded, generated, error} = flow;
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <div className="max-w-md rounded-lg border border-destructive/40 bg-destructive/10 p-6">
+          <h2 className="text-lg font-semibold">
+            Your {label} difficulties are ready, but the chart could not be
+            saved.
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            This usually means your browser is out of storage. Delete a project
+            from the chart editor and try again.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => void saveAndOpen(loaded, generated)}>
+              Try again
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                teardown(loaded);
+                setFlow({kind: 'picker', error: null});
+              }}>
+              Back
+            </Button>
+          </div>
+        </div>
       </main>
     );
   }
