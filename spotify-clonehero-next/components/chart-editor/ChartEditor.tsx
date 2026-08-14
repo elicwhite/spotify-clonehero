@@ -259,7 +259,7 @@ export default function ChartEditor({
   stackedPianoRoll = false,
 }: ChartEditorProps) {
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const {state, dispatch} = useChartEditorContext();
+  const {state, dispatch, capabilities} = useChartEditorContext();
   // Compact type/spacing scale for as long as an editor is on screen,
   // portalled Radix surfaces included (`hooks/useEditorDensity.ts`).
   useEditorDensity();
@@ -360,24 +360,25 @@ export default function ChartEditor({
           {headerExtra && (
             <div className="shrink-0 ml-4 flex items-center">{headerExtra}</div>
           )}
-          {(state.chartDoc || getChartText || getChartFile) && (
-            <div className="shrink-0 ml-4">
-              <ExportDialog
-                songName={songName}
-                artistName={artistName}
-                charterName={charterName}
-                iniMetadata={state.chartDoc ? metadataValue : undefined}
-                getChartText={getChartText}
-                getChartFile={getChartFile}
-                chartDoc={state.chartDoc ?? undefined}
-                getAudioSources={getAudioSources}
-                getExtraAssets={getExtraAssets}
-                defaultFormat={defaultExportFormat}
-                sourceChartFormat={sourceChartFormat}
-                chartFormatSelectable={chartFormatSelectable}
-              />
-            </div>
-          )}
+          {capabilities.showExport &&
+            (state.chartDoc || getChartText || getChartFile) && (
+              <div className="shrink-0 ml-4">
+                <ExportDialog
+                  songName={songName}
+                  artistName={artistName}
+                  charterName={charterName}
+                  iniMetadata={state.chartDoc ? metadataValue : undefined}
+                  getChartText={getChartText}
+                  getChartFile={getChartFile}
+                  chartDoc={state.chartDoc ?? undefined}
+                  getAudioSources={getAudioSources}
+                  getExtraAssets={getExtraAssets}
+                  defaultFormat={defaultExportFormat}
+                  sourceChartFormat={sourceChartFormat}
+                  chartFormatSelectable={chartFormatSelectable}
+                />
+              </div>
+            )}
         </EditorHeaderRow>
       )}
 

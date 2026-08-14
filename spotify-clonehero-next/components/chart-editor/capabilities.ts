@@ -132,6 +132,12 @@ export interface EditorCapabilities {
    */
   showChartMatrix: boolean;
   /**
+   * Show the header's Export control. A page that only views a chart leaves
+   * it off: it has no audio to package and no project behind the document,
+   * so an export from there would ship a chart the user never asked for.
+   */
+  showExport: boolean;
+  /**
    * Show the sidebar's Stems mixer (plan 0074 Phase 5): one row per track
    * the live `AudioManager` carries, plus the metronome click. It is the
    * one place any of these pages offers a click-volume control, so it stays
@@ -209,6 +215,7 @@ export const DRUM_EDIT_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: true,
   chartAssist: 'all',
   showChartMatrix: true,
+  showExport: true,
   showStemsMixer: true,
 };
 
@@ -230,6 +237,7 @@ export const ADD_LYRICS_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: true,
   chartAssist: 'lyrics-only',
   showChartMatrix: false,
+  showExport: true,
   showStemsMixer: false,
 };
 
@@ -247,6 +255,7 @@ export const PREVIEW_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: true,
   chartAssist: false,
   showChartMatrix: false,
+  showExport: false,
   showStemsMixer: false,
 };
 
@@ -281,5 +290,6 @@ export const TEMPO_CAPABILITIES: EditorCapabilities = {
   showPianoRollNotes: false,
   chartAssist: 'tempo-and-silence',
   showChartMatrix: false,
+  showExport: true,
   showStemsMixer: true,
 };
