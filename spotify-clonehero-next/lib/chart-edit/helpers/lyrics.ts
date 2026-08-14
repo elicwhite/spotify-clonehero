@@ -64,6 +64,13 @@ function getVocalPart(
  *
  * Asks about the chart as a whole, not one part, so a caller can tell a
  * lyrics-only chart from an empty one without knowing which part holds them.
+ *
+ * scan-chart computes the same answer as `NotesData.hasLyrics`, but only
+ * inside the unexported `scanParsedChart`, reachable through
+ * `scanChart(files, parseResult)` — that wants the package's bytes and runs a
+ * full scan (chart hash, note counts, NPS). A caller holding a
+ * `ChartDocument` would have to serialize it back to files first. Exporting
+ * the predicate upstream retires this (plan 0039).
  */
 export function hasAnyLyrics(doc: ChartDocument): boolean {
   const parts = doc.parsedChart.vocalTracks?.parts;

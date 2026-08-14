@@ -25,6 +25,7 @@ Add primitives to scan-chart for use by chart-edit's normalization layer. Drop o
 | `recomputeMarkerTimings(parsedChart, dirtyRanges)` | Section / tempo / timesig msTime.                                                                               | (subset of above)                                              |
 | `validateOperation(parsedChart, op)`               | Run the issue catalog against a proposed operation, returning `ChartIssueType[]`.                               | Editor-side ad-hoc validation                                  |
 | `defaultIniChartModifiers` (export)                | The default modifier set for a fresh chart.                                                                     | `PRO_DRUMS_MODIFIERS` local constant                           |
+| `hasAnyLyrics(parsedChart)` (export)               | Whether any vocal part carries a lyric. scan-chart already computes it as `NotesData.hasLyrics` in the unexported `scanParsedChart`; only `scanChart(files, …)` reaches it, which needs the package bytes and a full scan. | `lib/chart-edit/helpers/lyrics.ts hasAnyLyrics`                |
 
 ## Design
 
