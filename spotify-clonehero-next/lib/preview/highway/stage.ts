@@ -78,6 +78,13 @@ export interface AddHighwayOptions {
   /** `null` for scopes with no notes track (vocals/global). */
   track: Track | null;
   showDrumLanes: boolean;
+  /**
+   * Lane geometry for a scope with no track of its own, so an empty highway
+   * still looks like one. Display only: the overlays and the interaction
+   * surface stay bound to `track`, so a lane drawn this way offers no note
+   * editing and no ghost notes.
+   */
+  neutralLaneSchema?: InstrumentSchema | null;
 }
 
 /**
@@ -272,12 +279,16 @@ class StageHighway implements StageHighwayHandle {
     this.id = id;
     this.slot = slot;
 
-    // Lanes-off scopes (vocals/global) draw the neutral floor at the drum
-    // width, so they fit against that same width.
+    // `schema` is the EDITABLE track's geometry, and stays null without one:
+    // the overlays and the interaction surface key off it, so a lane with no
+    // track offers no ghost notes and no hit targets.
     this.schema = opts.track
       ? schemaForTrack(opts.track, ctx.chart.drumType)
       : null;
-    this.halfWidth = (this.schema?.highwayWidth ?? LANES_OFF_HIGHWAY_WIDTH) / 2;
+    // Width follows what is actually drawn, which may be the neutral lanes a
+    // trackless scope asked for. Lanes-off scopes fall back to the drum width.
+    const drawnSchema = this.schema ?? opts.neutralLaneSchema ?? null;
+    this.halfWidth = (drawnSchema?.highwayWidth ?? LANES_OFF_HIGHWAY_WIDTH) / 2;
 
     const worldX = slot * HIGHWAY_ROOT_SPACING;
     const layerIndex = layerForSlot(slot);
@@ -315,6 +326,7 @@ class StageHighway implements StageHighwayHandle {
       clippingPlanes: ctx.clippingPlanes,
       highwaySpeed: HIGHWAY_SPEED,
       showDrumLanes: opts.showDrumLanes,
+      neutralLaneSchema: opts.neutralLaneSchema ?? null,
     });
     if (this.disposed) {
       core.reconciler.dispose();

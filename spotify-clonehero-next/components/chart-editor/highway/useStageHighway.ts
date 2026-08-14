@@ -21,6 +21,7 @@ import type {
   SceneReconciler,
 } from '@/lib/preview/highway';
 import type {Track} from '@/lib/preview/highway/types';
+import type {InstrumentSchema} from '@/lib/chart-edit';
 
 export interface StageHighwayBinding {
   handleRef: RefObject<StageHighwayHandle | null>;
@@ -37,12 +38,16 @@ export interface UseStageHighwayInputs {
   /** Resolved notes track, or null for scopes with none (vocals/global). */
   track: Track | null;
   showDrumLanes: boolean;
+  /** Lane geometry to draw for a scope with no track of its own. Display
+   *  only — it never makes the lane editable. */
+  neutralLaneSchema?: InstrumentSchema | null;
 }
 
 export function useStageHighway({
   stage,
   id,
   track,
+  neutralLaneSchema = null,
   showDrumLanes,
 }: UseStageHighwayInputs): StageHighwayBinding {
   const handleRef = useRef<StageHighwayHandle | null>(null);
@@ -55,9 +60,11 @@ export function useStageHighway({
   // the mount effect reads the track through a ref rather than a dependency.
   const trackRef = useRef(track);
   const showDrumLanesRef = useRef(showDrumLanes);
+  const neutralLaneSchemaRef = useRef(neutralLaneSchema);
   useEffect(() => {
     trackRef.current = track;
     showDrumLanesRef.current = showDrumLanes;
+    neutralLaneSchemaRef.current = neutralLaneSchema;
   });
 
   const instrument = track?.instrument;
@@ -74,6 +81,7 @@ export function useStageHighway({
       .addHighway(id, {
         track: trackRef.current,
         showDrumLanes: showDrumLanesRef.current,
+        neutralLaneSchema: neutralLaneSchemaRef.current,
       })
       .then(async handle => {
         if (!handle || cancelled) return;

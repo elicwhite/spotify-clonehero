@@ -8,7 +8,10 @@ import {
   LANES_OFF_HIGHWAY_WIDTH,
   loadAndCreateHitBox,
 } from './HighwayScene';
-import {schemaForTrack} from '../../chart-edit/instruments';
+import {
+  schemaForTrack,
+  type InstrumentSchema,
+} from '../../chart-edit/instruments';
 import {
   AnimatedTextureManager,
   loadHighwayFlameTextures,
@@ -186,6 +189,12 @@ export interface BuildHighwayCellParams {
   highwaySpeed: number;
   /** When false, render the neutral floor + strikeline and skip lanes/notes. */
   showDrumLanes: boolean;
+  /**
+   * Lane geometry to draw when the scope has no track of its own — an empty
+   * highway that should still look like one. Display only: it gives the
+   * floor its frets and width, and never makes the lane editable.
+   */
+  neutralLaneSchema?: InstrumentSchema | null;
 }
 
 /**
@@ -202,11 +211,12 @@ export async function buildHighwayCell(
 ): Promise<HighwayCellCore> {
   const {chart, track, textureLoader, textures, clippingPlanes, highwaySpeed} =
     params;
-  const schema = track ? schemaForTrack(track, chart.drumType) : null;
+  const trackSchema = track ? schemaForTrack(track, chart.drumType) : null;
+  // The geometry drawn, which is not the same question as which track is
+  // editable: a scope with no track can still ask for lanes to draw.
+  const schema = trackSchema ?? params.neutralLaneSchema ?? null;
   const noteClippingPlanes = noteClippingPlanesForTrack(track, clippingPlanes);
-  // Lanes require both the capability flag and an actual notes track — there's
-  // nothing to draw lanes for on a vocals/global scope.
-  const lanesActive = params.showDrumLanes && track != null;
+  const lanesActive = params.showDrumLanes && schema != null;
   const fretLanes = schema?.lanes
     .filter(lane => !lane.fullWidth)
     .sort((a, b) => a.index - b.index);
