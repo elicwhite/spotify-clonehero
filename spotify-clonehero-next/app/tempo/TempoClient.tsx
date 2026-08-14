@@ -16,7 +16,6 @@ import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
 import {
   defaultIniChartModifiers,
   parseChartFile,
-  writeChartFolder,
   type File as ScanFile,
   type ParsedChart,
 } from '@eliwhite/scan-chart';
@@ -59,7 +58,7 @@ import {
   type AssistTaskDef,
 } from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
-import {chartPackageStore} from '@/lib/project-storage/projects';
+import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,8 +89,7 @@ function writeAndReparse(
   chart: ParsedChart,
   assets: ScanFile[],
   modifiers: typeof defaultIniChartModifiers,
-): {chart: ParsedChart; files: ScanFile[]; chartFile: ScanFile} {
-  const files = writeChartFolder({parsedChart: chart, assets});
+): ParsedChart {
   const chartFile = chartDocToFolderFiles({parsedChart: chart, assets}).chart;
   const format = chartFileFormatOf(chartFile.fileName) ?? 'chart';
   const chartBytes = new Uint8Array(chartFile.data);
@@ -99,18 +97,14 @@ function writeAndReparse(
   // parseChartFile returns the narrow shape; re-stitch the wide ParsedChart
   // fields the renderers and a future re-export expect.
   return {
-    chart: {
-      ...reparsed,
-      // Carry over ini-derived metadata (delay, song_length, name…) that the
-      // chart file itself doesn't store.
-      metadata: {...chart.metadata, ...reparsed.metadata},
-      chartBytes,
-      format,
-      iniChartModifiers: modifiers,
-    } as ParsedChart,
-    files,
-    chartFile,
-  };
+    ...reparsed,
+    // Carry over ini-derived metadata (delay, song_length, name…) that the
+    // chart file itself doesn't store.
+    metadata: {...chart.metadata, ...reparsed.metadata},
+    chartBytes,
+    format,
+    iniChartModifiers: modifiers,
+  } as ParsedChart;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,26 +265,18 @@ export default function TempoClient({
           newChart = built;
         }
 
-        const {chart, files, chartFile} = writeAndReparse(
-          newChart,
-          chartAssets,
-          modifiers,
-        );
+        const chart = writeAndReparse(newChart, chartAssets, modifiers);
 
-        const meta = await chartPackageStore().createProject({
-          name,
-          artist: chart.metadata.artist ?? '',
-          charter: chart.metadata.charter ?? '',
+        const projectId = await createProjectFromDoc({
+          chartDoc: {parsedChart: chart, assets: chartAssets},
+          audioFiles,
+          origin: 'tempo',
           durationSeconds: songLengthMs / 1000,
           sourceFormat: sourceFormat ?? 'folder',
           originalName,
-          chartFile,
-          audioFiles,
-          allFiles: files,
-          origin: 'tempo',
           stemFingerprint,
         });
-        router.push(`/chart-editor?project=${meta.id}`);
+        router.push(`/chart-editor?project=${projectId}`);
       } catch (err) {
         if (isAbortError(err)) {
           // Cancelled: back to the picker.
