@@ -65,6 +65,9 @@ type Status =
   | 'input'
   | 'processing'
   | 'saving'
+  // The run finished but the project write did not. The aligned document is
+  // still in memory, so this is retryable without re-running the alignment.
+  | 'save-failed'
   | 'error';
 
 // ---------------------------------------------------------------------------
@@ -155,6 +158,8 @@ function LyricsAlignInner() {
   const [chart, setChart] = useState<LoadedChart | null>(null);
   const [lyrics, setLyrics] = useState('');
   const [showLyricsWarning, setShowLyricsWarning] = useState(false);
+  /** The aligned document a failed save is holding, for the retry. */
+  const [pendingDoc, setPendingDoc] = useState<ChartDocument | null>(null);
   const initStartedRef = useRef(false);
 
   // The page's own assist runner — nothing else on this page shares it, so
@@ -212,7 +217,40 @@ function LyricsAlignInner() {
     }
   }, []);
 
+  /**
+   * Writes the aligned chart as a project and opens it. Never throws: a
+   * failure keeps the document so the user can retry the write alone.
+   */
+  const saveAndOpen = useCallback(
+    async (doc: ChartDocument) => {
+      if (!chart) return;
+      setStatus('saving');
+      setError(null);
+      try {
+        const projectId = await createProjectFromDoc({
+          chartDoc: doc,
+          audioFiles: chart.audioFiles,
+          origin: 'add-lyrics',
+          sourceFormat: chart.sourceFormat,
+          originalName: chart.originalName,
+          sngMetadata: chart.sngMetadata,
+        });
+        track({event: 'add_lyrics_handed_off'});
+        router.push(`/chart-editor?project=${projectId}`);
+      } catch (e) {
+        setPendingDoc(doc);
+        setError(e instanceof Error ? e.message : String(e));
+        setStatus('save-failed');
+      }
+    },
+    [chart, router],
+  );
+
   const handleAlign = useCallback(async () => {
+    // A run in flight, or a finished run being saved, owns the page until it
+    // navigates. Without this, the Align button below could start a second
+    // run behind a push that has already been issued.
+    if (status === 'processing' || status === 'saving') return;
     if (!chart || !lyrics.trim()) return;
 
     setError(null);
@@ -277,17 +315,14 @@ function LyricsAlignInner() {
       // The aligned chart becomes a project, and the editor opens it. This
       // page aligns; reviewing and fixing the result is what the editor is
       // for, and a project is what survives a reload.
-      setStatus('saving');
-      const projectId = await createProjectFromDoc({
-        chartDoc: applyAlignedLyricsToDoc(chart.chartDoc, result.syllables),
-        audioFiles: chart.audioFiles,
-        origin: 'add-lyrics',
-        sourceFormat: chart.sourceFormat,
-        originalName: chart.originalName,
-        sngMetadata: chart.sngMetadata,
-      });
-      track({event: 'add_lyrics_handed_off'});
-      router.push(`/chart-editor?project=${projectId}`);
+      //
+      // Saving has its own error path. A full disk is not an alignment
+      // failure, and the alignment that just cost the user a GPU run is
+      // still in memory — losing it to a write error would be the worst
+      // outcome on this page.
+      await saveAndOpen(
+        applyAlignedLyricsToDoc(chart.chartDoc, result.syllables),
+      );
     } catch (e) {
       if (isAbortError(e)) {
         // Cancelled: back to the paste form with the lyrics still in it.
@@ -304,7 +339,7 @@ function LyricsAlignInner() {
     } finally {
       setTierPass(null);
     }
-  }, [chart, lyrics, router, runner]);
+  }, [chart, lyrics, runner, saveAndOpen, status]);
 
   return (
     <main className="min-h-screen bg-background w-full">
@@ -361,6 +396,7 @@ function LyricsAlignInner() {
           (status === 'input' ||
             status === 'processing' ||
             status === 'saving' ||
+            status === 'save-failed' ||
             (status === 'error' && chart)) && (
             <div className="space-y-6">
               {/* Chart info */}
@@ -426,6 +462,31 @@ function LyricsAlignInner() {
                 </div>
               )}
 
+              {/* The alignment survived; only the write failed. Retrying
+                  saves the same document rather than aligning again. */}
+              {status === 'save-failed' && pendingDoc && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+                  <p className="text-sm font-medium">
+                    Your lyrics are aligned, but the chart could not be saved.
+                  </p>
+                  {error && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {error}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    This usually means your browser is out of storage. Delete a
+                    project from the chart editor and try again.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => void saveAndOpen(pendingDoc)}>
+                    Try again
+                  </Button>
+                </div>
+              )}
+
               {/* Existing lyrics warning */}
               {status !== 'processing' &&
                 status !== 'saving' &&
@@ -448,37 +509,40 @@ function LyricsAlignInner() {
                   </div>
                 )}
 
-              {/* Lyrics textarea + Align button. Hidden during processing
-                  so the step list is the only thing in view. */}
-              {status !== 'processing' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Paste Lyrics
-                    </label>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      All pasted text becomes lyrics, so don&apos;t include
-                      non-lyric symbols or section headers like [Verse]. One
-                      line per phrase.
-                    </p>
-                    <textarea
-                      value={lyrics}
-                      onChange={e => setLyrics(e.target.value)}
-                      rows={12}
-                      placeholder="Paste the song lyrics here..."
-                      className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary resize-y"
-                    />
-                  </div>
+              {/* Lyrics textarea + Align button. Hidden while a run is in
+                  flight or its result is being saved, so the step list is the
+                  only thing in view. */}
+              {status !== 'processing' &&
+                status !== 'saving' &&
+                status !== 'save-failed' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Paste Lyrics
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        All pasted text becomes lyrics, so don&apos;t include
+                        non-lyric symbols or section headers like [Verse]. One
+                        line per phrase.
+                      </p>
+                      <textarea
+                        value={lyrics}
+                        onChange={e => setLyrics(e.target.value)}
+                        rows={12}
+                        placeholder="Paste the song lyrics here..."
+                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary resize-y"
+                      />
+                    </div>
 
-                  <Button
-                    onClick={handleAlign}
-                    disabled={!lyrics.trim() || showLyricsWarning}
-                    size="lg"
-                    className="w-full sm:w-auto">
-                    Align Lyrics
-                  </Button>
-                </>
-              )}
+                    <Button
+                      onClick={handleAlign}
+                      disabled={!lyrics.trim() || showLyricsWarning}
+                      size="lg"
+                      className="w-full sm:w-auto">
+                      Align Lyrics
+                    </Button>
+                  </>
+                )}
 
               {error && <p className="text-destructive text-sm">{error}</p>}
             </div>
