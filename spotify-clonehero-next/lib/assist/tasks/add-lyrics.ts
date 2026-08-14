@@ -8,7 +8,13 @@
  * happen to be set, so `planSteps` and `run` branch over the same value.
  */
 
-import {hasStemOpus, loadStemOpus} from '@/lib/audio-pipeline/stem-cache';
+import {
+  DEMUCS_VOCALS_SAMPLE_RATE,
+  hasStemOpus,
+  loadStemOpus,
+  storeStemOpus,
+} from '@/lib/audio-pipeline/stem-cache';
+import {encodePcmToOpus, isOpusEncodeSupported} from '@/lib/audio/opus-encoder';
 import {VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {
   mixStemsToAudioBuffer,
@@ -23,6 +29,7 @@ import {alignVocals, type AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {makeAbortError} from '@/lib/workers/abortable-worker';
 import type {PlannedStep} from '../run-to-steps';
 import {
+  resolveDemucsStemFingerprint,
   resolveStemFingerprint,
   type AssistAudio,
   type AssistProgressSink,
@@ -54,9 +61,10 @@ export type AddLyricsVocals =
    */
   | {kind: 'stems'; stems: ReadonlyArray<AddLyricsStemFile>}
   /**
-   * Resolve from the song audio: reuse the BS-Roformer vocals a
-   * drum-transcription run already cached under this audio's fingerprint,
-   * else separate fresh with Demucs.
+   * Resolve from the song audio: reuse the BS-Roformer vocals a separation
+   * run already cached under this audio's fingerprint, else the Demucs
+   * vocals an earlier run of this task cached, else separate fresh with
+   * Demucs and cache that.
    */
   | {kind: 'resolve'; audio: AssistAudio};
 
@@ -66,14 +74,24 @@ export interface AddLyricsInput {
   vocals: AddLyricsVocals;
 }
 
-/** The separation step describes the branch `planSteps` predicted: a cache
- *  hit reuses the BS-Roformer vocals a drum-transcription run already
- *  separated, and only a miss runs Demucs. Labelling a cache hit "Demucs"
- *  would describe work that never happens. */
-function separateStepDescription(cached: boolean): string {
-  return cached
-    ? 'Reusing the separated BS-Roformer vocals'
-    : 'Demucs vocal separation';
+/** Which cached vocals a `resolve` run found, in the order it prefers them:
+ *  the 44.1 kHz stereo BS-Roformer stem a separation run left behind, else
+ *  the 16 kHz mono stem an earlier Demucs fallback stored. Null is a miss on
+ *  both, the only case that separates. */
+type CachedVocals = 'roformer' | 'demucs' | null;
+
+/** The separation step describes the branch `planSteps` predicted, naming
+ *  which vocals a cache hit will reuse. Labelling a cache hit "Demucs
+ *  separation" would describe work that never happens. */
+function separateStepDescription(cached: CachedVocals): string {
+  switch (cached) {
+    case 'roformer':
+      return 'Reusing the separated BS-Roformer vocals';
+    case 'demucs':
+      return 'Reusing the separated Demucs vocals';
+    case null:
+      return 'Demucs vocal separation';
+  }
 }
 
 const ADD_LYRICS_STEPS: ReadonlyArray<Omit<PlannedStep, 'cached'>> = [
@@ -187,20 +205,73 @@ export function makeAddLyricsTask({
     return vocals16k;
   }
 
-  /** The `resolve` branch: cached roformer vocals if the cache has them,
-   *  else a fresh Demucs separation of the decoded mix. */
+  /** Which cached vocals a `resolve` run would use. Shared by `planSteps`
+   *  (which only reports it) and `run` (which reads it back), so the step
+   *  list and the work always name the same branch. */
+  async function probeCachedVocals(audio: AssistAudio): Promise<CachedVocals> {
+    if (await hasStemOpus(await resolveStemFingerprint(audio), VOCALS_STEM)) {
+      return 'roformer';
+    }
+    if (
+      await hasStemOpus(await resolveDemucsStemFingerprint(audio), VOCALS_STEM)
+    ) {
+      return 'demucs';
+    }
+    return null;
+  }
+
+  /**
+   * Caches the vocals a Demucs run just separated, so the next run on this
+   * audio reuses them and the editor can offer them as a stem — the same
+   * courtesy a BS-Roformer separation already does. Filed under the Demucs
+   * separator id: these are 16 kHz mono, not roformer's 44.1 kHz stereo.
+   *
+   * Never throws. Alignment that worked must not fail over a cache write.
+   */
+  async function cacheDemucsVocals(
+    audio: AssistAudio,
+    vocals16k: Float32Array,
+  ): Promise<void> {
+    // Nothing to report on a browser without WebCodecs: the vocals simply
+    // stay in memory for this run, exactly as they did before there was a
+    // cache entry to write.
+    if (!isOpusEncodeSupported()) return;
+    try {
+      const opus = await encodePcmToOpus(
+        vocals16k,
+        DEMUCS_VOCALS_SAMPLE_RATE,
+        1,
+      );
+      await storeStemOpus(
+        await resolveDemucsStemFingerprint(audio),
+        VOCALS_STEM,
+        opus,
+      );
+    } catch (err) {
+      console.warn('Could not cache the separated Demucs vocals:', err);
+    }
+  }
+
+  /** The `resolve` branch: whichever cached vocals `probeCachedVocals` found,
+   *  else a fresh Demucs separation of the decoded mix, which is cached on
+   *  the way out. */
   async function resolveVocals(
     audio: AssistAudio,
     signal: AbortSignal,
     progress: AssistProgressSink,
   ): Promise<{vocals16k: Float32Array; source: 'cache' | 'demucs'}> {
-    const fingerprint = await resolveStemFingerprint(audio);
     // The probe decides the branch; `loadStemOpus` is the one authority on
     // whether the bytes it hands back are actually usable (returns null on a
     // corrupt/interrupted entry), so a probe hit that turns into a load miss
     // still falls back to Demucs rather than failing the task.
-    const cachedOpus = (await hasStemOpus(fingerprint, VOCALS_STEM))
-      ? await loadStemOpus(fingerprint, VOCALS_STEM)
+    const cached = await probeCachedVocals(audio);
+    const cachedOpus = cached
+      ? await loadStemOpus(
+          cached === 'roformer'
+            ? await resolveStemFingerprint(audio)
+            : await resolveDemucsStemFingerprint(audio),
+          VOCALS_STEM,
+        )
       : null;
 
     if (cachedOpus) {
@@ -217,10 +288,13 @@ export function makeAddLyricsTask({
       {signal},
     );
     if (signal.aborted) throw makeAbortError();
-    return {
-      vocals16k: await separateWithDemucsBuffer(audioBuffer, signal, progress),
-      source: 'demucs',
-    };
+    const vocals16k = await separateWithDemucsBuffer(
+      audioBuffer,
+      signal,
+      progress,
+    );
+    await cacheDemucsVocals(audio, vocals16k);
+    return {vocals16k, source: 'demucs'};
   }
 
   return {
@@ -237,9 +311,11 @@ export function makeAddLyricsTask({
         case 'bundled':
           return planWithSeparation(true, 'Vocals stem bundled with the chart');
         case 'resolve': {
-          const fingerprint = await resolveStemFingerprint(vocals.audio);
-          const cached = await hasStemOpus(fingerprint, VOCALS_STEM);
-          return planWithSeparation(cached, separateStepDescription(cached));
+          const cached = await probeCachedVocals(vocals.audio);
+          return planWithSeparation(
+            cached != null,
+            separateStepDescription(cached),
+          );
         }
       }
     },

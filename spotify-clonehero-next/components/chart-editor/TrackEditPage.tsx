@@ -50,7 +50,8 @@ import {audioSamples} from './audioSamples';
 import {stemOriginsOf} from './sidebar/StemsMixer';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
-import {usePaddedAudio} from './hooks/usePaddedAudio';
+import {stemPcm, usePaddedAudio} from './hooks/usePaddedAudio';
+import {VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {
   decodeChartPackageAudio,
   padPackageAudio,
@@ -934,6 +935,14 @@ function TrackEditEditor({
     [paddedFullMixPcm],
   );
 
+  // The waveform the piano roll draws behind the lyrics line. Read from the
+  // padded stem rather than the cache entry, so the leading silence playback
+  // already applies is in it with no second pad path to keep in sync.
+  const lyricsWaveData = useMemo(
+    () => audioSamples(stemPcm(paddedStems, VOCALS_STEM)),
+    [paddedStems],
+  );
+
   /**
    * Export audio. With no leading silence applied the package's own files
    * ship verbatim (`chartPackage.getAudioSources`). With an `audioAnchor`
@@ -1106,6 +1115,8 @@ function TrackEditEditor({
         audioManager={audioManager}
         audioData={audioData}
         audioChannels={PACKAGE_AUDIO_CHANNELS}
+        lyricsWaveData={lyricsWaveData}
+        lyricsWaveChannels={PACKAGE_AUDIO_CHANNELS}
         audioLoading={audioLoading}
         durationSeconds={
           audioDurationSeconds || (projectMeta?.durationSeconds ?? 0)

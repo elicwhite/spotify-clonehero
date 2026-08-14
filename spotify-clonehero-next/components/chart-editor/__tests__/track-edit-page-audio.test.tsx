@@ -62,9 +62,20 @@ jest.mock('../HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
 }));
+// The piano roll draws the lyrics-row waveform from `lyricsWaveData`; the
+// stub records what the host handed it so the wiring is assertable without a
+// canvas.
+const pianoRollProps: {
+  lyricsWaveData?: unknown | undefined;
+  lyricsWaveChannels?: number | undefined;
+} = {};
 jest.mock('../piano-roll/PianoRollTimeline', () => ({
   __esModule: true,
-  default: () => <div data-testid="piano-roll-stub" />,
+  default: (props: {lyricsWaveData?: unknown; lyricsWaveChannels?: number}) => {
+    pianoRollProps.lyricsWaveData = props.lyricsWaveData;
+    pianoRollProps.lyricsWaveChannels = props.lyricsWaveChannels;
+    return <div data-testid="piano-roll-stub" />;
+  },
 }));
 jest.mock('../TransportControls', () => ({
   __esModule: true,
@@ -135,21 +146,32 @@ let cachedDrumStem: {left: Float32Array; right: Float32Array} | null = null;
 // fingerprint of the project's own audio bytes, so a stem separated out of
 // one project must not resolve for another.
 let cachedDrumFingerprint = '';
+// The vocals half of the same cache. Opus bytes, and the fingerprint they are
+// filed under — which for the lyrics tool's Demucs fallback is a DIFFERENT
+// key over the same audio, since those vocals are 16 kHz mono.
+let cachedVocalsOpus: Uint8Array | null = null;
+let cachedVocalsFingerprint = '';
 jest.mock('../../../lib/audio-pipeline/stem-cache', () => {
   const actual = jest.requireActual('../../../lib/audio-pipeline/stem-cache');
   return {
     ...actual,
-    // Real fingerprints are a hash of the audio bytes; this keeps that
-    // property (different audio, different key) without the crypto.
+    // Real fingerprints are a hash of the audio bytes AND the separator id;
+    // this keeps both properties (different audio or different separator,
+    // different key) without the crypto.
     computeStemFingerprint: jest.fn(
-      async (bytes: Uint8Array) => `fingerprint-${bytes[0]}`,
+      async (bytes: Uint8Array, separatorId: string) =>
+        `${separatorId === actual.DEMUCS_SEPARATOR_ID ? 'demucs-' : ''}fingerprint-${bytes[0]}`,
     ),
     loadStem: jest.fn(async (fingerprint: string, stemName: string) =>
       stemName === 'drums' && fingerprint === cachedDrumFingerprint
         ? cachedDrumStem
         : null,
     ),
-    loadStemOpus: jest.fn(async () => null),
+    loadStemOpus: jest.fn(async (fingerprint: string, stemName: string) =>
+      stemName === 'vocals' && fingerprint === cachedVocalsFingerprint
+        ? cachedVocalsOpus
+        : null,
+    ),
   };
 });
 
@@ -268,6 +290,10 @@ beforeEach(() => {
   currentProjectId = 'proj1';
   cachedDrumStem = null;
   cachedDrumFingerprint = '';
+  cachedVocalsOpus = null;
+  cachedVocalsFingerprint = '';
+  delete pianoRollProps.lyricsWaveData;
+  delete pianoRollProps.lyricsWaveChannels;
   mockWriteEditedChart.mockClear();
   mockUpdateProject.mockClear();
 });
@@ -295,6 +321,55 @@ describe('/chart-editor Stems list', () => {
         stemFingerprint: 'fingerprint-1',
       }),
     );
+  });
+
+  it('lists a separated vocals stem, and feeds it to the piano roll’s lyrics row', async () => {
+    // What a BS-Roformer separation leaves behind: vocals under the same key
+    // its drums went to.
+    cachedVocalsOpus = new Uint8Array([1, 2, 3]);
+    cachedVocalsFingerprint = 'fingerprint-1';
+
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    const vocalsRow = await screen.findByTestId('stem-row-vocals');
+    expect(
+      within(vocalsRow).getByLabelText('AI-separated stem'),
+    ).toBeInTheDocument();
+    // The same stem the mixer plays is what the lyrics row draws.
+    await waitFor(() => expect(pianoRollProps.lyricsWaveData).toBeDefined());
+    expect(pianoRollProps.lyricsWaveChannels).toBe(2);
+  });
+
+  it('falls back to the lyrics tool’s Demucs vocals when no roformer stem was ever separated', async () => {
+    cachedVocalsOpus = new Uint8Array([4, 5, 6]);
+    cachedVocalsFingerprint = 'demucs-fingerprint-1';
+
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    const vocalsRow = await screen.findByTestId('stem-row-vocals');
+    expect(
+      within(vocalsRow).getByLabelText('AI-separated stem'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows no vocals row, and no lyrics waveform, when nothing separated vocals', async () => {
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    await screen.findByTestId('stem-row-song');
+    expect(screen.queryByTestId('stem-row-vocals')).not.toBeInTheDocument();
+    expect(pianoRollProps.lyricsWaveData).toBeUndefined();
   });
 
   it('lists the package’s own audio, and adds a separated stem badged AI-separated once an assist run produces one', async () => {

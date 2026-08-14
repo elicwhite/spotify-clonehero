@@ -144,5 +144,13 @@ export interface PipelineRunRequest {
 
 export type PipelineWorkerMessage =
   | ({type: 'progress'} & PipelineProgress)
+  /**
+   * The vocals stem a fresh BS-Roformer separation produced, planar stereo at
+   * 44.1 kHz, posted as soon as it lands. Worker protocol only — it is not on
+   * `PipelineResult` because no caller wants the samples: the client encodes
+   * them to Opus (which a worker cannot do) and seeds the stem cache, so the
+   * editor can offer a vocals track for a song it separated.
+   */
+  | {type: 'vocals'; vocals: {left: Float32Array; right: Float32Array}}
   | {type: 'result'; result: PipelineResult}
   | {type: 'error'; message: string};

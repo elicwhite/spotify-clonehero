@@ -26,6 +26,8 @@ import {
 } from '@/lib/drum-transcription/storage/opfs';
 import {
   computeStemFingerprint,
+  DEMUCS_SEPARATOR_ID,
+  hasStemOpus,
   ROFORMER_SEPARATOR_ID,
   storeStem,
   storeStemOpus,
@@ -55,6 +57,18 @@ jest.mock('../../lyrics-align/aligner', () => ({
 // about.
 jest.mock('../../drum-transcription/pipeline/crnn-audio-prep', () => ({
   planarStereoToCrnnInput: jest.fn(async () => new Float32Array(8)),
+}));
+// WebCodecs Opus encoding has no jsdom implementation, and `add-lyrics`
+// skips caching outright when it is unavailable — so the branch that stores
+// the separated Demucs vocals is only reachable with the encoder stubbed.
+const mockEncodePcmToOpus = jest.fn(
+  async (_pcm: Float32Array, _sampleRate: number, _channels: number) =>
+    new Uint8Array([7, 7, 7]),
+);
+jest.mock('../../audio/opus-encoder', () => ({
+  isOpusEncodeSupported: () => true,
+  encodePcmToOpus: (...args: [Float32Array, number, number]) =>
+    mockEncodePcmToOpus(...args),
 }));
 
 import {resumePipeline} from '@/lib/drum-transcription/pipeline/runner';
@@ -469,6 +483,114 @@ describe('addLyricsTask', () => {
       expect.closeTo(0.3, 5),
       expect.closeTo(0.4, 5),
     ]);
+  });
+
+  it('caches the vocals a Demucs run separated, under the Demucs separator id', async () => {
+    const bytes = new Uint8Array([40, 41, 42, 43]);
+    mockDecode.mockResolvedValue(fakeAudioBuffer());
+    mockAlignVocals.mockResolvedValue({
+      lines: [],
+      words: [],
+      syllables: [],
+      durationMs: 0,
+      lowConfidenceFrac: 0,
+      lowConfidence: false,
+    });
+
+    let fake: FakeWorker | undefined;
+    const task = makeAddLyricsTask({
+      createDemucsWorker: () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+    });
+    const runPromise = task.run(
+      {
+        lyrics: 'la la',
+        vocals: {
+          kind: 'resolve',
+          audio: {loadOriginalBytes: async () => bytes},
+        },
+      },
+      new AbortController().signal,
+      () => {},
+    );
+
+    await waitFor(() => fake !== undefined);
+    fake!.emit({type: 'loaded'});
+    fake!.emit({type: 'result', vocals16k: new Float32Array([0.3, 0.4])});
+    await runPromise;
+
+    // Filed under the Demucs id, never the BS-Roformer one: these are 16 kHz
+    // mono, and every reader of the roformer entry expects 44.1 kHz stereo.
+    expect(
+      await hasStemOpus(
+        await computeStemFingerprint(bytes, DEMUCS_SEPARATOR_ID),
+        'vocals',
+      ),
+    ).toBe(true);
+    expect(
+      await hasStemOpus(
+        await computeStemFingerprint(bytes, ROFORMER_SEPARATOR_ID),
+        'vocals',
+      ),
+    ).toBe(false);
+    expect(mockEncodePcmToOpus).toHaveBeenCalledWith(
+      expect.any(Float32Array),
+      16000,
+      1,
+    );
+  });
+
+  it('reuses cached Demucs vocals rather than separating again', async () => {
+    const bytes = new Uint8Array([50, 51, 52, 53]);
+    const opusBytes = new Uint8Array([3, 4, 5]);
+    await storeStemOpus(
+      await computeStemFingerprint(bytes, DEMUCS_SEPARATOR_ID),
+      'vocals',
+      opusBytes,
+    );
+
+    mockResample.mockResolvedValue(new Float32Array([0.1]));
+    mockAlignVocals.mockResolvedValue({
+      lines: [],
+      words: [],
+      syllables: [],
+      durationMs: 0,
+      lowConfidenceFrac: 0,
+      lowConfidence: false,
+    });
+
+    const input: AddLyricsInput = {
+      lyrics: 'la la',
+      vocals: {
+        kind: 'resolve',
+        audio: {loadOriginalBytes: async () => bytes},
+      },
+    };
+    const task = makeAddLyricsTask({
+      createDemucsWorker: () => {
+        throw new Error('Demucs must not run on a cache hit');
+      },
+    });
+
+    const separateStep = (await task.planSteps(input)).find(
+      s => s.key === 'separate',
+    );
+    expect(separateStep?.cached).toBe(true);
+    // The step list names which vocals it will reuse — promising "Demucs
+    // vocal separation" here would describe work that never happens.
+    expect(separateStep?.description).toBe(
+      'Reusing the separated Demucs vocals',
+    );
+
+    const result = await task.run(
+      input,
+      new AbortController().signal,
+      () => {},
+    );
+    expect(mockResample).toHaveBeenCalledWith(opusBytes, 'audio/opus');
+    expect(result.vocalsSource).toBe('cache');
   });
 
   it('cancels the Demucs branch immediately, terminating the worker and applying nothing', async () => {

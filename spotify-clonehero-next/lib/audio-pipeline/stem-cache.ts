@@ -25,6 +25,8 @@
  * a different cache entry.
  */
 
+import {MODEL_URLS} from '@/lib/lyrics-align/model-urls';
+
 const NAMESPACE = 'audio-pipeline';
 
 /** The rate every cached stem is stored at — the separator's own, and the
@@ -78,6 +80,20 @@ export const ROFORMER_MODEL_URL =
  * cached under the old id (old entries are simply abandoned, not migrated).
  */
 export const ROFORMER_SEPARATOR_ID = `${ROFORMER_MODEL_URL}|drums|stereo|44100|overlap0.25|fp16|libsoxr`;
+
+/** Sample rate the Demucs vocals stem is produced (and cached) at — the
+ *  aligner's input rate, which is all that separation is run for. */
+export const DEMUCS_VOCALS_SAMPLE_RATE = 16000;
+
+/**
+ * Identity of the `add-lyrics` Demucs fallback separation, which produces
+ * 16 kHz MONO vocals rather than BS-Roformer's 44.1 kHz stereo. It has its own
+ * id — and therefore its own cache entry — precisely because the two are not
+ * interchangeable: a `vocals` entry under {@link ROFORMER_SEPARATOR_ID} is
+ * handed to callers as roformer output, and a mono 16 kHz stem there would be
+ * a silent quality regression for every one of them.
+ */
+export const DEMUCS_SEPARATOR_ID = `${MODEL_URLS.demucs}|vocals|mono|${DEMUCS_VOCALS_SAMPLE_RATE}|fp32`;
 
 // ---------------------------------------------------------------------------
 // Planar gzip format — [L‖R] Float32, gzip-compressed. Lossless, so cache-hit

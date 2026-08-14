@@ -23,6 +23,7 @@
 
 import {
   computeStemFingerprint,
+  DEMUCS_SEPARATOR_ID,
   ROFORMER_SEPARATOR_ID,
 } from '@/lib/audio-pipeline/stem-cache';
 import type {PlannedStep, StepProgressEvent} from '../run-to-steps';
@@ -96,5 +97,21 @@ export async function resolveStemFingerprint(
   return computeStemFingerprint(
     bytes ?? (await audio.loadOriginalBytes()),
     ROFORMER_SEPARATOR_ID,
+  );
+}
+
+/**
+ * The fingerprint this audio's Demucs vocals are cached under. Always hashed
+ * from the bytes: `audio.stemFingerprint` is the host's BS-Roformer key, and
+ * reusing it here would file 16 kHz mono vocals in the roformer entry's
+ * directory.
+ */
+export async function resolveDemucsStemFingerprint(
+  audio: AssistAudio,
+  bytes?: Uint8Array,
+): Promise<string> {
+  return computeStemFingerprint(
+    bytes ?? (await audio.loadOriginalBytes()),
+    DEMUCS_SEPARATOR_ID,
   );
 }

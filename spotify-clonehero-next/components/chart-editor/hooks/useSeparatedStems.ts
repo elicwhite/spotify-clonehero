@@ -7,12 +7,12 @@
  * 18).
  *
  * The cache is the authority on what was actually separated — a
- * `generate-tempo-map` run's drum isolation writes the drum stem there from
- * inside the pipeline worker, and an `add-lyrics` run that resolved against
- * BS-Roformer vocals finds them there — so this probes the cache rather than
- * trying to catch each task's own result shape. It probes on mount (so stems
- * separated in an earlier session are on the mixer from the start) and again
- * the moment a run that can separate succeeds.
+ * `generate-tempo-map` run's BS-Roformer pass writes both its drums and its
+ * vocals there, and an `add-lyrics` run writes the Demucs vocals it fell back
+ * to — so this probes the cache rather than trying to catch each task's own
+ * result shape. It probes on mount (so stems separated in an earlier session
+ * are on the mixer from the start) and again the moment a run that can
+ * separate succeeds.
  *
  * The cache key is project state when already known, but old projects and
  * projects created by another entrypoint may have cached stems without that
@@ -31,7 +31,10 @@ import {
 import type {StereoStem} from '@/lib/audio-pipeline/stem-cache';
 import {DRUMS_STEM, VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {resampleStereoInWorker} from '@/lib/audio-pipeline/pcm-client';
-import {resolveStemFingerprint} from '@/lib/assist/tasks/types';
+import {
+  resolveDemucsStemFingerprint,
+  resolveStemFingerprint,
+} from '@/lib/assist/tasks/types';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {decodeAtRate} from '@/lib/audio-pipeline/decode-audio';
 import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
@@ -127,6 +130,10 @@ export function useSeparatedStems({
   // The fingerprint in hand: the persisted one, or one computed after a
   // separating run. Cleared on a project switch (the effect below).
   const fingerprintRef = useRef<string | null>(null);
+  // The Demucs vocals key, hashed at most once per project. It is never the
+  // persisted fingerprint (that one is BS-Roformer's) and is only paid for
+  // when the roformer vocals probe misses.
+  const demucsFingerprintRef = useRef<string | null>(null);
   // Identity of the last assist run this hook reacted to, so one run's
   // success triggers exactly one probe.
   const lastAssistOutcomeRef = useRef('');
@@ -134,6 +141,7 @@ export function useSeparatedStems({
   useEffect(() => {
     return () => {
       fingerprintRef.current = null;
+      demucsFingerprintRef.current = null;
       lastAssistOutcomeRef.current = '';
       setStems([]);
     };
@@ -181,7 +189,21 @@ export function useSeparatedStems({
           }
         }
         if (wantVocals) {
-          const vocalsOpus = await loadStemOpus(fingerprint, VOCALS_STEM);
+          // BS-Roformer's 44.1 kHz stereo vocals first; the lyrics tool's
+          // 16 kHz mono Demucs fallback, under its own separator key, only
+          // when a separation run never left the better stem behind. Both
+          // were produced for this project's audio, and either is a real
+          // track the mixer and the piano roll can show.
+          let vocalsOpus = await loadStemOpus(fingerprint, VOCALS_STEM);
+          if (!vocalsOpus) {
+            demucsFingerprintRef.current ??= await resolveDemucsStemFingerprint(
+              await loadAssistAudio(),
+            );
+            vocalsOpus = await loadStemOpus(
+              demucsFingerprintRef.current,
+              VOCALS_STEM,
+            );
+          }
           if (vocalsOpus) {
             // Decoded straight at the package's rate: this is only ever
             // played and drawn, so the decoder's own resample is the whole

@@ -4,9 +4,13 @@
  * WASM/GPU memory.
  */
 
+import {encodePcmToOpus, isOpusEncodeSupported} from '@/lib/audio/opus-encoder';
+import {VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {
   computeStemFingerprint,
   ROFORMER_SEPARATOR_ID,
+  STEM_CACHE_SAMPLE_RATE,
+  storeStemOpus,
 } from '@/lib/audio-pipeline/stem-cache';
 import {
   makeAbortError,
@@ -59,6 +63,35 @@ export interface TempoPipelineOptions<
   signal?: AbortSignal | undefined;
 }
 
+/**
+ * Seeds the stem cache with the vocals a fresh separation produced, Opus
+ * encoded like every other cached vocals stem. This is the only reason the
+ * tempo pipeline inverts vocals at all: it is what lets `/chart-editor` put a
+ * Vocals track on its mixer for a song whose separation ran here.
+ *
+ * Never throws. A tempo map that worked must not fail over a cache seed.
+ */
+async function storeVocalsStem(
+  fingerprint: string,
+  vocals: {left: Float32Array; right: Float32Array},
+): Promise<void> {
+  // Nothing to report on a browser without WebCodecs: the run keeps its
+  // tempo map, and the editor simply has no vocals track to offer.
+  if (!isOpusEncodeSupported()) return;
+  try {
+    const frames = Math.min(vocals.left.length, vocals.right.length);
+    const interleaved = new Float32Array(frames * 2);
+    for (let i = 0; i < frames; i++) {
+      interleaved[i * 2] = vocals.left[i];
+      interleaved[i * 2 + 1] = vocals.right[i];
+    }
+    const opus = await encodePcmToOpus(interleaved, STEM_CACHE_SAMPLE_RATE, 2);
+    await storeStemOpus(fingerprint, VOCALS_STEM, opus);
+  } catch (err) {
+    console.warn('Could not cache the separated vocals stem:', err);
+  }
+}
+
 export function defaultCreateWorker(): Worker {
   return new Worker(new URL('./pipeline-worker.ts', import.meta.url), {
     type: 'module',
@@ -106,6 +139,12 @@ export async function runTempoPipelineFromPcm<
   const drumStemStereo = options.drumStemStereo ?? null;
   const createWorker = options.createWorker ?? defaultCreateWorker;
 
+  // The vocals arrive mid-run, so the encode and store overlap the beat
+  // passes; the result waits on them anyway. `useSeparatedStems` re-probes the
+  // cache the moment a separating run reports success, and a store still in
+  // flight then is a stem the mixer would miss until the next reload.
+  let vocalsStored: Promise<void> | null = null;
+
   return runAbortableWorker<PipelineResultFor<K>>(
     createWorker,
     options.signal,
@@ -115,8 +154,13 @@ export async function runTempoPipelineFromPcm<
         if (msg.type === 'progress') {
           const {type: _type, ...p} = msg;
           options.onProgress?.(p);
+        } else if (msg.type === 'vocals') {
+          if (fingerprint)
+            vocalsStored = storeVocalsStem(fingerprint, msg.vocals);
         } else if (msg.type === 'result') {
-          settle.resolve(msg.result as PipelineResultFor<K>);
+          const result = msg.result as PipelineResultFor<K>;
+          if (!vocalsStored) settle.resolve(result);
+          else void vocalsStored.then(() => settle.resolve(result));
         } else if (msg.type === 'error') {
           settle.reject(new Error(msg.message));
         }

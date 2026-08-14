@@ -26,7 +26,7 @@ import {
   ROFORMER_MODEL_URL,
 } from './models';
 import {resampleSoxr, initSoxr} from './resampler-soxr';
-import {separateDrumStem} from './stem-separation';
+import {separateDrumStem, type StereoStemsWithVocals} from './stem-separation';
 import {
   computeLogMel,
   resampleToBeatThis,
@@ -115,6 +115,16 @@ function monoMixdown(left: Float32Array, right: Float32Array): Float32Array {
  * throughout: CRNN transcription (drum-transcription/pipeline/tempo-track.ts)
  * consumes the stereo stem from the result, so every source must surface it.
  * Only the tempo-map path calls this; LinkSeg needs nothing from the drums.
+ *
+ * A fresh separation also inverts the vocals stem and posts it to the client
+ * as it lands. The model emits all six stems either way, so the vocals cost
+ * one more iSTFT — and a run that separates a song is the only chance the
+ * editor gets to put a vocals track on its mixer. It goes out as its own
+ * message rather than on the result so the worker drops a full-song stem
+ * immediately instead of holding it across both beat passes, and so the
+ * client's Opus encode overlaps the rest of the pipeline. The other two
+ * branches have no vocals to offer and must not start a separation to get
+ * them.
  */
 async function obtainDrumStem(
   req: PipelineRunRequest,
@@ -173,7 +183,7 @@ async function obtainDrumStem(
   );
 
   progress({stage: 'separate', percent: 0});
-  let separated: StereoStem;
+  let separated: StereoStemsWithVocals;
   try {
     separated = await separateDrumStem({
       ort,
@@ -181,6 +191,7 @@ async function obtainDrumStem(
       right,
       session: roformerSession,
       output: 'stereo',
+      includeVocals: true,
       onProgress: ({segment, totalSegments, etaSec}) => {
         progress({
           stage: 'separate',
@@ -192,8 +203,16 @@ async function obtainDrumStem(
   } finally {
     await roformerSession.release();
   }
-  if (req.fingerprint) await storeStem(req.fingerprint, 'drums', separated);
-  return separated;
+  const drums: StereoStem = {left: separated.left, right: separated.right};
+  // Opus encoding needs an OfflineAudioContext, which a worker does not have,
+  // so the vocals go to the client as PCM and are stored there. Transferred,
+  // not copied: it is the whole song.
+  post(
+    {type: 'vocals', vocals: separated.vocals},
+    uniqueBuffers(separated.vocals.left, separated.vocals.right),
+  );
+  if (req.fingerprint) await storeStem(req.fingerprint, 'drums', drums);
+  return drums;
 }
 
 /** One Beat This! pass over a mono signal: resample, mel, ONNX, DBN
