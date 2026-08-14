@@ -66,12 +66,19 @@ installFakeOPFS();
 // `ChartEditor` — the results screen it renders is a different suite's
 // concern; a stub proves the page reached "done" without dragging in the
 // highway/piano-roll/WebGL stack.
-jest.mock('../../../components/chart-editor/ChartEditor', () => ({
-  __esModule: true,
-  default: ({songName}: {songName: string}) => (
-    <div data-testid="chart-editor-stub">{songName}</div>
-  ),
+const mockRouterPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({push: mockRouterPush}),
 }));
+
+const createdProjects: {origin: string}[] = [];
+jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
+  createProjectFromDoc: jest.fn(async (opts: never) => {
+    createdProjects.push(opts);
+    return `project-${createdProjects.length}`;
+  }),
+}));
+
 
 // Audio boundary — no real Web Audio in jsdom.
 jest.mock('../../../lib/preview/audioManager', () => ({
@@ -213,6 +220,8 @@ function alignResult(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+    createdProjects.length = 0;
+    mockRouterPush.mockClear();
   spawnedWorkers.length = 0;
   mockAlignVocals.mockReset();
   mockResample.mockReset();
@@ -233,10 +242,31 @@ describe('/add-lyrics home screen on the assist engine', () => {
 
     await loadChartAndAlign({'song.ogg': songBytes});
 
-    await screen.findByTestId('chart-editor-stub');
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
 
     expect(spawnedWorkers).toHaveLength(0);
     expect(mockResample).toHaveBeenCalledWith(opusBytes, 'audio/opus');
+  });
+
+  it('saves the aligned chart as a project and opens it in /chart-editor', async () => {
+    // Warm cache, so the run resolves without a Demucs worker to drive.
+    const songBytes = new Uint8Array([1, 2, 3, 4]);
+    const fingerprint = await computeStemFingerprint(
+      songBytes,
+      ROFORMER_SEPARATOR_ID,
+    );
+    await storeStemOpus(fingerprint, VOCALS_STEM, new Uint8Array([9, 9, 9]));
+    mockResample.mockResolvedValue(new Float32Array([0.1, 0.2]));
+    mockAlignVocals.mockResolvedValue(alignResult());
+
+    await loadChartAndAlign({'song.ogg': songBytes});
+
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      '/chart-editor?project=project-1',
+    );
+    expect(createdProjects).toHaveLength(1);
+    expect(createdProjects[0]).toMatchObject({origin: 'add-lyrics'});
   });
 
   it('separates with Demucs on a cold cache', async () => {
@@ -254,7 +284,7 @@ describe('/add-lyrics home screen on the assist engine', () => {
       }),
     );
 
-    await screen.findByTestId('chart-editor-stub');
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
 
     expect(spawnedWorkers[0].terminated).toBe(true);
     // The cache-resample path never runs on a Demucs separation.
@@ -317,7 +347,7 @@ describe('/add-lyrics home screen on the assist engine', () => {
       }),
     );
 
-    await screen.findByTestId('chart-editor-stub');
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
     expect(mockAlignVocals).toHaveBeenCalledTimes(2);
   });
 
@@ -375,7 +405,7 @@ describe('/add-lyrics home screen on the assist engine', () => {
       }),
     );
 
-    await screen.findByTestId('chart-editor-stub');
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
 
     expect(mockAlignVocals).toHaveBeenCalledTimes(2);
     expect(spawnedWorkers[0].terminated).toBe(true);

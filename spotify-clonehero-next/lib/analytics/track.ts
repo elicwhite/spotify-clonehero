@@ -60,12 +60,10 @@ export type AnalyticsEvent =
       lowConfidenceFrac: number;
     }
   | {event: 'add_lyrics_align_failed'; step: string}
-  | {event: 'add_lyrics_realign'}
-  | {
-      event: 'add_lyrics_exported';
-      format: 'sng' | 'zip';
-      manualMoveCount: number;
-    };
+  // The funnel's terminal event. The page aligns and then hands the chart to
+  // /chart-editor, so reaching the editor is the conversion; the export that
+  // used to end the funnel now happens there, against a saved project.
+  | {event: 'add_lyrics_handed_off'};
 
 // Latest user_id passed to setAnalyticsUserId. AuthProvider's effect
 // can resolve before gtag.js loads, in which case the immediate

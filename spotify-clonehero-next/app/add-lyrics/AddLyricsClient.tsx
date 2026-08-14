@@ -1,26 +1,18 @@
 'use client';
 
-import {useEffect, useState, useCallback, useRef, useMemo} from 'react';
+import {useEffect, useState, useCallback, useRef} from 'react';
+import {useRouter} from 'next/navigation';
 import {
   AudioWaveform,
   ClipboardPaste,
   Download,
   FolderOpen,
-  Move,
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
 import {toast} from 'sonner';
-import {parseChartFile} from '@eliwhite/scan-chart';
 import {Button} from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+
 import {getExtension, getBasename} from '@/lib/src-shared/utils';
 import {removeStyleTags} from '@/lib/ui-utils';
 import {
@@ -28,10 +20,8 @@ import {
   type Files,
 } from '@/lib/preview/chorus-chart-processing';
 import {readChart, type ChartDocument} from '@/lib/chart-edit';
-import {downloadBlob} from '@/lib/download';
-import {buildChartExport} from './export-chart';
-import type {AlignedSyllable} from '@/lib/lyrics-align/aligner';
 import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
+import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
 import {
   detectFormat,
   readChartDirectory,
@@ -45,27 +35,16 @@ import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView
 import {
   ChartEditorProvider,
   DEFAULT_VOCALS_SCOPE,
-  useChartEditorContext,
   ADD_LYRICS_CAPABILITIES,
   AudioServiceProvider,
-  useAudioServiceContext,
 } from '@/components/chart-editor';
-import ChartEditor from '@/components/chart-editor/ChartEditor';
-import EditorHeaderRow from '@/components/chart-editor/EditorHeaderRow';
-import {MoveEntitiesCommand} from '@/components/chart-editor/commands';
 import {track} from '@/lib/analytics/track';
-import {AudioManager} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {
   addLyricsTask,
   type AddLyricsInput,
 } from '@/lib/assist/tasks/add-lyrics';
 import {isAbortError} from '@/lib/workers/abortable-worker';
-import {audioSamples} from '@/components/chart-editor/audioSamples';
-
-type ParsedChart = ReturnType<typeof parseChartFile>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,7 +64,7 @@ type Status =
   | 'loading-chart'
   | 'input'
   | 'processing'
-  | 'done'
+  | 'saving'
   | 'error';
 
 // ---------------------------------------------------------------------------
@@ -154,50 +133,9 @@ function pickSongFile(chart: LoadedChart): {
   );
 }
 
-/** Decode audio into an interleaved Float32 PCM buffer for waveform display. */
-async function decodeAudioForWaveform(
-  data: Uint8Array,
-): Promise<{interleaved: Float32Array; channels: number} | null> {
-  try {
-    const ctx = new AudioContext({sampleRate: 44100});
-    try {
-      const buf = data.slice(0).buffer as ArrayBuffer;
-      const decoded = await ctx.decodeAudioData(buf);
-      const channels = decoded.numberOfChannels;
-      const length = decoded.length;
-      const interleaved = new Float32Array(length * channels);
-      for (let ch = 0; ch < channels; ch++) {
-        const channelData = decoded.getChannelData(ch);
-        for (let i = 0; i < length; i++) {
-          interleaved[i * channels + ch] = channelData[i];
-        }
-      }
-      return {interleaved, channels};
-    } finally {
-      await ctx.close();
-    }
-  } catch (err) {
-    console.warn('Could not decode audio for waveform display', err);
-    return null;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Page Component
 // ---------------------------------------------------------------------------
-
-/**
- * The non-chart half of the editor view: the audio and waveform the
- * ChartEditor needs alongside the document. The chart itself is read from
- * the editor session (`state.chartDoc`) so it stays live as the user edits;
- * nothing chart-shaped is snapshotted here.
- */
-interface EditorData {
-  audioManager: AudioManager;
-  audioData?: Float32Array | undefined;
-  audioChannels: number;
-  durationSeconds: number;
-}
 
 export default function AddLyricsClient() {
   return (
@@ -211,40 +149,12 @@ export default function AddLyricsClient() {
   );
 }
 
-// Lyric/phrase entity kinds counted toward "manual moves" before export.
-const LYRIC_MOVE_KINDS: ReadonlySet<string> = new Set([
-  'lyric',
-  'phrase-start',
-  'phrase-end',
-]);
-
 function LyricsAlignInner() {
-  const {state, dispatch} = useChartEditorContext();
-  const {setAudioManager: publishAudioManager} = useAudioServiceContext();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
   const [lyrics, setLyrics] = useState('');
-  const [alignedSyllables, setAlignedSyllables] = useState<AlignedSyllable[]>(
-    [],
-  );
   const [showLyricsWarning, setShowLyricsWarning] = useState(false);
-  /**
-   * Float32 16kHz mono PCM of the vocals stem used for alignment. Either
-   * the chart's existing stem (resampled) or the AI-separated stem from
-   * Demucs. Used as the highway's waveform source — never written into
-   * the downloaded chart.
-   */
-  const [vocalsWaveform, setVocalsWaveform] = useState<Float32Array | null>(
-    null,
-  );
-  const [editorData, setEditorData] = useState<EditorData | null>(null);
-  // Wrapped once per buffer — see `components/chart-editor/audioSamples.ts`.
-  const samples = useMemo(
-    () => audioSamples(editorData?.audioData),
-    [editorData?.audioData],
-  );
-  const [showIntroModal, setShowIntroModal] = useState(false);
   const initStartedRef = useRef(false);
 
   // The page's own assist runner — nothing else on this page shares it, so
@@ -252,6 +162,7 @@ function LyricsAlignInner() {
   // `add-lyrics` task, `run-to-steps.ts` adapter, and cancellation contract
   // as the in-editor `AddLyricsDialog` and `/drum-transcription`.
   const runner = useAssistRunnerControls();
+  const router = useRouter();
   /** Which alignment pass is in flight, for the processing card's caption.
    *  `null` outside a run. */
   const [tierPass, setTierPass] = useState<1 | 2 | null>(null);
@@ -271,16 +182,6 @@ function LyricsAlignInner() {
       }
     })();
   }, [status]);
-
-  // Tear down any AudioManager + audio decode state when leaving the results
-  // view (Re-enter lyrics, chart reload) or unmounting the page.
-  useEffect(() => {
-    return () => {
-      if (editorData) {
-        editorData.audioManager.destroy();
-      }
-    };
-  }, [editorData]);
 
   const handleChartLoaded = useCallback((loaded: LoadedFiles) => {
     setStatus('loading-chart');
@@ -315,7 +216,6 @@ function LyricsAlignInner() {
     if (!chart || !lyrics.trim()) return;
 
     setError(null);
-    setAlignedSyllables([]);
     setShowLyricsWarning(false);
     setTierPass(1);
     setStatus('processing');
@@ -367,18 +267,27 @@ function LyricsAlignInner() {
         });
       }
 
-      // The task hands back a buffer it kept out of the alignment worker's
-      // transfer list, so it is already the caller's to render. Never
-      // serialized into the downloaded chart.
-      setVocalsWaveform(result.vocals16k);
-      setAlignedSyllables(result.syllables);
-      setStatus('done');
       track({
         event: 'add_lyrics_align_completed',
         totalMs: Date.now() - alignStartedAt,
         lowConfidence: result.lowConfidence ? 1 : 0,
         lowConfidenceFrac: Math.round(result.lowConfidenceFrac * 100) / 100,
       });
+
+      // The aligned chart becomes a project, and the editor opens it. This
+      // page aligns; reviewing and fixing the result is what the editor is
+      // for, and a project is what survives a reload.
+      setStatus('saving');
+      const projectId = await createProjectFromDoc({
+        chartDoc: applyAlignedLyricsToDoc(chart.chartDoc, result.syllables),
+        audioFiles: chart.audioFiles,
+        origin: 'add-lyrics',
+        sourceFormat: chart.sourceFormat,
+        originalName: chart.originalName,
+        sngMetadata: chart.sngMetadata,
+      });
+      track({event: 'add_lyrics_handed_off'});
+      router.push(`/chart-editor?project=${projectId}`);
     } catch (e) {
       if (isAbortError(e)) {
         // Cancelled: back to the paste form with the lyrics still in it.
@@ -395,276 +304,7 @@ function LyricsAlignInner() {
     } finally {
       setTierPass(null);
     }
-  }, [chart, lyrics, runner]);
-
-  const handleDownload = useCallback(() => {
-    // Export the editor's live document. It starts as the aligned doc and
-    // every highway edit (lyric drags, phrase resizes, text changes) is
-    // dispatched onto it, so it is the only doc that carries the user's
-    // manual fixes. Re-deriving from `chart.chartDoc` would discard them.
-    const doc = state.chartDoc;
-    if (!chart || !doc) return;
-
-    try {
-      const {blob, fileName} = buildChartExport(
-        doc,
-        chart.sourceFormat,
-        chart.originalName,
-      );
-
-      downloadBlob(blob, fileName);
-
-      const manualMoveCount = state.undoEntries.filter(
-        ({command}) =>
-          command instanceof MoveEntitiesCommand &&
-          LYRIC_MOVE_KINDS.has(command.kind),
-      ).length;
-      track({
-        event: 'add_lyrics_exported',
-        format: chart.sourceFormat === 'sng' ? 'sng' : 'zip',
-        manualMoveCount,
-      });
-
-      toast.success('Chart exported with lyrics');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Export failed');
-    }
-  }, [chart, state.chartDoc, state.undoEntries]);
-
-  const showEditor = status === 'done' && alignedSyllables.length > 0;
-
-  // Prepare the ChartEditor view when alignment completes. Builds a fresh
-  // ChartDocument with the aligned lyrics applied, a running AudioManager,
-  // and a decoded PCM buffer for the waveform display.
-  useEffect(() => {
-    if (!showEditor || !chart || alignedSyllables.length === 0) return;
-    if (editorData) return; // already prepared
-
-    let cancelled = false;
-    let createdAudioManager: AudioManager | null = null;
-    (async () => {
-      try {
-        const nextDoc = applyAlignedLyricsToDoc(
-          chart.chartDoc,
-          alignedSyllables,
-        );
-
-        const audioManager = new AudioManager(chart.audioFiles, () => {
-          dispatch({type: 'SET_PLAYING', isPlaying: false});
-        });
-        createdAudioManager = audioManager;
-        await audioManager.ready;
-        if (cancelled) {
-          audioManager.destroy();
-          return;
-        }
-        audioManager.setChartDelay(
-          getChartDelayMs(nextDoc.parsedChart.metadata) / 1000,
-        );
-
-        // Highway waveform: prefer the same vocals buffer used during
-        // alignment (16kHz mono Float32 from `vocalsWaveform`). Falls back
-        // to decoding the song mix only if alignment somehow ran without
-        // populating that state. The waveform display is a visual cue, so
-        // a 16kHz mono source plots fine across the song duration.
-        const waveform: {interleaved: Float32Array; channels: number} | null =
-          vocalsWaveform
-            ? {interleaved: vocalsWaveform, channels: 1}
-            : await decodeAudioForWaveform(chart.audioFiles[0].data);
-        if (cancelled) {
-          audioManager.destroy();
-          return;
-        }
-
-        const durationSeconds = audioManager.duration;
-
-        publishAudioManager(audioManager);
-        dispatch({type: 'SET_CHART_DOC', chartDoc: nextDoc});
-
-        setEditorData({
-          audioManager,
-          audioData: waveform?.interleaved,
-          audioChannels: waveform?.channels ?? 1,
-          durationSeconds,
-        });
-
-        // Open the intro modal once per browser, the first time the user
-        // lands in the editor. Versioned key so a future copy update (v2)
-        // re-fires once for returning users.
-        const INTRO_KEY = 'add-lyrics:editor-intro-shown-v1';
-        if (
-          typeof localStorage !== 'undefined' &&
-          !localStorage.getItem(INTRO_KEY)
-        ) {
-          setShowIntroModal(true);
-          localStorage.setItem(INTRO_KEY, '1');
-        }
-
-        // add-lyrics defaults to the waveform highway since the user is
-        // syncing lyrics to vocal energy, not navigating notes.
-        dispatch({type: 'SET_HIGHWAY_MODE', mode: 'waveform'});
-      } catch (err) {
-        if (cancelled) return;
-        console.error('Failed to prepare chart editor:', err);
-        toast.error(
-          err instanceof Error ? err.message : 'Failed to prepare preview',
-        );
-        createdAudioManager?.destroy();
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    showEditor,
-    chart,
-    alignedSyllables,
-    editorData,
-    vocalsWaveform,
-    dispatch,
-    publishAudioManager,
-  ]);
-
-  const cloneHeroMetadata = useMemo<ChartResponseEncore | null>(() => {
-    if (!chart) return null;
-    const md = chart.chartDoc.parsedChart.metadata;
-    return {
-      name: md.name ?? 'Unknown',
-      artist: md.artist ?? 'Unknown',
-      charter: md.charter ?? 'Unknown',
-      md5: '',
-      hasVideoBackground: false,
-      albumArtMd5: '',
-      notesData: {} as ChartResponseEncore['notesData'],
-      modifiedTime: '',
-      file: '',
-    } as ChartResponseEncore;
-  }, [chart]);
-
-  // The chart the editor renders, read live from the session so highway
-  // edits reach every consumer (sheet-music pane, section list) rather than
-  // only the parts the scene reconciler redraws.
-  const editorChart = (state.chartDoc?.parsedChart ??
-    null) as ParsedChart | null;
-
-  if (showEditor && chart) {
-    const md = chart.chartDoc.parsedChart.metadata;
-    const songName = md.name ?? 'Unknown';
-    const artistName = md.artist ?? 'Unknown';
-    const charterName = md.charter ?? 'Unknown';
-    return (
-      <main className="h-screen w-screen flex flex-col bg-background overflow-hidden">
-        {/* This page's own 52px song-identity row, directly beneath the
-            site's compact header (`components/CompactSiteHeader.tsx`) - the same
-            row `ChartEditor` renders on other editor pages, which is why the
-            editor below is passed `hideHeader`. Identity runs on one line so
-            the row stays a single bar. */}
-        <EditorHeaderRow>
-          <div className="flex min-w-0 mr-auto items-baseline gap-2">
-            <h1 className="text-sm font-semibold truncate">
-              {removeStyleTags(songName)}
-              <span className="text-muted-foreground font-normal"> by </span>
-              {removeStyleTags(artistName)}
-            </h1>
-            <span className="text-xs text-muted-foreground truncate">
-              {alignedSyllables.length} syllables aligned into{' '}
-              {alignedSyllables.filter(s => s.newLine).length} lines
-            </span>
-          </div>
-          <span className="hidden sm:inline shrink-0 text-xs text-muted-foreground">
-            Drag any lyric to fix its timing
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => {
-              if (editorData) {
-                editorData.audioManager.destroy();
-              }
-              publishAudioManager(null);
-              setEditorData(null);
-              setAlignedSyllables([]);
-              setVocalsWaveform(null);
-              setStatus('input');
-              track({event: 'add_lyrics_realign'});
-            }}>
-            Re-enter lyrics
-          </Button>
-          {/* Disabled until the editor is prepared: until then the session
-              doc is still the previous alignment's (or nothing at all), and
-              exporting it would hand back the wrong chart. */}
-          <Button
-            size="sm"
-            className="shrink-0"
-            onClick={handleDownload}
-            disabled={!editorData}>
-            <Download className="h-4 w-4 mr-1" />
-            Download .{chart.sourceFormat === 'sng' ? 'sng' : 'zip'}
-          </Button>
-        </EditorHeaderRow>
-        <Dialog open={showIntroModal} onOpenChange={setShowIntroModal}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Your lyrics are aligned</DialogTitle>
-              <DialogDescription>
-                A few things worth knowing before you fine-tune.
-              </DialogDescription>
-            </DialogHeader>
-            <ul className="space-y-3 text-sm">
-              <li className="flex items-start gap-3">
-                <Move className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                <span>
-                  <strong>Drag any lyric</strong> on the highway to nudge its
-                  timing. Useful when the aligner picked the wrong onset.
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <AudioWaveform className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                <span>
-                  The waveform on the highway is the{' '}
-                  <strong>isolated vocal stem</strong>, not the full song mix —
-                  easier to spot where each line should sit.
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Download className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                <span>
-                  When the timing looks right, hit <strong>Download</strong> in
-                  the top-right to get the updated chart.
-                </span>
-              </li>
-            </ul>
-            <DialogFooter>
-              <Button onClick={() => setShowIntroModal(false)}>Got it</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <div className="flex-1 min-h-0">
-          {editorData && cloneHeroMetadata && editorChart ? (
-            <ChartEditor
-              chart={editorChart}
-              audioManager={editorData.audioManager}
-              audioData={samples}
-              audioChannels={editorData.audioChannels}
-              durationSeconds={editorData.durationSeconds}
-              sections={editorChart.sections}
-              songName={songName}
-              artistName={artistName}
-              charterName={charterName}
-              hideHeader
-            />
-          ) : (
-            <div className="flex items-center justify-center gap-3 h-full">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground" />
-              <p className="text-muted-foreground">Preparing preview...</p>
-            </div>
-          )}
-        </div>
-      </main>
-    );
-  }
+  }, [chart, lyrics, router, runner]);
 
   return (
     <main className="min-h-screen bg-background w-full">
@@ -720,6 +360,7 @@ function LyricsAlignInner() {
         {chart &&
           (status === 'input' ||
             status === 'processing' ||
+            status === 'saving' ||
             (status === 'error' && chart)) && (
             <div className="space-y-6">
               {/* Chart info */}
@@ -775,24 +416,37 @@ function LyricsAlignInner() {
                 />
               )}
 
-              {/* Existing lyrics warning */}
-              {status !== 'processing' && showLyricsWarning && (
-                <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 flex items-start gap-3">
-                  <TriangleAlert className="h-4 w-4 mt-0.5 text-yellow-700 dark:text-yellow-300 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      This chart already has lyrics. Aligning will replace them.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => setShowLyricsWarning(false)}>
-                      OK, continue
-                    </Button>
-                  </div>
+              {/* The run is done and the chart is on its way to the editor.
+                  Same column as the steps above, so the page does not jump
+                  between the last step and the navigation. */}
+              {status === 'saving' && (
+                <div className="flex items-center justify-center gap-3 py-8 text-muted-foreground">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-foreground" />
+                  <p>Saving your chart and opening the editor...</p>
                 </div>
               )}
+
+              {/* Existing lyrics warning */}
+              {status !== 'processing' &&
+                status !== 'saving' &&
+                showLyricsWarning && (
+                  <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 flex items-start gap-3">
+                    <TriangleAlert className="h-4 w-4 mt-0.5 text-yellow-700 dark:text-yellow-300 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        This chart already has lyrics. Aligning will replace
+                        them.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => setShowLyricsWarning(false)}>
+                        OK, continue
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
               {/* Lyrics textarea + Align button. Hidden during processing
                   so the step list is the only thing in view. */}
