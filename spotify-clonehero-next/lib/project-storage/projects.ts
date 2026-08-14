@@ -27,6 +27,7 @@ import {
   type SongMetadataValue,
 } from '@/lib/chart-editor-core';
 import * as drumTranscription from '@/lib/drum-transcription/storage/opfs';
+import {editedVariant} from '@/lib/chart-files/chart-file-names';
 
 import {
   createBlankChartDocument,
@@ -272,7 +273,7 @@ async function writeDrumTranscriptionIdentity(
   const written = writeChartFileAs(updated, updated.parsedChart.format);
   await drumTranscription.writeProjectBinary(
     id,
-    drumTranscription.editedVariant(written.fileName),
+    editedVariant(written.fileName),
     written.data,
   );
 }

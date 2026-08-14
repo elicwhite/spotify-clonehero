@@ -16,8 +16,8 @@
 
 import type {ChartDocument, DrumNote} from '@/lib/chart-edit';
 import {readChart, getDrumNotes} from '@/lib/chart-edit';
+import {CHART_FILE_BASENAMES} from '@/lib/chart-files/chart-file-names';
 import {
-  CHART_FILE_BASENAMES,
   hasProjectChartFile,
   hasStoredAudio,
   projectFileExists,

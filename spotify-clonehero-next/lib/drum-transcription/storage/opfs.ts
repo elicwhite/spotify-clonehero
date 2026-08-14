@@ -49,6 +49,10 @@ import {
 } from '@/lib/drum-transcription/audio/decoder';
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
+import {
+  CHART_FILE_BASENAMES,
+  editedVariant,
+} from '@/lib/chart-files/chart-file-names';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from '@/lib/project-storage/types';
 
@@ -461,18 +465,6 @@ export async function projectFileExists(
 }
 
 /**
- * The two basenames `writeChartFolder` (scan-chart) can produce for a
- * project's chart, keyed by `ParsedChart.format`. A project's persisted
- * chart is ALWAYS exactly one of these — never both — since format is
- * fixed at chart-flow ingest (or 'chart' for freshly-predicted, audio-only
- * projects) and never converted.
- */
-export const CHART_FILE_BASENAMES = {
-  chart: 'notes.chart',
-  mid: 'notes.mid',
-} as const;
-
-/**
  * The project's `song.ini`, written beside the chart file on every save and
  * merged back into the document on load. Neither `.chart` nor `.mid` can
  * carry the per-instrument `diff_*` intensities, `icon`, `loading_phrase` or
@@ -480,18 +472,6 @@ export const CHART_FILE_BASENAMES = {
  * this file is where the song-details dialog's edits actually persist.
  */
 export const SONG_INI_FILE_NAME = 'song.ini';
-
-/**
- * Basename -> its "edited" (post-autosave) sibling, same extension —
- * `notes.chart` -> `notes.edited.chart`, `notes.mid` -> `notes.edited.mid`.
- * Exported so the editor's autosave path can derive the right sibling name
- * from whichever chart file `writeChartFolder` actually produced, instead
- * of hardcoding `.chart`.
- */
-export function editedVariant(baseName: string): string {
-  const dot = baseName.lastIndexOf('.');
-  return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
-}
 
 /**
  * Finds the project's persisted chart file — `notes.chart`/`notes.mid` (or

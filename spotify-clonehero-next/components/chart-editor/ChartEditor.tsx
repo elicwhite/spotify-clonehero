@@ -11,7 +11,8 @@ import {
 } from '@/lib/chart-editor-core';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
-import type {AudioSource, AssetFile, ChartFileFormat} from './ExportDialog';
+import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
+import type {AudioSource, AssetFile} from './ExportDialog';
 
 import EditorHeaderRow from './EditorHeaderRow';
 import HighwayEditor from './HighwayEditor';

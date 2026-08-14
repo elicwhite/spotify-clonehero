@@ -16,7 +16,6 @@ import {
   writeProjectBinary,
   projectFileExists,
   findProjectChartFile,
-  editedVariant,
   SONG_INI_FILE_NAME,
   updateProject,
   loadAudioMeta,
@@ -70,10 +69,11 @@ import {
   type AudioStemInput,
 } from '@/components/chart-editor/hooks/usePaddedAudio';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
-import type {
-  AudioSource,
-  ChartFileFormat,
-} from '@/components/chart-editor/ExportDialog';
+import {
+  editedVariant,
+  type ChartFileFormat,
+} from '@/lib/chart-files/chart-file-names';
+import type {AudioSource} from '@/components/chart-editor/ExportDialog';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
 import {audioSamples} from '@/components/chart-editor/audioSamples';

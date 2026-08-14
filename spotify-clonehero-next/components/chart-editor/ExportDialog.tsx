@@ -45,6 +45,7 @@ import {
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import type {ChartDocument} from '@/lib/chart-edit';
+import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
 import type {DifficultyField} from '@/lib/chart-difficulty';
 import type {SongIniMetadataValue} from '@/lib/chart-editor-core';
 
@@ -295,10 +296,6 @@ export interface AudioSource {
   data: ArrayBuffer;
 }
 
-/** The chart file format inside the package — `.chart` (text) or `.mid`
- * (binary). Distinct from `PackageFormat`, which is the outer zip/sng
- * container. */
-export type ChartFileFormat = 'chart' | 'mid';
 
 interface ExportDialogProps {
   /**
