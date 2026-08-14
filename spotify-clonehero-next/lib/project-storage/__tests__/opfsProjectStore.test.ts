@@ -7,6 +7,31 @@ describe('createOpfsProjectStore', () => {
     installFakeOPFS();
   });
 
+  it('stores the provenance and anchor the caller was already holding', async () => {
+    const store = createOpfsProjectStore('test-namespace');
+    const provenance = {difficulties: {stamp: 'abc', generatedAt: '2026-01-01'}};
+
+    const meta = await store.createProject({
+      name: 'Generated',
+      artist: 'A',
+      charter: 'C',
+      sourceFormat: 'folder',
+      originalName: 'generated',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('[Song]\n{\n}\n'),
+      },
+      audioFiles: [],
+      allFiles: [],
+      audioAnchor: {tick: 192, ms: 500},
+      assistProvenance: provenance as never,
+    });
+
+    const reread = await store.getProject(meta.id);
+    expect(reread.audioAnchor).toEqual({tick: 192, ms: 500});
+    expect(reread.assistProvenance).toEqual(provenance);
+  });
+
   describe('chart file format', () => {
     /** A MIDI header plus one empty track — enough to prove the bytes are
      *  stored and read back without a text round trip. */

@@ -241,6 +241,13 @@ export function createOpfsProjectStore(
     origin?: ProjectOrigin | undefined;
     /** Existing separated-stem cache entry to attach to the new project. */
     stemFingerprint?: string | undefined;
+    /** Chart-time position of the audio's true start, when the document
+     *  being stored already has leading silence applied. */
+    audioAnchor?: {tick: number; ms: number} | null | undefined;
+    /** Assist provenance the document already carries. A tool page that
+     *  generates content before it creates the project has to pass this, or
+     *  the editor opens reading its own fresh work as never generated. */
+    assistProvenance?: AssistProvenance | undefined;
   }): Promise<ProjectMetadata> {
     const id = generateId();
     const now = new Date().toISOString();
@@ -265,6 +272,8 @@ export function createOpfsProjectStore(
       origin: opts.origin ?? 'chart-editor',
       hasAudio: opts.audioFiles.length > 0,
       stemFingerprint: opts.stemFingerprint,
+      audioAnchor: opts.audioAnchor,
+      assistProvenance: opts.assistProvenance,
     };
 
     const dir = await getProjectDir(id, {create: true});
