@@ -199,7 +199,8 @@ the evidence and are adopted:
   driving requirement. If a future page needs 2+ AudioManager-registered
   stems simultaneously, generalize then.
 - **No persistence-adapter injection for the stem cache.** `/tempo` and
-  `/add-lyrics` don't persist a project today; both only need the
+  `/add-lyrics` write a project only at the handoff to `/chart-editor`; both
+  need no more than the
   _content-addressed_ cache (Phase 2), which has no project/OPFS-project
   coupling to begin with — the whole point of fingerprint keys is that no
   caller-specific persistence adapter is needed. Revisit only if a

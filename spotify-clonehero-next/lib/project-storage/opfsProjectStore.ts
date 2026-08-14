@@ -510,14 +510,6 @@ export function createOpfsProjectStore(
   }
 
   /**
-   * The format a project's chart is stored in. A project written before the
-   * store recorded a format is `.chart`.
-   */
-  async function chartFormatOf(projectId: string): Promise<ChartFileFormat> {
-    return formatOfMetadata(await getProject(projectId));
-  }
-
-  /**
    * Reads the project's `song.ini` bytes, or `null` when the imported package
    * carried none.
    *
@@ -751,7 +743,6 @@ export function createOpfsProjectStore(
     updateProject,
     deleteProject,
     readChartFile,
-    chartFormatOf,
     readSongIni,
     writeSongIni,
     writeAudioFiles,

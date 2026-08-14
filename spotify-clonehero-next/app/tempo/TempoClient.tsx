@@ -168,7 +168,6 @@ export default function TempoClient({
       cancelBeforeRunRef.current = false;
 
       try {
-        let name: string;
         let audioFiles: Files;
         let originalChart: ParsedChart | null = null;
         let chartAssets: ScanFile[] = [];
@@ -186,7 +185,6 @@ export default function TempoClient({
         if (input.kind === 'audio') {
           const bytes = new Uint8Array(await input.file.arrayBuffer());
           originalBytes = bytes;
-          name = basename(input.file.name);
           originalName = input.file.name;
           audioFiles = [{fileName: input.file.name, data: bytes}];
           // Audio mode has no chart of its own to derive a length from, so
@@ -202,7 +200,6 @@ export default function TempoClient({
           sourceFormat = loaded.sourceFormat;
           const doc = readChart(loaded.files, {pro_drums: true});
           originalChart = doc.parsedChart;
-          name = originalChart.metadata.name ?? loaded.originalName;
           chartAssets = doc.assets;
           audioFiles = findAudioFiles(loaded.files);
           if (audioFiles.length === 0) {
@@ -255,8 +252,9 @@ export default function TempoClient({
           modifiers = {...originalChart.iniChartModifiers, pro_drums: true};
           newChart = swapSynctrack(originalChart, sync, {quantizeNotes: true});
         } else {
+          // Audio mode has no chart metadata, so the file name is the title.
           const built = buildChartFromSynctrack({sync, songLengthMs});
-          built.metadata.name = name;
+          built.metadata.name = basename(originalName);
           const audioAsset: ScanFile = {
             fileName: audioFiles[0].fileName,
             data: audioFiles[0].data,

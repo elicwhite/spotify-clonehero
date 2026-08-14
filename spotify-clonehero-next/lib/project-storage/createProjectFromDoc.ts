@@ -13,7 +13,7 @@
  * own error handling and cancel path already live.
  */
 
-import {chartDocToFolderFiles, writeChartFolder} from '@/lib/chart-edit';
+import {pickFolderFiles, writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {
   documentIdentityFields,
@@ -58,7 +58,7 @@ export async function createProjectFromDoc(
   // the whole output — album art, video and background art included, not the
   // chart and ini alone.
   const allFiles = writeChartFolder(chartDoc);
-  const {chart} = chartDocToFolderFiles(chartDoc);
+  const {chart} = pickFolderFiles(allFiles);
   const identity = documentIdentityFields(chartDoc);
 
   const meta = await chartPackageStore().createProject({

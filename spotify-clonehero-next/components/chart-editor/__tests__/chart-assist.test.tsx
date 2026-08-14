@@ -165,7 +165,6 @@ interface Wiring {
     | undefined;
   audioSampleRate?: number | undefined;
   detectedAudioOnsetMs?: number | undefined;
-  leadingSilenceDisabledReason?: string | undefined;
   drumRerunDisabledReason?: string | undefined;
   audioBusyReason?: string | undefined;
 }
@@ -179,23 +178,16 @@ const FULL_WIRING: Wiring = {
 };
 
 /**
- * What a host with the chart package's audio but no padded playback
- * supplies — the difficulty-generation flow
- * (`components/difficulty-generation/DifficultyGenerationFlow.tsx`), whose
- * reasons these strings mirror. The leading-silence card still renders with
- * its action dead: the point of the disabled-with-a-reason path is that a
- * card's status and recommendation are worth showing even where its action
- * can't run. Drum transcription is the other case — it separates its own
- * drum stem out of `loadAudio`'s mix, so a host reason about missing stems
- * doesn't apply to it and its action stays live.
+ * What a host supplies that declares a standing reason it cannot re-run drum
+ * transcription. The reason does not apply while the host offers `loadAudio`:
+ * the run separates its own drum stem out of that mix, so its action stays
+ * live.
  */
 const DISABLED_ACTIONS_WIRING: Wiring = {
   loadAudio: async () => ({
     loadOriginalBytes: async () => new Uint8Array(4),
   }),
   audioSampleRate: 44100,
-  leadingSilenceDisabledReason:
-    "Can't pad this editor's audio to match a shifted chart yet.",
   drumRerunDisabledReason: 'No separated drum audio to re-run from.',
 };
 
@@ -308,10 +300,8 @@ describe('ChartAssist capability gating', () => {
 
 /**
  * A chart loaded from a file, with its own audio but no drum-transcription
- * project behind it and no way to pad the audio it plays and exports (the
- * difficulty-generation flow). The audio-backed cards run; the one action
- * this host can't perform renders disabled with a reason, and no card is
- * silently missing.
+ * project behind it. The audio-backed cards run and no card is silently
+ * missing, even where the host declares a standing disabled reason.
  */
 describe('ChartAssist where the host disables an action', () => {
   function renderTrackEdit(doc = makeDoc()) {
@@ -336,17 +326,6 @@ describe('ChartAssist where the host disables an action', () => {
     ).toBeEnabled();
     // The Lyrics card's action is the Add Lyrics dialog's trigger.
     expect(screen.getByRole('button', {name: /add lyrics/i})).toBeEnabled();
-  });
-
-  it('disables Add leading silence and says why', () => {
-    renderTrackEdit();
-    const button = screen.getByRole('button', {name: /add leading silence/i});
-    expect(button).toBeDisabled();
-    // The reason reaches a sighted user through the tooltip and everyone
-    // else through the button's accessible description.
-    expect(button).toHaveAccessibleDescription(
-      /can't pad this editor's audio/i,
-    );
   });
 
   it('keeps drum transcription live despite a host reason about missing stems', () => {

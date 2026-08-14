@@ -61,7 +61,6 @@ describe('createOpfsProjectStore', () => {
       const {store, meta} = await createMidProject();
 
       expect(meta.chartFileFormat).toBe('mid');
-      expect(await store.chartFormatOf(meta.id)).toBe('mid');
 
       const chart = await store.readChartFile(meta.id);
       expect(chart.fileName).toBe('notes.mid');
@@ -103,7 +102,8 @@ describe('createOpfsProjectStore', () => {
       // Strip the field the way a project written before it existed has it.
       await store.updateProject(meta.id, {chartFileFormat: undefined});
 
-      expect(await store.chartFormatOf(meta.id)).toBe('chart');
+      const chart = await store.readChartFile(meta.id);
+      expect(chart.fileName).toBe('notes.chart');
       expect(await chartTextOf(store, meta.id)).toBe('[Song]\n{\n}\n');
     });
   });

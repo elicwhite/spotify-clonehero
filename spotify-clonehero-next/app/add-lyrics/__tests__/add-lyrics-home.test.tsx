@@ -15,9 +15,9 @@
  * `lib/assist/__tests__/tasks.test.ts`). `alignVocals`,
  * `decodeAndResampleTo44k`, and `resampleTo16kMono`/`mixStemsToAudioBuffer`
  * are mocked module boundaries (no real ONNX/AudioContext decode in jsdom).
- * `ChartEditor` is stubbed, matching `drum-transcription-visibility-
- * seeding.test.tsx` — this suite is about the alignment pipeline, not the
- * editor it hands off to.
+ * `createProjectFromDoc` is stubbed, so the tests read the project the page
+ * writes before it pushes `/chart-editor` — this suite is about the alignment
+ * pipeline, not the editor it hands off to.
  */
 
 import '@testing-library/jest-dom';
@@ -63,9 +63,8 @@ if (typeof (globalThis as any).CompressionStream === 'undefined') {
 
 installFakeOPFS();
 
-// `ChartEditor` — the results screen it renders is a different suite's
-// concern; a stub proves the page reached "done" without dragging in the
-// highway/piano-roll/WebGL stack.
+// The handoff: the page pushes `/chart-editor?project=<id>`, so the push is
+// what proves an alignment reached "done".
 const mockRouterPush = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({push: mockRouterPush}),
@@ -76,16 +75,6 @@ jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
   createProjectFromDoc: jest.fn(async (opts: never) => {
     createdProjects.push(opts);
     return `project-${createdProjects.length}`;
-  }),
-}));
-
-// Audio boundary — no real Web Audio in jsdom.
-jest.mock('../../../lib/preview/audioManager', () => ({
-  AudioManager: jest.fn().mockImplementation(function (this: any) {
-    this.ready = Promise.resolve();
-    this.duration = 10;
-    this.setChartDelay = jest.fn();
-    this.destroy = jest.fn();
   }),
 }));
 

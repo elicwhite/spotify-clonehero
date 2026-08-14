@@ -34,15 +34,6 @@ export interface LeadingSilenceCardProps {
   runner: AssistRunnerControls;
   audioSampleRate: number;
   audioBusyReason: string | undefined;
-  /**
-   * A STANDING reason this host can't add leading silence, even though the
-   * detector's advice is still worth showing. Padding the chart is only half
-   * the operation: the host also has to pad the audio it plays and exports
-   * (`usePaddedAudio`), and a host that can't leaves the chart and the audio
-   * drifted apart. Set, the action is disabled with this text and the card
-   * still renders its recommendation.
-   */
-  disabledReason?: string | undefined;
   detectedAudioOnsetMs: number | undefined;
   executeCommand: (command: EditCommand) => void;
   onLearnMore: (key: LearnKey) => void;
@@ -53,7 +44,6 @@ export default function LeadingSilenceCard({
   runner,
   audioSampleRate,
   audioBusyReason,
-  disabledReason,
   detectedAudioOnsetMs,
   executeCommand,
   onLearnMore,
@@ -111,7 +101,7 @@ export default function LeadingSilenceCard({
       actions={
         running ? null : (
           <CardAction
-            disabledReason={disabledReason ?? audioBusyReason}
+            disabledReason={audioBusyReason}
             onClick={run}
             icon={AudioWaveform}
             label="Add leading silence"

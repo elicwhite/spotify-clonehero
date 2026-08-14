@@ -15,6 +15,7 @@
 
 import {
   chartDocToFolderFiles,
+  pickFolderFiles,
   readChart,
   readChartForEditing,
   writeChartFileAs,
@@ -290,7 +291,7 @@ export async function createBlankProject({
 }: CreateBlankProjectOptions): Promise<ProjectRecord> {
   const doc = createBlankChartDocument({name, artist, charter, songLengthMs});
   const files = writeChartFolder(doc);
-  const {chart} = chartDocToFolderFiles(doc);
+  const {chart} = pickFolderFiles(files);
 
   const meta = await chartPackageStore().createProject({
     name,

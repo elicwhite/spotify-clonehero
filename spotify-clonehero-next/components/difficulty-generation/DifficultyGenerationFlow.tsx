@@ -1,19 +1,17 @@
 'use client';
 
 /**
- * Shared flow behind `/drum-difficulties` and `/guitar-difficulties` (plan
- * 0074 route model, 2026-08-03): pick a chart -> validate it has an Expert
- * track for `instrument` -> run the `generate-difficulties` assist task with
- * the home-screen `ProcessingView` full-page treatment -> apply the result
- * via `GenerateDifficultiesCommand` -> land in the shared `ChartEditor` with
- * that instrument's Expert/Hard/Medium/Easy visible.
+ * Shared flow behind `/drum-difficulties` and `/guitar-difficulties`: pick a
+ * chart -> validate it has an Expert track for `instrument` -> run the
+ * `generate-difficulties` assist task with the home-screen `ProcessingView`
+ * full-page treatment -> apply the result via `GenerateDifficultiesCommand`
+ * -> write the result as an OPFS project and push
+ * `/chart-editor?project=<id>`.
  *
- * The editor it lands in is the chart-package host `TrackEditPage` also
- * mounts: playback, waveform, export sources and the Chart Assist audio
- * boundary all come from `chartPackage.ts`. What lives here is the part
- * that route has and `/chart-editor` doesn't — a full-page pipeline run
- * between the picker and the editor — and the fact that no OPFS project
- * backs it: a chart is loaded once per visit, generated, edited, exported.
+ * This page does not mount the editor. It is the pipeline run between the
+ * picker and the handoff: a chart is loaded once per visit, generated, and
+ * saved, and every later edit and export belongs to `/chart-editor` and the
+ * project this page wrote.
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
@@ -89,9 +87,8 @@ export interface DifficultyGenerationFlowConfig {
 }
 
 interface SongMeta {
+  /** The song title, shown as the processing screen's subtitle. */
   name: string;
-  artist: string;
-  charter: string;
 }
 
 /** Everything a dropped chart has to yield before a run can start. */
@@ -175,8 +172,6 @@ export function inspectDroppedChart(
           chartDoc.parsedChart.metadata.name ??
           loaded.originalName ??
           'Unknown',
-        artist: chartDoc.parsedChart.metadata.artist ?? 'Unknown',
-        charter: chartDoc.parsedChart.metadata.charter ?? 'Unknown',
       },
       input: built.input,
       sourceStamp: computeTrackStamp(expert.track),
@@ -346,8 +341,8 @@ function DifficultyGenerationFlowInner({
       const loaded: LoadedChart = {
         candidate,
         audio,
-        // The transport's total-time display is the only consumer, so a
-        // package whose audio wouldn't decode still gets a usable editor.
+        // The nominal length the project stores. A fallback keeps a package
+        // whose audio would not decode from writing a zero-length project.
         durationSeconds:
           audio.durationSeconds > 0 ? audio.durationSeconds : 180,
       };
@@ -358,11 +353,9 @@ function DifficultyGenerationFlowInner({
 
       try {
         const result = await runner.start(task, candidate.input);
-        // Applied directly against the just-loaded `chartDoc`, not through
-        // `useExecuteCommand`'s `state.chartDoc` — that hook's closure was
-        // captured before the `SET_CHART_DOC` dispatch above and won't see
-        // it until a re-render. `dispatch` itself is a stable reference to
-        // the session's own method, so this still lands on the live store.
+        // The command is applied directly to the document this run started
+        // from. Nothing on this page edits that document while the run is in
+        // flight, and the result goes straight to the project write below.
         const command = new GenerateDifficultiesCommand(
           instrument,
           result.tiers,

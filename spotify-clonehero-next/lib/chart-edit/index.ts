@@ -26,7 +26,7 @@ export type {WrittenChartFile} from './write-chart-file-as';
 
 // The chart file and the `song.ini` beside it, from one serialization — what
 // a host persists so the ini-only fields survive a reload
-export {chartDocToFolderFiles} from './folder-files';
+export {chartDocToFolderFiles, pickFolderFiles} from './folder-files';
 export type {ChartFolderFiles} from './folder-files';
 export type {
   ChartDocument,

@@ -16,9 +16,6 @@ export const DIFFICULTY_ORIGIN = {
   guitar: 'guitar-difficulties',
 } as const satisfies Partial<Record<SupportedTrackInstrument, ProjectOrigin>>;
 
-export type DifficultyOrigin =
-  (typeof DIFFICULTY_ORIGIN)[keyof typeof DIFFICULTY_ORIGIN];
-
 /**
  * The instrument a difficulty-generated project was generated for, or null
  * for a project from anywhere else.
@@ -26,8 +23,11 @@ export type DifficultyOrigin =
 export function difficultyInstrumentOf(
   origin: ProjectOrigin | undefined,
 ): SupportedTrackInstrument | null {
-  for (const [instrument, value] of Object.entries(DIFFICULTY_ORIGIN)) {
-    if (value === origin) return instrument as SupportedTrackInstrument;
+  const instruments = Object.keys(
+    DIFFICULTY_ORIGIN,
+  ) as (keyof typeof DIFFICULTY_ORIGIN)[];
+  for (const instrument of instruments) {
+    if (DIFFICULTY_ORIGIN[instrument] === origin) return instrument;
   }
   return null;
 }

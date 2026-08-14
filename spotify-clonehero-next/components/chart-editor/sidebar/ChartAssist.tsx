@@ -68,12 +68,6 @@ export interface ChartAssistProps {
   /** Sample rate of the loaded audio, for the leading-silence pad's sample
    *  quantization. Without it the Add leading silence card doesn't render. */
   audioSampleRate?: number | undefined;
-  /** Why this host can't add leading silence: padding the chart is only half
-   *  the operation, and a host that can't also pad the audio it plays and
-   *  exports would leave the two drifted apart. The card still renders its
-   *  detector recommendation, with the action disabled and this on the
-   *  tooltip. */
-  leadingSilenceDisabledReason?: string | undefined;
   /** Why this host can't run drum transcription at all. It applies only to a
    *  host that offers no `loadAudio` — with it the run has everything it
    *  needs, since it separates its own drum stem. The card still renders its
@@ -94,7 +88,6 @@ export default function ChartAssist({
   allowDrumRerun = true,
   loadAudio,
   audioSampleRate,
-  leadingSilenceDisabledReason,
   drumRerunDisabledReason,
   audioBusyReason,
   detectedAudioOnsetMs,
@@ -200,7 +193,6 @@ export default function ChartAssist({
             runner={runner}
             audioSampleRate={audioSampleRate}
             audioBusyReason={audioBusyReason}
-            disabledReason={leadingSilenceDisabledReason}
             detectedAudioOnsetMs={detectedAudioOnsetMs}
             executeCommand={executeCommand}
             onLearnMore={setLearnOpen}

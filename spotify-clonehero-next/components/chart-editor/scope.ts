@@ -14,7 +14,8 @@
  *    entities.
  *
  *  - `global` — chart-wide editing only (sections, BPM, time-signature).
- *    Reserved for future use; no consumer today.
+ *    `HighwayEditor` gives its empty highway this scope, so a chart with no
+ *    visible track still draws its tempo markers and its lyrics.
  */
 
 import type {

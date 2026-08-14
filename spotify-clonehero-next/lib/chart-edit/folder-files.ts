@@ -20,8 +20,11 @@ export interface ChartFolderFiles {
   ini: WrittenChartFile;
 }
 
-export function chartDocToFolderFiles(doc: ChartDocument): ChartFolderFiles {
-  const files = writeChartFolder(doc);
+/**
+ * The same rule for a caller that already has a `writeChartFolder` output and
+ * must not pay for a second serialization to get the pair out of it.
+ */
+export function pickFolderFiles(files: WrittenChartFile[]): ChartFolderFiles {
   const chart = files.find(
     f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
   );
@@ -33,4 +36,8 @@ export function chartDocToFolderFiles(doc: ChartDocument): ChartFolderFiles {
     throw new Error('writeChartFolder did not produce a song.ini');
   }
   return {chart, ini};
+}
+
+export function chartDocToFolderFiles(doc: ChartDocument): ChartFolderFiles {
+  return pickFolderFiles(writeChartFolder(doc));
 }

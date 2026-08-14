@@ -2,15 +2,14 @@
  * @jest-environment jsdom
  */
 /**
- * `/drum-difficulties` and `/guitar-difficulties`'s shared flow (plan 0074
- * route model, 2026-08-03): picker -> Expert-track validation -> a scripted
- * `generate-difficulties` run (the real task, `FakeWorker`-backed via its
- * `createWorker` seam) -> the real `ChartEditor` mounts with X/H/M/E visible
- * in the real Chart Matrix. Heavy canvas/WebGL children and `AudioManager`
- * are stubbed (same boundary as `track-edit-page-visibility-seeding.test.tsx`);
- * `ChartDropZone` is replaced with a button that fires `onLoaded` with a
- * fixture chart, since driving its real file/folder pickers needs browser
- * APIs jsdom doesn't have.
+ * `/drum-difficulties` and `/guitar-difficulties`'s shared flow: picker ->
+ * Expert-track validation -> a scripted `generate-difficulties` run (the real
+ * task, `FakeWorker`-backed via its `createWorker` seam) -> a project write
+ * and a push to `/chart-editor`. `AudioManager` is stubbed, because jsdom has
+ * no Web Audio; `createProjectFromDoc` is stubbed, so the tests can read the
+ * document the flow hands over; and `ChartDropZone` is replaced with a button
+ * that fires `onLoaded` with a fixture chart, since driving its real
+ * file/folder pickers needs browser APIs jsdom doesn't have.
  */
 
 import '@testing-library/jest-dom';
@@ -47,7 +46,8 @@ class FakeResizeObserver {
 (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
   FakeResizeObserver;
 
-// Heavy/canvas children — same stubs chart-editor-layout.test.tsx uses.
+// The handoff: the flow pushes `/chart-editor?project=<id>`, so the push is
+// what proves a run reached the editor.
 const mockRouterPush = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({push: mockRouterPush}),
@@ -66,19 +66,6 @@ jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
     createdProjects.push(opts);
     return `project-${createdProjects.length}`;
   }),
-}));
-
-jest.mock('../../chart-editor/HighwayEditor', () => ({
-  __esModule: true,
-  default: () => <div data-testid="highway-editor-stub" />,
-}));
-jest.mock('../../chart-editor/piano-roll/PianoRollTimeline', () => ({
-  __esModule: true,
-  default: () => <div data-testid="piano-roll-stub" />,
-}));
-jest.mock('../../chart-editor/TransportControls', () => ({
-  __esModule: true,
-  default: () => <div data-testid="transport-controls-stub" />,
 }));
 
 // Audio boundary — no real Web Audio in jsdom. Every constructed manager is

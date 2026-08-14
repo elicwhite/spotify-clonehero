@@ -32,12 +32,6 @@ import {
 } from '@/lib/chart-files/chart-package';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
-import {
-  ChartEditorProvider,
-  DEFAULT_VOCALS_SCOPE,
-  ADD_LYRICS_CAPABILITIES,
-  AudioServiceProvider,
-} from '@/components/chart-editor';
 import {track} from '@/lib/analytics/track';
 import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {
@@ -141,18 +135,6 @@ function pickSongFile(chart: LoadedChart): {
 // ---------------------------------------------------------------------------
 
 export default function AddLyricsClient() {
-  return (
-    <AudioServiceProvider>
-      <ChartEditorProvider
-        capabilities={ADD_LYRICS_CAPABILITIES}
-        activeScope={DEFAULT_VOCALS_SCOPE}>
-        <LyricsAlignInner />
-      </ChartEditorProvider>
-    </AudioServiceProvider>
-  );
-}
-
-function LyricsAlignInner() {
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);

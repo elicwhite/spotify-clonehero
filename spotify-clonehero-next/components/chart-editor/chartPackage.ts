@@ -4,14 +4,11 @@
  * The chart-package host boundary: turning an in-memory `ChartDocument` plus
  * the audio files that shipped with it into what `ChartEditor` needs.
  *
- * Two hosts mount the editor this way — `/chart-editor` (through
- * `TrackEditPage`, audio read back from its OPFS project) and the
- * `/drum-difficulties` / `/guitar-difficulties` flow (audio held in memory
- * for the visit) — so the pieces that must agree between them live here:
- * the metronome click stem, the chart delay applied to playback, the
- * waveform PCM and its sample rate, the export audio sources, and the Chart
- * Assist audio boundary with the reason a chart package can't offer every
- * card.
+ * `/chart-editor` mounts the editor this way, through `TrackEditPage`, with
+ * the audio read back from its OPFS project. The pieces a chart-package host
+ * must supply live here: the metronome click stem, the chart delay applied to
+ * playback, the waveform PCM and its sample rate, the export audio sources,
+ * and the Chart Assist audio boundary.
  */
 
 import {useCallback, useMemo} from 'react';
@@ -177,21 +174,6 @@ export async function chartPackageAudioBytes(
   return new Uint8Array(await wav.arrayBuffer());
 }
 
-/**
- * Why a chart-package host can't offer one of the Chart Assist cards' actions.
- * The card still renders — its advice and note counts are worth reading —
- * with the action disabled and this on the tooltip.
- */
-export const CHART_PACKAGE_ASSIST_DISABLED_REASONS = {
-  /** Padding the chart is only half of adding leading silence: a host that
-   *  builds playback straight from the package's audio files and never pads
-   *  them would let a shifted chart drift away from its audio. Declared by
-   *  the difficulty-generation flow, which does exactly that; `TrackEditPage`
-   *  pads both its playback (`usePaddedAudio`) and its exported audio, so it
-   *  declares no reason at all. */
-  leadingSilence: "Can't pad this editor's audio to match a shifted chart yet.",
-} as const;
-
 // ---------------------------------------------------------------------------
 // Editor props
 // ---------------------------------------------------------------------------
@@ -205,18 +187,16 @@ export interface ChartPackageEditorProps {
  * The `ChartEditor` props a chart-package host derives from its prepared
  * audio and its live chart doc.
  *
- * Chart Assist on these hosts, card by card (plan 0074 Phase 2):
+ * Chart Assist on this host, card by card (plan 0074 Phase 2):
  * - Tempo map: RUNS. `generate-tempo-map` needs nothing but the song's audio
  *   bytes, which the chart package supplies.
  * - Lyrics: RUNS. `add-lyrics` needs audio bytes plus the pasted
  *   text. With no stem-cache fingerprint to offer, a chart whose audio was
  *   never separated here takes the Demucs branch, which is exactly what
  *   `/add-lyrics` does with the same input.
- * - Add leading silence: shown either way. A host that builds playback
- *   straight from the package's files declares
- *   `CHART_PACKAGE_ASSIST_DISABLED_REASONS.leadingSilence` and the action is
- *   disabled; a host that pads its playback and its exported audio
- *   (`TrackEditPage`) declares nothing and the action runs.
+ * - Add leading silence: RUNS. `TrackEditPage` pads both its playback
+ *   (`usePaddedAudio`) and its exported audio, so a shifted chart stays with
+ *   its audio.
  * - Drum transcription: RUNS, on charts that have Expert Drums.
  *   `transcribe-drums-from-audio` separates its own drum stem out of the same
  *   audio bytes, so it needs no OPFS drum-transcription project.
