@@ -5,10 +5,8 @@ import {
   CardHeader,
   CardContent,
   Card,
-  CardFooter,
 } from '@/components/ui/card';
 import {buttonVariants} from '@/components/ui/button';
-import {RxExternalLink} from 'react-icons/rx';
 import SupportedBrowserWarning from './SupportedBrowserWarning';
 import {Badge} from '@/components/ui/badge';
 
@@ -31,6 +29,28 @@ export default function Home() {
         <SupportedBrowserWarning />
       </section>
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+        <Card className="flex flex-col justify-between">
+          <CardHeader>
+            <CardTitle>
+              Find Music
+              <Badge className="ml-2 align-middle" variant="default">
+                New
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Find charts on Chorus for the music you already listen to. Match
+              your Spotify or Apple Music library and your listening history,
+              and get recommendations from the artists you play most.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 py-4">
+            <Link
+              href="/find-music"
+              className={buttonVariants({variant: 'default'})}>
+              Go to Tool
+            </Link>
+          </CardContent>
+        </Card>
         <Card className="flex flex-col justify-between">
           <CardHeader>
             <CardTitle>Drum Sheet Music Viewer</CardTitle>
@@ -65,44 +85,6 @@ export default function Home() {
           <CardContent className="grid gap-4 py-4">
             <Link
               href="add-lyrics"
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
-            </Link>
-          </CardContent>
-        </Card>
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Spotify Library Scanner</CardTitle>
-            <CardDescription>
-              Find charts on Chorus that match songs you have saved in your
-              Spotify playlists.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="grid gap-4 py-4">
-            <Link
-              href="/spotify"
-              className={buttonVariants({variant: 'default'})}>
-              Go to Tool
-            </Link>
-          </CardFooter>
-        </Card>
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Spotify History (advanced!)</CardTitle>
-            <CardDescription>
-              If you&apos;ve downloaded your{' '}
-              <a
-                href="https://www.spotify.com/us/account/privacy/"
-                className="text-accent-foreground">
-                Extended Streaming History <RxExternalLink className="inline" />
-              </a>{' '}
-              from your Spotify Account settings, this will find charts to songs
-              you&apos;ve ever listened to.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 py-4">
-            <Link
-              href="spotifyhistory"
               className={buttonVariants({variant: 'default'})}>
               Go to Tool
             </Link>

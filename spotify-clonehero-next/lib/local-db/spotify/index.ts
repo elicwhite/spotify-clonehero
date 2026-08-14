@@ -7,7 +7,6 @@ import type {
   SpotifyPlaylists,
   SpotifyTracks,
 } from '../types';
-import {recalculateTrackChartMatches} from '../queries';
 
 export type DbPlaylistRow = SpotifyPlaylists;
 export type DbAlbumRow = SpotifyAlbums;
@@ -136,8 +135,6 @@ async function upsertTracksPrivate(db: Kysely<DB>, tracks: TrackLike[]) {
       })),
     )
     .execute();
-
-  await recalculateTrackChartMatches(db);
 }
 
 export async function appendPlaylistTracks(

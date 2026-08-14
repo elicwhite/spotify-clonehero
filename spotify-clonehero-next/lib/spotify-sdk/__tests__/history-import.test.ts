@@ -1,16 +1,14 @@
 jest.mock('../../local-db/spotify-history', () => ({
-  hasSpotifyHistory: jest.fn(),
   upsertSpotifyHistory: jest.fn(),
 }));
 jest.mock('../../local-db/client', () => ({getLocalDb: jest.fn()}));
 jest.mock('../../fileSystemHelpers', () => ({
   readJsonFile: jest.fn(),
-  writeFile: jest.fn(),
 }));
 
 import {upsertSpotifyHistory} from '../../local-db/spotify-history';
 import {getLocalDb} from '../../local-db/client';
-import {readJsonFile, writeFile} from '../../fileSystemHelpers';
+import {readJsonFile} from '../../fileSystemHelpers';
 import {tryProcessSpotifyDump} from '../HistoryDumpParsing';
 
 describe('Spotify history import', () => {
@@ -53,19 +51,11 @@ describe('Spotify history import', () => {
       },
     ];
     (readJsonFile as jest.Mock).mockResolvedValue(entries);
-    (writeFile as jest.Mock).mockResolvedValue(undefined);
     (getLocalDb as jest.Mock).mockResolvedValue({
       transaction: () => ({
         execute: (run: (trx: unknown) => Promise<void>) => run({}),
       }),
     });
-    (globalThis as unknown as {navigator: {storage: unknown}}).navigator = {
-      storage: {
-        getDirectory: async () => ({
-          getFileHandle: async () => ({}),
-        }),
-      },
-    } as never;
 
     const handle = {
       async *values() {

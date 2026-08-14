@@ -29,8 +29,12 @@ const nextConfig = {
     // Route model (plan 0074, 2026-08-03): /difficulties was renamed to
     // /drum-difficulties, and the three single-instrument edit routes were
     // folded into /chart-editor, which reads their old OPFS namespaces as
-    // legacy stores so a `?project=` link keeps resolving. Permanent so
-    // search engines and bookmarks update.
+    // legacy stores so a `?project=` link keeps resolving.
+    //
+    // Plan 0106 (2026-08-14): /spotify and /spotifyhistory were retired into
+    // /find-music, which reads the same Spotify library and history.
+    //
+    // Permanent so search engines and bookmarks update.
     return [
       {
         source: '/difficulties',
@@ -50,6 +54,21 @@ const nextConfig = {
       {
         source: '/bass-edit',
         destination: '/chart-editor',
+        permanent: true,
+      },
+      {
+        source: '/spotify',
+        destination: '/find-music',
+        permanent: true,
+      },
+      {
+        source: '/spotify/app',
+        destination: '/find-music',
+        permanent: true,
+      },
+      {
+        source: '/spotifyhistory',
+        destination: '/find-music',
         permanent: true,
       },
     ];

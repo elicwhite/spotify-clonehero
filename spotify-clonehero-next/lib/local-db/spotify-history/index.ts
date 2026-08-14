@@ -5,19 +5,14 @@ import type {
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
 import {normalizeStrForMatching} from '../normalize';
 import type {DB} from '../types';
-import {getLocalDb} from '../client';
 
 const MAX_VARIABLE_NUMBER = 32766;
 const BATCH_SIZE = Math.floor(MAX_VARIABLE_NUMBER / 10);
 
-/**
- * Playback stats are optional: a history restored from the OPFS cache written
- * before they were captured has counts but no timestamps.
- */
 export async function upsertSpotifyHistory(
   trx: Transaction<DB>,
   history: ArtistTrackPlays,
-  stats?: ArtistTrackPlaybackStats,
+  stats: ArtistTrackPlaybackStats,
 ) {
   // First, delete all existing history
   await trx.deleteFrom('spotify_history').execute();
@@ -37,7 +32,7 @@ export async function upsertSpotifyHistory(
 
   for (const [artist, tracksMap] of history.entries()) {
     for (const [trackName, playCount] of tracksMap.entries()) {
-      const trackStats = stats?.get(artist)?.get(trackName);
+      const trackStats = stats.get(artist)?.get(trackName);
       rows.push({
         artist,
         artist_normalized: normalizeStrForMatching(artist),
@@ -57,13 +52,4 @@ export async function upsertSpotifyHistory(
     const batch = rows.slice(i, i + BATCH_SIZE);
     await trx.insertInto('spotify_history').values(batch).execute();
   }
-}
-
-export async function hasSpotifyHistory() {
-  const db = await getLocalDb();
-  const result = await db
-    .selectFrom('spotify_history')
-    .select(db.fn.countAll().as('count'))
-    .executeTakeFirst();
-  return result?.count ?? 0 > 0;
 }

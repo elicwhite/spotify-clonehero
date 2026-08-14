@@ -1,30 +1,26 @@
 import {sendGAEvent} from '@next/third-parties/google';
 
+/**
+ * Where a chart download came from. `downloadSong` takes this same type, so the
+ * two stay in step. 'sheet_music' and 'karaoke' are forward-declared — those
+ * flows can already trigger downloads but don't yet thread `source` through.
+ * Wire them when the relevant pages start passing it.
+ */
+export type ChartDownloadSource =
+  | 'find_music'
+  | 'sheet_music'
+  | 'karaoke'
+  | 'unknown';
+
 export type AnalyticsEvent =
   // Library scan / downloads
   | {event: 'charts_scanned'; value: number}
   | {
       event: 'chart_downloaded';
-      // 'sheet_music' / 'karaoke' are forward-declared — those flows can
-      // already trigger downloads but don't yet thread `source` through.
-      // Wire them when the relevant pages start passing it.
-      source:
-        | 'spotify'
-        | 'spotify_history'
-        | 'sheet_music'
-        | 'karaoke'
-        | 'unknown';
+      source: ChartDownloadSource;
       format: 'sng' | 'chart';
       md5?: string | undefined;
     }
-
-  // Spotify pages
-  | {
-      event: 'spotify_instrument_filter_changed';
-      instruments: string;
-      count: number;
-    }
-  | {event: 'spotify_hide_downloaded_toggled'; enabled: boolean}
 
   // Sheet music
   | {

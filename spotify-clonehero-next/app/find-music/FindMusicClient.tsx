@@ -19,9 +19,13 @@ import {
   onPlaylistCacheUpdated,
   useSpotifyLibraryUpdate,
 } from '@/lib/spotify-sdk/SpotifyFetching';
-import {tryProcessSpotifyDump} from '@/lib/spotify-sdk/HistoryDumpParsing';
+import {
+  discardLegacyHistoryDumpCache,
+  tryProcessSpotifyDump,
+} from '@/lib/spotify-sdk/HistoryDumpParsing';
 import {
   getLocalScanWarning,
+  scanGrantedSongsDirectory,
   tryScanForInstalledCharts,
 } from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
@@ -61,6 +65,9 @@ import {
 
 type Snapshot = {music: FindMusicSong[]; radar: RadarSong[]};
 type CatalogState = 'opening' | 'refreshing' | 'ready' | 'degraded';
+type LocalScanResult = NonNullable<
+  Awaited<ReturnType<typeof tryScanForInstalledCharts>>
+>;
 
 const EMPTY_STATS: FindMusicStats = {
   historySongs: 0,
@@ -105,6 +112,7 @@ export default function FindMusicClient() {
   const initializedRef = useRef(false);
   const committedRef = useRef<Snapshot>({music: [], radar: []});
   const sourceAccessEnabledRef = useRef(false);
+  const storedFolderScannedRef = useRef(false);
   const activeControllersRef = useRef<AbortController[]>([]);
   const snapshotQueueRef = useRef(Promise.resolve());
   const chorusRefreshInFlightRef = useRef<Promise<void> | null>(null);
@@ -395,6 +403,13 @@ export default function FindMusicClient() {
     };
   }, []);
 
+  // Unconditional, and outside the source-access gate above: the browsers that
+  // still hold this file are the ones whose listening history lives only there,
+  // so they may have no local database to gate on.
+  useEffect(() => {
+    void discardLegacyHistoryDumpCache();
+  }, []);
+
   useEffect(() => {
     if (!sourceAccessChecked || !sourceAccessEnabled) return;
     let canceled = false;
@@ -524,42 +539,72 @@ export default function FindMusicClient() {
     user,
   ]);
 
+  const runScan = useCallback(
+    async (
+      scan: (
+        onProgress: (count: number) => void,
+      ) => Promise<LocalScanResult | null>,
+      {announceFailure}: {announceFailure: boolean},
+    ) => {
+      try {
+        const result = await scan(count => {
+          setLocalStatus({
+            phase: 'loading',
+            summary: `Scanning… ${count.toLocaleString()} charts found`,
+          });
+        });
+        if (result == null) {
+          setLocalStatus(null);
+          return;
+        }
+        if (result.status === 'partial') {
+          toast.warning(getLocalScanWarning(result.issues.length));
+        }
+        setLocalStatus({
+          phase: 'ready',
+          summary:
+            result.status === 'partial'
+              ? `${result.installedCharts.length.toLocaleString()} charts found before some locations were skipped`
+              : `${result.installedCharts.length.toLocaleString()} installed charts`,
+          detail: 'Scanned just now',
+        });
+        await stageSnapshot();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setLocalStatus({
+          phase: 'error',
+          summary: 'Local scan failed',
+          detail: message,
+        });
+        // A scan the user asked for reports its failure both ways. One that
+        // ran on its own states it on the card only: a toast would blame the
+        // user for a folder they never touched this visit.
+        if (announceFailure) toast.error(message);
+      }
+    },
+    [stageSnapshot],
+  );
+
   const runLocalScan = useCallback(async () => {
     activateSourceAccess();
     setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
-    try {
-      const result = await tryScanForInstalledCharts(count => {
-        setLocalStatus({
-          phase: 'loading',
-          summary: `Scanning… ${count.toLocaleString()} charts found`,
-        });
-      });
-      if (result == null) {
-        setLocalStatus(null);
-        return;
-      }
-      if (result.status === 'partial') {
-        toast.warning(getLocalScanWarning(result.issues.length));
-      }
-      setLocalStatus({
-        phase: 'ready',
-        summary:
-          result.status === 'partial'
-            ? `${result.installedCharts.length.toLocaleString()} charts found before some locations were skipped`
-            : `${result.installedCharts.length.toLocaleString()} installed charts`,
-        detail: 'Scanned just now',
-      });
-      await stageSnapshot();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setLocalStatus({
-        phase: 'error',
-        summary: 'Local scan failed',
-        detail: message,
-      });
-      toast.error(message);
-    }
-  }, [activateSourceAccess, stageSnapshot]);
+    await runScan(tryScanForInstalledCharts, {announceFailure: true});
+  }, [activateSourceAccess, runScan]);
+
+  // The Songs folder picked in an earlier visit is rescanned on load, so
+  // install state is current without being asked for. `scanGrantedSongsDirectory`
+  // returns null rather than prompting when no folder is stored or its
+  // permission has lapsed, which is what makes this safe outside a user gesture.
+  const rescanStoredFolder = useCallback(async () => {
+    await runScan(scanGrantedSongsDirectory, {announceFailure: false});
+  }, [runScan]);
+
+  useEffect(() => {
+    if (!sourceAccessChecked || !sourceAccessEnabled) return;
+    if (storedFolderScannedRef.current) return;
+    storedFolderScannedRef.current = true;
+    void rescanStoredFolder();
+  }, [rescanStoredFolder, sourceAccessChecked, sourceAccessEnabled]);
 
   const spotifyLibraryStatus = useMemo<SourceStatus>(() => {
     if (spotifyProgress.updateStatus === 'fetching') {

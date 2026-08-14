@@ -3,6 +3,7 @@ import {sql, type Kysely} from 'kysely';
 import type {DB} from '../../lib/local-db/types';
 import {drumTypes} from '@eliwhite/scan-chart';
 import {isDrumType} from '@/lib/chorusChartDb/types';
+import {removeStyleTags} from '@/lib/ui-utils';
 import type {
   FindMusicChart,
   FindMusicProviderAction,
@@ -114,7 +115,10 @@ function toChart(row: ChartRow): FindMusicChart {
     md5: row.md5,
     artist: row.chart_artist,
     name: row.chart_name,
-    charter: row.charter,
+    // The mirror stores charter names as Chorus holds them, Unity rich-text
+    // markup included. Strip it here so the badge, the exclusion filter and
+    // the download folder name all see the plain name.
+    charter: removeStyleTags(row.charter),
     modifiedTime: row.modified_time,
     albumArtMd5: row.album_art_md5,
     groupId: Number(row.group_id),

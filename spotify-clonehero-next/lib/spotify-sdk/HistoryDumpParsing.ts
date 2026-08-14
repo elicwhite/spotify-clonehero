@@ -1,17 +1,12 @@
-import {readJsonFile, writeFile} from '@/lib/fileSystemHelpers';
-import {
-  hasSpotifyHistory,
-  upsertSpotifyHistory,
-} from '@/lib/local-db/spotify-history';
+import {readJsonFile} from '@/lib/fileSystemHelpers';
+import {upsertSpotifyHistory} from '@/lib/local-db/spotify-history';
 import {getLocalDb} from '@/lib/local-db/client';
+
+const LEGACY_HISTORY_DUMP_FILE = 'spotifyHistoryDump.json';
 
 export type ArtistTrackPlays = Map<string, Map<string, number>>;
 
-/**
- * Playback detail that sits alongside the play counts. Kept separate from
- * ArtistTrackPlays because that map is what the OPFS cache file stores, and a
- * cache written before this existed must keep deserializing.
- */
+/** Playback detail that sits alongside the play counts. */
 export type TrackPlaybackStats = {
   firstPlayedAt: string | null;
   lastPlayedAt: string | null;
@@ -29,33 +24,19 @@ export type SpotifyHistoryImportResult =
 
 class SpotifyHistorySelectionError extends Error {}
 
-export async function getSpotifyDumpArtistTrackPlays() {
-  const root = await navigator.storage.getDirectory();
-  let installedChartsCacheHandle: FileSystemFileHandle;
+/**
+ * Remove the OPFS copy of an imported history that this module used to keep
+ * beside the `spotify_history` table. The table is the only store now, so the
+ * file is a stale second copy of the user's listening history and is deleted
+ * wherever it is still found.
+ */
+export async function discardLegacyHistoryDumpCache() {
   try {
-    installedChartsCacheHandle = await root.getFileHandle(
-      'spotifyHistoryDump.json',
-    );
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry(LEGACY_HISTORY_DUMP_FILE);
   } catch {
-    // Cache dump doesn't exist, return null
-    return null;
+    // Not having the file is the ordinary case, not a failure.
   }
-
-  const cachedInstalledCharts = await readJsonFile(installedChartsCacheHandle);
-  const artistTrackPlays = deserialize(cachedInstalledCharts);
-
-  if (artistTrackPlays != null) {
-    const hasHistoryInDb = await hasSpotifyHistory();
-
-    if (!hasHistoryInDb) {
-      const db = await getLocalDb();
-      await db.transaction().execute(async trx => {
-        await upsertSpotifyHistory(trx, artistTrackPlays);
-      });
-    }
-  }
-
-  return artistTrackPlays;
 }
 
 export async function tryProcessSpotifyDump(
@@ -66,7 +47,10 @@ export async function tryProcessSpotifyDump(
     const {plays: artistTrackPlays, stats} =
       createPlaysMapOfSpotifyData(results);
 
-    await cacheArtistTrackPlays(artistTrackPlays, stats);
+    const db = await getLocalDb();
+    await db.transaction().execute(async trx => {
+      await upsertSpotifyHistory(trx, artistTrackPlays, stats);
+    });
     return {status: 'imported', plays: artistTrackPlays};
   } catch (error) {
     if (error instanceof SpotifyHistorySelectionError) {
@@ -74,53 +58,6 @@ export async function tryProcessSpotifyDump(
     }
     throw error;
   }
-}
-
-async function cacheArtistTrackPlays(
-  artistTrackPlays: ArtistTrackPlays,
-  stats: ArtistTrackPlaybackStats,
-) {
-  const serialized = serialize(artistTrackPlays);
-  const root = await navigator.storage.getDirectory();
-  const installedChartsCacheHandle = await root.getFileHandle(
-    'spotifyHistoryDump.json',
-    {
-      create: true,
-    },
-  );
-
-  await Promise.all([
-    writeFile(installedChartsCacheHandle, serialized),
-    getLocalDb().then(db => {
-      return db.transaction().execute(async trx => {
-        await upsertSpotifyHistory(trx, artistTrackPlays, stats);
-      });
-    }),
-  ]);
-}
-
-function deserialize(cachedInstalledCharts: any): ArtistTrackPlays | null {
-  if (cachedInstalledCharts == null) {
-    return null;
-  }
-
-  if (!Array.isArray(cachedInstalledCharts)) {
-    throw new Error('Expected cached Spotify dump to be an array');
-  }
-
-  return new Map(
-    cachedInstalledCharts.map(([artist, tracks]) => {
-      return [artist, new Map(tracks)];
-    }),
-  );
-}
-
-function serialize(artistTrackPlays: ArtistTrackPlays) {
-  return JSON.stringify(
-    Array.from(artistTrackPlays.entries()).map(([artist, tracks]) => {
-      return [artist, Array.from(tracks.entries())];
-    }),
-  );
 }
 
 async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {

@@ -185,8 +185,6 @@ it is a density variant of a shared shell, not an outlier to normalize away.
 | `/sheet-music` | `app/sheet-music/opengraph-image.tsx` (140) | bespoke |
 | `/sheet-music/[slug]` | `app/sheet-music/[slug]/opengraph-image.tsx` | bespoke, dynamic |
 | `/sng` | `app/sng/opengraph-image.tsx` (127) | bespoke |
-| `/spotify` | `app/spotify/opengraph-image.tsx` (127) | bespoke |
-| `/spotifyhistory` | `app/spotifyhistory/opengraph-image.tsx` (112) | bespoke |
 | `/add-lyrics` | `app/add-lyrics/opengraph-image.tsx` (104) | bespoke |
 
 Observed duplication and drift:

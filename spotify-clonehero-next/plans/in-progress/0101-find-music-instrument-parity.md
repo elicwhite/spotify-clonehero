@@ -54,9 +54,9 @@ displays — sits unused in the same row.
 Mirror-wide: 26,076 charts show a drums badge, 12,473 render `?`, and 12,090 of
 those (97%) already have `diff_drums` populated.
 
-`/spotify` and `/spotifyhistory` have the same defect independently, reading
-`diff_drums_real` as the drums difficulty (`app/spotify/app/Spotify.tsx:340`,
-`app/spotifyhistory/SpotifyHistory.tsx:371`).
+~~`/spotify` and `/spotifyhistory` have the same defect independently, reading
+`diff_drums_real` as the drums difficulty.~~ Both pages were deleted by plan
+0106 (2026-08-14); `/find-music` is the only page left with this defect.
 
 ### Defect 3 — the mirror drops the track-level fields
 
@@ -187,8 +187,8 @@ Nothing downstream is final until this completes.
     (instrument filter), `FindMusicTable.tsx:846-851` (badges), and
     `FindMusicTable.tsx:726-733` (evidence tooltip). Extract one predicate over
     `FindMusicChart`; all four call it.
-13. Point `/spotify` and `/spotifyhistory` at `diff_drums` so the three pages
-    agree.
+13. ~~Point `/spotify` and `/spotifyhistory` at `diff_drums` so the three pages
+    agree.~~ Moot: plan 0106 deleted both pages.
 
 ## Sequencing against plan 0100
 
@@ -208,7 +208,6 @@ coverage". This plan produces that measurement; revisit them after, not before.
 - No chart renders `?` when the corresponding `diff_*` is `>= 0`.
 - No chart renders an empty instrument column.
 - Presence is decided by one predicate, one call site per consumer.
-- `/find-music`, `/spotify`, and `/spotifyhistory` show the same drums intensity.
 - Tests cover: `diff = 0` with a track, `diff = 0` without, `diff = -1` with a
   track, `diff ≥ 1` without, each drum type, and the `proDrums` → `drums` filter
   migration.

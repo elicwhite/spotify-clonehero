@@ -11,7 +11,6 @@ import {
   updateScanProgress,
   completeScanSession,
 } from './scanning';
-import {recalculateTrackChartMatches} from '../queries';
 
 const MAX_VARIABLE_NUMBER = 32766;
 
@@ -207,15 +206,13 @@ export async function upsertCharts(
   // Drop the temp table
   await trx.schema.dropTable(tempTable).execute();
 
-  await recalculateTrackChartMatches(trx);
-
   const after = performance.now();
   console.log('Upserted charts in', (after - before) / 1000, 'seconds');
 }
 
 export async function clearAllCharts(db: Kysely<DB>): Promise<void> {
   await db.deleteFrom('chorus_charts').execute();
-  await recalculateTrackChartMatches(db);
+  await db.deleteFrom('spotify_track_chart_matches').execute();
 }
 
 // Metadata operations
@@ -278,7 +275,6 @@ export async function replaceChorusCatalog(
     .deleteFrom('chorus_metadata')
     .where('key', '=', 'charts_data_version')
     .execute();
-  await recalculateTrackChartMatches(db);
   await upsertCharts(db, charts);
   const scanId = await createScanSession(db, new Date(lastRun), 1);
   await completeScanSession(db, scanId, lastRun);
@@ -292,7 +288,7 @@ export async function clearAllData(): Promise<void> {
     await trx.deleteFrom('chorus_charts').execute();
     await trx.deleteFrom('chorus_scan_sessions').execute();
     await trx.deleteFrom('chorus_metadata').execute();
-    await recalculateTrackChartMatches(trx);
+    await trx.deleteFrom('spotify_track_chart_matches').execute();
   });
 }
 

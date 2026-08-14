@@ -2,6 +2,12 @@ import {getLocalDb} from './client';
 import type {DB} from './types';
 import {Kysely} from 'kysely';
 
+/**
+ * Fills `spotify_track_chart_matches`, which nothing reads: Find Music matches
+ * on normalized artist and name inside its own queries. Migration 007 is the
+ * only caller, and it has to keep working for a database older than 007, so the
+ * function stays until the table itself is dropped.
+ */
 export async function recalculateTrackChartMatches(db?: Kysely<DB>) {
   if (!db) {
     db = await getLocalDb();

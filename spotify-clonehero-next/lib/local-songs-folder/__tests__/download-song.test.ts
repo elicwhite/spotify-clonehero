@@ -90,7 +90,7 @@ function successfulDownloadOptions(folder: FileSystemDirectoryHandle) {
   return {
     folder,
     asSng: true,
-    source: 'spotify' as const,
+    source: 'find_music' as const,
     md5: 'chart-md5',
   };
 }
@@ -192,7 +192,7 @@ describe('downloadSong outcomes', () => {
     expect(copyPipeTo).toHaveBeenCalledWith(destinationWritable);
     expect(mockTrack).toHaveBeenCalledWith({
       event: 'chart_downloaded',
-      source: 'spotify',
+      source: 'find_music',
       format: 'sng',
       md5: 'chart-md5',
     });

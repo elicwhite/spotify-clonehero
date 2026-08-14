@@ -104,12 +104,43 @@ jest.mock('../../../lib/apple-music/navigation', () => ({
     mockNavigateToAppleMusicPath(path),
 }));
 
-jest.mock('../../../lib/spotify-sdk/HistoryDumpParsing', () => ({
-  tryProcessSpotifyDump: jest.fn(),
+const mockToastError = jest.fn();
+const mockToastWarning = jest.fn();
+jest.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+    warning: (...args: unknown[]) => mockToastWarning(...args),
+    info: jest.fn(),
+    success: jest.fn(),
+  },
 }));
 
+const mockDiscardLegacyHistoryDumpCache = jest.fn(async () => undefined);
+jest.mock('../../../lib/spotify-sdk/HistoryDumpParsing', () => ({
+  tryProcessSpotifyDump: jest.fn(),
+  discardLegacyHistoryDumpCache: () => mockDiscardLegacyHistoryDumpCache(),
+}));
+
+type LocalScanResult = {
+  status: 'complete' | 'partial';
+  lastScanned: Date;
+  installedCharts: unknown[];
+  issues: Array<{path: string}>;
+};
+type ScanProgress = ((count: number) => void) | undefined;
+const mockTryScanForInstalledCharts = jest.fn(
+  async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
+);
+const mockScanGrantedSongsDirectory = jest.fn(
+  async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
+);
 jest.mock('../../../lib/local-songs-folder', () => ({
-  tryScanForInstalledCharts: jest.fn(),
+  tryScanForInstalledCharts: (onProgress?: (count: number) => void) =>
+    mockTryScanForInstalledCharts(onProgress),
+  scanGrantedSongsDirectory: (onProgress?: (count: number) => void) =>
+    mockScanGrantedSongsDirectory(onProgress),
+  getLocalScanWarning: (issueCount: number) =>
+    `${issueCount} locations skipped`,
 }));
 
 const mockGetFindMusicSongs = jest.fn();
@@ -887,4 +918,121 @@ it('holds source-driven matches until the user explicitly re-ranks', async () =>
     expect(screen.getByTestId('music-table')).toHaveTextContent('Alpha,Beta'),
   );
   expect(screen.queryByTestId('held-matches')).not.toBeInTheDocument();
+});
+
+// Contracts ported from the deleted `/spotify` suite (plan 0106). Their
+// subject moved to `runLocalScan`; the behavior they describe did not change.
+
+function completeScan(): LocalScanResult {
+  return {
+    status: 'complete',
+    lastScanned: new Date(),
+    installedCharts: [],
+    issues: [],
+  };
+}
+
+async function renderSetupGuide() {
+  mockGetFindMusicSongs.mockResolvedValue([]);
+  mockGetFindMusicStats.mockResolvedValue({
+    ...stats,
+    historySongs: 0,
+    libraryTracks: 0,
+    chorusCharts: 0,
+  });
+  render(<FindMusicClient />);
+  return await screen.findByRole('button', {name: 'Choose Songs folder'});
+}
+
+it('shows one aggregate warning for a partial local scan', async () => {
+  mockTryScanForInstalledCharts.mockResolvedValue({
+    status: 'partial',
+    lastScanned: new Date(),
+    installedCharts: [],
+    issues: [{path: 'Songs/Inaccessible'}, {path: 'Songs/Offline'}],
+  });
+
+  fireEvent.click(await renderSetupGuide());
+
+  await waitFor(() =>
+    expect(mockToastWarning).toHaveBeenCalledWith('2 locations skipped'),
+  );
+  expect(mockToastWarning).toHaveBeenCalledTimes(1);
+});
+
+it('leaves the local card actionable when folder selection is canceled', async () => {
+  mockTryScanForInstalledCharts.mockResolvedValue(null);
+
+  fireEvent.click(await renderSetupGuide());
+
+  expect(
+    await screen.findByRole('button', {name: 'Choose Songs folder'}),
+  ).toBeInTheDocument();
+  expect(mockToastError).not.toHaveBeenCalled();
+});
+
+it('reports a folder acquisition failure on the card and in a toast', async () => {
+  mockTryScanForInstalledCharts.mockRejectedValue(
+    new Error('Songs folder failed'),
+  );
+
+  fireEvent.click(await renderSetupGuide());
+
+  await waitFor(() =>
+    expect(mockToastError).toHaveBeenCalledWith('Songs folder failed'),
+  );
+  expect(await screen.findByText('Songs folder failed')).toBeInTheDocument();
+});
+
+it('rescans a Songs folder chosen in an earlier visit, without a prompt', async () => {
+  mockScanGrantedSongsDirectory.mockResolvedValue(completeScan());
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  render(<FindMusicClient />);
+
+  await waitFor(() =>
+    expect(mockScanGrantedSongsDirectory).toHaveBeenCalledTimes(1),
+  );
+  // The automatic path never reaches the picker: that would need a gesture.
+  expect(mockTryScanForInstalledCharts).not.toHaveBeenCalled();
+});
+
+it('says nothing when no Songs folder is stored to rescan', async () => {
+  mockScanGrantedSongsDirectory.mockResolvedValue(null);
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  render(<FindMusicClient />);
+
+  await waitFor(() =>
+    expect(mockScanGrantedSongsDirectory).toHaveBeenCalledTimes(1),
+  );
+  expect(mockToastError).not.toHaveBeenCalled();
+  expect(mockToastWarning).not.toHaveBeenCalled();
+});
+
+it('states an automatic rescan failure on the card without a toast', async () => {
+  mockScanGrantedSongsDirectory.mockRejectedValue(new Error('Folder is gone'));
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  render(<FindMusicClient />);
+
+  await waitFor(() =>
+    expect(screen.getByTestId('sidebar')).toHaveAttribute(
+      'data-local-phase',
+      'error',
+    ),
+  );
+  // A scan nobody asked for does not interrupt with a toast.
+  expect(mockToastError).not.toHaveBeenCalled();
+});
+
+it('discards the legacy OPFS history dump even with no local database', async () => {
+  mockLocalDbExists.mockResolvedValue(false);
+  window.sessionStorage.clear();
+
+  render(<FindMusicClient />);
+
+  await waitFor(() =>
+    expect(mockDiscardLegacyHistoryDumpCache).toHaveBeenCalled(),
+  );
 });

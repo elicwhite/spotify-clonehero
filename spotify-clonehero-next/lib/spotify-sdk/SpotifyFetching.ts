@@ -382,26 +382,6 @@ export async function resolveSpotifyTrackUrls({
   return getTrackUrls(sdk, artist, song);
 }
 
-export function useTrackUrls(
-  artist: string,
-  song: string,
-): () => Promise<null | {
-  previewUrl: string | null;
-  spotifyUrl: string;
-}> {
-  const getPreviewUrl = useCallback(async () => {
-    const sdk = await getSpotifySdk();
-
-    if (sdk == null) {
-      return null;
-    }
-
-    return await getTrackUrls(sdk, artist, song);
-  }, [artist, song]);
-
-  return getPreviewUrl;
-}
-
 export type SpotifyLibraryUpdateProgress = {
   playlists: PlaylistProgressMetadata;
   albums: AlbumProgressMetadata;

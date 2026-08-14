@@ -249,6 +249,14 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
 
   fireEvent.click(screen.getByRole('button', {name: 'Install'}));
   await waitFor(() => expect(mockDownloadSong).toHaveBeenCalledTimes(1));
+  // The source names this page, so downloads from it are attributable.
+  expect(mockDownloadSong).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    expect.objectContaining({source: 'find_music'}),
+  );
   await waitFor(() => expect(screen.getAllByText('Installed')).toHaveLength(2));
 });
 

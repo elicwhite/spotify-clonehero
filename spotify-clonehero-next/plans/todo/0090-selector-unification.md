@@ -109,7 +109,7 @@ A fourth chart-package entry point, **click-only, no drop**, deliberately compac
 | `app/sng/components/SngLanding.tsx:29` | `pickFiles({id:'sng-modify', types:[{accept:{'application/octet-stream':['.sng']}}]})` | Card button |
 | `app/sng/SngClient.tsx:37` | `showDirectoryPicker({id:'sng-convert-folder', mode:'readwrite'})` | Only **readwrite** picker in the app |
 | `app/chart-review/ChartReviewClient.tsx:495, 509` | `showDirectoryPicker` + `showOpenFilePicker` (`.tsv`) | Internal tool; persists handles in IndexedDB |
-| `lib/local-songs-folder/index.ts:16`, `app/drum-fills/hooks/useLibraryScan.ts:58`, `app/spotifyhistory/SpotifyHistory.tsx:173` | `showDirectoryPicker` | Library/settings-level, not a per-task selector |
+| `lib/local-songs-folder/index.ts:16`, `app/drum-fills/hooks/useLibraryScan.ts:58` | `showDirectoryPicker` | Library/settings-level, not a per-task selector |
 | `app/drum-fills/components/MidiStatus.tsx:89` | hidden input `.yaml` | MIDI profile, not audio/chart |
 
 ### 1.12 Page-specific behavior wired around the selectors

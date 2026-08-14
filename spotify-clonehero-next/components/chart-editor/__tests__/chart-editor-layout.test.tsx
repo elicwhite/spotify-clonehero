@@ -92,11 +92,11 @@ describe('editor density scope (plan 0074 Phase 7 task 7c)', () => {
     expect(document.documentElement.dataset['density']).toBeUndefined();
   });
 
-  it('does not mark a non-editor page compact (/spotify)', async () => {
-    // Dynamic import so this suite doesn't drag /spotify's module graph
-    // (Supabase client, etc.) into every other test in this file.
-    const {default: WelcomeCard} = await import('@/app/spotify/WelcomeCard');
-    render(<WelcomeCard />);
+  it('does not mark a non-editor page compact (/privacy)', async () => {
+    // Dynamic import so this suite doesn't drag another page's module graph
+    // into every other test in this file.
+    const {default: PrivacyPage} = await import('@/app/privacy/page');
+    render(<PrivacyPage />);
 
     expect(document.documentElement.dataset['density']).toBeUndefined();
   });
@@ -175,7 +175,7 @@ describe('site header + editor header row (plan 0074 Phase 8 task 8c)', () => {
   });
 
   it('keeps the full site nav, and no compact header, on a non-editor route', () => {
-    mockPathname = '/spotify';
+    mockPathname = '/find-music';
     render(<SiteHeader siteNav={<SiteNavStub />} />);
 
     expect(screen.getByText('Music Charts Tools')).toBeInTheDocument();

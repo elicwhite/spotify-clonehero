@@ -1,7 +1,7 @@
 import {get, set} from 'idb-keyval';
 import filenamify from 'filenamify/browser';
 
-import {track} from '@/lib/analytics/track';
+import {track, type ChartDownloadSource} from '@/lib/analytics/track';
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {
   LocalChartScanIssue,
@@ -45,6 +45,24 @@ let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
  * permission failures resolve to null rather than throwing.
  */
 export async function getCachedSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+  return await recoverStoredHandle({mayRequestPermission: true});
+}
+
+/**
+ * The same recovery, but it never calls `requestPermission`. A re-grant needs a
+ * user gesture, so a caller that runs on page load — with no gesture to spend —
+ * must take the handle only when permission is already granted, and do nothing
+ * otherwise.
+ */
+export async function getGrantedSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+  return await recoverStoredHandle({mayRequestPermission: false});
+}
+
+async function recoverStoredHandle({
+  mayRequestPermission,
+}: {
+  mayRequestPermission: boolean;
+}): Promise<FileSystemDirectoryHandle | null> {
   if (currentSongDirectoryCache) {
     return currentSongDirectoryCache;
   }
@@ -70,7 +88,7 @@ export async function getCachedSongsDirectoryHandle(): Promise<FileSystemDirecto
   const opts = {mode: 'readwrite'} as const;
   try {
     let permission = await perm.queryPermission(opts);
-    if (permission !== 'granted') {
+    if (permission !== 'granted' && mayRequestPermission) {
       permission = await perm.requestPermission(opts);
     }
     if (permission !== 'granted') {
@@ -116,6 +134,22 @@ export async function tryScanForInstalledCharts(
   onProgress: (count: number) => void = () => {},
 ): Promise<InstalledChartsResponse | null> {
   const handle = await tryGetSongsDirectoryHandle();
+  if (!handle) {
+    return null;
+  }
+
+  return await scanInstalledCharts(handle, onProgress);
+}
+
+/**
+ * Rescan the Songs folder chosen in an earlier visit. Returns null when no
+ * folder is stored or its permission has lapsed, so a page can call this on
+ * load without ever showing the user a picker or a permission prompt.
+ */
+export async function scanGrantedSongsDirectory(
+  onProgress: (count: number) => void = () => {},
+): Promise<InstalledChartsResponse | null> {
+  const handle = await getGrantedSongsDirectoryHandle();
   if (!handle) {
     return null;
   }
@@ -354,12 +388,7 @@ export async function downloadSong(
     folder?: FileSystemDirectoryHandle;
     replaceExisting?: boolean;
     asSng?: boolean;
-    source?:
-      | 'spotify'
-      | 'spotify_history'
-      | 'sheet_music'
-      | 'karaoke'
-      | 'unknown';
+    source?: ChartDownloadSource;
     md5?: string;
   },
 ): Promise<

@@ -15,7 +15,7 @@ import {render, screen} from '@testing-library/react';
 import SiteHeader, {SiteMain} from '../SiteChrome';
 import EditorHeaderRow from '../chart-editor/EditorHeaderRow';
 
-let mockPathname = '/spotify';
+let mockPathname = '/privacy';
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(),
@@ -40,7 +40,7 @@ function renderChrome(children?: React.ReactNode) {
 
 describe('SiteHeader', () => {
   beforeEach(() => {
-    mockPathname = '/spotify';
+    mockPathname = '/privacy';
   });
 
   it('renders the full site nav on a non-editor page', () => {
@@ -106,7 +106,7 @@ describe('SiteHeader', () => {
 
 describe("EditorHeaderRow (the editor's own song-identity row)", () => {
   it('always renders its own row, independent of route or site chrome', () => {
-    mockPathname = '/spotify';
+    mockPathname = '/privacy';
     render(<EditorHeaderRow>Song title</EditorHeaderRow>);
 
     expect(screen.getByText('Song title')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('SiteMain (plan 0076 item 2: no gap below the compact header)', () => {
   });
 
   it('keeps the full padding on a non-editor route', () => {
-    mockPathname = '/spotify';
+    mockPathname = '/privacy';
     render(
       <SiteMain>
         <div data-testid="content">content</div>

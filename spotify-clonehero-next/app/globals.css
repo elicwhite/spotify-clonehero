@@ -149,7 +149,7 @@
    * Dialogs, AlertDialogs all render into `document.body`, outside the
    * editor's own subtree, and a compact editor with full-size popovers
    * hanging off it is not the prototype. Pages that never mount an editor
-   * (`/spotify`, `/sheet-music`, ...) never carry the attribute, so they
+   * (`/find-music`, `/sheet-music`, ...) never carry the attribute, so they
    * render exactly as they did before this scope existed — nothing here
    * is a global token edit.
    *

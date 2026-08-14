@@ -12,7 +12,7 @@ export default async function SpotifyLoginPage({
 
   if (!error && data?.user) {
     const params = await searchParams;
-    redirect(params.next || '/spotify');
+    redirect(params.next || '/find-music');
   }
 
   // Render a Spotify-only login form by reusing LoginForm, but hide email/discord
