@@ -658,9 +658,8 @@ export default function ExportDialog({
                       </span>
                     ) : (
                       <span>
-                        This chart was made as .mid. A .chart file writes lyrics
-                        as plain text, so converting drops vocal note pitches,
-                        phrase lengths, and any harmony parts.
+                        This chart was made as .mid. Converting to .chart can be
+                        lossy, some .mid-only data may not survive.
                       </span>
                     )}
                   </p>

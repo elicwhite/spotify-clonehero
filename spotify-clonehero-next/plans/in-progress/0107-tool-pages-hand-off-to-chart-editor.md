@@ -96,10 +96,10 @@ Work:
 
 - Thread the project's `chartFileFormat` from `TrackEditPage` into
   `sourceChartFormat`, and set `chartFormatSelectable`.
-- The existing warning text at `:655-668` is generic ("some .mid-only data may
-  not survive"). Make it name what actually goes: for `.mid` → `.chart`, vocal
-  pitches, phrase lengths, and harmony parts. That sentence is the reason this
-  phase exists.
+- Keep the warning text generic and symmetric in both directions. Naming
+  specific casualties (vocal note pitches, phrase lengths, harmony parts) reads
+  as a claim that the app authored that data. It says the format changed and
+  the change can be lossy, which is what the user needs to decide.
 - Keep the user's original filename for an export whose format is unchanged.
   `chartPackageFileName` has no override today; add one.
 
