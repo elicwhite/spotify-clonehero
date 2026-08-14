@@ -174,6 +174,7 @@ export {
 // Lyric helpers (vocal part lyrics)
 export {
   DEFAULT_VOCALS_PART,
+  hasAnyLyrics,
   lyricId,
   listLyricTicks,
   moveLyric,

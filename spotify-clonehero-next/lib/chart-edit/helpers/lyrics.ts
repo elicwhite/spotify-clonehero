@@ -59,6 +59,20 @@ function getVocalPart(
   return doc.parsedChart.vocalTracks?.parts?.[partName] ?? null;
 }
 
+/**
+ * Whether the document carries lyrics on any vocal part.
+ *
+ * Asks about the chart as a whole, not one part, so a caller can tell a
+ * lyrics-only chart from an empty one without knowing which part holds them.
+ */
+export function hasAnyLyrics(doc: ChartDocument): boolean {
+  const parts = doc.parsedChart.vocalTracks?.parts;
+  if (!parts) return false;
+  return Object.values(parts).some(part =>
+    part.notePhrases.some(phrase => phrase.lyrics.length > 0),
+  );
+}
+
 /** All lyric ticks in the named vocal part, sorted ascending. */
 export function listLyricTicks(
   doc: ChartDocument,

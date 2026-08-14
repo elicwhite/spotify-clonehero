@@ -28,6 +28,7 @@ import {
   getAudioAnchor,
   readChartForEditing,
   setAudioAnchor,
+  hasAnyLyrics,
 } from '@/lib/chart-edit';
 import {
   documentIdentityFields,
@@ -41,7 +42,12 @@ import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {AudioServiceProvider} from './AudioServiceContext';
-import {trackKeyId, type EditorScope} from './scope';
+import {
+  DEFAULT_VOCALS_SCOPE,
+  scopePaneKey,
+  trackKeyId,
+  type EditorScope,
+} from './scope';
 import ChartEditor from './ChartEditor';
 import type {AlbumArtFile} from '@/lib/album-art';
 import type {AudioSource} from './ExportDialog';
@@ -86,10 +92,10 @@ import AudioDropZone, {
 
 /**
  * Message shown for a chart with nothing this editor can open: no guitar,
- * bass or drum track at any difficulty.
+ * bass or drum track at any difficulty, and no lyrics either.
  */
 export const NO_SUPPORTED_TRACK_MESSAGE =
-  'No guitar, bass, or drum track found in chart.';
+  'No guitar, bass, drum, or vocal track found in chart.';
 
 /**
  * Configuration for an OPFS-project-backed chart-edit page (`/chart-editor`).
@@ -272,7 +278,8 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
 
         if (
           highestDifficultyTrackKeys(chartDoc.parsedChart.trackData).length ===
-          0
+            0 &&
+          !hasAnyLyrics(chartDoc)
         ) {
           throw new Error(NO_SUPPORTED_TRACK_MESSAGE);
         }
@@ -669,14 +676,15 @@ function TrackEditEditor({
         }
         const parsed = chartDoc.parsedChart;
 
-        // 4. Resolve the tracks to open: every instrument's highest charted
-        // difficulty (route model, plan 0074). The scope to focus is drums
-        // when it's among them, else the first one — a chart with none of
-        // them has nothing this editor can open.
+        // 4. Resolve the scope to open. Every instrument's highest charted
+        // difficulty is seeded (route model, plan 0074); the one to focus is
+        // drums when it's among them, else the first. A chart with no
+        // instrument track but with lyrics opens on vocals instead — that is
+        // the shape `/add-lyrics` hands over.
         const seededKeys = highestDifficultyTrackKeys(parsed.trackData);
         const scopeTrack =
           seededKeys.find(k => k.instrument === 'drums') ?? seededKeys[0];
-        if (!scopeTrack) {
+        if (!scopeTrack && !hasAnyLyrics(chartDoc)) {
           throw new Error(
             `${NO_SUPPORTED_TRACK_MESSAGE} Available tracks: ` +
               parsed.trackData
@@ -684,22 +692,17 @@ function TrackEditEditor({
                 .join(', '),
           );
         }
-        const currentScope = state.activeScope;
-        if (
-          currentScope.kind !== 'track' ||
-          currentScope.track.instrument !== scopeTrack.instrument ||
-          currentScope.track.difficulty !== scopeTrack.difficulty
-        ) {
-          dispatch({
-            type: 'SET_ACTIVE_SCOPE',
-            scope: {
+        const openingScope: EditorScope = scopeTrack
+          ? {
               kind: 'track',
               track: {
                 instrument: scopeTrack.instrument,
                 difficulty: scopeTrack.difficulty,
               },
-            },
-          });
+            }
+          : DEFAULT_VOCALS_SCOPE;
+        if (scopePaneKey(state.activeScope) !== scopePaneKey(openingScope)) {
+          dispatch({type: 'SET_ACTIVE_SCOPE', scope: openingScope});
         }
 
         // 5. Open the editor. Everything above is the chart, and the chart is

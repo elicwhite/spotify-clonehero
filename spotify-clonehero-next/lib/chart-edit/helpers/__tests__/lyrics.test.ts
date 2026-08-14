@@ -4,6 +4,7 @@ import type {ChartDocument, NormalizedVocalPart} from '@/lib/chart-edit';
 import {
   addLyric,
   deleteLyric,
+  hasAnyLyrics,
   restoreLyric,
   setLyricText,
   lyricId,
@@ -195,5 +196,29 @@ describe('setLyricText', () => {
     addPhrase(doc, 0, 960);
 
     expect(setLyricText(doc, 480, 'new')).toBe(false);
+  });
+});
+
+describe('hasAnyLyrics', () => {
+  test('is false for a chart with no vocal track at all', () => {
+    const parsedChart = createEmptyChart({
+      format: 'chart',
+      resolution: RES,
+      bpm: 120,
+    });
+    expect(hasAnyLyrics({parsedChart, assets: []})).toBe(false);
+  });
+
+  test('is false for a vocal part with phrases but no lyrics', () => {
+    const doc = makeDoc();
+    addPhrase(doc, 0, RES);
+    expect(hasAnyLyrics(doc)).toBe(false);
+  });
+
+  test('is true once a part carries one lyric', () => {
+    const doc = makeDoc();
+    addPhrase(doc, 0, RES);
+    expect(addLyric(doc, 0, 'la')).not.toBeNull();
+    expect(hasAnyLyrics(doc)).toBe(true);
   });
 });
