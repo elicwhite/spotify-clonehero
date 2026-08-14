@@ -1,6 +1,6 @@
 # 0107 — Format-faithful projects, and every tool page hands off to `/chart-editor`
 
-Status: in-progress
+Status: completed
 
 `/tempo` and `/drum-transcription` end the same way: they write an OPFS project,
 then they send the user to `/chart-editor?project=<id>`. The landing page is the
@@ -298,6 +298,35 @@ This plan accepts the growth, because it is the pattern `/tempo` and
 **not** accept it silently: quota handling is a real gap that this plan makes
 larger, and it gets its own plan. If `createProject` can fail on a full disk,
 the handoff must show that failure rather than navigate to a broken project.
+
+## Outcome
+
+Landed. Notes on what changed against the plan as written:
+
+- `ProjectOrigin` gained one value per difficulty route, not a shared
+  `'difficulties'`: `origin` is written at creation and read verbatim, so a
+  merged value would never record which page made a project.
+- The export conversion warning stays generic in both directions. Naming the
+  casualties read as a claim the app authored that data, and the draft wording
+  was wrong about phrase lengths besides — the `.chart` writer emits
+  `phrase_end` at `tick + length`, so those survive.
+- B2's vocals waveform arrived with plan 0108 rather than here. Only the
+  lyrics-only opening scope was left to do.
+- The difficulty flow's `leadingSilence` disabled reason is gone: the editor
+  pads through `audioAnchor`, which the flow could not. A gain, as predicted.
+- `hasAnyLyrics` duplicates scan-chart's `NotesData.hasLyrics`, which is
+  computed in the unexported `scanParsedChart` and only reachable through a
+  full `scanChart(files, …)`. Logged as a candidate primitive in plan 0039.
+
+Two losses accepted, both on `/add-lyrics`:
+
+1. The export renames the download to `Artist - Song (Charter)`.
+   `buildChartExport` kept the user's own file name, because the page edits
+   somebody else's chart. `chartPackageFileName` has no override.
+2. No stem fingerprint is handed over. The page keys its cache off the song
+   file, the editor keys off the mixed-down package bytes, so passing one
+   would name a key with nothing behind it. The editor derives its own on
+   demand. Making the two agree is worth its own plan.
 
 ## Verification
 

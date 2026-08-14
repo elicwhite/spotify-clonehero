@@ -5,8 +5,8 @@ import {useRouter} from 'next/navigation';
 import {
   AudioWaveform,
   ClipboardPaste,
-  Download,
   FolderOpen,
+  Pencil,
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
@@ -336,9 +336,9 @@ function LyricsAlignInner() {
                 <FlowStep Icon={AudioWaveform} label="Align" desc="Automatic" />
                 <FlowArrow />
                 <FlowStep
-                  Icon={Download}
-                  label="Download"
-                  desc="Updated chart"
+                  Icon={Pencil}
+                  label="Edit"
+                  desc="In the chart editor"
                 />
               </div>
             </div>
