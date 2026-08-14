@@ -38,6 +38,8 @@ const ORIGIN_LABEL: Record<ProjectOrigin, string> = {
   'chart-editor': 'Chart editor',
   'drum-transcription': 'Drum transcription',
   tempo: 'Tempo mapper',
+  'add-lyrics': 'Lyrics',
+  difficulties: 'Difficulty generation',
 };
 
 export interface ProjectListProps {

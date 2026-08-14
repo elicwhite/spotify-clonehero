@@ -13,7 +13,12 @@
 import type {ProjectStage} from '@/lib/drum-transcription/storage/opfs';
 
 /** Which entrypoint a project was started from. */
-export type ProjectOrigin = 'chart-editor' | 'drum-transcription' | 'tempo';
+export type ProjectOrigin =
+  | 'chart-editor'
+  | 'drum-transcription'
+  | 'tempo'
+  | 'add-lyrics'
+  | 'difficulties';
 
 /** Which on-disk shape a project's directory has. */
 export type ProjectLayout = 'chart-package' | 'drum-transcription';
