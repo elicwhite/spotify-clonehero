@@ -469,9 +469,15 @@ export function createOpfsProjectStore(
    * Reads a project's chart file, in whatever format it is stored in.
    * Prefers the edited (autosaved) sibling, falls back to the original.
    *
-   * Returns the bytes and the name they are stored under, so a caller can
-   * parse the chart without knowing its format. Never assume `notes.chart`
-   * exists — a MIDI-sourced project only ever has `notes.mid`.
+   * The name returned is always the canonical one for the format, never the
+   * `.edited.` variant the bytes may have come from. Which file on disk is
+   * newest is this store's business; a caller parsing the chart needs a name
+   * scan-chart recognizes, and `notes.edited.chart` is classified as a
+   * passthrough asset instead — which would ship a second, stale chart file
+   * inside every export.
+   *
+   * Never assume `notes.chart` exists: a MIDI-sourced project only ever has
+   * `notes.mid`.
    */
   async function readChartFile(
     projectId: string,
@@ -491,7 +497,10 @@ export function createOpfsProjectStore(
         try {
           const handle = await dir.getFileHandle(fileName);
           const file = await handle.getFile();
-          return {fileName, data: new Uint8Array(await file.arrayBuffer())};
+          return {
+            fileName: base,
+            data: new Uint8Array(await file.arrayBuffer()),
+          };
         } catch {
           continue;
         }

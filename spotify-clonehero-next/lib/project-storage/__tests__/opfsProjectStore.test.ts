@@ -9,7 +9,9 @@ describe('createOpfsProjectStore', () => {
 
   it('stores the provenance and anchor the caller was already holding', async () => {
     const store = createOpfsProjectStore('test-namespace');
-    const provenance = {difficulties: {stamp: 'abc', generatedAt: '2026-01-01'}};
+    const provenance = {
+      difficulties: {stamp: 'abc', generatedAt: '2026-01-01'},
+    };
 
     const meta = await store.createProject({
       name: 'Generated',
@@ -76,7 +78,10 @@ describe('createOpfsProjectStore', () => {
       });
 
       const chart = await store.readChartFile(meta.id);
-      expect(chart.fileName).toBe('notes.edited.mid');
+      // The autosaved bytes, under the CANONICAL name: scan-chart treats
+      // `notes.edited.mid` as a passthrough asset, so returning that name
+      // would ship a second, stale chart file inside every export.
+      expect(chart.fileName).toBe('notes.mid');
       expect(Array.from(chart.data)).toEqual(Array.from(edited));
     });
 
