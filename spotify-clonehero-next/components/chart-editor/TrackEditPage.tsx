@@ -45,7 +45,7 @@ import {trackKeyId, type EditorScope} from './scope';
 import ChartEditor from './ChartEditor';
 import type {AlbumArtFile} from '@/lib/album-art';
 import type {AudioSource} from './ExportDialog';
-import {chartDocToChartText, useChartPackageEditor} from './chartPackage';
+import {useChartPackageEditor} from './chartPackage';
 import {audioSamples} from './audioSamples';
 import {stemOriginsOf} from './sidebar/StemsMixer';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
@@ -290,10 +290,6 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         // anything can render. On an album-length song that is most of the
         // wait.
 
-        // Force .chart output format (input may have been .mid)
-        chartDoc.parsedChart.format = 'chart';
-        const chartText = chartDocToChartText(chartDoc);
-
         // Create OPFS project
         const meta = await store.createProject({
           name,
@@ -302,7 +298,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           sourceFormat,
           originalName,
           sngMetadata,
-          chartText,
+          chartFile: chartDocToFolderFiles(chartDoc).chart,
           audioFiles,
           allFiles: files,
         });
@@ -599,9 +595,6 @@ function TrackEditEditor({
   const saveFn = useCallback(async () => {
     if (!state.chartDoc) return;
     const {chart, ini} = chartDocToFolderFiles(state.chartDoc);
-    if (chart.fileName !== 'notes.chart') {
-      throw new Error('writeChartFolder did not produce notes.chart');
-    }
     // The ini goes first. A torn save then leaves a newer ini beside an older
     // chart, and the merge on load lets the chart win on everything it can
     // express, so the visible result is one autosave's worth of stale chart
@@ -609,10 +602,7 @@ function TrackEditEditor({
     // reverse order would show stale metadata over fresh content, which reads
     // to the user as a lost edit.
     await store.writeSongIni(projectId, ini.data);
-    await store.writeEditedChart(
-      projectId,
-      new TextDecoder().decode(chart.data),
-    );
+    await store.writeEditedChart(projectId, chart.data);
     // Mirror the doc's audio anchor into project metadata: a `.chart` file
     // has nowhere to carry it, and without it a reload would show a chart
     // shifted by the leading silence against unpadded audio. Cheap and
@@ -647,9 +637,9 @@ function TrackEditEditor({
         if (cancelled) return;
         setProjectMeta(meta);
 
-        // 2. Load chart text (prefer edited, fallback to original)
+        // 2. Load the chart file (prefer edited, fallback to original)
         setLoadingStep('Loading chart data...');
-        const chartText = await store.readChartText(projectId);
+        const chartFile = await store.readChartFile(projectId);
         if (cancelled) return;
         const songIni = await store.readSongIni(projectId);
         if (cancelled) return;
@@ -657,13 +647,10 @@ function TrackEditEditor({
         // 3. Build the editable ChartDocument. This is the editor's parse:
         // a basic four-lane drum chart is read as pro-drums so the cymbal
         // toggle the editor offers survives the save it writes. The package's
-        // `song.ini` is overlaid onto the result, since the persisted `.chart`
-        // has nowhere to carry the fields that live only there (every
-        // `diff_*`, `icon`, custom keys).
-        const chartBytes = new TextEncoder().encode(chartText);
-        let chartDoc = readChartForEditing([
-          {fileName: 'notes.chart', data: chartBytes},
-        ]);
+        // `song.ini` is overlaid onto the result, since neither chart format
+        // can carry the fields that live only there (every `diff_*`, `icon`,
+        // custom keys).
+        let chartDoc = readChartForEditing([chartFile]);
         if (songIni) {
           chartDoc = withSongIniFields(chartDoc, {
             fileName: 'song.ini',

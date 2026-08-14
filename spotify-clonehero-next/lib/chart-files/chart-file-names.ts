@@ -1,50 +1,65 @@
 /**
  * The names a chart file has at rest, and how to derive its autosave
- * sibling. Both OPFS layouts store a chart under these names, so neither one
- * owns them.
+ * sibling.
  *
- * A chart is `.chart` or `.mid`, and which one it is belongs to the user, not
- * to the storage layer. Code that hardcodes `notes.chart` breaks a
- * MIDI-sourced project, so resolve the name from here instead.
+ * A chart file is `notes.chart` or `notes.mid`. The source chart sets the
+ * format, and a project keeps that format for as long as it is stored: a
+ * `.chart` file carries vocals as bare lyric text events, so a conversion
+ * drops vocal note pitches, phrase lengths and harmony parts. A project
+ * holds exactly one of the two names, never both. Export can convert, and
+ * tells the user what the conversion costs.
+ *
+ * Do not write `notes.chart` directly. Get the name from this module. A
+ * MIDI-sourced project has no `notes.chart`.
  */
 
-/** The extension a chart file is stored in. */
+/**
+ * The format of the chart file inside a package — `.chart` (text) or `.mid`
+ * (binary). Distinct from `SourceFormat`, which is the outer folder/zip/sng
+ * container.
+ */
 export type ChartFileFormat = 'chart' | 'mid';
 
-/** The at-rest name of a chart file, per format. */
+/** The name a chart file is stored under, per format. */
 export const CHART_FILE_BASENAMES = {
   chart: 'notes.chart',
   mid: 'notes.mid',
 } as const;
 
 /**
- * Basename -> its "edited" (post-autosave) sibling, same extension —
- * `notes.chart` -> `notes.edited.chart`, `notes.mid` -> `notes.edited.mid`.
- * An autosave path derives the sibling name from whichever chart file
- * `writeChartFolder` produced, instead of hardcoding `.chart`.
+ * Basename -> its "edited" (post-autosave) sibling, with the same extension.
+ * `notes.chart` becomes `notes.edited.chart`, `notes.mid` becomes
+ * `notes.edited.mid`. An autosave path derives the sibling name from
+ * whichever chart file `writeChartFolder` produced, instead of hardcoding
+ * `.chart`.
  */
 export function editedVariant(baseName: string): string {
   const dot = baseName.lastIndexOf('.');
+  if (dot < 0) {
+    throw new Error(
+      `"${baseName}" has no extension to insert ".edited" before`,
+    );
+  }
   return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
 }
 
-/** The at-rest name for a format, and its autosave sibling. */
-export function chartFileNamesFor(format: ChartFileFormat): {
-  original: string;
-  edited: string;
-} {
-  const original = CHART_FILE_BASENAMES[format];
-  return {original, edited: editedVariant(original)};
+/** Whether a file name is a chart file, in either format. */
+export function isChartFileName(fileName: string): boolean {
+  return chartFileFormatOf(fileName) !== null;
 }
 
 /**
  * The format a chart file name denotes. `null` for a name that is not a
  * chart file, so a caller can tell "not a chart" from "a chart in the other
  * format".
+ *
+ * `.midi` is not a chart file here. scan-chart reads and writes `notes.mid`
+ * only, and `hasChartExtension` agrees. The export path canonicalizes a
+ * user's `.midi` to `notes.mid` before anything stores it.
  */
 export function chartFileFormatOf(fileName: string): ChartFileFormat | null {
   const lower = fileName.toLowerCase();
-  if (lower.endsWith('.mid') || lower.endsWith('.midi')) return 'mid';
+  if (lower.endsWith('.mid')) return 'mid';
   if (lower.endsWith('.chart')) return 'chart';
   return null;
 }

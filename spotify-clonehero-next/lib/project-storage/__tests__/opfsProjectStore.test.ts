@@ -1,5 +1,6 @@
 import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
 import {createOpfsProjectStore} from '../opfsProjectStore';
+import {chartTextOf} from './chartText';
 
 describe('createOpfsProjectStore', () => {
   beforeEach(() => {
@@ -16,7 +17,10 @@ describe('createOpfsProjectStore', () => {
       durationSeconds: 120,
       sourceFormat: 'sng',
       originalName: 'my-song.sng',
-      chartText: '[Song]\n{\n}\n',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('[Song]\n{\n}\n'),
+      },
       audioFiles: [{fileName: 'guitar.ogg', data: new Uint8Array([1, 2, 3])}],
       allFiles: [
         {fileName: 'notes.chart', data: new Uint8Array([9])},
@@ -34,7 +38,7 @@ describe('createOpfsProjectStore', () => {
     const fetched = await store.getProject(meta.id);
     expect(fetched).toEqual(meta);
 
-    const chartText = await store.readChartText(meta.id);
+    const chartText = await chartTextOf(store, meta.id);
     expect(chartText).toBe('[Song]\n{\n}\n');
 
     const audioFiles = await store.loadAudioFiles(meta.id);
@@ -54,15 +58,18 @@ describe('createOpfsProjectStore', () => {
       durationSeconds: 60,
       sourceFormat: 'sng',
       originalName: 'song.sng',
-      chartText: 'original',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('original'),
+      },
       audioFiles: [],
       allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
     });
 
-    expect(await store.readChartText(meta.id)).toBe('original');
+    expect(await chartTextOf(store, meta.id)).toBe('original');
 
-    await store.writeEditedChart(meta.id, 'edited');
-    expect(await store.readChartText(meta.id)).toBe('edited');
+    await store.writeEditedChart(meta.id, new TextEncoder().encode('edited'));
+    expect(await chartTextOf(store, meta.id)).toBe('edited');
 
     // updatedAt bumped on save.
     const updated = await store.getProject(meta.id);
@@ -82,7 +89,10 @@ describe('createOpfsProjectStore', () => {
       durationSeconds: 60,
       sourceFormat: 'sng',
       originalName: 'drum.sng',
-      chartText: 'drum-chart',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('drum-chart'),
+      },
       audioFiles: [],
       allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
     });
@@ -100,7 +110,10 @@ describe('createOpfsProjectStore', () => {
       durationSeconds: 60,
       sourceFormat: 'sng',
       originalName: 'old.sng',
-      chartText: 'old-chart',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('old-chart'),
+      },
       audioFiles: [],
       allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
     });
@@ -111,11 +124,11 @@ describe('createOpfsProjectStore', () => {
 
     expect((await store.listProjects()).map(p => p.id)).toEqual([legacy.id]);
     expect(await store.getProject(legacy.id)).toEqual(legacy);
-    expect(await store.readChartText(legacy.id)).toBe('old-chart');
+    expect(await chartTextOf(store, legacy.id)).toBe('old-chart');
 
     // Saves land on the project where it already lives, not on a copy.
-    await store.writeEditedChart(legacy.id, 'edited-in-place');
-    expect(await legacyStore.readChartText(legacy.id)).toBe('edited-in-place');
+    await store.writeEditedChart(legacy.id, new TextEncoder().encode('edited-in-place'));
+    expect(await chartTextOf(legacyStore, legacy.id)).toBe('edited-in-place');
 
     // New projects go to the current namespace, and both are listed.
     const fresh = await store.createProject({
@@ -125,7 +138,10 @@ describe('createOpfsProjectStore', () => {
       durationSeconds: 60,
       sourceFormat: 'sng',
       originalName: 'new.sng',
-      chartText: 'new-chart',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('new-chart'),
+      },
       audioFiles: [],
       allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
     });
@@ -159,7 +175,10 @@ describe('createOpfsProjectStore', () => {
         durationSeconds: 60,
         sourceFormat: 'sng',
         originalName: 'song.sng',
-        chartText: 'chart',
+        chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('chart'),
+      },
         audioFiles: [],
         allFiles: [{fileName: 'notes.chart', data: new Uint8Array([1])}],
       });
@@ -222,7 +241,10 @@ describe('createOpfsProjectStore', () => {
         durationSeconds: 60,
         sourceFormat: 'sng',
         originalName: 'song.sng',
-        chartText: '[Song]\n{\n}\n',
+        chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('[Song]\n{\n}\n'),
+      },
         audioFiles: [{fileName: 'song.ogg', data: new Uint8Array([1])}],
         allFiles: [
           {fileName: 'notes.chart', data: new Uint8Array([9])},
@@ -254,7 +276,10 @@ describe('createOpfsProjectStore', () => {
         durationSeconds: 60,
         sourceFormat: 'sng',
         originalName: 'song.sng',
-        chartText: '[Song]\n{\n}\n',
+        chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('[Song]\n{\n}\n'),
+      },
         audioFiles: [],
         allFiles: [{fileName: 'notes.chart', data: new Uint8Array([9])}],
       });
@@ -304,7 +329,10 @@ describe('createOpfsProjectStore', () => {
         durationSeconds: 60,
         sourceFormat: 'sng',
         originalName: 'song.sng',
-        chartText: '[Song]\n{\n}\n',
+        chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('[Song]\n{\n}\n'),
+      },
         audioFiles: [],
         allFiles: [{fileName: 'notes.chart', data: new Uint8Array([9])}],
       });

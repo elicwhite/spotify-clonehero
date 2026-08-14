@@ -67,7 +67,10 @@ describe('attachAudioToProject', () => {
       durationSeconds: 300,
       sourceFormat: 'folder',
       originalName: 'Blank',
-      chartText: 'chart',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('chart'),
+      },
       audioFiles: [],
       allFiles: [],
     });
@@ -98,7 +101,10 @@ describe('attachAudioToProject', () => {
       durationSeconds: 300,
       sourceFormat: 'folder',
       originalName: 'Blank',
-      chartText: 'chart',
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode('chart'),
+      },
       audioFiles: [],
       allFiles: [],
     });

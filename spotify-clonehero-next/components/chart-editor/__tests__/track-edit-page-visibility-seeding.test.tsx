@@ -172,7 +172,10 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       sourceFormat: 'chart',
       originalName: 'Test Song',
     })),
-    readChartText: jest.fn(async () => fixtureChartText),
+    readChartFile: jest.fn(async () => ({
+      fileName: 'notes.chart',
+      data: new TextEncoder().encode(fixtureChartText),
+    })),
     readSongIni: jest.fn(async () => null),
     // A fresh array each call, so a test that inspects what one call
     // returned can't be affected by another.

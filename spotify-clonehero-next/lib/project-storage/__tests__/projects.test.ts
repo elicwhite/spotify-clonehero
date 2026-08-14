@@ -10,6 +10,7 @@ import {createOpfsProjectStore} from '../opfsProjectStore';
 
 import {writeChartFolder} from '@/lib/chart-edit';
 import {createBlankChartDocument} from '../blankChart';
+import {chartTextOf} from './chartText';
 
 let opfs: ReturnType<typeof installFakeOPFS>;
 
@@ -158,7 +159,10 @@ describe('project facade', () => {
       durationSeconds: 100,
       sourceFormat: 'sng',
       originalName: 'old.sng',
-      chartText: blankChartText('Old Song'),
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode(blankChartText('Old Song')),
+      },
       audioFiles: [{fileName: 'song.ogg', data: new Uint8Array([1])}],
       allFiles: [],
     });
@@ -183,7 +187,7 @@ describe('project facade', () => {
 
     // The chart itself carries the new identity, so the editor's next save
     // cannot mirror a stale name back over the record.
-    const chartText = await legacyStore.readChartText(created.id);
+    const chartText = await chartTextOf(legacyStore, created.id);
     expect(chartText).toContain('New Song');
     const ini = await legacyStore.readSongIni(created.id);
     expect(new TextDecoder().decode(ini!)).toContain('name = New Song');
@@ -206,7 +210,7 @@ describe('project facade', () => {
     const store = createOpfsProjectStore('chart-editor');
     expect(await store.loadAudioFiles(record.id)).toHaveLength(0);
 
-    const chartText = await store.readChartText(record.id);
+    const chartText = await chartTextOf(store, record.id);
     expect(chartText).toContain('[ExpertDrums]');
 
     const ini = await store.readSongIni(record.id);

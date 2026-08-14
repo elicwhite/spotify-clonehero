@@ -176,13 +176,11 @@ jest.mock('../../../lib/drum-transcription/storage/opfs', () => ({
   findProjectChartFile: jest.fn(async () => 'notes.chart'),
   // The fixture project has only the pipeline's own chart file, which is
   // what the task reads its fresh notes back out of.
-  CHART_FILE_BASENAMES: {chart: 'notes.chart', mid: 'notes.mid'},
   projectFileExists: jest.fn(
     async (_id: string, name: string) => name === 'notes.chart',
   ),
   readProjectBinary: jest.fn(async () => BEFORE_BYTES.buffer),
   writeProjectBinary: jest.fn(async () => {}),
-  editedVariant: (name: string) => name.replace(/\.chart$/, '.edited.chart'),
   loadAudioMeta: jest.fn(async () => ({
     sampleRate: 44100,
     channels: 2,

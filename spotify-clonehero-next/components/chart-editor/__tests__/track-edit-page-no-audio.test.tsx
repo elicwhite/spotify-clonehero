@@ -114,7 +114,10 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       originalName: 'Blank Song',
       hasAudio: false,
     })),
-    readChartText: jest.fn(async () => fixtureChartText),
+    readChartFile: jest.fn(async () => ({
+      fileName: 'notes.chart',
+      data: new TextEncoder().encode(fixtureChartText),
+    })),
     readSongIni: jest.fn(async () => null),
     loadAudioFiles,
     writeSongIni: jest.fn(async () => {}),

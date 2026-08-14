@@ -28,8 +28,6 @@ export interface ProjectOpfsMock {
   __projects: Map<string, Record<string, unknown>>;
   /** Clears both maps. Call in `beforeEach`. */
   __reset: () => void;
-  CHART_FILE_BASENAMES: {chart: string; mid: string};
-  editedVariant: (baseName: string) => string;
   createProject: jest.Mock;
   listProjects: jest.Mock;
   deleteProject: jest.Mock;
@@ -86,11 +84,6 @@ export function createProjectOpfsMock({
     __reset: () => {
       files.clear();
       projects.clear();
-    },
-    CHART_FILE_BASENAMES: {chart: 'notes.chart', mid: 'notes.mid'},
-    editedVariant: (baseName: string) => {
-      const dot = baseName.lastIndexOf('.');
-      return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
     },
     createProject: jest.fn(async (name: string) => {
       const id = `proj-${projects.size + 1}`;

@@ -296,7 +296,6 @@ export interface AudioSource {
   data: ArrayBuffer;
 }
 
-
 interface ExportDialogProps {
   /**
    * Song name written into the exported `song.ini` and the download's file

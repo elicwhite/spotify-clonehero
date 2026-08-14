@@ -97,7 +97,6 @@ jest.mock('../../../lib/drum-transcription/storage/opfs', () => ({
   readProjectBinary: jest.fn(async () => CHART_BYTES.buffer),
   writeProjectBinary: jest.fn(async () => {}),
   projectFileExists: jest.fn(async () => false),
-  editedVariant: (name: string) => name.replace(/\.chart$/, '.edited.chart'),
   SONG_INI_FILE_NAME: 'song.ini',
   loadAudioMeta: jest.fn(async () => ({
     sampleRate: 44100,

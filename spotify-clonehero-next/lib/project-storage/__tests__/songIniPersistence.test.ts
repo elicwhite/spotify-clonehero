@@ -20,6 +20,7 @@ import {
 import {readSongIniMetadata, withSongIniFields} from '@/lib/chart-editor-core';
 
 import {createOpfsProjectStore} from '../opfsProjectStore';
+import {chartTextOf} from './chartText';
 
 type Store = ReturnType<typeof createOpfsProjectStore>;
 
@@ -53,7 +54,10 @@ async function createProject(store: Store, doc: ChartDocument) {
     durationSeconds: 120,
     sourceFormat: 'folder',
     originalName: 'song',
-    chartText: new TextDecoder().decode(chart.data),
+    chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode(new TextDecoder().decode(chart.data)),
+      },
     audioFiles: [],
     allFiles: [chart, ini],
   });
@@ -68,12 +72,12 @@ async function save(
 ): Promise<void> {
   const {chart, ini} = chartDocToFolderFiles(doc);
   await store.writeSongIni(projectId, ini.data);
-  await store.writeEditedChart(projectId, new TextDecoder().decode(chart.data));
+  await store.writeEditedChart(projectId, chart.data);
 }
 
 /** What a host's load does: chart parse, then the project merge. */
 async function load(store: Store, projectId: string): Promise<ChartDocument> {
-  const chartText = await store.readChartText(projectId);
+  const chartText = await chartTextOf(store, projectId);
   const songIni = await store.readSongIni(projectId);
   const doc = readChartForEditing([
     {fileName: 'notes.chart', data: new TextEncoder().encode(chartText)},
@@ -171,7 +175,10 @@ describe('song.ini persistence', () => {
       durationSeconds: 120,
       sourceFormat: 'folder',
       originalName: 'song',
-      chartText: new TextDecoder().decode(chart.data),
+      chartFile: {
+        fileName: 'notes.chart',
+        data: new TextEncoder().encode(new TextDecoder().decode(chart.data)),
+      },
       audioFiles: [],
       // No ini on disk: every project created before the editor wrote one.
       allFiles: [chart],
@@ -208,10 +215,7 @@ describe('song.ini persistence', () => {
       },
     };
     const {chart} = chartDocToFolderFiles(edited);
-    await store.writeEditedChart(
-      projectId,
-      new TextDecoder().decode(chart.data),
-    );
+    await store.writeEditedChart(projectId, chart.data);
 
     const loaded = await load(store, projectId);
     expect(loaded.parsedChart.metadata.artist).toBe('New Artist');

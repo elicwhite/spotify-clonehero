@@ -14,6 +14,7 @@
  */
 
 import {
+  chartDocToFolderFiles,
   readChart,
   readChartForEditing,
   writeChartFileAs,
@@ -216,16 +217,14 @@ export async function renameProject(
   return updated;
 }
 
-/** Applies `identity` to a `chart-package` project's chart text and ini. */
+/** Applies `identity` to a `chart-package` project's chart file and ini. */
 async function writeChartPackageIdentity(
   id: string,
   identity: SongMetadataValue,
 ): Promise<void> {
-  const chartText = await chartPackageStore().readChartText(id);
+  const chartFile = await chartPackageStore().readChartFile(id);
   const songIni = await chartPackageStore().readSongIni(id);
-  let doc = readChartForEditing([
-    {fileName: 'notes.chart', data: new TextEncoder().encode(chartText)},
-  ]);
+  let doc = readChartForEditing([chartFile]);
   if (songIni) {
     doc = withSongIniFields(doc, {fileName: 'song.ini', data: songIni});
   }
@@ -241,16 +240,9 @@ async function persistChartPackageDoc(
   id: string,
   doc: ChartDocument,
 ): Promise<void> {
-  const files = writeChartFolder(doc);
-  const chartFile = files.find(f => f.fileName === 'notes.chart');
-  if (chartFile) {
-    await chartPackageStore().writeEditedChart(
-      id,
-      new TextDecoder().decode(chartFile.data),
-    );
-  }
-  const iniFile = files.find(f => f.fileName.toLowerCase() === 'song.ini');
-  if (iniFile) await chartPackageStore().writeSongIni(id, iniFile.data);
+  const {chart, ini} = chartDocToFolderFiles(doc);
+  await chartPackageStore().writeEditedChart(id, chart.data);
+  await chartPackageStore().writeSongIni(id, ini.data);
 }
 
 /** Applies `identity` to a `drum-transcription` project's chart file. */
@@ -298,10 +290,7 @@ export async function createBlankProject({
 }: CreateBlankProjectOptions): Promise<ProjectRecord> {
   const doc = createBlankChartDocument({name, artist, charter, songLengthMs});
   const files = writeChartFolder(doc);
-  const chartFile = files.find(f => f.fileName === 'notes.chart');
-  if (!chartFile) {
-    throw new Error('writeChartFolder did not produce a chart file');
-  }
+  const {chart} = chartDocToFolderFiles(doc);
 
   const meta = await chartPackageStore().createProject({
     name,
@@ -310,7 +299,7 @@ export async function createBlankProject({
     durationSeconds: songLengthMs / 1000,
     sourceFormat: 'folder',
     originalName: name,
-    chartText: new TextDecoder().decode(chartFile.data),
+    chartFile: chart,
     audioFiles: [],
     allFiles: files,
     origin: 'chart-editor',

@@ -36,6 +36,7 @@ import {readChart} from '@/lib/chart-edit';
 import {isWebGPUAvailable} from '@/lib/drum-transcription/ml/onnx-runtime';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
+import {isChartFileName} from '@/lib/chart-files/chart-file-names';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import SectionDropZone from '@/components/landing/SectionDropZone';
 import AudioUploader from '@/app/drum-transcription/components/AudioUploader';
@@ -91,9 +92,7 @@ function writeAndReparse(
   modifiers: typeof defaultIniChartModifiers,
 ): {chart: ParsedChart; files: ScanFile[]} {
   const files = writeChartFolder({parsedChart: chart, assets});
-  const chartFile = files.find(
-    f => f.fileName === 'notes.chart' || f.fileName === 'notes.mid',
-  );
+  const chartFile = files.find(f => isChartFileName(f.fileName));
   if (!chartFile) throw new Error('Failed to write the new chart');
   const format = chartFile.fileName.endsWith('.mid') ? 'mid' : 'chart';
   const chartBytes = new Uint8Array(chartFile.data);
@@ -272,15 +271,8 @@ export default function TempoClient({
           newChart = built;
         }
 
-        // The shared chart-package store currently persists .chart text, so
-        // normalize MIDI inputs the same way TrackEditPage's own import does.
-        const chartForStorage = {...newChart, format: 'chart' as const};
-        const {chart, files} = writeAndReparse(
-          chartForStorage,
-          chartAssets,
-          modifiers,
-        );
-        const chartFile = files.find(f => f.fileName === 'notes.chart');
+        const {chart, files} = writeAndReparse(newChart, chartAssets, modifiers);
+        const chartFile = files.find(f => isChartFileName(f.fileName));
         if (!chartFile) throw new Error('Failed to build the chart project');
 
         const meta = await chartPackageStore().createProject({
@@ -290,7 +282,7 @@ export default function TempoClient({
           durationSeconds: songLengthMs / 1000,
           sourceFormat: sourceFormat ?? 'folder',
           originalName,
-          chartText: new TextDecoder().decode(chartFile.data),
+          chartFile,
           audioFiles,
           allFiles: files,
           origin: 'tempo',

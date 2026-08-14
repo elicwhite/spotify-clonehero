@@ -356,7 +356,8 @@ export function buildChartDocumentFromExistingChart(
   // formats — this builder only touches note/track content, never format.
   // Storage/editor code downstream must handle whichever format the source
   // chart used (see lib/drum-transcription/storage/opfs.ts's
-  // findProjectChartFile / CHART_FILE_BASENAMES) rather than assuming
+  // findProjectChartFile, and
+  // lib/chart-files/chart-file-names' CHART_FILE_BASENAMES) rather than assuming
   // `notes.chart`.
 
   const resolution = parsedChart.resolution || RESOLUTION;

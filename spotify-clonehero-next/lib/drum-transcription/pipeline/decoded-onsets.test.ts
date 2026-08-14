@@ -33,11 +33,6 @@ jest.mock('../storage/opfs', () => {
       projects.clear();
       nextId = 1;
     },
-    CHART_FILE_BASENAMES: {chart: 'notes.chart', mid: 'notes.mid'},
-    editedVariant: (baseName: string) => {
-      const dot = baseName.lastIndexOf('.');
-      return `${baseName.slice(0, dot)}.edited${baseName.slice(dot)}`;
-    },
     createProject: jest.fn(async (name: string) => {
       const id = `project-${nextId++}`;
       const meta = {

@@ -105,6 +105,7 @@ import type {
 import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
 import {chartPackageStore} from '@/lib/project-storage/projects';
 import TempoClient from '../TempoClient';
+import {chartTextOf} from '@/lib/project-storage/__tests__/chartText';
 
 const mockDecode = decodeAndResampleTo44k as jest.Mock;
 const mockMerge = mergeAudioFiles as jest.Mock;
@@ -329,7 +330,7 @@ describe('TempoClient', () => {
     const project = await chartPackageStore().getProject(projectId!);
     expect(project.origin).toBe('tempo');
     expect(project.stemFingerprint).toBe(fakeWorker!.posted[0].fingerprint);
-    expect(await chartPackageStore().readChartText(projectId!)).toContain(
+    expect(await chartTextOf(chartPackageStore(), projectId!)).toContain(
       '[SyncTrack]',
     );
     expect(screen.queryByRole('button', {name: 'Start over'})).toBeNull();
