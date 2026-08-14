@@ -82,7 +82,7 @@ describe('SiteHeader', () => {
   });
 
   it('treats nested editor sub-paths as editor routes too', () => {
-    mockPathname = '/add-lyrics/anything';
+    mockPathname = '/chart-editor/anything';
     renderChrome();
 
     expect(

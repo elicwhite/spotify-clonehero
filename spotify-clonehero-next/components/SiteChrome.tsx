@@ -35,20 +35,12 @@ const ROUTE_CHROME: readonly {
    */
   gutter: string;
 }[] = [
-  // Routes that render (or lead into) the chart editor shell, per plan 0074
-  // Phase 7 task 7b's audit: every page that mounts `ChartEditor` somewhere
-  // in its tree, directly or via a picker/upload screen that precedes it.
-  //
-  // `/drum-transcription` and `/tempo` are deliberately absent: both are
-  // landing pages, and landing pages carry the regular site nav (owner
-  // feedback, 2026-08-06). `/tempo` does mount `ChartEditor` once a song has
-  // been mapped, so it trades the compact header on that screen for the
-  // regular header on its landing screen; matching is by pathname, so the
-  // two cannot differ within one route.
+  // Routes that mount `ChartEditor`. Every tool page hands its finished
+  // chart to `/chart-editor` rather than embedding an editor of its own, so
+  // the tool pages are landing pages and landing pages carry the regular
+  // site nav (owner feedback, 2026-08-06). Matching is by pathname, so a
+  // route cannot use one header on one screen and the other elsewhere.
   {prefix: '/chart-editor', header: 'compact', gutter: 'px-3 pb-3'},
-  {prefix: '/drum-difficulties', header: 'compact', gutter: 'px-3 pb-3'},
-  {prefix: '/guitar-difficulties', header: 'compact', gutter: 'px-3 pb-3'},
-  {prefix: '/add-lyrics', header: 'compact', gutter: 'px-3 pb-3'},
   {prefix: '/preview', header: 'compact', gutter: 'px-3 pb-3'},
   // Lays out its own header row, rail, and panes, so it takes the regular
   // nav and no gutter.
