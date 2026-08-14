@@ -488,6 +488,21 @@ function cloneDocWithVocals(doc: ChartDocument): ChartDocument {
   for (const [name, part] of Object.entries(vt.parts)) {
     parts[name] = {
       ...part,
+      // The MIDI writer emits the UNION of `notePhrases` and
+      // `staticLyricPhrases`, deduplicated by tick and text. On the main
+      // vocals part the parser builds the second list as a shallow copy of
+      // the first, so the two share their lyric arrays and the union is a
+      // no-op — until the deep clone below gives `notePhrases` its own
+      // objects. From then on `staticLyricPhrases` still holds the lyrics as
+      // they were before the edit, and the writer re-emits them: a deleted
+      // lyric comes back, and a retexted or moved one ships twice.
+      //
+      // Dropping it is safe here and not on a harmony part: for `vocals` it
+      // is that duplicate, and the writer takes the part's phrase markers
+      // from `notePhrases`. A harmony's copy is independent data (its own
+      // note-106 boundaries), so it is cloned along with everything else and
+      // left alone — harmony lyrics are not editable today.
+      ...(name === DEFAULT_VOCALS_PART ? {staticLyricPhrases: []} : {}),
       notePhrases: part.notePhrases.map(p => ({
         ...p,
         notes: p.notes.map(n => ({...n})),
