@@ -106,8 +106,13 @@ Work:
 ## A3. `ProjectOrigin` gains two values
 
 `lib/project-storage/types.ts:16` is a closed union:
-`'chart-editor' | 'drum-transcription' | 'tempo'`. Add `'add-lyrics'` and
-`'difficulties'`.
+`'chart-editor' | 'drum-transcription' | 'tempo'`. Add `'add-lyrics'`,
+`'drum-difficulties'`, and `'guitar-difficulties'`.
+
+One value per route, not one shared `'difficulties'`. `origin` is written into
+`metadata.json` at creation and read back verbatim, so a project stamped with a
+merged value never records which page made it and no later migration can
+recover the instrument. Plan 0105 already writes the union this way.
 
 This is a typecheck break, not an additive change:
 `components/project-list/ProjectList.tsx:37` declares
@@ -200,7 +205,8 @@ so one change covers both. The file header (`:15-16`) and `:458-460` both state
 that no OPFS project backs it; delete those statements with the behavior.
 
 - Replace the `{editor, loaded}` arm of `FlowState` with a handoff: call the B1
-  helper with `origin: 'difficulties'` and the doc's `assistProvenance`, then
+  helper with the route's own origin (`'drum-difficulties'` /
+  `'guitar-difficulties'`) and the doc's `assistProvenance`, then
   push.
 - Delete the inline `<ChartEditor>` at **`:501-518`** (the component ends at
   `:521`).

@@ -18,7 +18,8 @@ export type ProjectOrigin =
   | 'drum-transcription'
   | 'tempo'
   | 'add-lyrics'
-  | 'difficulties';
+  | 'drum-difficulties'
+  | 'guitar-difficulties';
 
 /** Which on-disk shape a project's directory has. */
 export type ProjectLayout = 'chart-package' | 'drum-transcription';
