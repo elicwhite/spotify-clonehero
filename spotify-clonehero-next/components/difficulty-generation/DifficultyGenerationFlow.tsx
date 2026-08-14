@@ -30,10 +30,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {
-  LoadedFiles,
-  SourceFormat,
-} from '@/lib/chart-files/chart-package';
+import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
 import {DIFFICULTY_ORIGIN} from '@/lib/project-storage/difficultyOrigins';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
@@ -456,4 +453,3 @@ function DifficultyGenerationFlowInner({
     </main>
   );
 }
-

@@ -79,7 +79,6 @@ jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
   }),
 }));
 
-
 // Audio boundary — no real Web Audio in jsdom.
 jest.mock('../../../lib/preview/audioManager', () => ({
   AudioManager: jest.fn().mockImplementation(function (this: any) {
@@ -220,8 +219,8 @@ function alignResult(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-    createdProjects.length = 0;
-    mockRouterPush.mockClear();
+  createdProjects.length = 0;
+  mockRouterPush.mockClear();
   spawnedWorkers.length = 0;
   mockAlignVocals.mockReset();
   mockResample.mockReset();

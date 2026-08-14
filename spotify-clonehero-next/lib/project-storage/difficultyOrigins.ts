@@ -14,9 +14,7 @@ import type {ProjectOrigin} from './types';
 export const DIFFICULTY_ORIGIN = {
   drums: 'drum-difficulties',
   guitar: 'guitar-difficulties',
-} as const satisfies Partial<
-  Record<SupportedTrackInstrument, ProjectOrigin>
->;
+} as const satisfies Partial<Record<SupportedTrackInstrument, ProjectOrigin>>;
 
 export type DifficultyOrigin =
   (typeof DIFFICULTY_ORIGIN)[keyof typeof DIFFICULTY_ORIGIN];

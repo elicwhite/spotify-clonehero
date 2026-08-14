@@ -223,7 +223,6 @@ test('sends the selected chart-file format to the packager', async () => {
   });
 });
 
-
 test('hides the chart-file-format control unless the caller opts in', async () => {
   const {rerender} = render(
     <ExportDialog songName="Song" getChartText={async () => '.chart text'} />,
