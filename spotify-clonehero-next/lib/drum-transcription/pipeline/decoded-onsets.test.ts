@@ -141,6 +141,7 @@ jest.mock('../ml/transcriber', () => ({
 
 interface MockOpfs {
   __files: Map<string, unknown>;
+  __projects: Map<string, unknown>;
   __reset: () => void;
   deleteProjectFile: jest.Mock;
 }
@@ -259,6 +260,31 @@ describe('runner write sites', () => {
     // Written alongside confidence.json, before the chart file exists check
     // could pass without it.
     expect(storedJson(projectId, 'confidence.json')).toBeDefined();
+  });
+
+  it('runPipeline creates no project when the run is cancelled while decoding', async () => {
+    // A project outlives the run that makes it, so an abandoned run must
+    // leave none behind. Decoding is the long step a user cancels during.
+    const decoder = jest.requireMock('../audio/decoder') as {
+      decodeAudio: jest.Mock;
+    };
+    const controller = new AbortController();
+    decoder.decodeAudio.mockImplementationOnce(async () => {
+      controller.abort();
+      return {duration: 4, sampleRate: 44100, length: 4 * 44100};
+    });
+
+    await expect(
+      runPipeline(
+        new ArrayBuffer(16),
+        'song.mp3',
+        noProgress,
+        fakeTranscriber(),
+        {signal: controller.signal},
+      ),
+    ).rejects.toMatchObject({name: 'AbortError'});
+
+    expect(mockOpfs.__projects.size).toBe(0);
   });
 
   it('runPipeline stores the verbatim original upload, not an Opus re-encode', async () => {

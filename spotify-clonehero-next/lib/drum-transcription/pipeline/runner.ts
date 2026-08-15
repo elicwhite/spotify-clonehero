@@ -125,6 +125,11 @@ export async function runPipeline(
 
   onProgress({step: 'decoding', progress: 0.5, projectName: fileName});
 
+  // Decoding is long enough to be cancelled part way through. A project is
+  // storage that outlives this run, so a run that is already abandoned must
+  // not create one.
+  throwIfAborted(signal);
+
   // Create project and store audio
   projectMeta = await createProject(metadata.name);
   projectId = projectMeta.id;
