@@ -236,11 +236,138 @@ function groovePoolLane(
   return out;
 }
 
+/** Minimum sections a chart needs before section-scoped sub-measure pooling
+ * may run. `submeasure_consistency.MIN_SECTIONS`. */
+const MIN_SECTIONS = 2;
+
+/** Per-row sub-measure pooling key, or `null` where pooling must not apply.
+ * `train.py`'s `build_consistency_ctx` subkey construction.
+ *
+ * The key is `(Expert chord lane-set, tick_in_measure, section_idx)`. It is
+ * `null` for rows in measures that DO join a whole-measure Expert groove
+ * cluster — the existing `groovePool*` pass already owns those, and this
+ * second pass must strictly ADD coverage, never override a working one.
+ *
+ * Returns `null` for the whole song (pool nothing) when it has fewer than
+ * {@link MIN_SECTIONS} sections. This is the DEGENERATE-SECTION GUARD: without
+ * usable section structure every onset maps to section 0, collapsing the key
+ * to `(chord, tick, 0)` — byte-identical to the SONG-WIDE key, which is a
+ * recorded NEGATIVE upstream (over-flattens the relane choice, and moves
+ * edit_rate the wrong way). Declining to pool is correct here; pooling
+ * song-wide is precisely the known-bad behavior. 100% of the rb4 val/test
+ * corpus has >=2 sections, so no corpus metric can observe this path, but
+ * ~10% of sampled MIDI-authored community customs land on it. */
+function buildSubmeasureKeys(
+  rows: readonly FeatureRow[],
+  msToMeasure: (ms: number) => [number, number],
+  clusters: Map<string, number[]>,
+  sections: readonly {ms: number; name: string}[],
+): (string | null)[] | null {
+  const starts = sections.map(s => s.ms).sort((a, b) => a - b);
+  if (starts.length < MIN_SECTIONS) return null;
+
+  const sectionOf = (ms: number): number => {
+    // bisect_right(starts, ms) - 1, clamped at 0.
+    let lo = 0;
+    let hi = starts.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (starts[mid] <= ms) lo = mid + 1;
+      else hi = mid;
+    }
+    return Math.max(0, lo - 1);
+  };
+
+  const clustered = new Set<number>();
+  for (const idxs of clusters.values()) for (const mi of idxs) clustered.add(mi);
+
+  // Expert chord lane-set per onset ms. Sorted into the key string so it is
+  // order-independent, matching Python's frozenset equality.
+  const lanesByMs = new Map<number, Set<string>>();
+  for (const r of rows) {
+    let set = lanesByMs.get(r.ms);
+    if (!set) {
+      set = new Set();
+      lanesByMs.set(r.ms, set);
+    }
+    set.add(r.lane);
+  }
+
+  return rows.map(r => {
+    const [mi, beat] = msToMeasure(r.ms);
+    if (clustered.has(mi)) return null;
+    const chord = Array.from(lanesByMs.get(r.ms)!)
+      .sort()
+      .join(',');
+    return `${chord}|${pythonRound(beat * GROOVE_TPQ)}|${sectionOf(r.ms)}`;
+  });
+}
+
+/** Relane half of the second (sub-measure) pooling pass — conf-weighted modal
+ * relane across each section-scoped sub-measure group. Family rows only.
+ * `train.py`'s `submeasure_pool_lane` at its shipped operating point.
+ *
+ * Ported at `margin = None, dominance = None`, i.e. unconditional pooling:
+ * every instance takes its group's mode. The upstream margin-gated (D1) and
+ * group-dominance-gated (D2) variants exist but are BOTH disabled in the
+ * shipped Python config, and every setting of them measured further from the
+ * human bar at no edit_rate benefit. They are deliberately not ported — port
+ * them only if those Python constants stop being `None`. */
+function submeasurePoolLane(
+  rows: readonly FeatureRow[],
+  finalLane: readonly string[],
+  confidence: readonly number[],
+  subkeys: readonly (string | null)[],
+): string[] {
+  const keyed = new Array<string | null>(rows.length);
+  const votes = new Map<string, Map<string, number>>();
+  for (let i = 0; i < rows.length; i++) {
+    const sub = subkeys[i];
+    if (sub === null || rows[i].family === 'fixed') {
+      keyed[i] = null;
+      continue;
+    }
+    const key = `${sub}|${rows[i].lane}`;
+    keyed[i] = key;
+    let tally = votes.get(key);
+    if (!tally) {
+      tally = new Map();
+      votes.set(key, tally);
+    }
+    tally.set(finalLane[i], (tally.get(finalLane[i]) ?? 0) + confidence[i]);
+  }
+  if (votes.size === 0) return finalLane.slice();
+
+  const modal = new Map<string, string>();
+  for (const [key, tally] of votes) {
+    let bestLane = '';
+    let bestScore = -Infinity;
+    for (const [lane, score] of tally) {
+      if (score > bestScore) {
+        bestScore = score;
+        bestLane = lane;
+      }
+    }
+    modal.set(key, bestLane);
+  }
+  const out = finalLane.slice();
+  for (let i = 0; i < rows.length; i++) {
+    const key = keyed[i];
+    if (key !== null) out[i] = modal.get(key)!;
+  }
+  return out;
+}
+
 /** Reduce one tier's featurized rows through its survive + relane heads,
  * groove-pooling, family-NMS, and chord-merge dedup (everything except
  * canonicalization, which needs song-wide context — see {@link reduceOurs}).
  * `msToMeasure`/`clusters` are the same measure-clock + Expert-groove
- * clusters {@link reduceOurs} builds once per song for canonicalization. */
+ * clusters {@link reduceOurs} builds once per song for canonicalization.
+ *
+ * `submeasureSubkeys` enables the second, section-scoped pooling pass for this
+ * tier; pass `null` to disable it. The tier gate lives in {@link reduceOurs},
+ * because only it knows the tier — upstream this is
+ * `SUBMEASURE_POOL_LANE_TIERS`, currently `("hard",)`. */
 export function reduceOursTier(
   rows: FeatureRow[],
   survive: SurviveModel,
@@ -248,6 +375,7 @@ export function reduceOursTier(
   familyNmsGapMs: number | null,
   msToMeasure: (ms: number) => [number, number],
   clusters: Map<string, number[]>,
+  submeasureSubkeys: readonly (string | null)[] | null = null,
 ): OursOutNote[] {
   const rawProba = rows.map(r => surviveProba(survive, r.features));
   const sp = groovePoolProba(rows, rawProba, msToMeasure, clusters);
@@ -275,23 +403,43 @@ export function reduceOursTier(
 
   const rawFinalLane: string[] = rows.map(r => r.lane);
   const confidence: number[] = rows.map(() => 1.0);
+  // Predict for EVERY family row, survivor or not. Python's
+  // `precompute_song_set` masks on family alone (`fam_mask`), never on
+  // survival, so a non-surviving family row still carries its head's
+  // predicted lane and real confidence — and both pooling passes count those
+  // votes ("survived or not — the vote still counts", above).
+  //
+  // Restricting this to survivors made non-survivors vote for their OWN lane
+  // at weight 1.0, which is neither the lane nor the weight Python uses. That
+  // was latent while the only consumer was groovePoolLane (whole-measure
+  // groups, where it never flipped an argmax across the 20 fixtures), but it
+  // diverges through the smaller section-scoped sub-measure groups below.
   for (const family of ['cymbal', 'tom'] as const) {
     const head = relane[family];
     for (let i = 0; i < rows.length; i++) {
-      if (!survived[i] || rows[i].family !== family) continue;
+      if (rows[i].family !== family) continue;
       const {lane, confidence: conf} = relanePredict(head, rows[i].features);
       rawFinalLane[i] = lane;
       confidence[i] = conf;
     }
   }
 
-  const finalLane = groovePoolLane(
+  const pooledLane = groovePoolLane(
     rows,
     rawFinalLane,
     confidence,
     msToMeasure,
     clusters,
   );
+
+  // Second pooling pass, section-scoped and sub-measure, on measures the
+  // whole-measure key above could not cluster. Runs AFTER groovePoolLane on
+  // its output, with the same confidences — `train.py`'s ordering
+  // (`RELANE_POOL` then `SUBMEASURE_POOL_LANE_TIERS`).
+  const finalLane =
+    submeasureSubkeys === null
+      ? pooledLane
+      : submeasurePoolLane(rows, pooledLane, confidence, submeasureSubkeys);
 
   // Chord-merge dedup over surviving FAMILY notes (post-NMS, post-pool):
   // group by (ms, family, final lane), keep the highest-confidence member.
@@ -412,6 +560,16 @@ export function reduceOurs(
   const {clusters} = expertGrooveClusters(expertNotes, msToMeasure);
   const msToBeat = buildMsToBeat(input.tempos);
 
+  // Expert-only and tier-independent, so built once per song like `clusters`.
+  // `null` when the song has too few sections to pool safely — see
+  // {@link buildSubmeasureKeys}.
+  const submeasureSubkeys = buildSubmeasureKeys(
+    rows,
+    msToMeasure,
+    clusters,
+    input.sections,
+  );
+
   const forTier = (tier: Tier): OursOutNote[] => {
     const candidate = reduceOursTier(
       rows,
@@ -420,6 +578,11 @@ export function reduceOurs(
       models.familyNmsGapsMs[tier],
       msToMeasure,
       clusters,
+      // `SUBMEASURE_POOL_LANE_TIERS = ("hard",)` — hard is the only tier with a
+      // measured sub-measure defect against Harmonix; medium's paired CI
+      // crosses zero and easy is already more consistent than the human bar,
+      // so pooling those would overshoot it.
+      tier === 'hard' ? submeasureSubkeys : null,
     );
     return applyCanonicalization(
       candidate,
