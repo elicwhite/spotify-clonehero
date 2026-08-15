@@ -279,7 +279,8 @@ function buildSubmeasureKeys(
   };
 
   const clustered = new Set<number>();
-  for (const idxs of clusters.values()) for (const mi of idxs) clustered.add(mi);
+  for (const idxs of clusters.values())
+    for (const mi of idxs) clustered.add(mi);
 
   // Expert chord lane-set per onset ms. Sorted into the key string so it is
   // order-independent, matching Python's frozenset equality.
@@ -296,9 +297,7 @@ function buildSubmeasureKeys(
   return rows.map(r => {
     const [mi, beat] = msToMeasure(r.ms);
     if (clustered.has(mi)) return null;
-    const chord = Array.from(lanesByMs.get(r.ms)!)
-      .sort()
-      .join(',');
+    const chord = Array.from(lanesByMs.get(r.ms)!).sort().join(',');
     return `${chord}|${pythonRound(beat * GROOVE_TPQ)}|${sectionOf(r.ms)}`;
   });
 }
