@@ -2,9 +2,14 @@ import {SQLocalKysely} from 'sqlocal/kysely';
 import {Kysely, Migrator, ParseJSONResultsPlugin} from 'kysely';
 import type {DB} from './types';
 import {normalizeStrForMatching} from './normalize';
+import {
+  LOCAL_DB_MIGRATION_LOCK,
+  getWebLocks,
+  withWebLock,
+} from '@/lib/web-locks';
 
-// Database client - will be initialized in initializeLocalDb()
-let localDb: Kysely<DB> | null = null;
+// The resolved promise IS the cache: `getLocalDb` awaits it on every call, so a
+// second variable holding the same database could only ever disagree with it.
 let dbInitializationPromise: Promise<Kysely<DB>> | null = null;
 let sqlocalClient: SQLocalKysely | null = null;
 export const LOCAL_DB_PATH = 'spotify-clonehero-local.sqlite3';
@@ -26,28 +31,58 @@ export async function localDbExists(): Promise<boolean> {
   }
 }
 
-// Initialize the database with migrations
+/**
+ * Opens the database, or joins the open already running.
+ *
+ * Clearing the cached promise happens here, after the await, rather than inside
+ * the failure path. `openAndMigrate` runs its `catch` before this function has
+ * assigned the promise, so a reset made there is immediately overwritten by the
+ * rejected promise — every later caller then replays the first rejection and
+ * only a reload can clear it. The identity check stops a slow failure from
+ * discarding a newer attempt.
+ */
 export async function getLocalDb(): Promise<Kysely<DB>> {
-  // If database is already initialized, return it immediately
-  if (localDb) {
-    return localDb;
+  const attempt = (dbInitializationPromise ??= initializeDatabase());
+  try {
+    return await attempt;
+  } catch (error) {
+    if (dbInitializationPromise === attempt) dbInitializationPromise = null;
+    throw error;
   }
-
-  // If initialization is already in progress, return the existing promise
-  if (dbInitializationPromise) {
-    return dbInitializationPromise;
-  }
-
-  // Start initialization and store the promise
-  dbInitializationPromise = initializeDatabase();
-  return dbInitializationPromise;
 }
 
 if (typeof window !== 'undefined') {
   window['getLocalDb'] = getLocalDb;
 }
 
+/**
+ * Kysely's SQLite adapter makes `acquireMigrationLock` a no-op, and reports
+ * `supportsTransactionalDdl: false` so migrations commit one at a time. Both
+ * follow from its stated assumption that SQLite has a single connection. SQLocal
+ * gives every tab its own connection to the same OPFS file, so two migrators can
+ * reach the first `ALTER TABLE ... ADD COLUMN` together and the loser fails on a
+ * duplicate column, taking the whole database down with it. This lock is what
+ * makes that assumption true again.
+ *
+ * A browser without Web Locks runs unlocked. It still opens the database
+ * correctly with one tab, and refusing to open it at all would remove a working
+ * case to prevent a race that needs two.
+ */
 async function initializeDatabase(): Promise<Kysely<DB>> {
+  // Closing the previous client happens outside the lock. `destroy()` posts to
+  // the worker and waits for an answer with no timeout of its own, so a worker
+  // that never booted would otherwise hold this origin-wide lock forever and
+  // freeze `getLocalDb()` in every tab.
+  await closeSqlocalClient();
+
+  const locks = getWebLocks();
+  return locks
+    ? withWebLock(LOCAL_DB_MIGRATION_LOCK, locks, openAndMigrate)
+    : openAndMigrate();
+}
+
+async function openAndMigrate(): Promise<Kysely<DB>> {
+  let client: SQLocalKysely | undefined;
   try {
     console.log('Initializing SQLocal database...');
 
@@ -58,7 +93,7 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
     // costs an OPFS roundtrip (~1ms), so a bigger cache pays for itself
     // quickly on read-heavy workloads (snapshot SELECTs, chorus charts,
     // etc.). Negative values are KiB; -65536 = 64 MiB. Per-tab.
-    const client = new SQLocalKysely({
+    client = new SQLocalKysely({
       databasePath: LOCAL_DB_PATH,
       onInit: sql => [
         sql`PRAGMA cache_size = -65536`,
@@ -104,13 +139,53 @@ async function initializeDatabase(): Promise<Kysely<DB>> {
 
     console.log('Local database initialized successfully');
 
-    localDb = db;
-    return localDb;
+    return db;
   } catch (error) {
     console.error('Failed to initialize local database:', error);
-    // Reset the promise so we can retry on next call
-    dbInitializationPromise = null;
+    // Same reason as above, for the client this attempt just created.
+    sqlocalClient = null;
+    await destroyQuietly(client);
     throw error;
+  }
+}
+
+async function closeSqlocalClient(): Promise<void> {
+  const previous = sqlocalClient;
+  sqlocalClient = null;
+  await destroyQuietly(previous);
+}
+
+/**
+ * A failed attempt leaves its worker, and that worker's connection to the OPFS
+ * file, alive. Retrying without closing it puts two connections on one database
+ * from a single page — the condition the migration lock exists to prevent
+ * across tabs.
+ *
+ * A teardown failure must not replace the error that caused the teardown, and a
+ * worker that never booted must not hold anything up: `destroy()` waits on a
+ * worker reply with no timeout, so it is raced against one here.
+ */
+const DESTROY_TIMEOUT_MS = 3000;
+
+async function destroyQuietly(
+  client: SQLocalKysely | null | undefined,
+): Promise<void> {
+  if (!client) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.destroy(),
+      new Promise<void>(resolve => {
+        timer = setTimeout(() => {
+          console.warn('Timed out destroying the previous SQLocal client');
+          resolve();
+        }, DESTROY_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.warn('Could not destroy the previous SQLocal client', error);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -206,7 +281,7 @@ export async function overwriteLocalDbFile(
   if (!sqlocalClient) throw new Error('SQLocal client not initialized');
   await sqlocalClient.overwriteDatabaseFile(databaseFile);
   // Force a fresh Kysely instance so connections see the new file
-  localDb = null;
+  await closeSqlocalClient();
   dbInitializationPromise = null;
   await getLocalDb();
 }

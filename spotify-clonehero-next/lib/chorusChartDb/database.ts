@@ -13,6 +13,7 @@ import {
 } from '@/lib/local-db/chorus';
 import {getLastScanSession} from '../local-db/chorus/scanning';
 import {getLocalDb} from '@/lib/local-db/client';
+import {CHORUS_CATALOG_LOCK, getWebLocks, withWebLock} from '@/lib/web-locks';
 
 const DEBUG = true;
 
@@ -34,6 +35,16 @@ export function useChorusChartDb(): [
     }));
 
     try {
+      // Every path below ends in a locked section, so an unusable LockManager
+      // is fatal whichever one runs. Failing here rather than in two places
+      // also stops a dump being downloaded that could never be installed.
+      const locks = getWebLocks();
+      if (!locks) {
+        throw new Error(
+          'This browser does not support cross-tab catalog synchronization',
+        );
+      }
+
       debugLog('Checking for server data updates');
       const localDataVersion = await getChartsDataVersion();
       const serverDataVersion = await getServerChartsDataVersion();
@@ -43,13 +54,6 @@ export function useChorusChartDb(): [
           ...progress,
           status: 'fetching-dump',
         }));
-
-        const locks = getCatalogLocks();
-        if (!locks) {
-          throw new Error(
-            'This browser does not support cross-tab catalog synchronization',
-          );
-        }
 
         const installCatalog = async () => {
           // Another tab may have completed the replacement while this tab
@@ -76,14 +80,7 @@ export function useChorusChartDb(): [
           });
         };
 
-        await withCatalogLock(installCatalog, locks);
-      }
-
-      const locks = getCatalogLocks();
-      if (!locks) {
-        throw new Error(
-          'This browser does not support cross-tab catalog synchronization',
-        );
+        await withWebLock(CHORUS_CATALOG_LOCK, locks, installCatalog);
       }
 
       setProgress(progress => ({
@@ -92,16 +89,14 @@ export function useChorusChartDb(): [
       }));
       debugLog('Fetching updated charts');
 
-      await withCatalogLock(
-        () =>
-          getUpdatedCharts((_, stats) => {
-            setProgress(progress => ({
-              ...progress,
-              numFetched: stats.totalSongsFound,
-              numTotal: stats.totalSongsToFetch,
-            }));
-          }),
-        locks,
+      await withWebLock(CHORUS_CATALOG_LOCK, locks, () =>
+        getUpdatedCharts((_, stats) => {
+          setProgress(progress => ({
+            ...progress,
+            numFetched: stats.totalSongsFound,
+            numTotal: stats.totalSongsToFetch,
+          }));
+        }),
       );
       debugLog('Done fetching charts');
     } catch (error) {
@@ -167,29 +162,4 @@ function debugLog(message: string) {
   if (DEBUG) {
     console.log(message);
   }
-}
-
-type LockManagerLike = {
-  request<T>(
-    name: string,
-    options: {mode: 'exclusive'},
-    callback: () => Promise<T>,
-  ): Promise<T>;
-};
-
-function getCatalogLocks(): LockManagerLike | undefined {
-  return typeof navigator !== 'undefined'
-    ? (navigator as Navigator & {locks?: LockManagerLike}).locks
-    : undefined;
-}
-
-async function withCatalogLock<T>(
-  work: () => Promise<T>,
-  locks: LockManagerLike,
-): Promise<T> {
-  return locks.request(
-    'spotify-clonehero-chorus-catalog',
-    {mode: 'exclusive'},
-    work,
-  );
 }
