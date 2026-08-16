@@ -206,6 +206,7 @@ import {
 } from './hitTest';
 import {buildLyricsRowScene, fullySelectedPhraseTicks} from './lyricsScene';
 import {
+  edgeScrollDeltaPx,
   fitToWidth,
   followLeftMs,
   msToX,
@@ -709,6 +710,16 @@ export default function PianoRollTimeline({
   const lastPlayheadRef = useRef(-1);
   const dirtyRef = useRef(true);
   const drawRef = useRef<(playheadMs: number) => void>(() => {});
+  /**
+   * Pointer x (viewport px) of the in-flight scrub, or null. The frame loop
+   * reads it to auto-scroll while the pointer rests at a viewport edge: a
+   * held pointer sends NO further move events, so the pan has to come from
+   * the loop, not from `handlePointerMove`.
+   */
+  const scrubPointerXRef = useRef<number | null>(null);
+  /** `performance.now()` of the last edge-scroll step (frame delta source). */
+  const scrubEdgeTsRef = useRef(0);
+  const seekToRef = useRef<(ms: number) => void>(() => {});
 
   // -- Note-editing interaction state (refs: no re-render per pointer move) --
   const pointerModeRef = useRef<PointerMode>('idle');
@@ -1468,7 +1479,39 @@ export default function PianoRollTimeline({
     const isActive = () =>
       audioManager.isPlaying || pointerModeRef.current !== 'idle';
 
+    /**
+     * Auto-scroll while a scrub drag holds the pointer in an edge band, so the
+     * playhead the user is dragging stays on screen instead of stopping at the
+     * viewport border. The pan re-seeks to the ms now under the (stationary)
+     * pointer, which is what carries the playhead along with the view.
+     */
+    const edgeScroll = () => {
+      const pointerX = scrubPointerXRef.current;
+      const view = viewRef.current;
+      const scene = sceneRef.current;
+      const canvas = canvasRef.current;
+      const now = performance.now();
+      const dtMs = Math.min(50, now - scrubEdgeTsRef.current);
+      scrubEdgeTsRef.current = now;
+      if (pointerX === null || !scene || !canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvas.width / dpr;
+      const vw =
+        stackedPianoRollRef.current && scene.rows.length > 1
+          ? Math.max(1, width - STACKED_GUTTER_W)
+          : width;
+      const deltaPx = edgeScrollDeltaPx({pointerX, viewportWidth: vw, dtMs});
+      if (deltaPx === 0) return;
+      const before = view.leftMs;
+      const panned = panByPx(view, deltaPx, vw, scene.totalMs);
+      if (panned.leftMs === before) return; // already at the song's edge
+      view.leftMs = panned.leftMs;
+      dirtyRef.current = true;
+      seekToRef.current(xToMs(pointerX, view));
+    };
+
     const drawIfNeeded = () => {
+      if (pointerModeRef.current === 'scrub') edgeScroll();
       const playheadMs = Math.max(0, audioManager.chartTime * 1000);
       const playing = audioManager.isPlaying;
       // Re-engage follow on the play rising edge (mirrors the highway).
@@ -1572,6 +1615,8 @@ export default function PianoRollTimeline({
     },
     [audioManager, durationSeconds],
   );
+
+  seekToRef.current = seekTo;
 
   const seekZone = useCallback((y: number, laneBottom: number) => {
     return y <= RULER_H || y >= laneBottom;
@@ -2086,6 +2131,8 @@ export default function PianoRollTimeline({
         }
         scrubbingRef.current = true;
         pointerModeRef.current = 'scrub';
+        scrubPointerXRef.current = x;
+        scrubEdgeTsRef.current = performance.now();
         seekTo(xToMs(x, viewRef.current));
         return;
       }
@@ -2429,6 +2476,10 @@ export default function PianoRollTimeline({
       const mode = pointerModeRef.current;
 
       if (mode === 'scrub') {
+        // Pointer capture keeps the events coming after the pointer leaves the
+        // canvas, so `x` can be negative or past the width — exactly what the
+        // frame loop's edge-scroll wants.
+        scrubPointerXRef.current = x;
         seekTo(xToMs(x, viewRef.current));
         return;
       }
@@ -3293,6 +3344,7 @@ export default function PianoRollTimeline({
       }
 
       scrubbingRef.current = false;
+      scrubPointerXRef.current = null;
       pointerModeRef.current = 'idle';
       noteDragRef.current = null;
       noteResizeRef.current = null;
@@ -4119,6 +4171,7 @@ export default function PianoRollTimeline({
     }
     pointerModeRef.current = 'idle';
     scrubbingRef.current = false;
+    scrubPointerXRef.current = null;
     noteDragRef.current = null;
     marqueeRef.current = null;
     tempoDragRef.current = null;

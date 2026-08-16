@@ -1,7 +1,10 @@
 import {
   BASE_PX_PER_MS,
   MIN_GLYPH_WIDTH,
+  EDGE_SCROLL_MAX_PX_PER_MS,
+  EDGE_SCROLL_ZONE_PX,
   clampLeftMs,
+  edgeScrollDeltaPx,
   fitToWidth,
   followLeftMs,
   glyphWidth,
@@ -253,5 +256,73 @@ describe('viewMath: glyphWidth', () => {
     });
     // raw = 120 * 0.5 * 0.1 * 0.72 = 4.32
     expect(w).toBeCloseTo(4.32, 6);
+  });
+});
+
+describe('viewMath: edge auto-scroll', () => {
+  const width = 900;
+  const dtMs = 16;
+
+  test('the middle of the viewport does not scroll', () => {
+    for (const pointerX of [width / 2, EDGE_SCROLL_ZONE_PX + 1]) {
+      expect(edgeScrollDeltaPx({pointerX, viewportWidth: width, dtMs})).toBe(0);
+    }
+  });
+
+  test('each band scrolls toward its own edge', () => {
+    expect(
+      edgeScrollDeltaPx({pointerX: 10, viewportWidth: width, dtMs}),
+    ).toBeLessThan(0);
+    expect(
+      edgeScrollDeltaPx({pointerX: width - 10, viewportWidth: width, dtMs}),
+    ).toBeGreaterThan(0);
+  });
+
+  test('speed ramps with depth and saturates past the run-out', () => {
+    const shallow = edgeScrollDeltaPx({
+      pointerX: width - 10,
+      viewportWidth: width,
+      dtMs,
+    });
+    const deep = edgeScrollDeltaPx({
+      pointerX: width + 60,
+      viewportWidth: width,
+      dtMs,
+    });
+    const far = edgeScrollDeltaPx({
+      pointerX: width + 5000,
+      viewportWidth: width,
+      dtMs,
+    });
+    expect(deep).toBeGreaterThan(shallow);
+    expect(far).toBeGreaterThan(deep);
+    expect(far).toBeCloseTo(EDGE_SCROLL_MAX_PX_PER_MS * dtMs, 6);
+  });
+
+  test('the delta is proportional to the frame time', () => {
+    const one = edgeScrollDeltaPx({pointerX: -50, viewportWidth: width, dtMs});
+    const two = edgeScrollDeltaPx({
+      pointerX: -50,
+      viewportWidth: width,
+      dtMs: dtMs * 2,
+    });
+    expect(two).toBeCloseTo(one * 2, 6);
+  });
+
+  test('a stopped clock never scrolls', () => {
+    expect(
+      edgeScrollDeltaPx({pointerX: 0, viewportWidth: width, dtMs: 0}),
+    ).toBe(0);
+  });
+
+  test('a viewport narrower than two bands keeps a neutral middle', () => {
+    const narrow = EDGE_SCROLL_ZONE_PX;
+    expect(
+      edgeScrollDeltaPx({
+        pointerX: narrow / 2,
+        viewportWidth: narrow,
+        dtMs,
+      }),
+    ).toBe(0);
   });
 });

@@ -190,6 +190,53 @@ export function followLeftMs(input: FollowInput): number {
   return leftMs;
 }
 
+/** Width of the auto-scroll band at each viewport edge, in px. */
+export const EDGE_SCROLL_ZONE_PX = 56;
+/** Top auto-scroll speed, in px per ms (== 900 px/s). */
+export const EDGE_SCROLL_MAX_PX_PER_MS = 0.9;
+/**
+ * Pointer distance past the edge at which the speed reaches its maximum. Past
+ * the edge the ramp keeps growing, so the user can pull further out to go
+ * faster, but it saturates here instead of running away.
+ */
+export const EDGE_SCROLL_RUNOUT_PX = 120;
+
+export interface EdgeScrollInput {
+  /** Pointer x in viewport px (negative or > `viewportWidth` when outside). */
+  pointerX: number;
+  viewportWidth: number;
+  /** Elapsed time since the last scroll step, in ms. */
+  dtMs: number;
+}
+
+/**
+ * Pixels to pan this frame while a drag holds the pointer at a viewport edge.
+ *
+ * The speed ramps from 0 at the inner border of the edge band to the maximum
+ * at {@link EDGE_SCROLL_RUNOUT_PX} past the edge, so a small push scrolls
+ * slowly and a big one scrolls fast. Returns 0 in the middle of the viewport.
+ * Positive = scroll right (content moves left), which matches
+ * {@link panByPx}.
+ */
+export function edgeScrollDeltaPx(input: EdgeScrollInput): number {
+  const {pointerX, viewportWidth, dtMs} = input;
+  if (dtMs <= 0 || viewportWidth <= 0) return 0;
+  // A viewport too narrow for two bands gets one band per side, each half of
+  // it, so the two never overlap into a dead zone that always scrolls.
+  const zone = Math.min(EDGE_SCROLL_ZONE_PX, viewportWidth / 2);
+  let depth = 0;
+  if (pointerX < zone) {
+    depth = -(zone - pointerX);
+  } else if (pointerX > viewportWidth - zone) {
+    depth = pointerX - (viewportWidth - zone);
+  } else {
+    return 0;
+  }
+  const ramp = clamp(Math.abs(depth) / (zone + EDGE_SCROLL_RUNOUT_PX), 0, 1);
+  const speed = ramp * EDGE_SCROLL_MAX_PX_PER_MS;
+  return Math.sign(depth) * speed * dtMs;
+}
+
 export interface GlyphWidthInput {
   /** Ticks in one grid step (`gridStepTicks(resolution, gridDivision)`). */
   gridStepTicks: number;
