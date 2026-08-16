@@ -10,6 +10,7 @@ import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
 import {createClient} from '@/lib/supabase/client';
 import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
+import * as Sentry from '@sentry/nextjs';
 import {
   CHORUS_UNAVAILABLE_MESSAGE,
   isChorusUnavailableError,
@@ -299,6 +300,9 @@ export default function FindMusicClient() {
               error instanceof Error ? error.message : String(error),
             );
             toast.error('Could not refresh the Chorus index');
+            // A Chorus outage is not our bug and stays out of Sentry; the
+            // branch above owns it. Anything reaching here is ours.
+            Sentry.captureException(error);
           }
           setCatalogState('degraded');
         }
@@ -354,19 +358,29 @@ export default function FindMusicClient() {
 
   useEffect(() => {
     let canceled = false;
-    void supabase.auth.getUser().then(({data}) => {
-      if (canceled) return;
-      const nextUser = data?.user ?? null;
-      setUser(nextUser);
-      setHasSpotify(
-        Boolean(
-          nextUser?.identities?.some(
-            identity => identity.provider === 'spotify',
+    void supabase.auth
+      .getUser()
+      .then(({data}) => {
+        if (canceled) return;
+        const nextUser = data?.user ?? null;
+        setUser(nextUser);
+        setHasSpotify(
+          Boolean(
+            nextUser?.identities?.some(
+              identity => identity.provider === 'spotify',
+            ),
           ),
-        ),
-      );
-      setAuthChecked(true);
-    });
+        );
+        setAuthChecked(true);
+      })
+      .catch((error: unknown) => {
+        if (canceled) return;
+        // Without this the page waits on `authChecked` forever and every
+        // source card stays on "Not connected" with no reason given. This is
+        // the login check itself, so its failure is worth hearing about.
+        setAuthChecked(true);
+        Sentry.captureException(error);
+      });
     return () => {
       canceled = true;
     };
@@ -450,6 +464,9 @@ export default function FindMusicClient() {
         });
     if (result.error) {
       toast.error(result.error.message);
+      // A sign-in that cannot start is the failure most worth hearing about:
+      // the user cannot reach any of this page without it.
+      Sentry.captureException(result.error);
       return;
     }
     if (result.data?.url) window.location.href = result.data.url;
@@ -501,6 +518,7 @@ export default function FindMusicClient() {
         detail: message,
       });
       toast.error(message);
+      Sentry.captureException(error);
     }
   }, [activateSourceAccess, stageSnapshot]);
 
@@ -528,6 +546,7 @@ export default function FindMusicClient() {
         toast.error(
           error instanceof Error ? error.message : 'Spotify refresh failed',
         );
+        Sentry.captureException(error);
       }
     }
   }, [
@@ -580,6 +599,7 @@ export default function FindMusicClient() {
         // ran on its own states it on the card only: a toast would blame the
         // user for a folder they never touched this visit.
         if (announceFailure) toast.error(message);
+        Sentry.captureException(error);
       }
     },
     [stageSnapshot],
@@ -872,6 +892,14 @@ export default function FindMusicClient() {
                     The stored catalog could not be updated, so its instrument
                     metadata is being kept hidden until the refresh succeeds.
                   </p>
+                  {/* Without this the card says only that something failed.
+                      Diagnosing the first report of one cost a Discord thread
+                      and a screenshot of the reporter's console. */}
+                  {chorusError ? (
+                    <p className="mt-2 text-sm break-words text-destructive">
+                      {chorusError}
+                    </p>
+                  ) : null}
                   <Button
                     type="button"
                     className="mt-4"

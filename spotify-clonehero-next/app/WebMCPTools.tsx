@@ -3,10 +3,10 @@
 import {useEffect} from 'react';
 import {usePathname} from 'next/navigation';
 import {runRawSql} from '@/lib/local-db/client';
-import {isTasteDataPrivateRoute} from '@/lib/apple-music/private-route';
+import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
 
 function currentRoutePrivacyError() {
-  if (!isTasteDataPrivateRoute(window.location.pathname)) return null;
+  if (!rendersPersonalTasteData(window.location.pathname)) return null;
   return {
     content: [
       {
@@ -26,7 +26,7 @@ function currentRoutePrivacyError() {
  */
 export default function WebMCPTools() {
   const pathname = usePathname();
-  const isTasteDataPrivate = isTasteDataPrivateRoute(pathname);
+  const isTasteDataPrivate = rendersPersonalTasteData(pathname);
 
   useEffect(() => {
     if (isTasteDataPrivate) return;

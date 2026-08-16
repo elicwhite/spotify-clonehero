@@ -4,51 +4,73 @@
 
 import * as Sentry from '@sentry/nextjs';
 import {getSentryEnvironment, isSentryEnabled} from '@/lib/sentry/environment';
-import {isTasteDataPrivateRoute} from '@/lib/apple-music/private-route';
+import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
+import {markReplayRegistered} from '@/lib/sentry/replay';
+import {
+  filterTasteBreadcrumb,
+  filterTasteTransaction,
+} from '@/lib/sentry/taste-filters';
 
 const sentryEnvironment = getSentryEnvironment(
   process.env['NEXT_PUBLIC_VERCEL_ENV'],
 );
-const isInitialTasteDataPrivate = isTasteDataPrivateRoute(
+const isInitialTasteDataPrivate = rendersPersonalTasteData(
   typeof window === 'undefined' ? undefined : window.location.pathname,
 );
-const isCurrentTasteDataPrivate = () =>
-  isTasteDataPrivateRoute(
-    typeof window === 'undefined' ? undefined : window.location.pathname,
-  );
+const currentPathname = () =>
+  typeof window === 'undefined' ? undefined : window.location.pathname;
 
-if (!isInitialTasteDataPrivate) {
-  Sentry.init({
-    dsn: 'https://ef4de5241935af48ae2c81fbc23c6a46@o4506522084048896.ingest.us.sentry.io/4506522086080512',
-
-    environment: sentryEnvironment,
-
-    // Add optional integrations for additional features
-    integrations: [Sentry.replayIntegration()],
-
-    // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-    tracesSampleRate: 1,
-
-    // Define how likely Replay events are sampled.
-    // This sets the sample rate to be 10%. You may want this to be 100% while
-    // in development and sample at a lower rate in production
-    replaysSessionSampleRate: 0.0,
-
-    // Define how likely Replay events are sampled when an error occurs.
-    replaysOnErrorSampleRate: 0.2,
-
-    // Setting this option to true will print useful information to the console while you're setting up Sentry.
-    debug: false,
-
-    enabled: isSentryEnabled(sentryEnvironment),
-
-    // Client-side navigation can enter /find-music after Sentry initialized.
-    // Drop events at send time so personal taste data stays browser-local.
-    beforeSend: event => (isCurrentTasteDataPrivate() ? null : event),
-    beforeSendTransaction: event =>
-      isCurrentTasteDataPrivate() ? null : event,
-  });
+// `replayIntegration()` throws if it is ever called twice, so the one place that
+// decides to call it also records that it did.
+function initialIntegrations() {
+  if (isInitialTasteDataPrivate) return [];
+  markReplayRegistered();
+  return [Sentry.replayIntegration()];
 }
+
+// Sentry initializes on every route. Skipping it when the first load was a
+// taste-data route meant a user landing directly on /find-music had no SDK at
+// all, so that whole feature reported nothing — a broken Chorus refresh took a
+// Discord thread and a screenshot of the user's console to diagnose.
+//
+// Errors from those routes are reported. Session Replay is what must not run
+// there: it records the DOM, which on /find-music is the user's songs, artists,
+// and playlists. It is therefore registered only when the first load was not a
+// taste-data route, and added later by TasteDataPrivacyBoundary on the first
+// navigation to one that is not. `stop()` alone is not enough — a buffer that
+// was never created cannot be flushed by an integration that loads too early.
+Sentry.init({
+  dsn: 'https://ef4de5241935af48ae2c81fbc23c6a46@o4506522084048896.ingest.us.sentry.io/4506522086080512',
+
+  environment: sentryEnvironment,
+
+  integrations: initialIntegrations(),
+
+  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
+  tracesSampleRate: 1,
+
+  // Define how likely Replay events are sampled.
+  // This sets the sample rate to be 10%. You may want this to be 100% while
+  // in development and sample at a lower rate in production
+  replaysSessionSampleRate: 0.0,
+
+  // Define how likely Replay events are sampled when an error occurs.
+  replaysOnErrorSampleRate: 0.2,
+
+  // Setting this option to true will print useful information to the console while you're setting up Sentry.
+  debug: false,
+
+  enabled: isSentryEnabled(sentryEnvironment),
+
+  // Errors from taste-data routes are wanted. What those errors carry with
+  // them — the console, the network, and the DOM attributes Sentry copies into
+  // click breadcrumbs — is where the user's library would otherwise ride along.
+  // `lib/sentry/taste-filters` holds the rules so they can be tested directly.
+  beforeSendTransaction: event =>
+    filterTasteTransaction(event, currentPathname()),
+  beforeBreadcrumb: breadcrumb =>
+    filterTasteBreadcrumb(breadcrumb, currentPathname()),
+});
 
 export const onRouterTransitionStart = (
   ...args: Parameters<typeof Sentry.captureRouterTransitionStart>
@@ -58,10 +80,10 @@ export const onRouterTransitionStart = (
     typeof window === 'undefined'
       ? href
       : new URL(href, window.location.origin).pathname;
-  if (isTasteDataPrivateRoute(targetPath)) {
+  if (rendersPersonalTasteData(targetPath)) {
     void Sentry.getReplay()?.stop();
     return;
   }
-  if (isCurrentTasteDataPrivate()) return;
+  if (rendersPersonalTasteData(currentPathname())) return;
   return Sentry.captureRouterTransitionStart(...args);
 };

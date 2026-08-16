@@ -1,6 +1,6 @@
 import {
   isAppleMusicConnectorRoute,
-  isTasteDataPrivateRoute,
+  rendersPersonalTasteData,
 } from '../private-route';
 
 describe('isAppleMusicConnectorRoute', () => {
@@ -26,7 +26,7 @@ describe('isAppleMusicConnectorRoute', () => {
   });
 });
 
-describe('isTasteDataPrivateRoute', () => {
+describe('rendersPersonalTasteData', () => {
   it.each([
     '/apple-music-connect',
     '/apple-music-connect/',
@@ -34,7 +34,7 @@ describe('isTasteDataPrivateRoute', () => {
     '/find-music/',
     '/find-music/recommendations',
   ])('matches a route with personal taste data: %s', pathname => {
-    expect(isTasteDataPrivateRoute(pathname)).toBe(true);
+    expect(rendersPersonalTasteData(pathname)).toBe(true);
   });
 
   it.each([
@@ -44,6 +44,6 @@ describe('isTasteDataPrivateRoute', () => {
     '/apple-music-connect/child',
     '/find-musician',
   ])('does not match an ordinary route: %s', pathname => {
-    expect(isTasteDataPrivateRoute(pathname)).toBe(false);
+    expect(rendersPersonalTasteData(pathname)).toBe(false);
   });
 });

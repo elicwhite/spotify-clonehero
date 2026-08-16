@@ -487,7 +487,9 @@ async function downloadAsFolder(
     // This is what we hope for, that the file doesn't exist
   }
   if (songDirHandle != null) {
-    throw new Error(`Chart ${filename} already installed`);
+    // The caller renders a state, not this string, so naming the chart here
+    // only puts it in an error report.
+    throw new Error('Chart already installed');
   }
 
   try {
@@ -540,7 +542,7 @@ async function downloadAsSng(
     // This is what we hope for, that the file doesn't exist
   }
   if (songFileHandle != null) {
-    throw new Error(`Chart ${fileWithExtension} already installed`);
+    throw new Error('Chart already installed');
   }
 
   try {

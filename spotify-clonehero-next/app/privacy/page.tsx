@@ -40,8 +40,8 @@ export default function PrivacyPage() {
         <li>Approximate location derived from IP at country level.</li>
         <li>
           Custom events for feature usage and conversion funnels — e.g. &quot;a
-          chart was downloaded from the Spotify page&quot;, &quot;a sheet-music
-          viewer was opened&quot;, &quot;a lyric was manually moved before
+          chart was downloaded from Find Music&quot;, &quot;a sheet-music viewer
+          was opened&quot;, &quot;a lyric was manually moved before
           export&quot;. The full list lives in{' '}
           <code>lib/analytics/track.ts</code> in the source repo.
         </li>
@@ -51,11 +51,20 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
+      <h2>Error reporting</h2>
+
+      <p>
+        We report errors to Sentry to help improve the reliability of the site.
+      </p>
+
       <h2>What we don&apos;t collect</h2>
 
       <ul>
         <li>No advertising identifiers; we run no ads.</li>
-        <li>No third-party trackers beyond Google Analytics.</li>
+        <li>
+          No third-party trackers beyond Google Analytics and the error
+          reporting above.
+        </li>
         <li>
           No content of files you load: audio, charts, lyrics, and Spotify
           history all stay in your browser&apos;s storage (OPFS / SQLocal /

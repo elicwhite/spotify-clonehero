@@ -1,5 +1,6 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
@@ -56,6 +57,9 @@ export function useAppleMusicSource({
 
   useEffect(() => {
     if (!enabled) return;
+    // `setup` never rejects — it classifies into `setupState` and resolves to
+    // null — so it reports from its own catch rather than through a `.catch`
+    // here that could never run.
     void setup();
   }, [enabled, setup]);
 
@@ -91,14 +95,25 @@ export function useAppleMusicSource({
       } else if (result.status === 'error') {
         setRefreshError(result.message);
         toast.error(result.message);
+        // The classified failures are the diagnosable ones; reporting only the
+        // outer `.catch` below would hear about everything except these.
+        //
+        // Only the code is sent. `classifyAppleMusicError` exists because the
+        // raw error can quote private song metadata — see the "safe actionable
+        // diagnostic" test — so attaching it as a `cause` would undo that.
+        Sentry.captureException(
+          new Error(`Apple Music refresh failed: ${result.errorCode}`),
+        );
       }
     })().catch(error => {
+      if (controller.signal.aborted) return;
       const message =
         error instanceof Error
           ? error.message
           : 'Apple Music library refresh failed';
       setRefreshError(message);
       toast.error(message);
+      Sentry.captureException(error);
     });
     refreshInFlightRef.current = run;
     try {
@@ -131,6 +146,7 @@ export function useAppleMusicSource({
           ? error.message
           : 'Could not clear Apple Music data',
       );
+      Sentry.captureException(error);
     }
   }, [disconnect, replaceSnapshot]);
 

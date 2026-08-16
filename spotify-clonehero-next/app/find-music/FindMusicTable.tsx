@@ -1,5 +1,6 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import {
   useCallback,
   useContext,
@@ -126,6 +127,7 @@ export default function FindMusicTable({
     }));
     void dismissRadarSong(song.key, scope).catch(error => {
       console.error('Failed to save recommendation dismissal', error);
+      Sentry.captureException(error);
     });
   }, []);
 
@@ -164,6 +166,8 @@ export default function FindMusicTable({
       setDownloadStates(current => ({...current, [chart.md5]: 'done'}));
     } catch (error) {
       console.error('Failed to install chart', error);
+      // An md5 says which chart without saying which song.
+      Sentry.captureException(error, {tags: {chart_md5: chart.md5}});
       setDownloadStates(current => ({...current, [chart.md5]: 'error'}));
     }
   }, []);

@@ -1,5 +1,6 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import {useCallback, useRef, useState} from 'react';
 import {
   AppleMusicError,
@@ -140,6 +141,12 @@ export function useAppleMusicLibraryUpdate(
         setSetupState(
           classified.code === 'unauthorized' ? 'unauthorized' : 'error',
         );
+        // `setup` resolves to null rather than rejecting, so a caller's
+        // `.catch` never runs. Reporting has to happen here or not at all.
+        // An expired or declined authorization is the user's own doing.
+        if (classified.code !== 'unauthorized') {
+          Sentry.captureException(error);
+        }
         return null;
       }
     },

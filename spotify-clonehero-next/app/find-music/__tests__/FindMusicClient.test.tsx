@@ -23,6 +23,11 @@ import {FIND_MUSIC_FILTERS_STORAGE_KEY} from '../filterPersistence';
 import {FIND_MUSIC_ACTIVATION_KEY} from '../activation';
 
 let mockPathname = '/find-music';
+const mockCaptureException = jest.fn();
+jest.mock('@sentry/nextjs', () => ({
+  captureException: (...args: unknown[]) => mockCaptureException(...args),
+}));
+
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
 }));
@@ -36,11 +41,15 @@ type MockAuthUser = {identities?: Array<{provider: string}>} | null;
 const mockGetUser = jest.fn(
   async (): Promise<{data: {user: MockAuthUser}}> => ({data: {user: null}}),
 );
+const mockSignInWithOAuth = jest.fn(async () => ({
+  data: {url: null},
+  error: null as {message: string} | null,
+}));
 jest.mock('../../../lib/supabase/client', () => ({
   createClient: () => ({
     auth: {
       getUser: mockGetUser,
-      signInWithOAuth: jest.fn(),
+      signInWithOAuth: mockSignInWithOAuth,
       linkIdentity: jest.fn(),
     },
   }),
@@ -167,6 +176,7 @@ jest.mock('../FindMusicSidebar', () => ({
     chorusStatus,
     onRefreshAppleMusic,
     onRefreshChorus,
+    onConnectSpotify,
   }: {
     musicCount: number;
     view: 'music' | 'radar';
@@ -180,6 +190,7 @@ jest.mock('../FindMusicSidebar', () => ({
     chorusStatus: SourceStatus;
     onRefreshAppleMusic: () => void;
     onRefreshChorus: () => void;
+    onConnectSpotify: () => void;
   }) => (
     <aside
       data-testid="sidebar"
@@ -203,6 +214,12 @@ jest.mock('../FindMusicSidebar', () => ({
       </button>
       <button type="button" onClick={() => onViewChange('music')}>
         Choose your music
+      </button>
+      <button
+        type="button"
+        data-testid="sidebar-connect-spotify"
+        onClick={onConnectSpotify}>
+        Connect Spotify test
       </button>
       <button type="button" onClick={onRefreshAppleMusic}>
         Refresh Apple Music test
@@ -342,6 +359,42 @@ it('tells the user to try again later when Chorus is unavailable', async () => {
     'data-chorus-phase',
     'error',
   );
+  // Chorus being down is not our bug. Restored with the reporting that
+  // 9cff96d8 removed along with the two Spotify pages.
+  expect(mockCaptureException).not.toHaveBeenCalled();
+});
+
+it('reports a sign-in that cannot start', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(true);
+  mockGetUser.mockResolvedValue({data: {user: null}});
+  mockSignInWithOAuth.mockResolvedValue({
+    data: {url: null},
+    error: {message: 'redirect_uri_mismatch'},
+  });
+
+  render(<FindMusicClient />);
+
+  const connect = await screen.findByTestId('sidebar-connect-spotify');
+  fireEvent.click(connect);
+
+  await waitFor(() => expect(mockCaptureException).toHaveBeenCalledTimes(1));
+});
+
+it('reports a Chorus refresh failure that is not an outage', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(true);
+  mockRefreshChorus.mockRejectedValue(
+    new Error('SQLITE_ERROR: duplicate column name: artist_normalized'),
+  );
+
+  render(<FindMusicClient />);
+
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+  await waitFor(() => expect(mockCaptureException).toHaveBeenCalledTimes(1));
+  expect(
+    screen.getByText(/duplicate column name: artist_normalized/),
+  ).toBeInTheDocument();
 });
 
 it('does not create the local index or prepare sources before first interaction', async () => {
