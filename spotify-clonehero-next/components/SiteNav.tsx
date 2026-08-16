@@ -15,7 +15,7 @@ export default function SiteNav() {
   return (
     <nav className="h-12 shrink-0 border-b border-border/60 px-4 md:h-16 md:px-8">
       <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto h-full">
-        <div className="flex flex-row gap-8">
+        <div className="flex flex-row items-center gap-4 md:gap-8">
           <Link
             href="/"
             className="flex items-center space-x-3 rtl:space-x-reverse">
@@ -23,11 +23,24 @@ export default function SiteNav() {
               Music Charts Tools
             </span>
           </Link>
-          <Link href="/">
-            <Button variant="ghost" className="font-semibold">
-              <span className="">More Tools</span>
-            </Button>
-          </Link>
+          <div className="flex flex-row items-center gap-1">
+            {/*
+              The two audience pages. `/` is the player page, so Play and the
+              brand link go to the same place; it is listed anyway because a
+              wordmark is not a nav item, and a reader who has scrolled into
+              /chart needs a way back that says what it is.
+            */}
+            <Link href="/">
+              <Button variant="ghost" className="font-semibold">
+                Play
+              </Button>
+            </Link>
+            <Link href="/chart">
+              <Button variant="ghost" className="font-semibold">
+                Chart
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <nav className="flex items-center">

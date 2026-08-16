@@ -3,11 +3,11 @@
  */
 /**
  * Site-wide header (plan 0074 Phase 8 task 8c, owner feedback from live
- * review 2026-08-03: the site header - brand link home, More Tools, login -
- * must stay visible at the top of every editor route). The full site nav on
- * every ordinary page; on an editor route, the compact site header (home
- * link + More Tools + auth controls) instead - always present, never
- * suppressed by the page beneath it.
+ * review 2026-08-03: the site header - brand link home, login - must stay
+ * visible at the top of every editor route). The full site nav on every
+ * ordinary page; on an editor route, the compact site header (home link +
+ * auth controls) instead - always present, never suppressed by the page
+ * beneath it.
  */
 
 import '@testing-library/jest-dom';
@@ -53,7 +53,7 @@ describe('SiteHeader', () => {
     expect(screen.queryByText('Log In')).not.toBeInTheDocument();
   });
 
-  it('renders the compact site header - home link, More Tools, and auth controls - on an editor route', () => {
+  it('renders the compact site header - home link and auth controls - on an editor route', () => {
     mockPathname = '/chart-editor';
     renderChrome();
 
@@ -61,8 +61,10 @@ describe('SiteHeader', () => {
       name: 'Music Charts Tools home',
     });
     expect(homeLink).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', {name: 'More Tools'})).toBeInTheDocument();
     expect(screen.getByText('Log In')).toBeInTheDocument();
+    // The audience links stay in the full nav; this row is 40px above an
+    // editor and carries only the standing affordances.
+    expect(screen.queryByRole('link', {name: 'Chart'})).not.toBeInTheDocument();
   });
 
   it('includes the GitHub and Discord icon links on an editor route (plan 0076 item 1)', () => {

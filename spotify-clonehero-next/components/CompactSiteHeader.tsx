@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import {Suspense} from 'react';
 import {Music} from 'lucide-react';
-import {Button} from '@/components/ui/button';
 import HeaderAuthControls from '@/components/HeaderAuthControls';
 import SocialLinks from '@/components/SocialLinks';
 
@@ -9,8 +8,8 @@ import SocialLinks from '@/components/SocialLinks';
  * Compact site header shown on editor routes (owner feedback, live review
  * 2026-08-03): "we need our site header to be on the top of the page, as it
  * includes the login button and link to other tools." A slim ~40px row with
- * the same functional affordances as the full site nav (brand link home, More
- * Tools, Discord/GitHub, auth controls), styled to sit above a dark editor
+ * the same functional affordances as the full site nav (brand link home,
+ * Discord/GitHub, auth controls), styled to sit above a dark editor
  * surface. It is always on screen on an editor route; the editor's own
  * song-identity row renders directly beneath it as a separate, second row.
  *
@@ -20,9 +19,13 @@ import SocialLinks from '@/components/SocialLinks';
  *
  * Not a smaller `SiteNav` - a different composition. It adds the brand mark
  * (the full nav is wordmark-only). The affordances the two share - brand link
- * home, More Tools, Discord/GitHub, auth controls - are the site's standing
- * set (plan 0076 item 1 added the Discord/GitHub icons here; both headers
- * render the one `SocialLinks`, this one at its compact scale).
+ * home, Discord/GitHub, auth controls - are the site's standing set (plan
+ * 0076 item 1 added the Discord/GitHub icons here; both headers render the
+ * one `SocialLinks`, this one at its compact scale).
+ *
+ * The audience links (Play, Chart) are the full nav's alone. This row is 40px
+ * on top of an editor that needs every pixel below it, and someone mid-edit is
+ * not browsing; the brand link reaches both pages in one more click.
  */
 export default function CompactSiteHeader() {
   return (
@@ -39,14 +42,6 @@ export default function CompactSiteHeader() {
           <span className="hidden text-sm font-semibold whitespace-nowrap sm:inline">
             Music Charts Tools
           </span>
-        </Link>
-        <Link href="/">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs font-semibold">
-            More Tools
-          </Button>
         </Link>
       </div>
       <div className="flex shrink-0 items-center gap-1">

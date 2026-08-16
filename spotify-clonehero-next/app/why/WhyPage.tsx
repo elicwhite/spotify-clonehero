@@ -170,7 +170,7 @@ export function WhyPage() {
       </LandingSection>
 
       <LandingSection
-        title="Where I think this stops"
+        title="These tools generate first drafts"
         intro="I do not think AI is good enough to produce a drum chart that needs no edits to clear the bar this community has, and I am glad the bar is where it is.">
         <div className="max-w-2xl space-y-4 text-base leading-relaxed text-foreground/90">
           <p>
@@ -195,9 +195,9 @@ export function WhyPage() {
           Everything is free, runs on your own machine, and never uploads your
           audio or your chart.{' '}
           <Link
-            href="/"
+            href="/chart"
             className="text-foreground underline underline-offset-2">
-            See all the tools
+            See the charting tools
           </Link>
           .
         </p>

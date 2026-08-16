@@ -28,6 +28,7 @@ export function LandingHero({
   title,
   lede,
   trust,
+  actions,
   illustration,
   caption,
 }: {
@@ -36,6 +37,14 @@ export function LandingHero({
   lede: ReactNode;
   /** The plain trust facts, one short factual sentence each. */
   trust?: ReactNode[];
+  /**
+   * Links into the tools, for a page whose entry point is elsewhere. A tool
+   * page has no use for this: its entry screen is the next thing on the page,
+   * so a button above it would compete with the tool itself. A cohort page
+   * like `/chart` has no `ToolEntrySection` at all, and without this slot its
+   * only way into the editor would be a link several sections down.
+   */
+  actions?: ReactNode;
   /** The hero canvas. Page-owned content; the hero only gives it a slot. */
   illustration?: ReactNode;
   /** Mono caption explaining what the illustration shows. */
@@ -51,6 +60,9 @@ export function LandingHero({
         {lede}
       </p>
       {trust && trust.length > 0 ? <TrustLine items={trust} /> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-3">{actions}</div>
+      ) : null}
       {illustration}
       {caption ? (
         <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">

@@ -39,7 +39,7 @@ export default function OpengraphImage() {
           <span style={{display: 'flex', opacity: 0.35}}>·</span>
           <div style={{display: 'flex'}}>View</div>
           <span style={{display: 'flex', opacity: 0.35}}>·</span>
-          <div style={{display: 'flex'}}>Lyrics</div>
+          <div style={{display: 'flex'}}>Edit</div>
         </div>
       </OgFrame>
     ),
