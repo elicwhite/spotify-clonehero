@@ -670,10 +670,6 @@ it('shows the charts a manual Chorus rescan finds without a second click', async
   await waitFor(() =>
     expect(screen.getByTestId('music-table')).toHaveTextContent('Alpha,Beta'),
   );
-  expect(screen.queryByTestId('held-matches')).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole('button', {name: 'Re-rank now'}),
-  ).not.toBeInTheDocument();
 });
 
 it('keeps other sources interactive while one source scans', async () => {
@@ -930,7 +926,7 @@ it('moves the sidebar into a dismissible hamburger drawer on small screens', asy
   );
 });
 
-it('holds source-driven matches until the user explicitly re-ranks', async () => {
+it('folds source-driven matches into the visible list as they arrive', async () => {
   mockLocalDbExists.mockResolvedValue(false);
   mockAppleSetupState = 'authorized';
   mockGetFindMusicSongs
@@ -958,19 +954,13 @@ it('holds source-driven matches until the user explicitly re-ranks', async () =>
     screen.getByRole('button', {name: 'Refresh Apple Music test'}),
   );
 
-  const hold = await screen.findByTestId('held-matches');
-  expect(mockRefreshChorus).toHaveBeenCalledTimes(1);
-  expect(hold).toHaveTextContent('1 new match held');
-  expect(screen.getByTestId('sidebar')).toHaveTextContent(
-    '2 matches available',
-  );
-  expect(screen.getByTestId('music-table')).not.toHaveTextContent('Beta');
-
-  fireEvent.click(screen.getByRole('button', {name: 'Re-rank now'}));
   await waitFor(() =>
     expect(screen.getByTestId('music-table')).toHaveTextContent('Alpha,Beta'),
   );
-  expect(screen.queryByTestId('held-matches')).not.toBeInTheDocument();
+  expect(mockRefreshChorus).toHaveBeenCalledTimes(1);
+  expect(screen.getByTestId('sidebar')).toHaveTextContent(
+    '2 matches available',
+  );
 });
 
 // Contracts ported from the deleted `/spotify` suite (plan 0106). Their

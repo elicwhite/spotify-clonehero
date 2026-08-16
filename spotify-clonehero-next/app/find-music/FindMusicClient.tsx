@@ -98,8 +98,6 @@ export default function FindMusicClient() {
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [stats, setStats] = useState(EMPTY_STATS);
   const [committed, setCommitted] = useState<Snapshot>({music: [], radar: []});
-  const [pending, setPending] = useState<Snapshot | null>(null);
-  const [pendingCounts, setPendingCounts] = useState({added: 0, changed: 0});
   const [initializing, setInitializing] = useState(true);
   const [sourceAccessChecked, setSourceAccessChecked] = useState(false);
   const [sourceAccessEnabled, setSourceAccessEnabled] = useState(false);
@@ -111,7 +109,6 @@ export default function FindMusicClient() {
   );
   const [chorusError, setChorusError] = useState<string | null>(null);
   const initializedRef = useRef(false);
-  const committedRef = useRef<Snapshot>({music: [], radar: []});
   const sourceAccessEnabledRef = useRef(false);
   const storedFolderScannedRef = useRef(false);
   const activeControllersRef = useRef<AbortController[]>([]);
@@ -206,33 +203,10 @@ export default function FindMusicClient() {
     [],
   );
 
-  const stageSnapshot = useCallback(
-    () =>
-      enqueueSnapshot(async () => {
-        const [next, nextStats] = await Promise.all([
-          querySnapshot(),
-          getFindMusicStats(),
-        ]);
-        setStats(nextStats);
-
-        if (!initializedRef.current) {
-          initializedRef.current = true;
-          committedRef.current = next;
-          setCommitted(next);
-          setInitializing(false);
-          return;
-        }
-
-        const counts = diffSnapshots(committedRef.current, next);
-        if (counts.added > 0 || counts.changed > 0) {
-          setPending(next);
-          setPendingCounts(counts);
-        }
-      }),
-    [enqueueSnapshot, querySnapshot],
-  );
-
-  const replaceSnapshot = useCallback(
+  // Every source folds its result straight into the visible list. A row can
+  // move under the reader as a scan lands, which is the cost of showing the
+  // current answer instead of a stale one behind a button.
+  const refreshSnapshot = useCallback(
     () =>
       enqueueSnapshot(async () => {
         const [next, nextStats] = await Promise.all([
@@ -240,11 +214,8 @@ export default function FindMusicClient() {
           getFindMusicStats(),
         ]);
         initializedRef.current = true;
-        committedRef.current = next;
         setCommitted(next);
         setStats(nextStats);
-        setPending(null);
-        setPendingCounts({added: 0, changed: 0});
         setInitializing(false);
       }),
     [enqueueSnapshot, querySnapshot],
@@ -258,19 +229,10 @@ export default function FindMusicClient() {
       initializing,
       stats,
       spotifyPreviewAvailable,
-      stageSnapshot,
-      replaceSnapshot,
+      refreshSnapshot,
       onActivate: activateSourceAccess,
       onActivateForNavigation: activateSourceAccessForNavigation,
     });
-
-  const applyPending = useCallback(() => {
-    if (!pending) return;
-    committedRef.current = pending;
-    setCommitted(pending);
-    setPending(null);
-    setPendingCounts({added: 0, changed: 0});
-  }, [pending]);
 
   const runChorusRefresh = useCallback(async () => {
     if (chorusRefreshInFlightRef.current) {
@@ -283,11 +245,7 @@ export default function FindMusicClient() {
       setChorusError(null);
       try {
         await refreshChorusIndex(controller);
-        // The hold exists so a new snapshot never reorders a list the reader
-        // is looking at. `catalogState` has replaced that list with the
-        // refreshing card for the whole of this run, so there is nothing to
-        // hold, and staging would restore the card to an unchanged list.
-        await replaceSnapshot();
+        await refreshSnapshot();
         setCatalogState('ready');
         setChorusError(null);
       } catch (error) {
@@ -315,7 +273,7 @@ export default function FindMusicClient() {
     } finally {
       chorusRefreshInFlightRef.current = null;
     }
-  }, [refreshChorusIndex, replaceSnapshot]);
+  }, [refreshChorusIndex, refreshSnapshot]);
 
   // Only the first snapshot lowers `initializing`, so only the run that opens
   // the index may raise it. Every refresh after that is gated by
@@ -438,9 +396,9 @@ export default function FindMusicClient() {
   useEffect(() => {
     if (spotifyProgress.updateStatus !== 'fetching') return;
     return onPlaylistCacheUpdated(() => {
-      void stageSnapshot();
+      void refreshSnapshot();
     });
-  }, [spotifyProgress.updateStatus, stageSnapshot]);
+  }, [spotifyProgress.updateStatus, refreshSnapshot]);
 
   useEffect(() => {
     const controllers = activeControllersRef.current;
@@ -505,7 +463,7 @@ export default function FindMusicClient() {
         summary: `${songCount.toLocaleString()} songs with plays`,
         detail: 'Refreshed just now',
       });
-      await stageSnapshot();
+      await refreshSnapshot();
     } catch (error) {
       if (isPickerCancel(error)) {
         setHistoryStatus(null);
@@ -520,7 +478,7 @@ export default function FindMusicClient() {
       toast.error(message);
       Sentry.captureException(error);
     }
-  }, [activateSourceAccess, stageSnapshot]);
+  }, [activateSourceAccess, refreshSnapshot]);
 
   const runLibraryRefresh = useCallback(async () => {
     activateSourceAccess();
@@ -540,7 +498,7 @@ export default function FindMusicClient() {
         toast.info('Spotify is unavailable here');
         return;
       }
-      await stageSnapshot();
+      await refreshSnapshot();
     } catch (error) {
       if (!controller.signal.aborted) {
         toast.error(
@@ -554,7 +512,7 @@ export default function FindMusicClient() {
     connectSpotify,
     hasSpotify,
     refreshSpotifyLibrary,
-    stageSnapshot,
+    refreshSnapshot,
     user,
   ]);
 
@@ -587,7 +545,7 @@ export default function FindMusicClient() {
               : `${result.installedCharts.length.toLocaleString()} installed charts`,
           detail: 'Scanned just now',
         });
-        await stageSnapshot();
+        await refreshSnapshot();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setLocalStatus({
@@ -602,7 +560,7 @@ export default function FindMusicClient() {
         Sentry.captureException(error);
       }
     },
-    [stageSnapshot],
+    [refreshSnapshot],
   );
 
   const runLocalScan = useCallback(async () => {
@@ -640,7 +598,7 @@ export default function FindMusicClient() {
         progress: total > 0 ? (complete / total) * 100 : 0,
         detail: spotifyProgress.rateLimitCountdown
           ? `Spotify rate limit · retrying in ${spotifyProgress.rateLimitCountdown.retryAfterSeconds}s`
-          : 'Matches are held until you re-rank',
+          : 'Matches update as each playlist finishes',
       };
     }
     if (spotifyProgress.updateStatus === 'error') {
@@ -797,8 +755,8 @@ export default function FindMusicClient() {
                   filters={filters}
                   onFiltersChange={setFilters}
                   onClearFilters={clearFilters}
-                  musicCount={pending?.music.length ?? committed.music.length}
-                  radarCount={pending?.radar.length ?? committed.radar.length}
+                  musicCount={committed.music.length}
+                  radarCount={committed.radar.length}
                 />
               </SheetContent>
             </Sheet>
@@ -825,43 +783,14 @@ export default function FindMusicClient() {
               filters={filters}
               onFiltersChange={setFilters}
               onClearFilters={clearFilters}
-              musicCount={pending?.music.length ?? committed.music.length}
-              radarCount={pending?.radar.length ?? committed.radar.length}
+              musicCount={committed.music.length}
+              radarCount={committed.radar.length}
             />
           </div>
           <section
             aria-label="Find music results"
             data-testid="find-music-results"
             className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4 md:p-5">
-            {pending && (
-              <div
-                data-testid="held-matches"
-                className="mb-3 flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-                </span>
-                <span className="font-medium">
-                  {pendingCounts.added.toLocaleString()} new match
-                  {pendingCounts.added === 1 ? '' : 'es'} held
-                </span>
-                {pendingCounts.changed > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {pendingCounts.changed.toLocaleString()} matches have
-                    updated evidence
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  The visible list will not move until you apply them.
-                </span>
-                <button
-                  className="ml-auto rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                  onClick={applyPending}>
-                  Re-rank now
-                </button>
-              </div>
-            )}
-
             {initializing || catalogState === 'refreshing' ? (
               <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border bg-card p-8">
                 <div className="text-center">
@@ -932,40 +861,6 @@ export default function FindMusicClient() {
       </div>
     </SupportedBrowserWarning>
   );
-}
-
-function diffSnapshots(current: Snapshot, next: Snapshot) {
-  const currentMusic = new Map(
-    current.music.map(song => [song.key, fingerprint(song)]),
-  );
-  const currentRadar = new Map(
-    current.radar.map(song => [song.key, fingerprint(song)]),
-  );
-  const nextMusicKeys = new Set(next.music.map(song => song.key));
-  const nextRadarKeys = new Set(next.radar.map(song => song.key));
-  let added = 0;
-  let changed = 0;
-  for (const song of next.music) {
-    const before = currentMusic.get(song.key);
-    if (before == null) added += 1;
-    else if (before !== fingerprint(song)) changed += 1;
-  }
-  for (const song of next.radar) {
-    const before = currentRadar.get(song.key);
-    if (before == null) added += 1;
-    else if (before !== fingerprint(song)) changed += 1;
-  }
-  for (const key of currentMusic.keys()) {
-    if (!nextMusicKeys.has(key)) changed += 1;
-  }
-  for (const key of currentRadar.keys()) {
-    if (!nextRadarKeys.has(key)) changed += 1;
-  }
-  return {added, changed};
-}
-
-function fingerprint(song: FindMusicSong | RadarSong) {
-  return JSON.stringify(song);
 }
 
 function isPickerCancel(error: unknown) {

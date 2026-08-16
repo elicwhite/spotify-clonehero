@@ -13,12 +13,6 @@ export type MusicSort = {
   key: 'score' | 'plays' | 'artist' | 'song' | 'updated';
   direction: 'asc' | 'desc';
 };
-export type HoldState<T> = {
-  committed: T[];
-  pending: T[] | null;
-  pendingNewCount: number;
-  pendingChangedCount: number;
-};
 
 export type RadarCandidateSummary = Pick<
   RadarSong,
@@ -27,8 +21,6 @@ export type RadarCandidateSummary = Pick<
   chartCount: number;
   availableInstrumentCount: number;
 };
-
-type Keyed = {key: string};
 
 type RadarCandidateSummaryEvidence = Pick<
   RadarCandidateSummary,
@@ -335,61 +327,4 @@ function sortRadarRankables<
         safeCount(left.savedLibrarySongCount) ||
       compareIdentity(left, right),
   );
-}
-
-function stableValue(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableValue).join(',')}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map(key => `${JSON.stringify(key)}:${stableValue(record[key])}`)
-    .join(',')}}`;
-}
-
-export function createHoldState<T extends Keyed>(initial: T[]): HoldState<T> {
-  return {
-    committed: [...initial],
-    pending: null,
-    pendingNewCount: 0,
-    pendingChangedCount: 0,
-  };
-}
-
-/** Stage a complete query snapshot without touching visible row references. */
-export function stageSnapshot<T extends Keyed>(
-  state: HoldState<T>,
-  next: T[],
-): HoldState<T> {
-  const committedByKey = new Map(state.committed.map(row => [row.key, row]));
-  let pendingNewCount = 0;
-  let pendingChangedCount = 0;
-
-  for (const row of next) {
-    const committed = committedByKey.get(row.key);
-    if (!committed) pendingNewCount += 1;
-    else if (stableValue(committed) !== stableValue(row))
-      pendingChangedCount += 1;
-  }
-  const nextKeys = new Set(next.map(row => row.key));
-  for (const key of committedByKey.keys()) {
-    if (!nextKeys.has(key)) pendingChangedCount += 1;
-  }
-
-  return {
-    committed: state.committed,
-    pending: [...next],
-    pendingNewCount,
-    pendingChangedCount,
-  };
-}
-
-export function applyHeld<T extends Keyed>(state: HoldState<T>): HoldState<T> {
-  if (state.pending === null) return state;
-  return {
-    committed: state.pending,
-    pending: null,
-    pendingNewCount: 0,
-    pendingChangedCount: 0,
-  };
 }

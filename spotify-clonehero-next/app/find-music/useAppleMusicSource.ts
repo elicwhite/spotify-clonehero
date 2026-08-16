@@ -33,8 +33,7 @@ export function useAppleMusicSource({
   initializing,
   stats,
   spotifyPreviewAvailable,
-  stageSnapshot,
-  replaceSnapshot,
+  refreshSnapshot,
   onActivate,
   onActivateForNavigation,
 }: {
@@ -43,8 +42,7 @@ export function useAppleMusicSource({
   initializing: boolean;
   stats: FindMusicStats;
   spotifyPreviewAvailable: boolean;
-  stageSnapshot: () => Promise<void>;
-  replaceSnapshot: () => Promise<void>;
+  refreshSnapshot: () => Promise<void>;
   onActivate: () => void;
   onActivateForNavigation: () => void;
 }): {viewModel: AppleMusicSourceViewModel; actions: AppleMusicSourceActions} {
@@ -88,7 +86,7 @@ export function useAppleMusicSource({
       setRefreshing(true);
       const result = await refresh(controller);
       if (result.status === 'success') {
-        await stageSnapshot();
+        await refreshSnapshot();
       } else if (result.status === 'unauthorized') {
         setRefreshError('Authorization is required to refresh');
         toast.info('Connect Apple Music to refresh your library');
@@ -123,7 +121,7 @@ export function useAppleMusicSource({
       if (refreshInFlightRef.current === run) refreshInFlightRef.current = null;
       setRefreshing(false);
     }
-  }, [onActivate, refresh, stageSnapshot]);
+  }, [onActivate, refresh, refreshSnapshot]);
 
   const runDisconnect = useCallback(async () => {
     if (
@@ -138,7 +136,7 @@ export function useAppleMusicSource({
       controllerRef.current?.abort();
       await refreshInFlightRef.current?.catch(() => undefined);
       await disconnect();
-      await replaceSnapshot();
+      await refreshSnapshot();
       toast.success('Apple Music disconnected and local library data cleared');
     } catch (error) {
       toast.error(
@@ -148,7 +146,7 @@ export function useAppleMusicSource({
       );
       Sentry.captureException(error);
     }
-  }, [disconnect, replaceSnapshot]);
+  }, [disconnect, refreshSnapshot]);
 
   const connected = enabled && setupState === 'authorized';
   const previewAvailable = connected && client !== null;

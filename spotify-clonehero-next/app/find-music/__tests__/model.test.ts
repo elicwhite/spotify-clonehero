@@ -1,15 +1,12 @@
 import {drumTypes} from '@eliwhite/scan-chart';
 import {
-  applyHeld,
   applyMusicFilters,
   applyRadarFilters,
   capPerArtist,
-  createHoldState,
   scoreMusicSong,
   scoreRadarSong,
   sortMusicSongs,
   sortRadarSongs,
-  stageSnapshot,
 } from '../model';
 import type {
   FindMusicChart,
@@ -594,48 +591,5 @@ describe('find music sorting', () => {
     const tiedB = radar({key: 'b', artist: 'Alpha', artistPlayCount: 30});
     const tiedA = radar({key: 'a', artist: 'Alpha', artistPlayCount: 30});
     expect(sortRadarSongs([low, tiedB, tiedA])).toEqual([tiedA, tiedB, low]);
-  });
-});
-
-describe('held query snapshots', () => {
-  test('holds row references and order until explicitly applied', () => {
-    const alpha = music({key: 'alpha', playCount: 1});
-    const beta = music({key: 'beta', playCount: 2});
-    const initial = createHoldState([alpha, beta]);
-    const changedBeta = {...beta, playCount: 8};
-    const gamma = music({key: 'gamma', playCount: 3});
-    const staged = stageSnapshot(initial, [gamma, changedBeta, alpha]);
-    expect(staged.committed).toBe(initial.committed);
-    expect(staged.committed).toEqual([alpha, beta]);
-    expect(staged.pendingNewCount).toBe(1);
-    expect(staged.pendingChangedCount).toBe(1);
-
-    const applied = applyHeld(staged);
-    expect(applied.committed).toEqual([gamma, changedBeta, alpha]);
-    expect(applied.committed[1].playCount).toBe(8);
-    expect(applied.pending).toBeNull();
-    expect(applied.pendingNewCount).toBe(0);
-    expect(applied.pendingChangedCount).toBe(0);
-  });
-
-  test('new count is based on keys, not changed evidence or row order', () => {
-    const alpha = music({key: 'alpha', playCount: 1});
-    const beta = music({key: 'beta', playCount: 2});
-    const staged = stageSnapshot(createHoldState([alpha, beta]), [
-      {...beta, playCount: 9},
-      alpha,
-    ]);
-    expect(staged.pendingNewCount).toBe(0);
-    expect(staged.pendingChangedCount).toBe(1);
-  });
-
-  test('holds source removals until apply just like new evidence', () => {
-    const alpha = music({key: 'alpha'});
-    const beta = music({key: 'beta'});
-    const staged = stageSnapshot(createHoldState([alpha, beta]), [alpha]);
-    expect(staged.committed).toEqual([alpha, beta]);
-    expect(staged.pendingNewCount).toBe(0);
-    expect(staged.pendingChangedCount).toBe(1);
-    expect(applyHeld(staged).committed).toEqual([alpha]);
   });
 });
