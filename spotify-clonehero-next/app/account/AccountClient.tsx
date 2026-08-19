@@ -16,7 +16,7 @@ import {Star, Music, LogOut, Trash2} from 'lucide-react';
 import {createClient} from '@/lib/supabase/client';
 import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {unfavoriteSongByHash} from './actions';
-import {Icons} from '@/components/icons';
+import SpotifyIcon from '@/components/SpotifyIcon';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -178,7 +178,7 @@ export default function AccountClient({
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Icons.spotify className="h-5 w-5 text-green-500" />
+                    <SpotifyIcon className="h-6 w-6" />
                     Link with Spotify
                   </CardTitle>
                   <CardDescription>
@@ -195,7 +195,10 @@ export default function AccountClient({
                     <Button
                       onClick={handleSpotifyConnect}
                       className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                      <Icons.spotify className="h-4 w-4 mr-2" />
+                      <SpotifyIcon
+                        variant="white"
+                        className="mr-2 h-[21px] w-[21px]"
+                      />
                       Connect Spotify
                     </Button>
                   </div>

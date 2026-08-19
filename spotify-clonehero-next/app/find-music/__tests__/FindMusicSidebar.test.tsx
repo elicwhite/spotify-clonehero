@@ -101,7 +101,7 @@ describe('FindMusicSidebar', () => {
     expect(screen.getByText('Apple Music')).toBeInTheDocument();
     expect(
       screen.getByTestId('source-apple-music').querySelector('img'),
-    ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-white.svg');
+    ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-color.svg');
 
     const library = screen.getByTestId('source-spotify-library');
     const appleMusic = screen.getByTestId('source-apple-music');

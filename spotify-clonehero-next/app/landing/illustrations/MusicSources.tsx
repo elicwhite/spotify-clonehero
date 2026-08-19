@@ -2,7 +2,7 @@ import {FolderOpen} from 'lucide-react';
 import type {ReactNode} from 'react';
 
 import AppleMusicIcon from '@/components/AppleMusicIcon';
-import {Icons} from '@/components/icons';
+import SpotifyIcon from '@/components/SpotifyIcon';
 
 /**
  * What Find Music reads: the two connected services and the local Songs
@@ -11,12 +11,10 @@ import {Icons} from '@/components/icons';
  * The service marks are the official artwork, drawn to their owners' rules
  * rather than sized to fit a layout:
  *
- * - Spotify's guidelines put the icon's floor at 21px, ask for clear space of
- *   half the icon's height around it, and allow the green icon only on a
- *   black or a white background. So the mark is 32px, the row's padding and
- *   gap are both 16px, and it sits directly on `bg-card` — near-black in
- *   dark, white in light — in Spotify green, rather than on a green tile of
- *   our own.
+ * - `SpotifyIcon` holds Spotify's own rules. The row owns the clear space
+ *   Spotify asks for: its padding and gap are both 16px, half the 32px mark.
+ *   The mark sits directly on `bg-card` — near-black in dark, white in light —
+ *   which is where the green icon is allowed to go.
  * - The Apple Music tile is the shipped artwork at the same 32px, unmodified.
  *
  * Both are `aria-hidden`; the name beside each mark is the accessible name.
@@ -49,12 +47,7 @@ export function MusicSources() {
   return (
     <ul className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
       <Source
-        mark={
-          <Icons.spotify
-            className="h-8 w-8 shrink-0 text-[#1ED760]"
-            aria-hidden="true"
-          />
-        }
+        mark={<SpotifyIcon />}
         name="Spotify"
         detail="Library and listening history"
       />

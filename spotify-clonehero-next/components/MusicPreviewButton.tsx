@@ -3,11 +3,11 @@
 import {ExternalLink, LoaderCircle} from 'lucide-react';
 
 import AppleMusicIcon from '@/components/AppleMusicIcon';
+import SpotifyIcon from '@/components/SpotifyIcon';
 import {Button} from '@/components/ui/button';
 import type {AppleMusicLibraryClient} from '@/lib/apple-music';
 import {cn} from '@/lib/utils';
 
-import {Icons} from './icons';
 import {
   musicPreviewControllerIdentity,
   useMusicPreviewController,
@@ -82,7 +82,7 @@ function MusicPreviewButtonForTrack({
             ? 'No match'
             : controller.phase === 'unavailable'
               ? 'No preview'
-              : 'Play';
+              : 'Preview';
   const providerName =
     controller.destinationProvider === 'spotify' ? 'Spotify' : 'Apple Music';
 
@@ -90,29 +90,43 @@ function MusicPreviewButtonForTrack({
     <div className={cn('flex items-center gap-2', compact && 'justify-center')}>
       <Button
         type="button"
-        size={compact ? 'xs' : 'default'}
-        variant={controller.thisTrackPlaying ? 'secondary' : 'default'}
-        className={cn(compact && 'w-[96px] px-2')}
+        size={compact ? 'sm' : 'default'}
+        // Outline, matching the open-in-provider button beside it: Install is
+        // the primary action in a row, not Preview. The label and
+        // `aria-pressed` carry the playing state.
+        variant="outline"
+        // The brand icons hold their minimum size, so the compact button keeps
+        // the `sm` icon scale and only loses height and width. The `xs` size
+        // scales icons down to 12px, which is below the Spotify minimum.
+        className={cn(compact && 'h-8 w-[120px] px-2.5 text-[11.5px]')}
         onClick={() => void controller.start()}
         disabled={lookingUp || unavailable || controller.providerCount === 0}
         aria-pressed={
           controller.thisTrackPlaying || controller.thisTrackLoading
         }
-        aria-label={`${label} preview of ${song} by ${artist}`}>
+        aria-label={
+          label === 'Preview'
+            ? `Preview ${song} by ${artist}`
+            : `${label} preview of ${song} by ${artist}`
+        }>
         {lookingUp || controller.thisTrackLoading ? (
-          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+          <LoaderCircle className="h-[21px] w-[21px] animate-spin" />
         ) : controller.displayProvider === 'spotify' ? (
-          <Icons.spotify className="h-3.5 w-3.5" />
+          // The green icon is allowed here: the outline fill is the page
+          // background, white in light and near-black in dark. 21px is
+          // Spotify's floor.
+          <SpotifyIcon className="h-[21px] w-[21px]" />
         ) : (
-          <AppleMusicIcon className="h-3.5 w-3.5" />
+          <AppleMusicIcon className="h-[21px] w-[21px]" />
         )}
         {label}
       </Button>
       {controller.destinationUrl ? (
         <Button
           size="icon"
+          // Same height and same fill as the preview button beside it.
           variant="outline"
-          className={cn(compact && 'h-7 w-7 shrink-0')}
+          className={cn(compact && 'h-8 w-8 shrink-0')}
           asChild>
           <a
             href={controller.destinationUrl}

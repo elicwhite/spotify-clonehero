@@ -117,7 +117,7 @@ it('returns a canceled row to idle when another row takes over its Apple request
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Slow Song by Slow Artist',
+      name: 'Preview Slow Song by Slow Artist',
     }),
   );
   expect(
@@ -127,14 +127,14 @@ it('returns a canceled row to idle when another row takes over its Apple request
   ).toBeDisabled();
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Fast Song by Fast Artist',
+      name: 'Preview Fast Song by Fast Artist',
     }),
   );
 
   await waitFor(() => expect(slowSignal?.aborted).toBe(true));
   expect(
     await screen.findByRole('button', {
-      name: 'Play preview of Slow Song by Slow Artist',
+      name: 'Preview Slow Song by Slow Artist',
     }),
   ).toBeEnabled();
   await waitFor(() => expect(playTrack).toHaveBeenCalledTimes(1));
@@ -168,7 +168,7 @@ it('keeps a no-preview preference retryable when the backup fails transiently', 
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Transient Song by Transient Artist',
+      name: 'Preview Transient Song by Transient Artist',
     }),
   );
   const retry = await screen.findByRole('button', {
@@ -228,7 +228,7 @@ it('cancels an in-flight Apple fallback when the client disconnects', async () =
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Disconnect Song by Disconnect Artist',
+      name: 'Preview Disconnect Song by Disconnect Artist',
     }),
   );
   await waitFor(() => expect(pendingSignal).toBeDefined());
@@ -248,7 +248,7 @@ it('cancels an in-flight Apple fallback when the client disconnects', async () =
   expect(pendingSignal?.aborted).toBe(true);
   expect(
     screen.getByRole('button', {
-      name: 'Play preview of Disconnect Song by Disconnect Artist',
+      name: 'Preview Disconnect Song by Disconnect Artist',
     }),
   ).toBeEnabled();
 });
@@ -289,7 +289,7 @@ it('tries every exact Apple catalog action before text search or another provide
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Multi Apple Song by Multi Apple Artist',
+      name: 'Preview Multi Apple Song by Multi Apple Artist',
     }),
   );
 

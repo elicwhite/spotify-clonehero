@@ -834,7 +834,7 @@ function ChartRow({
       ) : (
         <Button
           size="xs"
-          variant={downloadState === 'error' ? 'destructive' : 'outline'}
+          variant={downloadState === 'error' ? 'destructive' : 'default'}
           disabled={downloadState === 'downloading'}
           onClick={event => {
             event.stopPropagation();

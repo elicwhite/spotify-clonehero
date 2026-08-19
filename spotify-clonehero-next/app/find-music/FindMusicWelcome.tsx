@@ -14,8 +14,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-import {Icons} from '@/components/icons';
 import AppleMusicIcon from '@/components/AppleMusicIcon';
+import SpotifyIcon from '@/components/SpotifyIcon';
 import {Eyebrow} from '@/components/landing/Eyebrow';
 import {TrustLine} from '@/components/landing/TrustLine';
 import {Button} from '@/components/ui/button';
@@ -59,7 +59,8 @@ type SetupCardProps = {
   onAction: () => void;
   overflowActionLabel?: string | undefined;
   onOverflowAction?: (() => void) | undefined;
-  accent?: 'spotify' | 'appleMusic' | 'default';
+  /** True when `icon` is Spotify or Apple Music artwork. */
+  brandArtwork?: boolean;
   optional?: boolean;
 };
 
@@ -99,7 +100,7 @@ function SetupCard({
   onAction,
   overflowActionLabel,
   onOverflowAction,
-  accent = 'default',
+  brandArtwork = false,
   optional = false,
 }: SetupCardProps) {
   const loading = status.phase === 'loading';
@@ -113,13 +114,15 @@ function SetupCard({
         error && 'border-destructive/50',
       )}
       data-testid={`welcome-${name.toLowerCase().replaceAll(' ', '-')}`}>
-      <div className="flex items-start gap-3">
+      <div className={cn('flex items-start gap-3', brandArtwork && 'gap-4')}>
         <span
           className={cn(
             'grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:h-5 [&_svg]:w-5',
-            accent === 'spotify' && 'bg-[#1ed760] text-[#08210f]',
-            accent === 'appleMusic' &&
-              'bg-gradient-to-br from-[#fa3159] to-[#d7003a] text-white',
+            // Service marks keep their own shape and colors, so they get no
+            // tile behind them. 32px on `bg-card` with the card's own 20px
+            // padding and the 16px gap below is the same treatment the home
+            // page gives them.
+            brandArtwork && 'h-8 w-8 bg-transparent [&_svg]:h-8 [&_svg]:w-8',
           )}>
           {icon}
         </span>
@@ -322,8 +325,8 @@ export default function FindMusicWelcome({
             <SetupCard
               name="Spotify Library"
               description="Match songs from your playlists, liked albums, and saved music."
-              icon={<Icons.spotify />}
-              accent="spotify"
+              icon={<SpotifyIcon />}
+              brandArtwork
               status={spotifyLibraryStatus}
               actionLabel={spotifyLibraryAction}
               onAction={
@@ -333,8 +336,8 @@ export default function FindMusicWelcome({
             <SetupCard
               name="Apple Music"
               description="Connect in this browser to match saved songs. It works without a site account, does not sign you in to this site, and keeps its library index browser-local."
-              icon={<AppleMusicIcon variant="white" className="h-5 w-5" />}
-              accent="appleMusic"
+              icon={<AppleMusicIcon className="h-8 w-8" />}
+              brandArtwork
               status={appleMusicStatus}
               actionLabel={appleMusicAction}
               onAction={

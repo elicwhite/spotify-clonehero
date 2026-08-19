@@ -11,6 +11,7 @@ import {useSearchParams} from 'next/navigation';
 
 import {cn} from '@/lib/utils';
 import {Icons} from '@/components/icons';
+import SpotifyIcon from '@/components/SpotifyIcon';
 import {SPOTIFY_SCOPES} from '../spotifyScopes';
 
 export function LoginForm({
@@ -123,7 +124,7 @@ export function LoginForm({
                   {loading === 'spotify' ? (
                     <Icons.spinner className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
-                    <Icons.spotify className="h-6 w-6 mr-2" />
+                    <SpotifyIcon className="mr-2 h-6 w-6" />
                   )}
                   {loading === 'spotify' ? 'Logging in' : 'Login with Spotify'}
                 </Button>

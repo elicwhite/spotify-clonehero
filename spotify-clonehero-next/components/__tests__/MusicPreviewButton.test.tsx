@@ -94,9 +94,7 @@ it('uses an exact Spotify action without consulting the Apple backup', async () 
     trackKey: 'row-preview',
   });
 
-  fireEvent.click(
-    screen.getByRole('button', {name: 'Play preview of Song by Artist'}),
-  );
+  fireEvent.click(screen.getByRole('button', {name: 'Preview Song by Artist'}));
 
   await waitFor(() => expect(playTrack).toHaveBeenCalledTimes(1));
   expect(mockResolveSpotify).toHaveBeenCalledWith({
@@ -117,7 +115,7 @@ it('uses an exact Spotify action without consulting the Apple backup', async () 
     screen.getByRole('link', {name: 'Open Song by Artist in Spotify'}),
   ).toHaveAttribute('href', 'https://open.spotify.com/track/spotify-id');
   const previewButton = screen.getByRole('button', {
-    name: 'Play preview of Song by Artist',
+    name: 'Preview Song by Artist',
   });
   expect(previewButton.querySelector('img')).not.toBeInTheDocument();
   expect(screen.getAllByRole('button')).toHaveLength(1);
@@ -157,7 +155,7 @@ it('falls back from an Apple catalog item with no preview to Spotify', async () 
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Apple First Song by Apple First Artist',
+      name: 'Preview Apple First Song by Apple First Artist',
     }),
   );
 
@@ -195,7 +193,7 @@ it('falls back from an unavailable Spotify result to Apple and links to the succ
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Spotify First Song by Spotify First Artist',
+      name: 'Preview Spotify First Song by Spotify First Artist',
     }),
   );
 
@@ -219,7 +217,7 @@ it('falls back from an unavailable Spotify result to Apple and links to the succ
   expect(
     screen
       .getByRole('button', {
-        name: 'Play preview of Spotify First Song by Spotify First Artist',
+        name: 'Preview Spotify First Song by Spotify First Artist',
       })
       .querySelector('img'),
   ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-color.svg');
@@ -247,7 +245,7 @@ it('tries the backup when playback of the preferred preview rejects', async () =
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of Playback Failover Song by Playback Failover Artist',
+      name: 'Preview Playback Failover Song by Playback Failover Artist',
     }),
   );
 
@@ -271,7 +269,7 @@ it('reports no match only after both conservative searches return nothing', asyn
 
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Play preview of No Match Song by No Match Artist',
+      name: 'Preview No Match Song by No Match Artist',
     }),
   );
 

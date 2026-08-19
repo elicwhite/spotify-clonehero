@@ -15,8 +15,8 @@ import {
   X,
 } from 'lucide-react';
 
-import {Icons} from '@/components/icons';
 import AppleMusicIcon from '@/components/AppleMusicIcon';
+import SpotifyIcon from '@/components/SpotifyIcon';
 import {Button} from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -103,7 +103,7 @@ function activeFilterCount(filters: FindMusicFilters) {
 
 function SourceGlyph({children}: {children: React.ReactNode}) {
   return (
-    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground [&_svg]:h-3 [&_svg]:w-3">
+    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground [&_svg]:h-3.5 [&_svg]:w-3.5">
       {children}
     </span>
   );
@@ -130,11 +130,12 @@ function SourceCard({
   return (
     <article
       className={cn(
-        'rounded-lg border bg-card px-3 py-2.5 text-card-foreground',
+        // px/py are 12px, the clear space Spotify asks for around a 24px mark.
+        'rounded-lg border bg-card p-3 text-card-foreground',
         error && 'border-destructive/50',
       )}
       data-testid={`source-${id}`}>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {icon}
         <h3 className="min-w-0 flex-1 text-xs font-semibold">{name}</h3>
         <span
@@ -157,7 +158,7 @@ function SourceCard({
         </span>
       </div>
 
-      <div className="ml-7 mt-1">
+      <div className="ml-9 mt-1">
         {description ? (
           <p className="mb-1.5 text-[11px] leading-4 text-muted-foreground">
             {description}
@@ -545,11 +546,7 @@ export default function FindMusicSidebar({
         <SourceCard
           id="spotify-library"
           name="Spotify Library"
-          icon={
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[#1ed760] text-[#08210f]">
-              <Icons.spotify className="h-3 w-3" />
-            </span>
-          }
+          icon={<SpotifyIcon className="h-6 w-6" />}
           status={spotifyLibraryStatus}
           actionLabel={spotifyActionLabel}
           onAction={
@@ -562,11 +559,7 @@ export default function FindMusicSidebar({
         <SourceCard
           id="apple-music"
           name="Apple Music"
-          icon={
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-gradient-to-br from-[#fa3159] to-[#d7003a] text-white">
-              <AppleMusicIcon variant="white" className="h-3 w-3" />
-            </span>
-          }
+          icon={<AppleMusicIcon className="h-6 w-6" />}
           status={appleMusicStatus}
           actionLabel={appleMusicActionLabel}
           onAction={
@@ -583,11 +576,7 @@ export default function FindMusicSidebar({
         <SourceCard
           id="history"
           name="Spotify History"
-          icon={
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-[#1ed760] text-[#08210f]">
-              <Icons.spotify className="h-3 w-3" />
-            </span>
-          }
+          icon={<SpotifyIcon className="h-6 w-6" />}
           status={historyStatus}
           actionLabel={
             historyStatus.phase === 'idle'

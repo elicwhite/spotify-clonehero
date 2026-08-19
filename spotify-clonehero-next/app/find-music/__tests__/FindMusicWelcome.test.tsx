@@ -82,7 +82,7 @@ describe('FindMusicWelcome', () => {
     );
     expect(
       screen.getByTestId('welcome-apple-music').querySelector('img'),
-    ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-white.svg');
+    ).toHaveAttribute('src', '/assets/apple-music/apple-music-icon-color.svg');
     expect(screen.getByTestId('find-music-welcome')).toHaveClass(
       'overflow-y-auto',
     );
