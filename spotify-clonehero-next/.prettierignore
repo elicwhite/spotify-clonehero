@@ -1,5 +1,6 @@
 # Dependencies and lockfiles
 node_modules
+.pnpm-store
 yarn.lock
 package-lock.json
 pnpm-lock.yaml
