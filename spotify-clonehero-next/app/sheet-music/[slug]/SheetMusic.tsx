@@ -118,17 +118,23 @@ export default function SheetMusic({
   }, []);
 
   useEffect(() => {
-    if (!vexflowContainerRef.current) {
+    const container = vexflowContainerRef.current;
+    if (!container) {
       return;
     }
 
     // Use this to force the sheet music to re-render when the window width changes
     windowWidth;
 
-    if (vexflowContainerRef.current?.children.length > 0) {
-      vexflowContainerRef.current.removeChild(
-        vexflowContainerRef.current.children[0],
-      );
+    // Removing the old SVG collapses this container to zero height. renderMusic
+    // then reads offsetWidth, which forces a layout while the page is short, and
+    // the browser clamps the scroll offset to the top. Hold the old height until
+    // the new SVG is in place so the reader keeps their position across a
+    // re-render (e.g. when practice mode marks the start measure).
+    const previousHeight = container.offsetHeight;
+    if (container.children.length > 0) {
+      container.style.minHeight = `${previousHeight}px`;
+      container.removeChild(container.children[0]);
     }
 
     const data = renderMusic(
@@ -147,6 +153,7 @@ export default function SheetMusic({
       practiceModeConfig,
       collectNoteMarkers,
     );
+    container.style.minHeight = '';
     setRenderData(data);
   }, [
     measures,
