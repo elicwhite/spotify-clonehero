@@ -72,6 +72,12 @@ export const OG_TYPE = {
   eyebrow: 24,
   eyebrowTool: 20,
   eyebrowTracking: '0.18em',
+  /**
+   * Text inside an illustration panel: a primary label and its mono
+   * sub-line (the add-lyrics syllables and their timestamps).
+   */
+  illustrationLabel: 40,
+  illustrationSub: 22,
 } as const;
 
 export type OgTitleSize = 'display' | 'title' | 'titleCompact' | 'titleInset';

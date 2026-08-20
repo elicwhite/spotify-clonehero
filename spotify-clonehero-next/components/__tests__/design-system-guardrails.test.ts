@@ -91,6 +91,22 @@ describe('pages compose the landing shell rather than forking it', () => {
       pattern: /max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl/,
       owner: 'components/landing/LandingHero.tsx',
     },
+    {
+      // The hero canvas frame was forked into four canvas components with an
+      // undocumented height split (h-32/sm:h-40 vs h-36/sm:h-44) before
+      // `heroCanvasFrameClass` owned it with height as the one knob.
+      label: 'the hero canvas frame',
+      pattern: /w-full rounded-lg border border-border bg-card/,
+      owner: 'components/landing/heroCanvasFrame.ts',
+    },
+    {
+      // The hairline card grid had three authors (StepFlow, the
+      // drum-transcription fixes grid, /why) with p-4 vs p-5 cell drift
+      // before `CardGrid` owned the container.
+      label: 'the hairline card grid',
+      pattern: /gap-px overflow-hidden rounded-lg border border-border/,
+      owner: 'components/landing/CardGrid.tsx',
+    },
   ];
 
   it.each(OWNED_STRINGS)(

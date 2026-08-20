@@ -9,10 +9,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import {CardGrid, CardGridCell} from '@/components/landing/CardGrid';
 import {ComparisonTable} from '@/components/landing/ComparisonTable';
 import {ExternalLink} from '@/components/landing/ExternalLink';
 import {LandingHero} from '@/components/landing/LandingHero';
 import {LandingPage} from '@/components/landing/LandingPage';
+import {LandingProse} from '@/components/landing/Prose';
 import {ScrollToStartCta} from '@/components/landing/ScrollToStartCta';
 import {LandingSection} from '@/components/landing/Section';
 import {StepFlow} from '@/components/landing/StepFlow';
@@ -136,30 +138,28 @@ export function DrumTranscriptionLanding({toolEntry}: {toolEntry: ReactNode}) {
       <LandingSection
         title="What you'll fix"
         intro="These are the parts of a draft that are wrong most often. They are where your time goes, so they are worth knowing before you start.">
-        <ul className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+        <CardGrid columns="sm:grid-cols-2">
           {FIXES.map(fix => (
-            <li
-              key={fix.title}
-              className="flex flex-col gap-3 bg-card p-5 sm:last:odd:col-span-2">
+            <CardGridCell key={fix.title} className="sm:last:odd:col-span-2">
               <h3 className="text-sm font-semibold text-foreground">
                 {fix.title}
               </h3>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {fix.body}
               </p>
-            </li>
+            </CardGridCell>
           ))}
-        </ul>
+        </CardGrid>
       </LandingSection>
 
       <LandingSection
         title="How many edits"
         intro="Edits per 100 notes counts the work a draft leaves you: every note you add, delete, move to another lane, or move to another position. Lower is fewer edits. Hover or focus a figure to see the measurement behind it.">
         <div className="space-y-3">
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <LandingProse>
             This tool can start with an existing tempo map or make one from the
             audio.
-          </p>
+          </LandingProse>
           <ComparisonTable
             caption="Edits per 100 notes for this tool, ADTOF, and Octave when starting with an existing tempo map or starting from audio."
             rowHeader="Part of the kit"

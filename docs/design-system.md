@@ -6,7 +6,7 @@ sources:
   - docs/design-system-audit.md (plan 0099 Phase 0)
   - spotify-clonehero-next/plans/in-progress/0099-design-system-convergence.md
 created: 2026-08-10
-updated: 2026-08-10
+updated: 2026-08-19
 ---
 
 # Design system (structure)
@@ -46,7 +46,11 @@ Compose in this order. Everything lives in `components/landing/`.
 | `StatChip` / `InlineStat` / `StatCell` | Any measured figure | Chip, in-sentence, and table-cell sizes of the same thing. All three surface provenance. |
 | `ScrollToStartCta` | The closing call to action | Scrolls to `START_SECTION_ID`. Caller supplies only the verb. |
 | `ExternalLink` | Naming a third-party project | One definition, enforced by test. |
-| `SectionDropZone` | A file drop target inside a section | |
+| `SectionDropZone` | A file drop target inside a section | `onAudioFile` is optional; a chart-only tool omits it and audio drops get a chart-only rejection toast. |
+| `ToolEntryCard` | The card the tool's entry controls sit in | `{description?, footnote?, children}`. Owns `w-full` and the header/no-header padding; the four tool pages hand-built and drifted on this shape before it existed. |
+| `CardGrid` / `CardGridCell` | The hairline card grid (`gap-px` cells on `bg-border`) | Container string is owned here, enforced by test. Cells default to `p-5`; `StepFlow` uses the documented denser `gap-2 p-4` variant. |
+| `LandingProse` | A body paragraph inside a `LandingSection` | Same measure and `text-sm sm:text-base` ramp as the section intro, so body prose never renders a step smaller than the intro above it. |
+| `heroCanvasFrameClass` | The frame a hero illustration canvas draws inside | Height is the one knob: `'standard'` (`h-32 sm:h-40`) for one horizontal band, `'tall'` (`h-36 sm:h-44`) for stacked lanes. Owned string, enforced by test. |
 
 ### Documented variants
 
@@ -62,6 +66,15 @@ Compose in this order. Everything lives in `components/landing/`.
   the hierarchy is visible. A group of peer measurements has no summary row and
   keeps every row at full contrast. This is why the drum table's kit parts are
   muted under "Whole chart" while the tempo table's measurements are not.
+- **`Eyebrow` `as`.** The mono-label voice on a non-paragraph element:
+  `as="dt"` puts it on a definition list's terms (the difficulty pages' rule
+  rows) without re-typing the metrics.
+- **Destructive treatments.** A failure that is the screen's current subject
+  gets `DestructiveNotice` (`components/DestructiveNotice.tsx`), the tinted
+  callout panel with a title and a recovery action. A one-line supplementary
+  error stays a plain `text-destructive` paragraph. The entry screens still
+  disagree about which of the two a rejected chart package deserves; that
+  split predates the primitive and is recorded, not resolved.
 - **No verdict slot.** Deliberate, per style guide §5.2. Use `footnote` for
   methodology and attribution, `disclaimer` for what the measurement does not
   establish.

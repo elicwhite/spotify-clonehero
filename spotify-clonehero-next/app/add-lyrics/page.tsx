@@ -8,9 +8,9 @@ import AddLyricsClient from './AddLyricsClient';
 // keeps siteName, card type, and the auto-discovered og-image from the
 // root layout intact.
 export const metadata: Metadata = {
-  title: 'Add lyrics to a chart',
+  title: 'Add synced lyrics to a chart',
   description:
-    'Paste your lyrics and they’re automatically synced to any Clone Hero chart, syllable-by-syllable. Runs entirely in your browser.',
+    'Paste lyrics and each syllable is aligned to the vocal of any Clone Hero chart, in your browser. The result opens in the chart editor for review.',
 };
 
 export default function Page() {

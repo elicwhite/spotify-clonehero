@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 import {EditPassCanvas} from '@/app/drum-transcription/landing/EditPassCanvas';
+import {ReductionCascadeCanvas} from '@/components/difficulty-generation/landing/illustrations/ReductionCascadeCanvas';
 import {BeatGridCanvas} from '@/app/tempo/landing/BeatGridCanvas';
 import {FeatureBand} from '@/components/landing/FeatureBand';
 import {LandingFooter} from '@/components/landing/LandingFooter';
@@ -12,7 +13,6 @@ import {LandingSection} from '@/components/landing/Section';
 import {START_SECTION_ID} from '@/components/landing/ToolEntrySection';
 import {buttonVariants} from '@/components/ui/button';
 
-import {DifficultyLadder} from './illustrations/DifficultyLadder';
 import {LyricSyllables} from './illustrations/LyricSyllables';
 
 /**
@@ -123,7 +123,7 @@ export function ChartPage() {
       <FeatureBand
         eyebrow="Step 3 · Difficulties"
         title="Build Hard, Medium, and Easy from Expert"
-        illustration={<DifficultyLadder />}
+        illustration={<ReductionCascadeCanvas instrument="guitar" />}
         actions={
           <>
             <Link
@@ -140,9 +140,7 @@ export function ChartPage() {
         }>
         <p>
           Once the Expert track is right, the lower difficulties are generated
-          from it, for drums and for guitar. This step has been automated for
-          years, and the player base got three more difficulties on far more
-          songs than anyone was going to chart by hand.
+          from it, for drums and for guitar.
         </p>
       </FeatureBand>
 

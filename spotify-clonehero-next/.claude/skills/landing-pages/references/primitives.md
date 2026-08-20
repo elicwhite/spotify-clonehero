@@ -24,6 +24,10 @@ import {TrustLine} from '@/components/landing/TrustLine';
 import {StepFlow} from '@/components/landing/StepFlow';
 import {StatChip, InlineStat, StatCell} from '@/components/landing/StatChip';
 import SectionDropZone from '@/components/landing/SectionDropZone'; // ← default export
+import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
+import {CardGrid, CardGridCell} from '@/components/landing/CardGrid';
+import {LandingProse} from '@/components/landing/Prose'; // ← not LandingProse.tsx
+import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
 ```
 
 All named exports except `SectionDropZone`.
@@ -78,8 +82,11 @@ another file.
 
 The first screenful. The prop order is the copy guide's, not a layout
 preference: the lede sells the purpose rather than the mechanism (§2), and the
-trust facts sit directly under it because the not-one-shot statement and the
-download size have to land in the first screenful (§4, §7).
+trust facts sit directly under it because the not-one-shot statement has to
+land in the first screenful (§4, §7). Download sizes are not trust facts (§7):
+the difficulty pages and `/add-lyrics` keep them off the page and let the tool
+disclose a download when it starts one, while `/tempo` and
+`/drum-transcription` still state "about 515 MB" and have not been revisited.
 
 - `title` is a `ReactNode` because titles carry typography that is content —
   `/drum-transcription` sets a non-breaking hyphen (`&#8209;`) so "first-pass"
@@ -94,8 +101,15 @@ Renders the page's single `h1`.
 
 ### `Eyebrow`
 
+```tsx
+<Eyebrow as?={'p' | 'dt' | 'span'}>{children}</Eyebrow>
+```
+
 The mono label above a heading. Mono is the family's "measurement voice":
-labels, numbers, provenance, stage numbers. Takes any `<p>` props.
+labels, numbers, provenance, stage numbers. Takes any `<p>` props. `as`
+(default `p`) puts the same voice on a non-paragraph element — `as="dt"` on a
+definition list's terms (the difficulty pages' rule rows) — so a page never
+re-types these metrics.
 
 ### `TrustLine`
 
@@ -152,15 +166,60 @@ page's client component.
 ### `SectionDropZone`
 
 ```tsx
-<SectionDropZone onAudioFile onChartLoaded disabled? className?>{children}</SectionDropZone>
+<SectionDropZone onAudioFile? onChartLoaded disabled? className?>{children}</SectionDropZone>
 ```
 
 Makes a section a drop target for an audio file or a chart package (folder,
-`.zip`, or `.sng`).
+`.zip`, or `.sng`). `onAudioFile` is optional: a chart-only tool (the
+difficulty pages, `/add-lyrics`) omits it and a dropped audio file gets a
+chart-only rejection toast.
+
+### `ToolEntryCard`
+
+```tsx
+<ToolEntryCard description? footnote?>{entryControls}</ToolEntryCard>
+```
+
+The card the tool's entry controls sit in, inside a `ToolEntrySection`. Owns
+`w-full` and the header/no-header padding: with no `description` the content
+pads its own top instead of assuming a `CardHeader` above it. `footnote` is
+the trust footnote (what runs locally, what gets downloaded). The four tool
+pages hand-built this shape and drifted before it existed — do not rebuild it
+from `Card` parts.
 
 ---
 
 ## Content
+
+### `CardGrid` / `CardGridCell`
+
+```tsx
+<CardGrid as?={'ul' | 'ol'} columns="sm:grid-cols-2">
+  <CardGridCell>…</CardGridCell>
+</CardGrid>
+```
+
+The hairline card grid: `bg-card` cells separated by 1px of border color
+through `gap-px`. `columns` takes the responsive `grid-cols-*` classes; cells
+default to `gap-3 p-5`, and `StepFlow` uses the documented denser `gap-2 p-4`
+variant. The container string is owned here and guarded by test.
+
+### `LandingProse`
+
+A body paragraph inside a `LandingSection`, at the same measure and
+`text-sm sm:text-base` ramp as the section intro. Use it for any prose that
+sits in a section body, so it never renders a step smaller than the intro.
+
+### `heroCanvasFrameClass`
+
+```ts
+heroCanvasFrameClass(); // 'standard': h-32 sm:h-40
+heroCanvasFrameClass('tall'); // 'tall':     h-36 sm:h-44
+```
+
+The frame a hero illustration canvas draws inside. Height is the one knob:
+`standard` for a single horizontal band (waveform, syllable row), `tall` for
+stacked lanes (highway, reduction cascade). Guarded by test.
 
 ### `StepFlow`
 

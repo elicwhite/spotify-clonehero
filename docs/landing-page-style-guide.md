@@ -7,7 +7,7 @@ sources:
   - "~/projects/drum-to-chart/wiki/AI charting Ethos.md"
   - Eli's decisions on the first landing-page draft, 2026-08-06
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-19
 ---
 
 # Landing Page Copy & Ethos Style Guide (living)
@@ -88,13 +88,47 @@ to a reader who hasn't been told a draft exists yet).
 | "Ready to chart faster? Let's go!" | "Open the tool" (as the button label, with no surrounding hype). |
 | "Blazing fast, right in your browser!" | "Runs in your browser. Nothing is uploaded." |
 
+**Only assert a burden the reader actually feels.** A page may name the pain the tool
+removes only where that pain is the reader's common experience (placing every syllable
+by hand really is the whole job of adding lyrics). Do not manufacture a burden to make
+the tool look necessary: most charters never wrote four difficulty tiers by hand, so
+"charting one song means charting it four times" argues a suffering the reader does not
+recognize, and it reads as a sales move. Where the burden is real, state it once (the
+lede is the natural place) and stop; no other paragraph should be arguing that the
+reader is suffering.
+
+| Don't | Do |
+|---|---|
+| "Charting one song means charting it four times." (most charters don't) | "This tool adds Hard, Medium, and Easy from the Expert track." |
+| Re-stating the pain in every section intro | State it once in the lede; the rest of the page describes the tool. |
+
+**Illustration captions describe the effect, not the picture.** A caption that narrates
+what the illustration depicts is alt text, and alt text is not copy. The caption states
+the takeaway the reader should leave with, which on these pages is usually what the tool
+gets right and what the reader will fix in the editor. The model is /drum-transcription's
+hero caption: "Above: the model's predicted notes need some edits, like moving a cymbal
+to the right lane, removing a note that was never played, or nudging a note onto the
+beat. Make those fixes in the chart editor."
+
+| Don't | Do |
+|---|---|
+| "Above: one syllable lands early, and a person drags it onto the vocal." | "Above: most syllables land where they are sung. The ones that land off the vocal are yours to drag into place in the chart editor." |
+
 ## 3. How to talk about the technology
 
 **Precise terms, never hide.** Name the mechanism concretely. Say what it does and where it
 breaks.
 
-- Correct labels: "a transcription model", "a trained model", "a neural network trained on
-  X", "decision rules fit to data", "a beat-tracking model", "a forced-alignment model".
+- Correct labels: "a transcription model", "a trained model", "decision rules fit to
+  data", "a beat-tracking model", "a forced-alignment model".
+- **One canonical phrasing per mechanism, on the page and across pages.** A learned
+  component is "a trained model", or its job-specific form ("a trained transcription
+  model", "a forced-alignment model"). Do not rotate through synonyms ("a neural
+  network", the architecture name, the checkpoint name) for variety; every synonym is a
+  second concept the reader has to reconcile with the first. Naming a published
+  third-party model once as credit is not synonym rotation: a plain one-line credit in
+  the how-it-works layer ("The forced-alignment model is wav2vec2.") is wanted, and the
+  plain description still does the explaining everywhere else.
 - Never the phrase "AI-powered". Never "powered by AI", "AI-driven", "smart", "intelligent",
   "magic".
 - Never deny or obscure that machine learning is involved. If a tool uses a model, the page
@@ -108,8 +142,20 @@ breaks.
   the component by its job: "a custom trained transcription model", "a beat-tracking model".
   A published third-party model may be named once as credit, but the plain description
   carries the meaning; the name must never be doing the explaining.
+- **Pipeline internals stay off the page.** Describe what each component does in the
+  ordinary case, once. Intermediate artifacts (a separated vocals stem, a cache), rare
+  fallback branches, and retry logic are implementation details, not landing copy; a
+  reader who wants them reads the how-it-works layer or the code.
 - Every capability claim should be paired with its failure mode nearby, in the same visual
   block where possible. Failure modes are specific, not hedges: name the musical situation.
+- **The established-category condition** (Eli's decision, 2026-08-19). The pairing above
+  is required where the tool's category is new to the reader. A tool in a category the
+  community already trusts and uses does not have to argue its own limits the way a novel
+  one does: such a page may state its capabilities without a paired failure mode, and it
+  carries no training provenance and no measured numbers (§5.1, §8). The difficulty pages
+  are under this condition. The condition is the category's standing, not the author's
+  preference: transcription and lyric alignment are novel to this audience, so
+  /drum-transcription and /add-lyrics keep their failure modes.
 - **Failure modes are priced, not just named.** Distinguish cheap fixes from expensive
   ones: a failure the reader corrects in a few edits (wrong time-signature markers on a
   good tempo grid) is a different situation from one that means redoing the work (a bad
@@ -119,6 +165,7 @@ breaks.
 | Don't | Do |
 |---|---|
 | "AI-powered drum transcription" | "A trained transcription model listens to the audio and proposes notes." |
+| "wav2vec2 with a CTC head aligns each syllable" | "A forced-alignment model places each syllable at the time it is sung." |
 | "Advanced algorithms handle the rest" | "A fixed table of numbers, measured once and frozen, decides which notes to keep." |
 | "Highly accurate" | "It gets kick and snare right far more often than it gets cymbal choices right. Ride vs crash is the most common thing you'll fix." |
 | "Sometimes it makes mistakes." | "Double-kick passages and fast ghost notes are where it misses most." |
@@ -155,29 +202,48 @@ that number is measured and sourced (see §6).
 
 ## 5. Provenance and comparisons
 
-### 5.1 Training-data provenance
+### 5.1 Training-data and eval-corpus provenance
 
-Do not hide it. Do not make it a headline. Charters are uneasy about tools that learned from
-charters' work, and presenting that as a credential is the exact failure mode.
+Do not make it a headline, and do not name the corpus. Landing copy never names whose
+charts a model was trained on or measured against, and never frames a number as matching
+or agreeing with a named party's released charts. Naming the source drags a third party
+into the tool's marketing, and a "matches X" framing turns their work into a credential
+(the exact failure mode charters distrust). This supersedes the earlier rule that named
+the specific corpus in the how-it-works layer.
 
-**Where it goes:** a how-it-works or fine-print layer, stated matter-of-factly, once. Named
-sources are named (not "learned from real charts" when you mean a specific corpus). State
-the consent situation honestly if the page discusses it, without self-congratulation and
-without arguing that precedent makes it fine.
+**What the page says instead:** describe the corpus by its nature and size, generically:
+"officially authored charts", "charts that were synced by hand", "482 songs whose vocal
+charts were synced by hand". The kind of source and the sample size are the facts a
+reader needs; the identity is not. The named corpus stays in the research repo and its
+result files, where the measurement is reproduced, not on the page or in the page's
+provenance-tooltip strings. Script paths in provenance tooltips are quoted as they are.
+
+A page under §3's established-category condition goes further: it states no training
+provenance at all, generic or otherwise, and carries no measured numbers (Eli's
+decision, 2026-08-19, for the difficulty pages). The rules in this section govern the
+pages that do discuss provenance.
+
+The rest is unchanged: the description is stated matter-of-factly, once, in a
+how-it-works or fine-print layer. State the consent situation honestly if the page
+discusses it, without self-congratulation and without arguing that precedent makes it
+fine.
 
 | Don't | Do |
 |---|---|
-| A hero chip reading "Learned from Harmonix" | A line in How it works: "The reduction rules were fit to Harmonix's official charts." |
+| A hero chip reading "Learned from Harmonix" | Nothing, on a page under §3's established-category condition; otherwise a generic line in How it works: "The model was fit to charts that were synced by hand." |
 | H1: "It reduces a chart the way Harmonix does" | H1 that names the tool's job: "Generate lower difficulties from an expert chart." |
+| "Measured against 482 Harmonix-charted songs" | "Measured against 482 songs whose charts were synced by hand." |
 | An accent color named after the training source | Accent colors named for their role in the design system. |
-| "Trained on thousands of community charts" as a trust badge | State the source in How it works; do not use scale as a boast. |
+| "Trained on thousands of community charts" as a trust badge | State the kind of source and the count in How it works; do not use scale as a boast. |
 | "We're proud to be transparent about our data" | State the data. Transparency is not a feature to congratulate yourself for. |
 
 ### 5.2 Comparisons to other tools
 
 **Never editorialize that another tool is worse.** Present measurements in a table and stop.
 No verdict sentence, no framing sentence that pre-chews the conclusion. The methodology goes
-in a footnote so a reader can reproduce it.
+in a footnote so a reader can reproduce it. When a comparison's yardstick is the corpus a
+model was trained on or measured against, §5.1 applies to that column too: describe it
+generically ("the reference charts"), never by name.
 
 Be generous. If another tool takes a more elegant approach, say so plainly and explain why
 this one chose otherwise. Where another tool is the community standard and works well, say
@@ -186,8 +252,8 @@ that is a fact worth stating, not a competitor to undercut).
 
 | Don't | Do |
 |---|---|
-| "The other tools strip far more notes than Rock Band 4 does." | The table with the note-count column, plus a methodology footnote. |
-| "By over-reducing, HOPCAT and Onyx land below Rock Band 4's difficulty." | Same numbers in the same table, no sentence interpreting them. |
+| "The other tools strip far more notes than the reference charts do." | The table with the note-count column, plus a methodology footnote. |
+| "By over-reducing, HOPCAT and Onyx land below the reference difficulty." | Same numbers in the same table, no sentence interpreting them. |
 | "Unlike other tools, ours…" | Drop the clause. Describe what this tool does. |
 | Omitting a comparison where the other tool wins | Include it. A table that only shows favorable rows is not a measurement. |
 | Silence about a competitor's better design | "Onyx's approach avoids the separation step entirely, which is the cleaner path; this tool uses separation because it measured better on X." |
@@ -244,12 +310,19 @@ they are not true, and do not soften a false one into a half-truth.
       step is nondeterministic (sampling, thread-dependent ordering), say so instead.
 - [ ] **Inspectable before saving.** "You can open the result in the editor and check every
       note before saving." Name the actual review surface.
-- [ ] **Download size disclosed up front.** Large model downloads are stated before the user
-      starts, with the size and when it happens. Example: /tempo downloads about 420 MB of
-      models the first time you run it. Never discover-on-click.
+- [ ] **Download sizes stay off the landing page.** (Eli's decision, 2026-08-18, made
+      while cutting them from the difficulty pages and /add-lyrics; those three pages
+      follow it. /tempo and /drum-transcription still state "about 515 MB" in their
+      trust lines and have not been revisited, so today this rule describes the newer
+      pages, not the whole tree.) Model download sizes are not
+      a landing-page trust fact, whatever the size. What the page still owes the reader is
+      the model's existence — §3 requires saying a model runs — and the tool itself
+      disclosing the download at the moment it starts one, with a visible size and
+      progress, so the number is never a surprise mid-run.
 - [ ] **What it writes and where.** If the tool modifies chart files, say what it touches.
 - [ ] **Offline after first load**, where true.
-- [ ] **Known failure modes**, specific and musical, near the capability claims.
+- [ ] **Known failure modes**, specific and musical, near the capability claims. Not
+      on a page under §3's established-category condition.
 - [ ] **Not-one-shot statement** (§4), in the first screenful.
 
 Trust signals are stated, not decorated. No badge graphics, no shield icons, no "100%
@@ -263,16 +336,19 @@ Before a tool page ships, confirm:
    (charting terms, not product terms). No slogan H1.
 2. **Not-one-shot statement** present, high, in body register (§4).
 3. **Mechanism named** concretely (§3): model where a model, rules/table where rules.
-4. **Failure modes** listed, specific, near the capability claims.
+4. **Failure modes** listed, specific, near the capability claims, unless the page is
+   under §3's established-category condition.
 5. **Trust signals** from §7 that are true for this tool, stated plainly.
 6. **Numbers** all sourced, with provenance surfaced; provisional ones marked (§6).
-7. **Provenance** of training data in the how-it-works layer, not the hero (§5.1).
+7. **Provenance** of training data in the how-it-works layer, not the hero (§5.1);
+   none at all, and no measured numbers, on a page under §3's established-category
+   condition.
 8. **Comparisons**, if any, are tables with a methodology footnote and no verdict sentence
    (§5.2).
 9. **Banned phrases** swept (§9).
 10. **Read it as a hostile charter.** Any sentence that would draw "yeah right" gets cut or
     replaced with a measurement.
-11. **Cross-page consistency.** One canonical phrasing per concept across the six pages;
+11. **Cross-page consistency.** One canonical phrasing per concept across every page;
     if two pages describe the same mechanism differently, reconcile them.
 12. **Every claim survives being screenshotted out of context.** Copy travels as screenshots
     in Discord. A qualifier three paragraphs away does not protect a claim.
@@ -307,6 +383,30 @@ Patterns:
 
 ## Changelog
 
+- 2026-08-19 (review reconciliation, difficulty pages): the difficulty pages carry no
+  failure modes, no training provenance, and no measured numbers (Eli's decision): a
+  tool in a category the community already trusts and uses does not have to argue its
+  own limits the way a novel one does. Recorded as §3's established-category condition
+  and threaded through §5.1, §7, and §8; /drum-transcription and /add-lyrics keep their
+  failure modes. §7's download-size rule now states its actual scope: /tempo and
+  /drum-transcription still show "about 515 MB" and have not been revisited. §5.2's
+  example rows named the corpus the reduction model was measured against as the
+  comparison yardstick; a yardstick that is the training or eval corpus now falls under
+  §5.1 and is described generically.
+- 2026-08-18 (feedback round 2, /add-lyrics): download sizes come off landing pages
+  entirely — §7's disclosed-up-front item replaced with the opposite rule; the tool
+  discloses the download when it starts one. Naming a published third-party model once
+  as a plain credit line is wanted, not synonym rotation (§3 amended); the name still
+  never carries the mechanism. Implementation details like vocals stems, caches, and
+  rare fallback branches stay off the page: describe the ordinary case, once.
+- 2026-08-18 (difficulty-pages feedback rounds, applied to /add-lyrics): illustration
+  captions describe the effect the reader should take away, never restate what the
+  picture depicts (/drum-transcription's hero caption is the model); landing copy never
+  names the corpus a model was trained on or measured against and never frames a number
+  as matching a named party's charts — describe the source generically with its size
+  (§5.1 rewritten; it previously said to name the source in how-it-works); one canonical
+  phrasing per mechanism, "a trained model" or its job-specific form, no synonym
+  rotation; only assert a burden the reader actually feels, once, in the lede.
 - 2026-08-06 (feedback round 3, /drum-transcription): hero lede sells the purpose (speed
   up charting, first pass, you fix what's wrong), never a mechanism enumeration; every
   noun needs an established referent ("the draft" standing alone is banned); landing pages

@@ -3,6 +3,7 @@
 import {useEffect, useRef} from 'react';
 
 import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/components/landing/lanes';
+import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
 
 /**
  * The hero motif: the edit pass.
@@ -347,7 +348,7 @@ export function EditPassCanvas() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="h-36 w-full rounded-lg border border-border bg-card sm:h-44"
+      className={heroCanvasFrameClass('tall')}
     />
   );
 }

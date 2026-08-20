@@ -3,6 +3,7 @@
 import {useEffect, useRef} from 'react';
 
 import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/components/landing/lanes';
+import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
 
 /**
  * The hero motif for /tempo, a lighter variant of the family's edit-pass
@@ -277,7 +278,7 @@ export function BeatGridCanvas() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="h-32 w-full rounded-lg border border-border bg-card sm:h-40"
+      className={heroCanvasFrameClass()}
     />
   );
 }

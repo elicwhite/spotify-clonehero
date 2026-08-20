@@ -681,8 +681,8 @@ function TrackEditEditor({
         // 4. Resolve the scope to open. Every instrument's highest charted
         // difficulty is seeded (route model, plan 0074); the one to focus is
         // drums when it's among them, else the first. A chart with no
-        // instrument track but with lyrics opens on vocals instead — that is
-        // the shape `/add-lyrics` hands over.
+        // instrument track but with lyrics opens on vocals instead — a shape
+        // `/add-lyrics` can hand over.
         // A project from a difficulty route opens on the work that route
         // did: every charted difficulty of its one instrument, and nothing
         // else. Elsewhere it is one track per instrument, at its highest

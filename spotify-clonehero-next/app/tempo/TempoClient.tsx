@@ -22,11 +22,11 @@ import {
 import {Button} from '@/components/ui/button';
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
 import {
   findAudioFiles,
   type Files,
@@ -334,78 +334,78 @@ export default function TempoClient({
         <SectionDropZone
           onAudioFile={file => process({kind: 'audio', file})}
           onChartLoaded={loaded => process({kind: 'chart', loaded})}>
-          <Card className="w-full">
-            <CardHeader>
-              <CardDescription>
+          <ToolEntryCard
+            description={
+              <>
                 Builds a tempo map and beat grid in your browser. Start from a
                 song file to get a fresh chart, or from an existing chart to
                 rebuild its tempo map without moving any notes.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {phase === 'pick' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    className="h-28 flex flex-col gap-2"
-                    onClick={() => setPhase('pick-audio')}>
-                    <Music className="h-6 w-6" />
-                    <span>Pick a song file</span>
-                    <span className="text-xs text-muted-foreground font-normal">
-                      mp3, ogg, opus, wav, flac…
-                    </span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-28 flex flex-col gap-2"
-                    onClick={() => setPhase('pick-chart')}>
-                    <FolderSearch className="h-6 w-6" />
-                    <span>Use an existing chart</span>
-                    <span className="text-xs text-muted-foreground font-normal">
-                      chart folder, .sng, or .zip
-                    </span>
-                  </Button>
-                </div>
-              )}
-              {phase === 'pick-audio' && (
-                <div className="space-y-3">
-                  <AudioUploader
-                    onFileSelected={file => process({kind: 'audio', file})}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPhase('pick')}
-                    className="gap-1">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </Button>
-                </div>
-              )}
-              {phase === 'pick-chart' && (
-                <div className="space-y-3">
-                  <ChartDropZone
-                    id="tempo-chart-picker"
-                    onLoaded={loaded => process({kind: 'chart', loaded})}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPhase('pick')}
-                    className="gap-1">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </Button>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
+              </>
+            }
+            footnote={
+              <>
                 Everything runs on your computer. Nothing is uploaded. The first
                 run downloads about 515 MB of models: the drum separator, the
                 beat tracker, and the transcription model whose drum hits the
                 map is fitted to.
-              </p>
-            </CardContent>
-          </Card>
+              </>
+            }>
+            {phase === 'pick' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  className="h-28 flex flex-col gap-2"
+                  onClick={() => setPhase('pick-audio')}>
+                  <Music className="h-6 w-6" />
+                  <span>Pick a song file</span>
+                  <span className="text-xs text-muted-foreground font-normal">
+                    mp3, ogg, opus, wav, flac…
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-28 flex flex-col gap-2"
+                  onClick={() => setPhase('pick-chart')}>
+                  <FolderSearch className="h-6 w-6" />
+                  <span>Use an existing chart</span>
+                  <span className="text-xs text-muted-foreground font-normal">
+                    chart folder, .sng, or .zip
+                  </span>
+                </Button>
+              </div>
+            )}
+            {phase === 'pick-audio' && (
+              <div className="space-y-3">
+                <AudioUploader
+                  onFileSelected={file => process({kind: 'audio', file})}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPhase('pick')}
+                  className="gap-1">
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              </div>
+            )}
+            {phase === 'pick-chart' && (
+              <div className="space-y-3">
+                <ChartDropZone
+                  id="tempo-chart-picker"
+                  onLoaded={loaded => process({kind: 'chart', loaded})}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPhase('pick')}
+                  className="gap-1">
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              </div>
+            )}
+          </ToolEntryCard>
         </SectionDropZone>
       }
     />

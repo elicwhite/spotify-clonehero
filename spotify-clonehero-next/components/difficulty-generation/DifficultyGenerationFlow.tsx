@@ -14,19 +14,15 @@
  * project this page wrote.
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {useRouter} from 'next/navigation';
 import {AlertTriangle, Loader2} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import {DestructiveNotice} from '@/components/DestructiveNotice';
+import SectionDropZone from '@/components/landing/SectionDropZone';
+import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
@@ -78,9 +74,13 @@ export type DifficultyGenerationInstrument = 'drums' | 'guitar';
 
 export interface DifficultyGenerationFlowConfig {
   instrument: DifficultyGenerationInstrument;
-  pageTitle: string;
-  pageDescription: string;
   dropZoneId: string;
+  /** Wraps the picker screen in the route's landing page. The flow hands its
+   *  entry card (drop zone + any rejection banner) to this render prop, the
+   *  same inversion `/tempo` uses: the landing owns the page around the
+   *  picker, and every other flow state (processing, handoff, save-failed)
+   *  still renders full-screen without it. */
+  landing?: (toolEntry: ReactNode) => ReactNode;
   /** Test seam: override the `generate-difficulties` task, e.g. one built
    *  with `makeGenerateDifficultiesTask({createWorker: fakeWorkerFactory})`. */
   task?: AssistTaskDef<GenerateDifficultiesResult, GenerateDifficultiesInput>;
@@ -233,7 +233,7 @@ function DifficultyGenerationFlowInner({
 }: {
   config: DifficultyGenerationFlowConfig;
 }) {
-  const {instrument, pageTitle, pageDescription, dropZoneId} = config;
+  const {instrument, dropZoneId, landing} = config;
   const task = config.task ?? generateDifficultiesTask;
   const label = INSTRUMENT_LABEL[instrument];
 
@@ -413,7 +413,7 @@ function DifficultyGenerationFlowInner({
     const {loaded, generated, error} = flow;
     return (
       <main className="flex min-h-screen items-center justify-center p-4">
-        <div className="max-w-md rounded-lg border border-destructive/40 bg-destructive/10 p-6">
+        <DestructiveNotice className="max-w-md p-6">
           <h2 className="text-lg font-semibold">
             Your {label} difficulties are ready, but the chart could not be
             saved.
@@ -439,7 +439,7 @@ function DifficultyGenerationFlowInner({
               Back
             </Button>
           </div>
-        </div>
+        </DestructiveNotice>
       </main>
     );
   }
@@ -467,29 +467,19 @@ function DifficultyGenerationFlowInner({
     );
   }
 
-  return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold sm:text-4xl mb-2">{pageTitle}</h1>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          {pageDescription}
-        </p>
-      </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Load a Chart</CardTitle>
-          <CardDescription>
-            Drop a .sng or .zip file, or select a chart folder.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+  const entry = (
+    <>
+      {/* The whole section is a drop target (no `onAudioFile`: this tool
+          only takes chart packages), so a chart can be dragged anywhere on
+          the entry without aiming for the card. */}
+      <SectionDropZone className="w-full" onChartLoaded={handleChartLoaded}>
+        <ToolEntryCard description="Drop a .sng or .zip file, or select a chart folder.">
           <ChartDropZone onLoaded={handleChartLoaded} id={dropZoneId} />
-        </CardContent>
-      </Card>
+        </ToolEntryCard>
+      </SectionDropZone>
 
       {flow.error && (
-        <div className="mt-6 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+        <DestructiveNotice className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="text-sm">
             {/* Deliberately neutral: this banner also carries reasons that
@@ -507,8 +497,16 @@ function DifficultyGenerationFlowInner({
               Try another chart
             </Button>
           </div>
-        </div>
+        </DestructiveNotice>
       )}
-    </main>
+    </>
   );
+
+  if (landing) {
+    return <>{landing(entry)}</>;
+  }
+
+  // The fallback shell supplies the rhythm `ToolEntrySection`'s `gap-6`
+  // provides on the landing path.
+  return <main className="mx-auto max-w-3xl space-y-6 px-4 py-8">{entry}</main>;
 }

@@ -32,6 +32,9 @@ import {
 const UNRECOGNIZED_MESSAGE =
   'Drop an audio file, a chart folder, a .zip, or a .sng';
 
+/** The rejection for a section that only takes charts (no `onAudioFile`). */
+const CHART_ONLY_MESSAGE = 'Drop a chart folder, a .zip, or a .sng';
+
 /** Same test AudioUploader applies to a picked file. */
 const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|m4a|webm|opus|wma)$/i;
 
@@ -54,8 +57,10 @@ function isOverNestedZone(e: React.DragEvent): boolean {
 }
 
 export interface SectionDropZoneProps {
-  /** Called with a dropped audio file, as if it came from AudioUploader. */
-  onAudioFile: (file: File) => void;
+  /** Called with a dropped audio file, as if it came from AudioUploader.
+   *  Omit on a section whose tool only takes charts: a dropped audio file
+   *  then gets the chart-only rejection toast. */
+  onAudioFile?: ((file: File) => void) | undefined;
   /** Called with a dropped chart package (folder, .zip or .sng). */
   onChartLoaded: (loaded: LoadedFiles) => void;
   /** Ignore drops entirely, e.g. while a pipeline is already running. */
@@ -92,10 +97,16 @@ export default function SectionDropZone({
           const result = await dropped;
           if (result.kind === 'chart') {
             onChartLoaded(result.loaded);
-          } else if (result.kind === 'file' && isAudioFile(result.file)) {
+          } else if (
+            result.kind === 'file' &&
+            isAudioFile(result.file) &&
+            onAudioFile
+          ) {
             onAudioFile(result.file);
           } else {
-            toast.error(UNRECOGNIZED_MESSAGE);
+            toast.error(
+              onAudioFile ? UNRECOGNIZED_MESSAGE : CHART_ONLY_MESSAGE,
+            );
           }
         } catch (err) {
           toast.error(

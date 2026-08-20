@@ -1,6 +1,6 @@
 import type {LucideIcon} from 'lucide-react';
 
-import {cn} from '@/lib/utils';
+import {CardGrid, CardGridCell} from './CardGrid';
 
 export interface FlowStepSpec {
   Icon: LucideIcon;
@@ -24,13 +24,14 @@ export function StepFlow({
   className?: string;
 }) {
   return (
-    <ol
-      className={cn(
-        'grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4',
-        className,
-      )}>
+    <CardGrid
+      as="ol"
+      columns="sm:grid-cols-2 lg:grid-cols-4"
+      className={className}>
       {steps.map(({Icon, label, desc}, i) => (
-        <li key={label} className="flex flex-col gap-2 bg-card p-4">
+        // Denser than CardGrid's default: these cells are diagram steps, not
+        // prose cards (the documented `gap-2 p-4` variant).
+        <CardGridCell key={label} className="gap-2 p-4">
           <div className="flex items-center gap-2">
             <span
               aria-hidden="true"
@@ -46,8 +47,8 @@ export function StepFlow({
           <span className="text-sm leading-relaxed text-muted-foreground">
             {desc}
           </span>
-        </li>
+        </CardGridCell>
       ))}
-    </ol>
+    </CardGrid>
   );
 }

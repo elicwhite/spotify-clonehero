@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
 import SectionDropZone from '@/components/landing/SectionDropZone';
+import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
 import SourcePicker from './components/SourcePicker';
 import {DrumTranscriptionLanding} from './landing/DrumTranscriptionLanding';
 import type {LoadedFiles} from '@/lib/chart-files/chart-package';
@@ -534,34 +535,34 @@ function DrumTranscriptionInner() {
         <>
           {/* Either/or entry point: audio-only (unchanged) vs an existing chart
               package, whose SyncTrack/audio drive transcription (chart-flow
-              feature). Wrapped in a Card to match /tempo's entry-card shape. */}
+              feature). */}
           <SectionDropZone
             onAudioFile={handleStartPipeline}
             onChartLoaded={handleChartPackageLoaded}
             disabled={isProcessing}>
-            <Card className="w-full">
-              <CardHeader>
-                <CardDescription>
+            <ToolEntryCard
+              description={
+                <>
                   Predicts drum notes from the audio, right in your browser. An
                   existing chart&rsquo;s tempo map is used instead of a
                   predicted one, which avoids most note-position errors.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <SourcePicker
-                  onFileSelected={handleStartPipeline}
-                  onChartLoaded={handleChartPackageLoaded}
-                  chartFlowError={chartFlowError}
-                  disabled={isProcessing}
-                />
-                <p className="text-xs text-muted-foreground">
+                </>
+              }
+              footnote={
+                <>
                   Everything runs on your computer. Nothing is uploaded. The
                   first run downloads about 515 MB of models: the drum
                   separator, the transcription model, and the beat tracker used
                   to build the tempo map.
-                </p>
-              </CardContent>
-            </Card>
+                </>
+              }>
+              <SourcePicker
+                onFileSelected={handleStartPipeline}
+                onChartLoaded={handleChartPackageLoaded}
+                chartFlowError={chartFlowError}
+                disabled={isProcessing}
+              />
+            </ToolEntryCard>
           </SectionDropZone>
 
           {/* Projects started from this page. `/chart-editor` lists them all. */}

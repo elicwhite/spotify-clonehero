@@ -1,6 +1,6 @@
 ---
 name: landing-pages
-description: Build and edit marketing / tool landing pages in Music Charts Tools using the shared primitives in components/landing (LandingPage, LandingHero, LandingSection, ComparisonTable, ToolEntrySection, ScrollToStartCta, TrustLine, Eyebrow, StatChip, ExternalLink). Use this whenever creating a new landing or marketing page, adding a hero, section, comparison or measurement table, trust signals, stat chips with provenance, or a call-to-action, and whenever editing /drum-transcription, /tempo, /why, or the /find-music welcome. Also use it before writing any page-level container div with a max-width and vertical rhythm, since that shell already exists and forking it fails a test.
+description: Build and edit marketing / tool landing pages in Music Charts Tools using the shared primitives in components/landing (LandingPage, LandingHero, LandingSection, ComparisonTable, ToolEntrySection, ToolEntryCard, CardGrid, StepFlow, LandingProse, ScrollToStartCta, TrustLine, Eyebrow, StatChip, ExternalLink, heroCanvasFrameClass). Use this whenever creating a new landing or marketing page, adding a hero, section, comparison or measurement table, trust signals, stat chips with provenance, or a call-to-action, and whenever editing /drum-transcription, /tempo, /add-lyrics, /drum-difficulties, /guitar-difficulties, /why, or the /find-music welcome. Also use it before writing any page-level container div with a max-width and vertical rhythm, since that shell already exists and forking it fails a test.
 ---
 
 # Landing pages
@@ -90,7 +90,8 @@ rather than an inconvenience.
    `../docs/design-system.md` under "Documented variants".
 3. **Leave it local** if it genuinely has one user. The rule is to extract on
    the _second_ user, not the first — `/drum-transcription`'s "What you'll fix"
-   grid is deliberately still a local `<ul>`.
+   grid stayed a local `<ul>` while it was the only card grid, and became
+   `CardGrid` when a second page needed the same shape.
 
 **Do not** copy a primitive's markup into your page. If you catch yourself
 pasting `landing-lanes w-full max-w-4xl…` or the hero `h1` classes, the test

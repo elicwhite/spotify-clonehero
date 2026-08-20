@@ -274,16 +274,11 @@ beforeEach(() => {
   mockRouterPush.mockClear();
 });
 
-function renderFlow(
-  instrument: 'drums' | 'guitar',
-  pageTitle = 'Difficulty Generation',
-) {
+function renderFlow(instrument: 'drums' | 'guitar') {
   return render(
     <TooltipProvider>
       <DifficultyGenerationFlow
         instrument={instrument}
-        pageTitle={pageTitle}
-        pageDescription="desc"
         dropZoneId="test-picker"
         task={scriptedTask()}
       />

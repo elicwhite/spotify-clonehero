@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type {ReactNode} from 'react';
 
+import {CardGrid, CardGridCell} from '@/components/landing/CardGrid';
 import {ExternalLink} from '@/components/landing/ExternalLink';
 import {LandingHero} from '@/components/landing/LandingHero';
 import {LandingPage} from '@/components/landing/LandingPage';
@@ -91,9 +92,9 @@ export function WhyPage() {
       <LandingSection
         title="Who this helps, and how"
         intro="The same underlying work is worth different things to different people, and is probably worth handing to each of them in a different shape.">
-        <ul className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
+        <CardGrid columns="md:grid-cols-3">
           {GROUPS.map(({who, problem, hope}) => (
-            <li key={who} className="flex flex-col gap-3 bg-card p-5">
+            <CardGridCell key={who}>
               <span className="text-sm font-medium text-foreground">{who}</span>
               <span className="text-sm leading-relaxed text-muted-foreground">
                 {problem}
@@ -101,9 +102,9 @@ export function WhyPage() {
               <span className="text-sm leading-relaxed text-foreground/90">
                 {hope}
               </span>
-            </li>
+            </CardGridCell>
           ))}
-        </ul>
+        </CardGrid>
       </LandingSection>
 
       <LandingSection

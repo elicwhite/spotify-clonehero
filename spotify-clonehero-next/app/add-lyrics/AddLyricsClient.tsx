@@ -2,16 +2,12 @@
 
 import {useEffect, useState, useCallback, useRef} from 'react';
 import {useRouter} from 'next/navigation';
-import {
-  AudioWaveform,
-  ClipboardPaste,
-  FolderOpen,
-  Pencil,
-  TriangleAlert,
-  type LucideIcon,
-} from 'lucide-react';
+import {FolderOpen, TriangleAlert} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
+import {DestructiveNotice} from '@/components/DestructiveNotice';
+import SectionDropZone from '@/components/landing/SectionDropZone';
+import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
 
 import {getExtension, getBasename} from '@/lib/src-shared/utils';
 import {removeStyleTags} from '@/lib/ui-utils';
@@ -39,6 +35,7 @@ import {
   type AddLyricsInput,
 } from '@/lib/assist/tasks/add-lyrics';
 import {isAbortError} from '@/lib/workers/abortable-worker';
+import {AddLyricsLanding} from './landing/AddLyricsLanding';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -323,6 +320,33 @@ export default function AddLyricsClient() {
     }
   }, [chart, lyrics, runner, saveAndOpen, status]);
 
+  // No chart open yet: the landing page, whose tool entry is this screen's
+  // own drop zone, so the pipeline it starts stays owned here.
+  if (!chart && status !== 'loading-chart') {
+    return (
+      <AddLyricsLanding
+        toolEntry={
+          <>
+            {/* The whole section is a drop target (no `onAudioFile`: this
+                tool only takes chart packages), so a chart can be dragged
+                anywhere on the entry without aiming for the card. */}
+            <SectionDropZone
+              className="w-full"
+              onChartLoaded={handleChartLoaded}>
+              <ToolEntryCard>
+                <ChartDropZone
+                  onLoaded={handleChartLoaded}
+                  id="add-lyrics-chart"
+                />
+              </ToolEntryCard>
+            </SectionDropZone>
+            {error && <p className="text-destructive text-sm">{error}</p>}
+          </>
+        }
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background w-full">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -331,39 +355,10 @@ export default function AddLyricsClient() {
             Add Lyrics To A Chart
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            Paste your lyrics — they&rsquo;re automatically synced to the audio,
-            syllable-by-syllable. Runs entirely in your browser.
+            Paste your lyrics and they&rsquo;re synced to the audio, syllable by
+            syllable. Runs entirely in your browser.
           </p>
         </header>
-
-        {/* Step 1: Landing — flow diagram + drop zone */}
-        {(status === 'idle' || (status === 'error' && !chart)) && (
-          <div className="space-y-8">
-            {/* Flow diagram */}
-            <div className="bg-muted rounded-xl p-6">
-              <div className="flex items-center justify-between">
-                <FlowStep Icon={FolderOpen} label="Open" desc="Your chart" />
-                <FlowArrow />
-                <FlowStep
-                  Icon={ClipboardPaste}
-                  label="Paste"
-                  desc="Song lyrics"
-                />
-                <FlowArrow />
-                <FlowStep Icon={AudioWaveform} label="Align" desc="Automatic" />
-                <FlowArrow />
-                <FlowStep
-                  Icon={Pencil}
-                  label="Edit"
-                  desc="In the chart editor"
-                />
-              </div>
-            </div>
-
-            <ChartDropZone onLoaded={handleChartLoaded} id="add-lyrics-chart" />
-            {error && <p className="text-destructive text-sm">{error}</p>}
-          </div>
-        )}
 
         {/* Loading chart */}
         {status === 'loading-chart' && (
@@ -447,7 +442,7 @@ export default function AddLyricsClient() {
               {/* The alignment survived; only the write failed. Retrying
                   saves the same document rather than aligning again. */}
               {status === 'save-failed' && pendingDoc && (
-                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+                <DestructiveNotice>
                   <p className="text-sm font-medium">
                     Your lyrics are aligned, but the chart could not be saved.
                   </p>
@@ -466,7 +461,7 @@ export default function AddLyricsClient() {
                     onClick={() => void saveAndOpen(pendingDoc)}>
                     Try again
                   </Button>
-                </div>
+                </DestructiveNotice>
               )}
 
               {/* Existing lyrics warning */}
@@ -531,41 +526,6 @@ export default function AddLyricsClient() {
           )}
       </div>
     </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Flow diagram bits
-// ---------------------------------------------------------------------------
-
-function FlowStep({
-  Icon,
-  label,
-  desc,
-}: {
-  Icon: LucideIcon;
-  label: string;
-  desc: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2 min-w-0">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-      </span>
-      <span className="text-sm font-medium">{label}</span>
-      <span className="text-xs text-muted-foreground">{desc}</span>
-    </div>
-  );
-}
-
-function FlowArrow() {
-  return (
-    <svg
-      className="w-10 h-6 text-muted-foreground/30 flex-shrink-0"
-      fill="currentColor"
-      viewBox="0 0 40 24">
-      <path d="M0 9h28l-6-6 3-3 12 12-12 12-3-3 6-6H0z" />
-    </svg>
   );
 }
 
