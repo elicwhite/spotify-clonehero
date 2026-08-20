@@ -10,7 +10,13 @@ jest.mock('../../local-db/local-charts', () => ({
   upsertLocalCharts: jest.fn(),
 }));
 
-import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
+import {
+  scanSongsDirectory,
+  tryGetSongsDirectoryHandle,
+} from '@/lib/local-songs-folder';
+
+const scanWithPickerFallback = () =>
+  scanSongsDirectory(tryGetSongsDirectoryHandle);
 
 describe('local chart scan cancellation', () => {
   it('returns cancellation instead of throwing an error', async () => {
@@ -26,7 +32,7 @@ describe('local chart scan cancellation', () => {
     });
     jest.spyOn(window, 'alert').mockImplementation(() => {});
 
-    await expect(tryScanForInstalledCharts()).resolves.toBeNull();
+    await expect(scanWithPickerFallback()).resolves.toBeNull();
   });
 
   it('still rejects unexpected picker failures', async () => {
@@ -42,7 +48,7 @@ describe('local chart scan cancellation', () => {
     });
     jest.spyOn(window, 'alert').mockImplementation(() => {});
 
-    await expect(tryScanForInstalledCharts()).rejects.toThrow(
+    await expect(scanWithPickerFallback()).rejects.toThrow(
       'picker implementation failed',
     );
   });

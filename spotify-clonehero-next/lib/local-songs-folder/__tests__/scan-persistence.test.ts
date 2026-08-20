@@ -28,7 +28,13 @@ jest.mock('../../fileSystemHelpers', () => ({
 }));
 jest.mock('../../analytics/track', () => ({track: jest.fn()}));
 
-import {tryScanForInstalledCharts} from '@/lib/local-songs-folder';
+import {
+  scanSongsDirectory,
+  tryGetSongsDirectoryHandle,
+} from '@/lib/local-songs-folder';
+
+const scanWithPickerFallback = () =>
+  scanSongsDirectory(tryGetSongsDirectoryHandle);
 
 describe('partial local chart scan persistence', () => {
   beforeEach(() => {
@@ -61,7 +67,7 @@ describe('partial local chart scan persistence', () => {
       },
     );
 
-    const result = await tryScanForInstalledCharts();
+    const result = await scanWithPickerFallback();
 
     expect(result).toMatchObject({
       status: 'partial',
@@ -93,7 +99,7 @@ describe('partial local chart scan persistence', () => {
     mockWriteFile.mockReturnValue(pendingWrite);
 
     let settled = false;
-    const scanPromise = tryScanForInstalledCharts().then(result => {
+    const scanPromise = scanWithPickerFallback().then(result => {
       settled = true;
       return result;
     });
@@ -126,9 +132,7 @@ describe('partial local chart scan persistence', () => {
     mockScanLocalCharts.mockResolvedValue({issues: []});
     mockWriteFile.mockRejectedValue(new Error('OPFS write failed'));
 
-    await expect(tryScanForInstalledCharts()).rejects.toThrow(
-      'OPFS write failed',
-    );
+    await expect(scanWithPickerFallback()).rejects.toThrow('OPFS write failed');
     expect(localStorage.getItem('lastScannedInstalledCharts')).toBe(
       'existing-scan',
     );

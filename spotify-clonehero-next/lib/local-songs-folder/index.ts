@@ -11,9 +11,16 @@ import {coalesceProgress} from './scan-progress';
 import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 
-async function promptForSongsDirectory(): Promise<FileSystemDirectoryHandle | null> {
-  alert('Select your Songs directory');
+let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
 
+/**
+ * Show the folder picker and keep what the user picks, whether or not a folder
+ * is already stored. This is the only writer of `songsDirectoryHandle`: a
+ * caller that writes the key itself leaves `currentSongDirectoryCache` holding
+ * the previous folder for the rest of the session. Returns null when the user
+ * cancels or the browser refuses the picker.
+ */
+export async function pickSongsDirectory(): Promise<FileSystemDirectoryHandle | null> {
   let handle: FileSystemDirectoryHandle;
   try {
     handle = await window.showDirectoryPicker({
@@ -31,11 +38,20 @@ async function promptForSongsDirectory(): Promise<FileSystemDirectoryHandle | nu
   }
 
   await set('songsDirectoryHandle', handle);
+  currentSongDirectoryCache = handle;
 
   return handle;
 }
 
-let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
+async function promptForSongsDirectory(): Promise<FileSystemDirectoryHandle | null> {
+  // This picker is not one the user asked for: it interrupts a download or a
+  // scan that needs a folder it does not have. The picker itself names no
+  // folder, so the alert says which one to select. A picker the user chose
+  // from a menu needs no such warning.
+  alert('Select your Songs directory');
+
+  return await pickSongsDirectory();
+}
 
 /**
  * Try to recover a previously-picked Songs directory handle from idb-keyval
@@ -102,21 +118,15 @@ async function recoverStoredHandle({
   return handle;
 }
 
+/**
+ * The Songs folder, from wherever it can be had: the stored handle if there is
+ * one, otherwise whatever the user picks. Both paths cache the handle
+ * themselves, so this is only the choice between them.
+ */
 export async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
-  if (currentSongDirectoryCache) {
-    return currentSongDirectoryCache;
-  }
-
-  const cached = await getCachedSongsDirectoryHandle();
-  if (cached) {
-    return cached;
-  }
-
-  const promptedHandle = await promptForSongsDirectory();
-  if (promptedHandle) {
-    currentSongDirectoryCache = promptedHandle;
-  }
-  return promptedHandle;
+  return (
+    (await getCachedSongsDirectoryHandle()) ?? (await promptForSongsDirectory())
+  );
 }
 
 type InstalledChartsResponse = {
@@ -130,26 +140,19 @@ export function getLocalScanWarning(issueCount: number) {
   return `${issueCount.toLocaleString()} chart ${issueCount === 1 ? 'location was' : 'locations were'} skipped. Existing indexed charts were preserved.`;
 }
 
-export async function tryScanForInstalledCharts(
-  onProgress: (count: number) => void = () => {},
-): Promise<InstalledChartsResponse | null> {
-  const handle = await tryGetSongsDirectoryHandle();
-  if (!handle) {
-    return null;
-  }
-
-  return await scanInstalledCharts(handle, onProgress);
-}
-
 /**
- * Rescan the Songs folder chosen in an earlier visit. Returns null when no
- * folder is stored or its permission has lapsed, so a page can call this on
- * load without ever showing the user a picker or a permission prompt.
+ * Scan whichever Songs folder `getHandle` produces. The caller chooses how far
+ * the app may go to get one — `tryGetSongsDirectoryHandle` falls back to the
+ * picker, `pickSongsDirectory` insists on it, `getGrantedSongsDirectoryHandle`
+ * refuses to prompt at all — and every one of them answers null rather than
+ * throwing when there is no folder to scan, so a null result here means "no
+ * scan happened", never "the scan failed".
  */
-export async function scanGrantedSongsDirectory(
+export async function scanSongsDirectory(
+  getHandle: () => Promise<FileSystemDirectoryHandle | null>,
   onProgress: (count: number) => void = () => {},
 ): Promise<InstalledChartsResponse | null> {
-  const handle = await getGrantedSongsDirectoryHandle();
+  const handle = await getHandle();
   if (!handle) {
     return null;
   }

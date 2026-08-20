@@ -112,6 +112,17 @@ export type SourceStatus = {
   detail?: string;
 };
 
+/**
+ * The one item behind a source card's three-dots button. `tone` is absent for
+ * an ordinary action; only an action that throws data away asks to be marked
+ * destructive.
+ */
+export type CardOverflowAction = {
+  label: string;
+  onSelect: () => void;
+  tone?: 'destructive';
+};
+
 export type FindMusicFilters = {
   install: InstallFilter;
   instruments: Set<InstrumentId>;

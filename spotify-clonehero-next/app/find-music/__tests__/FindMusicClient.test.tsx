@@ -137,20 +137,39 @@ type LocalScanResult = {
   issues: Array<{path: string}>;
 };
 type ScanProgress = ((count: number) => void) | undefined;
-const mockTryScanForInstalledCharts = jest.fn(
+// One scan entry point now, told apart by the handle getter it is given: the
+// stored folder with a picker fallback, the picker alone, or the stored folder
+// and nothing else.
+const mockStoredOrPickedScan = jest.fn(
   async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
 );
-const mockScanGrantedSongsDirectory = jest.fn(
+const mockPickedScan = jest.fn(
   async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
 );
-jest.mock('../../../lib/local-songs-folder', () => ({
-  tryScanForInstalledCharts: (onProgress?: (count: number) => void) =>
-    mockTryScanForInstalledCharts(onProgress),
-  scanGrantedSongsDirectory: (onProgress?: (count: number) => void) =>
-    mockScanGrantedSongsDirectory(onProgress),
-  getLocalScanWarning: (issueCount: number) =>
-    `${issueCount} locations skipped`,
-}));
+const mockGrantedScan = jest.fn(
+  async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
+);
+jest.mock('../../../lib/local-songs-folder', () => {
+  const tryGetSongsDirectoryHandle = async () => null;
+  const pickSongsDirectory = async () => null;
+  const getGrantedSongsDirectoryHandle = async () => null;
+  return {
+    tryGetSongsDirectoryHandle,
+    pickSongsDirectory,
+    getGrantedSongsDirectoryHandle,
+    scanSongsDirectory: (
+      getHandle: () => Promise<FileSystemDirectoryHandle | null>,
+      onProgress?: (count: number) => void,
+    ) => {
+      if (getHandle === pickSongsDirectory) return mockPickedScan(onProgress);
+      if (getHandle === getGrantedSongsDirectoryHandle)
+        return mockGrantedScan(onProgress);
+      return mockStoredOrPickedScan(onProgress);
+    },
+    getLocalScanWarning: (issueCount: number) =>
+      `${issueCount} locations skipped`,
+  };
+});
 
 const mockGetFindMusicSongs = jest.fn();
 const mockGetRadarSongs = jest.fn(async () => []);
@@ -177,6 +196,7 @@ jest.mock('../FindMusicSidebar', () => ({
     onRefreshAppleMusic,
     onRefreshChorus,
     onConnectSpotify,
+    onPickLocalFolder,
   }: {
     musicCount: number;
     view: 'music' | 'radar';
@@ -191,6 +211,7 @@ jest.mock('../FindMusicSidebar', () => ({
     onRefreshAppleMusic: () => void;
     onRefreshChorus: () => void;
     onConnectSpotify: () => void;
+    onPickLocalFolder: () => void;
   }) => (
     <aside
       data-testid="sidebar"
@@ -226,6 +247,9 @@ jest.mock('../FindMusicSidebar', () => ({
       </button>
       <button type="button" onClick={onRefreshChorus}>
         Rescan Chorus test
+      </button>
+      <button type="button" onClick={onPickLocalFolder}>
+        Choose a different folder test
       </button>
     </aside>
   ),
@@ -988,7 +1012,7 @@ async function renderSetupGuide() {
 }
 
 it('shows one aggregate warning for a partial local scan', async () => {
-  mockTryScanForInstalledCharts.mockResolvedValue({
+  mockStoredOrPickedScan.mockResolvedValue({
     status: 'partial',
     lastScanned: new Date(),
     installedCharts: [],
@@ -1004,7 +1028,7 @@ it('shows one aggregate warning for a partial local scan', async () => {
 });
 
 it('leaves the local card actionable when folder selection is canceled', async () => {
-  mockTryScanForInstalledCharts.mockResolvedValue(null);
+  mockStoredOrPickedScan.mockResolvedValue(null);
 
   fireEvent.click(await renderSetupGuide());
 
@@ -1015,9 +1039,7 @@ it('leaves the local card actionable when folder selection is canceled', async (
 });
 
 it('reports a folder acquisition failure on the card and in a toast', async () => {
-  mockTryScanForInstalledCharts.mockRejectedValue(
-    new Error('Songs folder failed'),
-  );
+  mockStoredOrPickedScan.mockRejectedValue(new Error('Songs folder failed'));
 
   fireEvent.click(await renderSetupGuide());
 
@@ -1027,34 +1049,46 @@ it('reports a folder acquisition failure on the card and in a toast', async () =
   expect(await screen.findByText('Songs folder failed')).toBeInTheDocument();
 });
 
+it('always picks a folder when the user asks to change it', async () => {
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+  mockPickedScan.mockResolvedValue(completeScan());
+
+  render(<FindMusicClient />);
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole('button', {name: 'Choose a different folder test'}),
+  );
+
+  await waitFor(() => expect(mockPickedScan).toHaveBeenCalledTimes(1));
+  // Never the stored folder: that is what the card's Rescan already does.
+  expect(mockStoredOrPickedScan).not.toHaveBeenCalled();
+});
+
 it('rescans a Songs folder chosen in an earlier visit, without a prompt', async () => {
-  mockScanGrantedSongsDirectory.mockResolvedValue(completeScan());
+  mockGrantedScan.mockResolvedValue(completeScan());
   mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
 
   render(<FindMusicClient />);
 
-  await waitFor(() =>
-    expect(mockScanGrantedSongsDirectory).toHaveBeenCalledTimes(1),
-  );
+  await waitFor(() => expect(mockGrantedScan).toHaveBeenCalledTimes(1));
   // The automatic path never reaches the picker: that would need a gesture.
-  expect(mockTryScanForInstalledCharts).not.toHaveBeenCalled();
+  expect(mockStoredOrPickedScan).not.toHaveBeenCalled();
 });
 
 it('says nothing when no Songs folder is stored to rescan', async () => {
-  mockScanGrantedSongsDirectory.mockResolvedValue(null);
+  mockGrantedScan.mockResolvedValue(null);
   mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
 
   render(<FindMusicClient />);
 
-  await waitFor(() =>
-    expect(mockScanGrantedSongsDirectory).toHaveBeenCalledTimes(1),
-  );
+  await waitFor(() => expect(mockGrantedScan).toHaveBeenCalledTimes(1));
   expect(mockToastError).not.toHaveBeenCalled();
   expect(mockToastWarning).not.toHaveBeenCalled();
 });
 
 it('states an automatic rescan failure on the card without a toast', async () => {
-  mockScanGrantedSongsDirectory.mockRejectedValue(new Error('Folder is gone'));
+  mockGrantedScan.mockRejectedValue(new Error('Folder is gone'));
   mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
 
   render(<FindMusicClient />);

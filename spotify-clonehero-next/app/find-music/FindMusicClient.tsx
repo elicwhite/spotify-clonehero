@@ -25,9 +25,11 @@ import {
   tryProcessSpotifyDump,
 } from '@/lib/spotify-sdk/HistoryDumpParsing';
 import {
+  getGrantedSongsDirectoryHandle,
   getLocalScanWarning,
-  scanGrantedSongsDirectory,
-  tryScanForInstalledCharts,
+  pickSongsDirectory,
+  scanSongsDirectory,
+  tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
 import {Button} from '@/components/ui/button';
 import {
@@ -66,9 +68,6 @@ import {
 
 type Snapshot = {music: FindMusicSong[]; radar: RadarSong[]};
 type CatalogState = 'opening' | 'refreshing' | 'ready' | 'degraded';
-type LocalScanResult = NonNullable<
-  Awaited<ReturnType<typeof tryScanForInstalledCharts>>
->;
 
 const EMPTY_STATS: FindMusicStats = {
   historySongs: 0,
@@ -516,15 +515,16 @@ export default function FindMusicClient() {
     user,
   ]);
 
+  // `getHandle` decides how the folder is obtained: reuse the stored one, or
+  // insist on the picker. Whichever it is, a null handle means the user has no
+  // folder to scan and the card returns to its derived status.
   const runScan = useCallback(
     async (
-      scan: (
-        onProgress: (count: number) => void,
-      ) => Promise<LocalScanResult | null>,
+      getHandle: () => Promise<FileSystemDirectoryHandle | null>,
       {announceFailure}: {announceFailure: boolean},
     ) => {
       try {
-        const result = await scan(count => {
+        const result = await scanSongsDirectory(getHandle, count => {
           setLocalStatus({
             phase: 'loading',
             summary: `Scanning… ${count.toLocaleString()} charts found`,
@@ -563,18 +563,34 @@ export default function FindMusicClient() {
     [refreshSnapshot],
   );
 
-  const runLocalScan = useCallback(async () => {
-    activateSourceAccess();
-    setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
-    await runScan(tryScanForInstalledCharts, {announceFailure: true});
-  }, [activateSourceAccess, runScan]);
+  const runRequestedScan = useCallback(
+    async (getHandle: () => Promise<FileSystemDirectoryHandle | null>) => {
+      activateSourceAccess();
+      setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
+      await runScan(getHandle, {announceFailure: true});
+    },
+    [activateSourceAccess, runScan],
+  );
+
+  const runLocalScan = useCallback(
+    () => runRequestedScan(tryGetSongsDirectoryHandle),
+    [runRequestedScan],
+  );
+
+  // Rescanning reuses the stored folder and never asks for another one, so a
+  // user who moved their library needs a way to say so.
+  const runPickLocalFolder = useCallback(
+    () => runRequestedScan(pickSongsDirectory),
+    [runRequestedScan],
+  );
 
   // The Songs folder picked in an earlier visit is rescanned on load, so
-  // install state is current without being asked for. `scanGrantedSongsDirectory`
-  // returns null rather than prompting when no folder is stored or its
-  // permission has lapsed, which is what makes this safe outside a user gesture.
+  // install state is current without being asked for.
+  // `getGrantedSongsDirectoryHandle` returns null rather than prompting when no
+  // folder is stored or its permission has lapsed, which is what makes this
+  // safe outside a user gesture.
   const rescanStoredFolder = useCallback(async () => {
-    await runScan(scanGrantedSongsDirectory, {announceFailure: false});
+    await runScan(getGrantedSongsDirectoryHandle, {announceFailure: false});
   }, [runScan]);
 
   useEffect(() => {
@@ -713,6 +729,7 @@ export default function FindMusicClient() {
     onRefreshSpotifyLibrary: runLibraryRefresh,
     onRefreshAppleMusic: appleMusicActions.refresh,
     onScanLocal: runLocalScan,
+    onPickLocalFolder: runPickLocalFolder,
     onRefreshChorus: loadCatalog,
   };
 

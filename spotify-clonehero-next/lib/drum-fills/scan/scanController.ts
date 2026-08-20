@@ -2,8 +2,7 @@
  * Main-thread orchestration for the library scan.
  *
  * Responsibilities:
- *   - obtain the Songs directory handle (cached, or signal the UI to pick one),
- *   - spawn the scan worker and relay progress,
+ *   - spawn the scan worker on the caller's Songs directory and relay progress,
  *   - persist detected fills to the local DB in per-song batches
  *     (`replaceFillsForSong`, keyed by chartHash so a rescan replaces cleanly),
  *   - bookkeep the scan run (`scan_runs`),
@@ -12,7 +11,6 @@
  * DB writes stay on the main thread because SQLocal is per-tab.
  */
 
-import {getCachedSongsDirectoryHandle} from '@/lib/local-songs-folder';
 import {
   finishScanRun,
   replaceFillsForSong,
@@ -30,12 +28,8 @@ import type {
 export interface RunScanOptions {
   /** Progress callback, fired on the main thread as the worker reports. */
   onProgress?: ((progress: ScanProgress) => void) | undefined;
-  /**
-   * Provide a directory handle directly (e.g. the UI just ran the picker).
-   * When omitted, the cached handle is used; if there is none, the scan rejects
-   * with `NEEDS_PICKER` so the UI can prompt and retry.
-   */
-  directoryHandle?: FileSystemDirectoryHandle | undefined;
+  /** The Songs folder to scan. The caller resolves it, picker and all. */
+  directoryHandle: FileSystemDirectoryHandle;
   /** Hook for tests / alternative bundlers to supply the worker. */
   createWorker?: (() => Worker) | undefined;
 }
@@ -46,9 +40,6 @@ export interface ScanRunResult {
   fillsFound: number;
   errors: number;
 }
-
-/** Thrown when no directory handle is available and the UI must run the picker. */
-export const NEEDS_PICKER = 'NEEDS_PICKER';
 
 /** A handle to an in-flight scan: await `done`, or `cancel()` to stop early. */
 export interface ScanHandle {
@@ -91,19 +82,14 @@ function toFillInput(fill: ScannedFill): FillInput {
 }
 
 /**
- * Start a library scan. Resolves the directory handle, spawns the worker,
- * persists results, and returns a handle whose `done` promise settles when the
- * scan finishes (or is cancelled). Rejects `done` with `NEEDS_PICKER` if no
- * directory handle is available.
+ * Start a library scan of `directoryHandle`: spawn the worker, persist results,
+ * and return a handle whose `done` promise settles when the scan finishes (or
+ * is cancelled).
  */
 export async function startLibraryScan(
-  options: RunScanOptions = {},
+  options: RunScanOptions,
 ): Promise<ScanHandle> {
-  const handle =
-    options.directoryHandle ?? (await getCachedSongsDirectoryHandle());
-  if (!handle) {
-    throw new Error(NEEDS_PICKER);
-  }
+  const {directoryHandle} = options;
 
   const createWorker = options.createWorker ?? defaultCreateWorker;
   const worker = createWorker();
@@ -200,7 +186,7 @@ export async function startLibraryScan(
     rejectDone(new Error(event.message || 'Scan worker crashed'));
   };
 
-  const startMsg: ScanRequest = {type: 'start', directoryHandle: handle};
+  const startMsg: ScanRequest = {type: 'start', directoryHandle};
   worker.postMessage(startMsg);
 
   const cancel = () => {

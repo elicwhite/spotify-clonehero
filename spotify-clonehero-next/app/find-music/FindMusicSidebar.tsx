@@ -30,6 +30,7 @@ import {cn} from '@/lib/utils';
 import FindMusicInstrumentIcon from './FindMusicInstrumentIcon';
 import {
   INSTRUMENTS,
+  type CardOverflowAction,
   type FindMusicFilters,
   type FindMusicView,
   type SourceStatus,
@@ -52,6 +53,7 @@ export interface FindMusicSidebarProps {
   onRefreshSpotifyLibrary: () => void;
   onRefreshAppleMusic: () => void;
   onScanLocal: () => void;
+  onPickLocalFolder: () => void;
   onRefreshChorus: () => void;
   onConnectSpotify: () => void;
   onConnectAppleMusic: () => void;
@@ -74,8 +76,7 @@ type SourceCardProps = {
   onAction: () => void;
   primaryAction?: boolean;
   actionDisabled?: boolean;
-  overflowActionLabel?: string | undefined;
-  onOverflowAction?: (() => void) | undefined;
+  overflowAction?: CardOverflowAction | undefined;
   helpLink?:
     | {
         href: string;
@@ -119,8 +120,7 @@ function SourceCard({
   onAction,
   primaryAction = false,
   actionDisabled = false,
-  overflowActionLabel,
-  onOverflowAction,
+  overflowAction,
   helpLink,
 }: SourceCardProps) {
   const loading = status.phase === 'loading';
@@ -212,7 +212,7 @@ function SourceCard({
             ) : null}
             {loading ? 'Working…' : actionLabel}
           </Button>
-          {overflowActionLabel && onOverflowAction ? (
+          {overflowAction ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -225,8 +225,10 @@ function SourceCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem destructive onSelect={onOverflowAction}>
-                  {overflowActionLabel}
+                <DropdownMenuItem
+                  destructive={overflowAction.tone === 'destructive'}
+                  onSelect={overflowAction.onSelect}>
+                  {overflowAction.label}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -253,6 +255,7 @@ export default function FindMusicSidebar({
   onRefreshSpotifyLibrary,
   onRefreshAppleMusic,
   onScanLocal,
+  onPickLocalFolder,
   onRefreshChorus,
   onConnectSpotify,
   onConnectAppleMusic,
@@ -566,11 +569,14 @@ export default function FindMusicSidebar({
             appleMusicConnected ? onRefreshAppleMusic : onConnectAppleMusic
           }
           primaryAction={!appleMusicConnected}
-          overflowActionLabel={
-            canDisconnectAppleMusic ? 'Disconnect and clear' : undefined
-          }
-          onOverflowAction={
-            canDisconnectAppleMusic ? onDisconnectAppleMusic : undefined
+          overflowAction={
+            canDisconnectAppleMusic
+              ? {
+                  label: 'Disconnect and clear',
+                  onSelect: onDisconnectAppleMusic,
+                  tone: 'destructive',
+                }
+              : undefined
           }
         />
         <SourceCard
@@ -618,6 +624,16 @@ export default function FindMusicSidebar({
           }
           onAction={onScanLocal}
           primaryAction={localStatus.phase === 'idle'}
+          // The folder name is not shown: the File System Access API gives no
+          // path, and a bare folder name does not say which folder it is.
+          overflowAction={
+            localStatus.phase === 'idle'
+              ? undefined
+              : {
+                  label: 'Choose a different folder…',
+                  onSelect: onPickLocalFolder,
+                }
+          }
         />
         <SourceCard
           id="chorus"

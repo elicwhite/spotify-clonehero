@@ -8,7 +8,6 @@ import type {ScannedFill, ScanProgress, ScanResponse} from '../scan/types';
 const replaceFillsForSong = jest.fn().mockResolvedValue(undefined);
 const startScanRun = jest.fn().mockResolvedValue(42);
 const finishScanRun = jest.fn().mockResolvedValue(undefined);
-const getCachedSongsDirectoryHandle = jest.fn();
 
 jest.mock('../db', () => ({
   replaceFillsForSong: (...args: unknown[]) => replaceFillsForSong(...args),
@@ -16,12 +15,7 @@ jest.mock('../db', () => ({
   finishScanRun: (...args: unknown[]) => finishScanRun(...args),
 }));
 
-jest.mock('../../local-songs-folder', () => ({
-  getCachedSongsDirectoryHandle: (...args: unknown[]) =>
-    getCachedSongsDirectoryHandle(...args),
-}));
-
-import {startLibraryScan, NEEDS_PICKER} from '../scan/scanController';
+import {startLibraryScan} from '../scan/scanController';
 
 /** A controllable fake worker the controller talks to. */
 class FakeWorker {
@@ -85,12 +79,6 @@ beforeEach(() => {
 });
 
 describe('startLibraryScan', () => {
-  it('rejects with NEEDS_PICKER when no handle is available', async () => {
-    getCachedSongsDirectoryHandle.mockResolvedValue(null);
-    await expect(startLibraryScan()).rejects.toThrow(NEEDS_PICKER);
-    expect(startScanRun).not.toHaveBeenCalled();
-  });
-
   it('uses a supplied handle, starts a scan run, and posts start to the worker', async () => {
     const worker = new FakeWorker();
     await startLibraryScan({

@@ -57,6 +57,7 @@ function makeProps(
     onRefreshSpotifyLibrary: jest.fn(),
     onRefreshAppleMusic: jest.fn(),
     onScanLocal: jest.fn(),
+    onPickLocalFolder: jest.fn(),
     onRefreshChorus: jest.fn(),
     onConnectSpotify: jest.fn(),
     onConnectAppleMusic: jest.fn(),
@@ -493,5 +494,38 @@ describe('FindMusicSidebar', () => {
     );
     fireEvent.click(screen.getByRole('button', {name: 'Try again'}));
     expect(onRefreshHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a folder change only once a Songs folder is scanned', () => {
+    const onPickLocalFolder = jest.fn();
+    const {rerender} = render(
+      <FindMusicSidebar {...makeProps({onPickLocalFolder})} />,
+    );
+
+    expect(
+      within(screen.getByTestId('source-local')).queryByRole('button', {
+        name: 'Local Songs Folder actions',
+      }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <FindMusicSidebar
+        {...makeProps({
+          onPickLocalFolder,
+          localStatus: {phase: 'ready', summary: '86 installed charts'},
+        })}
+      />,
+    );
+
+    fireEvent.keyDown(
+      within(screen.getByTestId('source-local')).getByRole('button', {
+        name: 'Local Songs Folder actions',
+      }),
+      {key: 'Enter'},
+    );
+    fireEvent.click(
+      screen.getByRole('menuitem', {name: 'Choose a different folder…'}),
+    );
+    expect(onPickLocalFolder).toHaveBeenCalledTimes(1);
   });
 });

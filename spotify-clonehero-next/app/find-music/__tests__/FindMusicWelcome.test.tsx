@@ -35,6 +35,7 @@ function props(
     onRefreshSpotifyLibrary: jest.fn(),
     onRefreshAppleMusic: jest.fn(),
     onScanLocal: jest.fn(),
+    onPickLocalFolder: jest.fn(),
     onRefreshChorus: jest.fn(),
     ...overrides,
   };
@@ -208,5 +209,21 @@ describe('FindMusicWelcome', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Retry index'}));
     expect(failed.onRefreshChorus).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a folder change once a Songs folder is scanned', () => {
+    const scanned = props({
+      localStatus: {phase: 'ready', summary: '86 installed charts'},
+    });
+    render(<FindMusicWelcome {...scanned} />);
+
+    fireEvent.keyDown(
+      screen.getByRole('button', {name: 'Local Songs Folder actions'}),
+      {key: 'Enter'},
+    );
+    fireEvent.click(
+      screen.getByRole('menuitem', {name: 'Choose a different folder…'}),
+    );
+    expect(scanned.onPickLocalFolder).toHaveBeenCalledTimes(1);
   });
 });

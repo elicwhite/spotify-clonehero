@@ -28,7 +28,7 @@ import {
 import {Progress} from '@/components/ui/progress';
 import {cn} from '@/lib/utils';
 
-import type {SourceStatus} from './types';
+import type {CardOverflowAction, SourceStatus} from './types';
 
 export interface FindMusicWelcomeProps {
   authenticated: boolean;
@@ -47,6 +47,7 @@ export interface FindMusicWelcomeProps {
   onRefreshSpotifyLibrary: () => void;
   onRefreshAppleMusic: () => void;
   onScanLocal: () => void;
+  onPickLocalFolder: () => void;
   onRefreshChorus: () => void;
 }
 
@@ -57,8 +58,7 @@ type SetupCardProps = {
   status: SourceStatus;
   actionLabel: string;
   onAction: () => void;
-  overflowActionLabel?: string | undefined;
-  onOverflowAction?: (() => void) | undefined;
+  overflowAction?: CardOverflowAction | undefined;
   /** True when `icon` is Spotify or Apple Music artwork. */
   brandArtwork?: boolean;
   optional?: boolean;
@@ -98,8 +98,7 @@ function SetupCard({
   status,
   actionLabel,
   onAction,
-  overflowActionLabel,
-  onOverflowAction,
+  overflowAction,
   brandArtwork = false,
   optional = false,
 }: SetupCardProps) {
@@ -181,7 +180,7 @@ function SetupCard({
             {error ? <RefreshCw className="h-3.5 w-3.5" /> : null}
             {loading ? 'Working…' : actionLabel}
           </Button>
-          {overflowActionLabel && onOverflowAction ? (
+          {overflowAction ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -194,8 +193,10 @@ function SetupCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem destructive onSelect={onOverflowAction}>
-                  {overflowActionLabel}
+                <DropdownMenuItem
+                  destructive={overflowAction.tone === 'destructive'}
+                  onSelect={overflowAction.onSelect}>
+                  {overflowAction.label}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -245,6 +246,7 @@ export default function FindMusicWelcome({
   onRefreshSpotifyLibrary,
   onRefreshAppleMusic,
   onScanLocal,
+  onPickLocalFolder,
   onRefreshChorus,
 }: FindMusicWelcomeProps) {
   const spotifyConnected = authenticated && hasSpotify;
@@ -343,11 +345,14 @@ export default function FindMusicWelcome({
               onAction={
                 appleMusicConnected ? onRefreshAppleMusic : onConnectAppleMusic
               }
-              overflowActionLabel={
-                canDisconnectAppleMusic ? 'Disconnect and clear' : undefined
-              }
-              onOverflowAction={
-                canDisconnectAppleMusic ? onDisconnectAppleMusic : undefined
+              overflowAction={
+                canDisconnectAppleMusic
+                  ? {
+                      label: 'Disconnect and clear',
+                      onSelect: onDisconnectAppleMusic,
+                      tone: 'destructive',
+                    }
+                  : undefined
               }
             />
             <SetupCard
@@ -391,6 +396,16 @@ export default function FindMusicWelcome({
             status={localStatus}
             actionLabel={localAction}
             onAction={onScanLocal}
+            // The folder name is not shown: the File System Access API gives
+            // no path, and a bare folder name does not say which folder it is.
+            overflowAction={
+              localStatus.phase === 'idle'
+                ? undefined
+                : {
+                    label: 'Choose a different folder…',
+                    onSelect: onPickLocalFolder,
+                  }
+            }
             optional
           />
         </section>
