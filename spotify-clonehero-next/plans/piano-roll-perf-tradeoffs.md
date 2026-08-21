@@ -197,3 +197,53 @@ afternoon's.
 Below ~30fps at 10x throttling the honest answer may be that four WebGL
 highways plus a full-width 2D panel is more than the budget allows, and the
 lever left is resolution rather than algorithms.
+
+---
+
+## Investigated: the shared scene, traversed once per highway
+
+**Measured, and it is not worth changing. The structure looks wasteful; the
+cost is not there.**
+
+A stage keeps every highway in one `THREE.Scene` and renders it once per
+highway, each pass scissored into its own slice with its own camera. So each
+pass does walk all four highways' objects, and the obvious fix is a scene per
+highway.
+
+Measured instead, by varying how many highways are open and reading the
+scene-walking frames (`updateMatrixWorld`, `projectObject`,
+`multiplyMatrices`, `compose`) inside the render passes:
+
+| highways | traversal ms/frame | per highway | stage draw ms/frame | per highway |
+| -------- | ------------------ | ----------- | ------------------- | ----------- |
+| 1        | 0.48               | 0.48        | 4.66                | 4.66        |
+| 2        | 0.70               | 0.35        | 5.17                | 2.58        |
+| 4        | 1.71               | 0.43        | 8.18                | 2.04        |
+
+Cost per highway is flat — 0.35 to 0.48 ms — rather than growing with the
+count. If each pass were really paying to walk every other highway, four
+highways would cost 7.68 ms a frame against the 0.48 ms one costs. It costs
+1.71.
+
+The reason is already in the code: `HighwayRoot.syncLayers` stamps every
+descendant with its highway's layer, and each camera enables only its own. A
+foreign object fails `layers.test` before any of the expensive work — frustum
+cull, render-list insert, material resolve — so all that is left of the
+"redundant" walk is a recursion and a bitmask test. `updateMatrixWorld`
+likewise skips subtrees nothing moved.
+
+**What a scene per highway would cost:** the layer machinery becomes dead and
+could go, which reads as a simplification — but that machinery is exactly
+what makes the current arrangement cheap, so removing it is not free. Whatever
+is stage-global would have to be duplicated per scene or hoisted, and the
+interaction/raycast paths target the shared scene today. Real work and real
+risk, against a measured upside near zero.
+
+**What the traversal actually is:** each highway updating its *own* moving
+objects — 1.71 ms a frame at four highways, about 8.5% of the frame, growing
+linearly because every note is an `Object3D` repositioned every frame. The
+lever there is instancing the notes, not splitting the scene.
+
+**Worth knowing separately:** the stage draw is roughly a 3.5 ms fixed cost
+per frame plus ~1.2 ms per highway. Opening a fifth highway is cheap. The
+frame budget is not being eaten by how many highways are on screen.
