@@ -467,19 +467,29 @@ function sceneForTrackRow(scene: ChartScene, row: TrackRowScene): ChartScene {
   };
 }
 
-/** Destination contexts, so the blit does not re-fetch one every frame. */
-const regionContexts = new WeakMap<
+/** Contexts, so a draw does not re-fetch one every frame. */
+const panelContexts = new WeakMap<
   HTMLCanvasElement,
   CanvasRenderingContext2D
 >();
 
-function regionContext(
+/**
+ * The 2D context for one of the panel's canvases.
+ *
+ * Cached: `draw` and the three band copies each fetched one per frame.
+ *
+ * (Declaring these canvases opaque with `{alpha: false}` measured as no
+ * change at all — the copies are bound by pixel throughput, not blending —
+ * so they keep the alpha channel rather than take the `clearRect`-paints-black
+ * behaviour for nothing.)
+ */
+function panelContext(
   canvas: HTMLCanvasElement,
 ): CanvasRenderingContext2D | null {
-  const cached = regionContexts.get(canvas);
+  const cached = panelContexts.get(canvas);
   if (cached) return cached;
   const ctx = canvas.getContext('2d');
-  if (ctx) regionContexts.set(canvas, ctx);
+  if (ctx) panelContexts.set(canvas, ctx);
   return ctx;
 }
 
@@ -513,7 +523,7 @@ function copyCanvasRegion(
     destination.style.width = `${width}px`;
   if (destination.style.height !== `${height}px`)
     destination.style.height = `${height}px`;
-  const ctx = regionContext(destination);
+  const ctx = panelContext(destination);
   if (!ctx) return;
 
   // A resize blanks the canvas, so the narrowed copy would leave the rest of
@@ -1143,7 +1153,7 @@ export default function PianoRollTimeline({
   const draw = useCallback((playheadMs: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = panelContext(canvas);
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
