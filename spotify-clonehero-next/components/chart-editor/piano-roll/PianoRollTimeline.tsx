@@ -467,34 +467,78 @@ function sceneForTrackRow(scene: ChartScene, row: TrackRowScene): ChartScene {
   };
 }
 
+/** Destination contexts, so the blit does not re-fetch one every frame. */
+const regionContexts = new WeakMap<
+  HTMLCanvasElement,
+  CanvasRenderingContext2D
+>();
+
+function regionContext(
+  canvas: HTMLCanvasElement,
+): CanvasRenderingContext2D | null {
+  const cached = regionContexts.get(canvas);
+  if (cached) return cached;
+  const ctx = canvas.getContext('2d');
+  if (ctx) regionContexts.set(canvas, ctx);
+  return ctx;
+}
+
+/**
+ * Copy one horizontal band out of the offscreen canvas into the sticky canvas
+ * that shows it.
+ *
+ * `band`, when given, narrows the copy to a sub-range of the region — the
+ * rows band is taller than its scroll viewport, and `draw` only paints the
+ * part of it that is near the viewport, so copying the whole thing moves
+ * megapixels a frame that nothing painted and nobody can see. Whatever the
+ * destination already holds outside `band` is left alone: it is off screen by
+ * construction, and a scroll repaints before it is not.
+ */
 function copyCanvasRegion(
   source: HTMLCanvasElement,
   destination: HTMLCanvasElement,
   sourceY: number,
   height: number,
+  band?: {top: number; bottom: number},
 ): void {
   const dpr = window.devicePixelRatio || 1;
   const width = source.width / dpr;
   if (width <= 0 || height <= 0) return;
   const pixelHeight = Math.max(1, Math.round(height * dpr));
+  const resized =
+    destination.width !== source.width || destination.height !== pixelHeight;
   if (destination.width !== source.width) destination.width = source.width;
   if (destination.height !== pixelHeight) destination.height = pixelHeight;
-  destination.style.width = `${width}px`;
-  destination.style.height = `${height}px`;
-  const ctx = destination.getContext('2d');
+  if (destination.style.width !== `${width}px`)
+    destination.style.width = `${width}px`;
+  if (destination.style.height !== `${height}px`)
+    destination.style.height = `${height}px`;
+  const ctx = regionContext(destination);
   if (!ctx) return;
+
+  // A resize blanks the canvas, so the narrowed copy would leave the rest of
+  // it empty rather than holding the previous frame — take the whole band.
+  const localTop =
+    band && !resized ? Math.max(0, Math.min(height, band.top - sourceY)) : 0;
+  const localBottom =
+    band && !resized
+      ? Math.max(0, Math.min(height, band.bottom - sourceY))
+      : height;
+  const localHeight = localBottom - localTop;
+  if (localHeight <= 0) return;
+
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, width, height);
+  ctx.clearRect(0, localTop, width, localHeight);
   ctx.drawImage(
     source,
     0,
-    Math.round(sourceY * dpr),
+    Math.round((sourceY + localTop) * dpr),
     source.width,
-    Math.round(height * dpr),
+    Math.round(localHeight * dpr),
     0,
-    0,
+    localTop,
     width,
-    height,
+    localHeight,
   );
 }
 
@@ -1380,7 +1424,13 @@ export default function PianoRollTimeline({
       const waveCanvas = stackedWaveCanvasRef.current;
       if (topCanvas && rowsCanvas && waveCanvas) {
         copyCanvasRegion(canvas, topCanvas, 0, laneTop);
-        copyCanvasRegion(canvas, rowsCanvas, laneTop, laneBottom - laneTop);
+        copyCanvasRegion(
+          canvas,
+          rowsCanvas,
+          laneTop,
+          laneBottom - laneTop,
+          rowsBanded ? {top: rowsPaintTop, bottom: rowsPaintBottom} : undefined,
+        );
         copyCanvasRegion(canvas, waveCanvas, laneBottom, WAVE_ROW_H);
       }
     }
