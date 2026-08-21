@@ -4701,10 +4701,11 @@ function hitSection(
 ): SectionFlag | null {
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  ctx.font = '600 10px system-ui, sans-serif';
+  const font = '600 10px system-ui, sans-serif';
+  ctx.font = font;
   for (const s of scene.sections) {
     const fx = msToX(s.ms, view);
-    const labelW = measureTextWidth(ctx, s.name);
+    const labelW = measureTextWidth(ctx, font, s.name);
     if (x >= fx - 3 && x <= fx + labelW + 12) return s;
   }
   return null;

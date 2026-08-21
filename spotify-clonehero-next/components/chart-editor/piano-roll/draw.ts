@@ -56,6 +56,15 @@ import {
   type TrackRowGeometry,
 } from './sceneTypes';
 
+/** Font shorthands the painters assign, named so a measured width can be
+ *  cached against the same string the context was set to. */
+const FONT_TEMPO_BPM = '600 9.5px ui-monospace, Menlo, monospace';
+const FONT_TS_CHIP = '700 9.5px system-ui, sans-serif';
+const FONT_LYRIC_CHIP = '600 9.5px system-ui, sans-serif';
+const FONT_RULER_BAR = '500 10px ui-monospace, Menlo, monospace';
+const FONT_SECTION = '600 10px system-ui, sans-serif';
+const FONT_LANE_LABEL = '700 8px system-ui, sans-serif';
+
 export function drawGrid(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -451,7 +460,7 @@ export function drawTempoLane(
   ctx.stroke();
 
   const cy = top + TEMPO_H * 0.62;
-  ctx.font = '600 9.5px ui-monospace, Menlo, monospace';
+  ctx.font = FONT_TEMPO_BPM;
   for (let k = 0; k < scene.tempos.length; k++) {
     const marker = scene.tempos[k];
     const x = msToX(marker.ms, view);
@@ -482,11 +491,11 @@ export function drawTempoLane(
   // One chip per authored time-signature event. Every event gets a chip: an
   // event is the only thing that makes a bar line an authored meter change,
   // and it is what the lane's hit test, remove item and drag all target.
-  ctx.font = '700 9.5px system-ui, sans-serif';
+  ctx.font = FONT_TS_CHIP;
   tsWidthsOut.clear();
   for (const ts of scene.timeSignatures) {
     const dragging = tsDrag?.moved === true && tsDrag.originalTick === ts.tick;
-    const tw = measureTextWidth(ctx, ts.label);
+    const tw = measureTextWidth(ctx, FONT_TS_CHIP, ts.label);
     tsWidthsOut.set(ts.tick, tw);
     let ms = ts.ms;
     if (dragging) {
@@ -743,7 +752,7 @@ export function drawLyricsRow(
     ctx.globalAlpha = 1;
   }
 
-  ctx.font = '600 9.5px system-ui, sans-serif';
+  ctx.font = FONT_LYRIC_CHIP;
   for (const chip of scene.lyricChips) {
     // The drag's own chip tracks the pointer directly; every OTHER selected
     // chip previews riding along at the same tick delta (a lyric-anchored
@@ -760,7 +769,7 @@ export function drawLyricsRow(
     );
     const ms = tickToMs(previewTick, scene.timedTempos, scene.resolution);
     const x = msToX(ms, view);
-    const tw = measureTextWidth(ctx, chip.text);
+    const tw = measureTextWidth(ctx, FONT_LYRIC_CHIP, chip.text);
     widthsOut.set(chip.id, tw);
     if (x < -60 || x > w + 10) continue;
     const selected = selection.has(chip.id);
@@ -820,7 +829,7 @@ export function drawRuler(
   const labelEvery =
     avgBarPx > 44 ? 1 : avgBarPx > 22 ? 2 : avgBarPx > 11 ? 4 : 8;
 
-  ctx.font = '500 10px ui-monospace, Menlo, monospace';
+  ctx.font = FONT_RULER_BAR;
   for (const bar of bars) {
     const x = msToX(bar.ms, view);
     if (x < -40 || x > w + 40) continue;
@@ -839,7 +848,7 @@ export function drawRuler(
   // draggable: a flag being dragged renders at the pointer's
   // grid-snapped tick with a dashed ghost line marking its original
   // position, mirroring the tempo-marker drag's ghost.
-  ctx.font = '600 10px system-ui, sans-serif';
+  ctx.font = FONT_SECTION;
   for (const s of scene.sections) {
     const dragging =
       sectionDrag?.moved === true && sectionDrag.originalTick === s.tick;
@@ -861,7 +870,7 @@ export function drawRuler(
       );
     }
     if (x > w + 10) continue;
-    const tw = measureTextWidth(ctx, s.name);
+    const tw = measureTextWidth(ctx, FONT_SECTION, s.name);
     if (x + tw + 14 < 0) continue;
     const selected = selectedSectionTicks.has(s.tick);
     ctx.fillStyle = COLORS.sectionFlag;
@@ -894,7 +903,7 @@ function drawLoopFlags(
   const {startX, endX} = loopFlagXs(loop, view);
   const TAB_W = 11;
   const TAB_H = 11;
-  ctx.font = '700 8px system-ui, sans-serif';
+  ctx.font = FONT_LANE_LABEL;
   const flag = (x: number, label: string, inward: 1 | -1) => {
     if (x < -TAB_W - 2 || x > w + TAB_W + 2) return;
     const sx = Math.round(x) + 0.5;
@@ -954,7 +963,7 @@ export function drawLaneLabels(
   laneH: number,
   lanes: PianoRollLane[],
 ): void {
-  ctx.font = '600 9.5px system-ui, sans-serif';
+  ctx.font = FONT_LYRIC_CHIP;
   for (let l = 0; l < lanes.length; l++) {
     const y = laneTop + l * laneH;
     ctx.fillStyle = 'rgba(13,16,23,0.72)';
@@ -990,10 +999,10 @@ export function drawStackedGutter(
     ctx.stroke();
 
     ctx.fillStyle = COLORS.rulerInk;
-    ctx.font = '600 10px system-ui, sans-serif';
+    ctx.font = FONT_SECTION;
     ctx.fillText(`${instrument} · ${difficulty}`, 7, row.top + 15);
 
-    ctx.font = '600 9.5px system-ui, sans-serif';
+    ctx.font = FONT_LYRIC_CHIP;
     for (let lane = 0; lane < row.row.lanes.length; lane++) {
       const laneInfo = row.row.lanes[lane];
       const y = row.laneTop + lane * row.laneH;

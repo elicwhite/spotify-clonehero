@@ -7,9 +7,11 @@
  * too. Measuring is a text-shaping call, so on a long chart it is one of the
  * most expensive things the frame does.
  *
- * A width is a pure function of the string and the context's font, and the
- * painters set `ctx.font` from a constant before each loop, so the pair is a
- * complete key.
+ * A width is a pure function of the string and the font, so the pair is a
+ * complete key. The font is passed in rather than read back off the context:
+ * `ctx.font` is a getter that re-serializes the font shorthand, and at a few
+ * hundred labels a frame that read cost more than the lookup it keyed. Pass
+ * the same literal the caller assigned to `ctx.font`.
  */
 
 /** font → text → width. */
@@ -25,12 +27,9 @@ const MAX_PER_FONT = 4096;
 
 export function measureTextWidth(
   ctx: CanvasRenderingContext2D,
+  font: string,
   text: string,
 ): number {
-  // `String(...)` because a stubbed 2D context (jsdom in the tests) can hand
-  // back a non-string here; without it every lookup misses and the outer map
-  // grows without bound.
-  const font = String(ctx.font);
   let byText = widths.get(font);
   if (byText === undefined) {
     byText = new Map();

@@ -25,8 +25,8 @@ function fakeCtx(): CanvasRenderingContext2D & {calls: number} {
 describe('measureTextWidth', () => {
   it('measures once per (font, text) and reuses the result', () => {
     const ctx = fakeCtx();
-    const first = measureTextWidth(ctx, 'cache-hit-probe');
-    const second = measureTextWidth(ctx, 'cache-hit-probe');
+    const first = measureTextWidth(ctx, ctx.font, 'cache-hit-probe');
+    const second = measureTextWidth(ctx, ctx.font, 'cache-hit-probe');
     expect(second).toBe(first);
     expect(ctx.calls).toBe(1);
   });
@@ -34,9 +34,9 @@ describe('measureTextWidth', () => {
   it('does not reuse a width across fonts', () => {
     const ctx = fakeCtx();
     ctx.font = '600 9.5px system-ui, sans-serif';
-    const small = measureTextWidth(ctx, 'across-fonts-probe');
+    const small = measureTextWidth(ctx, ctx.font, 'across-fonts-probe');
     ctx.font = '700 19px system-ui, sans-serif';
-    const large = measureTextWidth(ctx, 'across-fonts-probe');
+    const large = measureTextWidth(ctx, ctx.font, 'across-fonts-probe');
     expect(large).toBeCloseTo(small * 2, 6);
     expect(ctx.calls).toBe(2);
   });
@@ -46,8 +46,8 @@ describe('measureTextWidth', () => {
     // pixel ratio, so one canvas's measurement is valid on another.
     const a = fakeCtx();
     const b = fakeCtx();
-    const viaA = measureTextWidth(a, 'shared-context-probe');
-    const viaB = measureTextWidth(b, 'shared-context-probe');
+    const viaA = measureTextWidth(a, a.font, 'shared-context-probe');
+    const viaB = measureTextWidth(b, b.font, 'shared-context-probe');
     expect(viaB).toBe(viaA);
     expect(b.calls).toBe(0);
   });
@@ -55,7 +55,8 @@ describe('measureTextWidth', () => {
   it('returns the live width after the eviction limit is passed', () => {
     const ctx = fakeCtx();
     ctx.font = '600 12px eviction-probe';
-    for (let i = 0; i < 5000; i++) measureTextWidth(ctx, `evict-${i}`);
-    expect(measureTextWidth(ctx, 'abc')).toBe(36);
+    for (let i = 0; i < 5000; i++)
+      measureTextWidth(ctx, ctx.font, `evict-${i}`);
+    expect(measureTextWidth(ctx, ctx.font, 'abc')).toBe(36);
   });
 });
