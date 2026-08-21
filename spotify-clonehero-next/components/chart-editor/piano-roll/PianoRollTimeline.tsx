@@ -556,6 +556,10 @@ export default function PianoRollTimeline({
   /** The rows band's scroll viewport. Only the slice of the stacked rows
    *  inside it is on screen, so only those rows are painted. */
   const rowsScrollRef = useRef<HTMLDivElement>(null);
+  /** That viewport's scroll offset and height, cached. Reading them off the
+   *  element inside `draw` forces a style/layout flush on every frame; they
+   *  only change on scroll or resize, both of which write here. */
+  const rowsViewRef = useRef({top: 0, height: 0});
   const stackedWaveCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   /** The popover subtree, which the container's wheel listener must not eat:
@@ -1132,16 +1136,13 @@ export default function PianoRollTimeline({
     // never saw — with no margin that frame shows empty lanes. The margin is
     // how far a fast scroll can outrun the repaint before anything unpainted
     // comes into view.
-    const rowsScroll = rowsScrollRef.current;
-    const rowsSliceTop =
-      rowLayout && rowsScroll ? laneTop + rowsScroll.scrollTop : laneTop;
-    const rowsOverscan = rowsScroll ? rowsScroll.clientHeight : 0;
-    const rowsPaintTop =
-      rowLayout && rowsScroll ? rowsSliceTop - rowsOverscan : laneTop;
-    const rowsPaintBottom =
-      rowLayout && rowsScroll
-        ? rowsSliceTop + rowsScroll.clientHeight + rowsOverscan
-        : laneBottom;
+    const rowsView = rowsViewRef.current;
+    const rowsBanded = rowLayout !== null && rowsView.height > 0;
+    const rowsSliceTop = rowsBanded ? laneTop + rowsView.top : laneTop;
+    const rowsPaintTop = rowsBanded ? rowsSliceTop - rowsView.height : laneTop;
+    const rowsPaintBottom = rowsBanded
+      ? rowsSliceTop + rowsView.height * 2
+      : laneBottom;
     const rowOnScreen = (row: TrackRowGeometry): boolean =>
       row.bottom >= rowsPaintTop && row.top <= rowsPaintBottom;
     const laneCount = Math.max(1, scene?.lanes.length ?? 1);
@@ -1447,6 +1448,15 @@ export default function PianoRollTimeline({
         if (stackedWaveCanvasRef.current)
           stackedWaveCanvasRef.current.style.height = `${WAVE_ROW_H}px`;
       }
+      // Resizing the panel changes how much of the rows band is on screen,
+      // which is what decides the rows `draw` paints.
+      const rowsScroller = rowsScrollRef.current;
+      if (rowsScroller) {
+        rowsViewRef.current = {
+          top: rowsScroller.scrollTop,
+          height: rowsScroller.clientHeight,
+        };
+      }
 
       const scene = sceneRef.current;
       const view = viewRef.current;
@@ -1624,6 +1634,13 @@ export default function PianoRollTimeline({
    * frame — which, with the transport paused, is a poll away.
    */
   const handleRowsScroll = useCallback(() => {
+    const scroller = rowsScrollRef.current;
+    if (scroller) {
+      rowsViewRef.current = {
+        top: scroller.scrollTop,
+        height: scroller.clientHeight,
+      };
+    }
     dirtyRef.current = true;
     drawRef.current(Math.max(0, audioManager.chartTime * 1000));
   }, [audioManager]);
