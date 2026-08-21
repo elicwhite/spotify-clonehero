@@ -27,6 +27,7 @@ import SiteHeader from '@/components/SiteChrome';
 import {ChartEditorProvider} from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
 import ChartEditor from '../ChartEditor';
+import {NO_TOOLS_APPLIED} from '../hooks/useToolsApplied';
 
 let mockPathname = '/chart-editor';
 jest.mock('next/navigation', () => ({
@@ -57,6 +58,7 @@ function editor(props: {hideHeader?: boolean} = {}) {
     <AudioServiceProvider>
       <ChartEditorProvider>
         <ChartEditor
+          toolsApplied={NO_TOOLS_APPLIED}
           chart={createEmptyChart({bpm: 120, resolution: 480})}
           audioManager={audioManager}
           durationSeconds={180}

@@ -4,6 +4,7 @@ import {ArrowRightLeft, CopyCheck, Filter, Repeat} from 'lucide-react';
 
 import DifficultyGenerationFlow from '@/components/difficulty-generation/DifficultyGenerationFlow';
 import {DifficultyLanding} from '@/components/difficulty-generation/landing/DifficultyLanding';
+import {useToolLandingView} from '@/components/analytics/useToolLandingView';
 
 /**
  * The /drum-difficulties page. Copy lives here, at the call site. Model
@@ -15,6 +16,7 @@ import {DifficultyLanding} from '@/components/difficulty-generation/landing/Diff
  * directory's `manifest.json` and `feature_names_v5.json`.
  */
 export default function DrumDifficultiesClient() {
+  useToolLandingView('drum-difficulties');
   return (
     <DifficultyGenerationFlow
       instrument="drums"

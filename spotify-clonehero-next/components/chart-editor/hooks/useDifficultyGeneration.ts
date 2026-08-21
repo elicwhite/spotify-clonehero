@@ -39,6 +39,7 @@ import {INSTRUMENT_LABEL} from '../trackLabels';
 import {difficultyGenerationBlockMessage} from '../difficultyGenerationMessages';
 import {
   LOWER_TRACK_DIFFICULTIES,
+  selectReportedOrigin,
   type SupportedTrackInstrument,
 } from '@/lib/chart-editor-core';
 import type {AssistStore} from '@/lib/assist/assist-store';
@@ -110,6 +111,11 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
   const disabledReason =
     runner == null ? GENERATION_NOT_WIRED_REASON : undefined;
 
+  // Derived in render scope, not inside `run`: a whole-`state` read there
+  // would capture a snapshot that can predate `SET_CHART_ORIGIN` and report
+  // the run under the wrong tool.
+  const origin = selectReportedOrigin(state);
+
   const run = useCallback(
     async (instrument: SupportedTrackInstrument) => {
       const doc = state.chartDoc;
@@ -139,6 +145,7 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
         const result = await runner.start(
           generateDifficultiesTask,
           built.input,
+          {origin, entrypoint: 'matrix-row'},
         );
         executeCommand(
           new GenerateDifficultiesCommand(
@@ -167,6 +174,7 @@ export function useDifficultyGeneration(): DifficultyGenerationControls {
     },
     [
       runner,
+      origin,
       state.chartDoc,
       state.trackStamps,
       disabledReason,

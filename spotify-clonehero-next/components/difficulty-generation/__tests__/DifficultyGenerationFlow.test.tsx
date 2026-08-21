@@ -36,6 +36,21 @@ import type {
 } from '@/lib/assist/difficulty-protocol';
 import DifficultyGenerationFlow from '../DifficultyGenerationFlow';
 
+// Funnel analytics (plan 0105). Only `track` is replaced; the module's
+// constants stay real.
+const trackMock = jest.fn();
+jest.mock('../../../lib/analytics/track', () => ({
+  ...jest.requireActual('../../../lib/analytics/track'),
+  track: (payload: unknown) => trackMock(payload),
+}));
+
+/** Every reported event of one kind, in order. */
+function reported(event: string) {
+  return trackMock.mock.calls
+    .map(([payload]) => payload as {event: string})
+    .filter(e => e.event === event);
+}
+
 // ResizeObserver: jsdom has none; the sidebar's Stems mixer (Radix Slider)
 // needs one on every mount, same as track-edit-page-visibility-seeding.test.tsx.
 class FakeResizeObserver {
@@ -98,8 +113,13 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
   })),
 }));
 
+/** Set by the audio-failure test: a file that is present but will not
+ *  decode, which is a property of the user's chart rather than of storage. */
+let decodeFails = false;
+
 class FakeAudioContext {
   async decodeAudioData(_buffer: ArrayBuffer) {
+    if (decodeFails) throw new Error('Unable to decode audio data');
     return {
       numberOfChannels: 1,
       duration: 10,
@@ -272,6 +292,8 @@ beforeEach(() => {
   createdProjects.length = 0;
   nextSaveError = null;
   mockRouterPush.mockClear();
+  trackMock.mockClear();
+  decodeFails = false;
 });
 
 function renderFlow(instrument: 'drums' | 'guitar') {
@@ -490,5 +512,69 @@ describe('DifficultyGenerationFlow', () => {
     unmount();
 
     expect(audioManagers[0].destroy).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Funnel analytics (plan 0105)
+// ---------------------------------------------------------------------------
+
+describe('funnel analytics', () => {
+  it('reports an opened chart once, under the route that opened it', async () => {
+    nextLoaded = loadedFilesFor(drumsChartDoc());
+    renderFlow('drums');
+
+    fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
+    await waitFor(() => expect(reported('chart_opened')).toHaveLength(1));
+
+    expect(reported('chart_opened')[0]).toEqual({
+      event: 'chart_opened',
+      origin: 'drum-difficulties',
+      sourceFormat: 'chart',
+    });
+    expect(reported('chart_open_failed')).toHaveLength(0);
+  });
+
+  it('reports a chart the tool refuses, and does not count it as opened', async () => {
+    // Guitar chart into the drums route: no Expert Drums to reduce from.
+    nextLoaded = loadedFilesFor(guitarChartDoc());
+    renderFlow('drums');
+
+    fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
+
+    await waitFor(() => expect(reported('chart_open_failed')).toHaveLength(1));
+    expect(reported('chart_open_failed')[0]).toMatchObject({
+      origin: 'drum-difficulties',
+      reason: 'no-supported-track',
+    });
+    expect(reported('chart_opened')).toHaveLength(0);
+  });
+
+  it('does not count a chart open for a user who left while its audio built', async () => {
+    // The audio build is the slow part. Someone who navigates away during it
+    // can never reach step 3, so counting them at step 2 invents a drop-off
+    // — which is why the event fires below the still-mounted check.
+    nextLoaded = loadedFilesFor(drumsChartDoc());
+    const {unmount} = renderFlow('drums');
+
+    fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
+    unmount();
+    await waitFor(() => expect(audioManagers).toHaveLength(1));
+
+    expect(reported('chart_opened')).toHaveLength(0);
+  });
+
+  it('still counts a chart open when its audio will not decode', async () => {
+    // `prepareChartPackageAudio` drops the waveform and plays on rather than
+    // failing, so an undecodable file is not a refused chart. Counting it as
+    // one would invent a drop-off that the user never experienced.
+    decodeFails = true;
+    nextLoaded = loadedFilesFor(drumsChartDoc());
+    renderFlow('drums');
+
+    fireEvent.click(screen.getByRole('button', {name: 'drop chart'}));
+
+    await waitFor(() => expect(reported('chart_opened')).toHaveLength(1));
+    expect(reported('chart_open_failed')).toHaveLength(0);
   });
 });

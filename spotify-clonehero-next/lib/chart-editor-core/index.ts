@@ -16,6 +16,7 @@ export {
   isAnythingSelected,
   selectActiveSchema,
   selectActiveTrack,
+  selectReportedOrigin,
   selectDifficultyStale,
   selectRenderDoc,
   selectTempoDerivedStale,

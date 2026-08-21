@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
-import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
+import {useAssistTaskRun} from '../hooks/useAssistTaskRun';
 import {transcribeDrumsFromAudioTask} from '@/lib/assist/tasks/transcribe-drums-from-audio';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {getAssistProvenance} from '@/lib/chart-editor-core';

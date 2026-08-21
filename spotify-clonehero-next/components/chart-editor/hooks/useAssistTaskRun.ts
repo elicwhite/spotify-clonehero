@@ -24,7 +24,9 @@ import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
   useAssistRunActivity,
   type AssistRunnerControls,
-} from './useAssistRunner';
+} from '@/components/assist/useAssistRunner';
+import {selectReportedOrigin} from '@/lib/chart-editor-core';
+import {useChartEditorContext} from '../ChartEditorContext';
 
 export interface AssistTaskRunOptions<Result, Input> {
   /** Builds the task's input. Async so a caller can load audio bytes (or
@@ -58,10 +60,18 @@ export function useAssistTaskRun<Result, Input>(
   }: AssistTaskRunOptions<Result, Input>,
 ): AssistTaskRun {
   const activity = useAssistRunActivity(runner.store);
+  // Both analytics dimensions are properties of this hook's situation, not of
+  // its callers: it only ever renders inside the editor, and it only ever
+  // serves the Chart Assist cards. Asking four cards to pass them would be
+  // four chances to pass the wrong one (plan 0105).
+  const {state} = useChartEditorContext();
 
   async function start(): Promise<void> {
     try {
-      const result = await runner.start(task, await prepareInput());
+      const result = await runner.start(task, await prepareInput(), {
+        origin: selectReportedOrigin(state),
+        entrypoint: 'assist-card',
+      });
       applyResult(result);
       const message =
         typeof successMessage === 'function'

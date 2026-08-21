@@ -28,6 +28,7 @@ import {
 } from '@/lib/chart-files/chart-file-names';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from './types';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 
 const METADATA_FILE = 'metadata.json';
 
@@ -100,6 +101,17 @@ export interface ProjectMetadata {
    * package that had audio.
    */
   hasAudio?: boolean | undefined;
+  /**
+   * Which assist tasks have been run against this chart from inside the
+   * editor, for the funnel's "which tools shipped together" figure (plan
+   * 0105). Persisted rather than derived from the undo stack, which is
+   * capped and starts empty after a reload — a charter working across two
+   * sessions would otherwise export reporting no tools at all.
+   *
+   * A run on a tool's own landing page is not listed here: that work is what
+   * {@link ProjectMetadata.origin} already records.
+   */
+  toolsApplied?: AssistTaskKey[] | undefined;
 }
 
 export interface ProjectSummary {

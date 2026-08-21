@@ -53,6 +53,14 @@ jest.mock('../../../lib/download', () => ({
   downloadBlob: (blob: Blob, fileName: string) => downloadBlob(blob, fileName),
 }));
 
+/** The analytics dimensions every host supplies. These tests are about
+ *  packaging, not reporting; `export-dialog-analytics.test.tsx` covers what
+ *  is sent. */
+const ANALYTICS_PROPS = {
+  origin: 'chart-editor',
+  toolsApplied: [],
+} as const;
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -72,6 +80,7 @@ async function openDialog() {
 test('drops the metadata inputs and the format dropdown', async () => {
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       artistName="Artist"
       charterName="Charter"
@@ -88,7 +97,11 @@ test('drops the metadata inputs and the format dropdown', async () => {
 
 test('renders two equal-weight package buttons', async () => {
   render(
-    <ExportDialog songName="Song" getChartText={async () => '.chart text'} />,
+    <ExportDialog
+      {...ANALYTICS_PROPS}
+      songName="Song"
+      getChartText={async () => '.chart text'}
+    />,
   );
   await openDialog();
 
@@ -103,6 +116,7 @@ test('renders two equal-weight package buttons', async () => {
 test('clicking the zip button packages as zip and downloads using prop metadata', async () => {
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       artistName="Artist"
       charterName="Charter"
@@ -130,7 +144,11 @@ test('clicking the zip button packages as zip and downloads using prop metadata'
 
 test('clicking the sng button packages as sng', async () => {
   render(
-    <ExportDialog songName="Song" getChartText={async () => '.chart text'} />,
+    <ExportDialog
+      {...ANALYTICS_PROPS}
+      songName="Song"
+      getChartText={async () => '.chart text'}
+    />,
   );
   await openDialog();
 
@@ -149,6 +167,7 @@ test('assembles from the live document rather than its .chart text', async () =>
   const getChartText = jest.fn(async () => '.chart text');
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartText={getChartText}
       chartDoc={chartDoc as never}
@@ -181,6 +200,7 @@ test('prefers the live document over getChartFile', async () => {
   }));
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartFile={getChartFile}
       chartDoc={chartDoc}
@@ -204,6 +224,7 @@ test('sends the selected chart-file format to the packager', async () => {
   const chartDoc = {parsedChart: {metadata: {}}, assets: []} as never;
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       chartDoc={chartDoc}
       sourceChartFormat="mid"
@@ -225,13 +246,18 @@ test('sends the selected chart-file format to the packager', async () => {
 
 test('hides the chart-file-format control unless the caller opts in', async () => {
   const {rerender} = render(
-    <ExportDialog songName="Song" getChartText={async () => '.chart text'} />,
+    <ExportDialog
+      {...ANALYTICS_PROPS}
+      songName="Song"
+      getChartText={async () => '.chart text'}
+    />,
   );
   await openDialog();
   expect(screen.queryByLabelText(/chart file/i)).not.toBeInTheDocument();
 
   rerender(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartText={async () => '.chart text'}
       chartFormatSelectable
@@ -244,6 +270,7 @@ test('offers no stem choice: the package always ships the original audio', async
   const getAudioSources = jest.fn(async () => []);
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartText={async () => '.chart text'}
       getAudioSources={getAudioSources}
@@ -258,6 +285,7 @@ test('offers no stem choice: the package always ships the original audio', async
 test('defaults the chart file to .mid when the project has no source format', async () => {
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartText={async () => '.chart text'}
       chartFormatSelectable
@@ -270,6 +298,7 @@ test('defaults the chart file to .mid when the project has no source format', as
 test('badges the button matching defaultFormat as recommended', async () => {
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartText={async () => '.chart text'}
       defaultFormat="sng"
@@ -291,6 +320,7 @@ test('disables both buttons while an export is in flight', async () => {
   let resolveChartText: (value: string) => void = () => {};
   render(
     <ExportDialog
+      {...ANALYTICS_PROPS}
       songName="Song"
       getChartText={() =>
         new Promise<string>(resolve => (resolveChartText = resolve))

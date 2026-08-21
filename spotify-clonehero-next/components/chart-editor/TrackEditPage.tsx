@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Fragment,
   Suspense,
   useCallback,
   useEffect,
@@ -39,9 +40,21 @@ import {
   withSongIniFields,
   type SongMetadataValue,
 } from '@/lib/chart-editor-core';
-import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
+import {
+  AssistRunnerProvider,
+  useAssistRunnerContext,
+} from '@/components/assist/AssistRunnerProvider';
+import {useProjectToolsApplied} from './hooks/useToolsApplied';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {difficultyInstrumentOf} from '@/lib/project-storage/difficultyOrigins';
+import {parseProjectOrigin} from '@/lib/project-storage/types';
+import {track} from '@/lib/analytics/track';
+import {
+  chartOpenFailureReason,
+  NO_AUDIO_MESSAGE,
+  NO_SUPPORTED_TRACK_MESSAGE,
+} from './chartOpenFailure';
 import {ChartEditorProvider, useChartEditorContext} from './ChartEditorContext';
 import {AudioServiceProvider} from './AudioServiceContext';
 import {
@@ -91,13 +104,6 @@ import ProjectList from '@/components/project-list/ProjectList';
 import AudioDropZone, {
   type DroppedAudio,
 } from '@/components/project-list/AudioDropZone';
-
-/**
- * Message shown for a chart with nothing this editor can open: no guitar,
- * bass or drum track at any difficulty, and no lyrics either.
- */
-export const NO_SUPPORTED_TRACK_MESSAGE =
-  'No guitar, bass, drum, or vocal track found in chart.';
 
 /**
  * Configuration for an OPFS-project-backed chart-edit page (`/chart-editor`).
@@ -173,6 +179,12 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const projectId = searchParams.get('project');
+  // Which tool sent the user here. A landing page that redirects into the
+  // editor before a project exists passes `?from=`, and the project it causes
+  // is stamped with that tool rather than with the editor (plan 0105). A
+  // chart started on the editor itself has no `from` and is the editor's own.
+  const newProjectOrigin =
+    parseProjectOrigin(searchParams.get('from')) ?? 'chart-editor';
 
   const [pageState, setPageState] = useState<PageState>(
     projectId ? 'loading-chart' : 'load',
@@ -268,6 +280,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
   const handleChartLoaded = useCallback(
     async (loaded: LoadedFiles) => {
       setPageState('loading-chart');
+      let chartAccepted = false;
 
       try {
         const {files, sourceFormat, originalName, sngMetadata} = loaded;
@@ -289,7 +302,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         // Find audio files
         const audioFiles = findAudioFiles(files);
         if (audioFiles.length === 0) {
-          throw new Error('No audio files found in chart package');
+          throw new Error(NO_AUDIO_MESSAGE);
         }
 
         // The project's duration is left unset here. It is a property of the
@@ -299,6 +312,10 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         // expensive thing in the whole flow, in front of the user, before
         // anything can render. On an album-length song that is most of the
         // wait.
+
+        // Everything above decided whether the chart is usable. Anything
+        // that fails from here is the store or the router.
+        chartAccepted = true;
 
         // Create OPFS project
         const meta = await store.createProject({
@@ -311,18 +328,36 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           chartFile: chartDocToFolderFiles(chartDoc).chart,
           audioFiles,
           allFiles: files,
+          origin: newProjectOrigin,
         });
 
         // Navigate to the project URL
         router.push(`${route}?project=${meta.id}`);
+
+        // Last, so a throw from the navigation above is reported as the
+        // failure it is rather than as an open AND a failure for one load.
+        track({
+          event: 'chart_opened',
+          origin: newProjectOrigin,
+          sourceFormat,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to load chart';
+        // The most likely silent drop in the funnel is a user who arrives
+        // with a chart the editor refuses, so the refusal is reported with
+        // the reason rather than only shown. The message itself never
+        // leaves the page: it can name the file the user loaded.
+        track({
+          event: 'chart_open_failed',
+          origin: newProjectOrigin,
+          reason: chartOpenFailureReason(err, chartAccepted),
+        });
         toast.error(msg);
         console.error('Failed to load chart:', err);
         setPageState('load');
       }
     },
-    [router, store, route],
+    [router, store, route, newProjectOrigin],
   );
 
   // Handle opening an existing project. A project still mid-pipeline goes to
@@ -378,6 +413,7 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           name: fileName.replace(/\.[^.]+$/, '') || BLANK_CHART_NAME,
           artist: BLANK_CHART_ARTIST,
           songLengthMs: Math.round(durationSeconds * 1000),
+          origin: newProjectOrigin,
         });
         await attachAudioToProject({
           store,
@@ -385,14 +421,30 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
           files: [{fileName, data}],
           durationSeconds,
         });
+        // Starting from a song is an entry, not a drop-off: without this the
+        // gap between a landing view and `chart_opened` would read as people
+        // giving up, when they in fact started a chart from scratch.
         router.push(`${route}?project=${record.id}`);
+        track({
+          event: 'chart_opened',
+          origin: newProjectOrigin,
+          sourceFormat: 'audio',
+        });
       } catch (err) {
+        // Reported for the same reason the other entry path reports: an
+        // entry that never completes is a drop-off, and a step-2 numerator
+        // with no failure denominator cannot be read.
+        track({
+          event: 'chart_open_failed',
+          origin: newProjectOrigin,
+          reason: 'storage-error',
+        });
         toast.error('Failed to create the chart');
         console.error(err);
         setPageState('load');
       }
     },
-    [route, router, store],
+    [route, router, store, newProjectOrigin],
   );
 
   // Starting a chart asks nothing up front: it opens on placeholder identity
@@ -403,14 +455,25 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
       const record = await createBlankProject({
         name: BLANK_CHART_NAME,
         artist: BLANK_CHART_ARTIST,
+        origin: newProjectOrigin,
       });
       router.push(`${route}?project=${record.id}`);
+      track({
+        event: 'chart_opened',
+        origin: newProjectOrigin,
+        sourceFormat: 'blank',
+      });
     } catch (err) {
+      track({
+        event: 'chart_open_failed',
+        origin: newProjectOrigin,
+        reason: 'storage-error',
+      });
       toast.error('Failed to create the chart');
       console.error(err);
       setPageState('load');
     }
-  }, [route, router]);
+  }, [route, router, newProjectOrigin]);
 
   // Handle going back to load screen
   const handleBack = useCallback(() => {
@@ -442,7 +505,9 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     }
     if (openRecord.layout === 'drum-transcription') {
       const host = config.renderTranscriptionEditor?.(openRecord.id);
-      if (host) return <>{host}</>;
+      // Keyed for the same reason as `TrackEditEditor` below: this host
+      // holds per-project state that must not survive a project switch.
+      if (host) return <Fragment key={openRecord.id}>{host}</Fragment>;
       return (
         <div className="flex flex-col items-center justify-center h-screen gap-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
@@ -454,6 +519,12 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
     }
     return (
       <TrackEditEditor
+        // Keyed by project, so opening a different one mounts a fresh
+        // editor rather than re-running this one's load against state that
+        // still belongs to the previous chart. `useProjectToolsApplied`
+        // depends on that: it holds per-project memory in refs and does not
+        // defend against the id changing underneath it.
+        key={openRecord.id}
         config={config}
         store={store}
         projectId={openRecord.id}
@@ -578,10 +649,25 @@ function TrackEditEditor({
 }: TrackEditEditorProps) {
   const {headerExtra, leftPanelChildren, stackedPianoRoll} = config;
   const {state, dispatch} = useChartEditorContext();
+  const assistRunner = useAssistRunnerContext();
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [loadingStep, setLoadingStep] = useState('Loading project...');
   const [errorMessage, setErrorMessage] = useState('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
+  // Which assist tasks this chart has been through, for the export event.
+  const recordTools = useCallback(
+    (id: string, patch: {toolsApplied: AssistTaskKey[]}) =>
+      store.updateProject(id, patch),
+    [store],
+  );
+  const toolsApplied = useProjectToolsApplied({
+    runner: assistRunner,
+    projectId,
+    projectMeta,
+    setProjectMeta,
+    updateProject: recordTools,
+  });
+
   // ORIGINAL (unpadded) PCM for the project's own audio files, retained
   // across the session: `usePaddedAudio` re-pads from these on every
   // `audioAnchor` change rather than compounding padding onto an
@@ -646,6 +732,10 @@ function TrackEditEditor({
         const meta = await store.getProject(projectId);
         if (cancelled) return;
         setProjectMeta(meta);
+        // Publish the chart's provenance to the editor before anything can
+        // start a run against it, so a run started early is not attributed
+        // to the editor by default (plan 0105).
+        dispatch({type: 'SET_CHART_ORIGIN', origin: meta.origin ?? null});
 
         // 2. Load the chart file (prefer edited, fallback to original)
         setLoadingStep('Loading chart data...');
@@ -1151,6 +1241,7 @@ function TrackEditEditor({
         artistName={chart.metadata.artist || projectMeta?.artist}
         charterName={chart.metadata.charter || projectMeta?.charter}
         onMetadataChange={handleMetadataChange}
+        toolsApplied={toolsApplied}
         sourceChartFormat={projectMeta?.chartFileFormat ?? 'chart'}
         chartFormatSelectable
         getAudioSources={getAudioSources}

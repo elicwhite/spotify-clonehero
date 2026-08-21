@@ -45,8 +45,18 @@ import {
 import {
   ASSIST_RUN_BUSY_MESSAGE,
   useAssistRunnerControls,
+  type AssistRunContext,
 } from '@/components/assist/useAssistRunner';
 import {isAbortError} from '@/lib/workers/abortable-worker';
+import {useToolLandingView} from '@/components/analytics/useToolLandingView';
+import {track, type ChartOpenSource} from '@/lib/analytics/track';
+
+/** Every run on this page is the transcription tool's own landing flow. The
+ *  project the pipeline creates is stamped `drum-transcription` to match. */
+const LANDING_RUN: AssistRunContext = {
+  origin: 'drum-transcription',
+  entrypoint: 'landing',
+};
 
 // Browser capabilities are static for the page lifetime, so the subscribe
 // function is a no-op. The server can't answer, so getServerSnapshot returns
@@ -147,12 +157,16 @@ function DrumTranscriptionInner() {
       runProjectIdRef.current =
         request.run.kind === 'resume' ? request.run.projectId : null;
       try {
-        const result = await runner.start(transcribeDrumsTask, {
-          run: request.run,
-          onProjectCreated: id => {
-            runProjectIdRef.current = id;
+        const result = await runner.start(
+          transcribeDrumsTask,
+          {
+            run: request.run,
+            onProjectCreated: id => {
+              runProjectIdRef.current = id;
+            },
           },
-        });
+          LANDING_RUN,
+        );
         toast.success('Processing complete! Opening editor.');
         setRunRequest(null);
         request.onSuccess(result.projectId);
@@ -262,15 +276,39 @@ function DrumTranscriptionInner() {
     [router],
   );
 
+  /**
+   * The hand-off into the editor for a chart this tool has just made: its
+   * step 2. The editor cannot report it — opening a project there is also
+   * what reopening one a week later looks like — so the hand-off is the only
+   * place that knows a chart has just arrived.
+   *
+   * Every other use of `openEditor` deliberately reports nothing: reopening
+   * a finished project, and resuming one whose pipeline never finished. The
+   * resume undercounts step 2 for this tool, which is the better of two
+   * wrongs — that record carries no source format, so any value reported
+   * would be a guess, and a mislabelled entry is worse than a missing one.
+   */
+  const openNewChart = useCallback(
+    (sourceFormat: ChartOpenSource) => (id: string) => {
+      track({
+        event: 'chart_opened',
+        origin: 'drum-transcription',
+        sourceFormat,
+      });
+      openEditor(id);
+    },
+    [openEditor],
+  );
+
   // Handle audio upload -> start pipeline
   const handleStartPipeline = useCallback(
     (file: File) =>
       startRun({
         title: `Processing: ${file.name}`,
         run: {kind: 'upload', audioFile: file, fileName: file.name},
-        onSuccess: openEditor,
+        onSuccess: openNewChart('audio'),
       }),
-    [openEditor, startRun],
+    [openNewChart, startRun],
   );
 
   // Handle an existing chart package being dropped/selected -> start the
@@ -318,7 +356,7 @@ function DrumTranscriptionInner() {
               extraAssets,
             },
           },
-          onSuccess: openEditor,
+          onSuccess: openNewChart(loaded.sourceFormat),
         });
       } catch (err) {
         // Reading the package failed before any run started; the picker
@@ -330,7 +368,7 @@ function DrumTranscriptionInner() {
         toast.error(message);
       }
     },
-    [openEditor, startRun],
+    [openNewChart, startRun],
   );
 
   // Handle selecting an existing project. A project whose pipeline never
@@ -604,6 +642,7 @@ interface PipelineRunRequest {
 }
 
 export default function DrumTranscriptionClient() {
+  useToolLandingView('drum-transcription');
   return (
     <>
       <OrtRuntimeScript />

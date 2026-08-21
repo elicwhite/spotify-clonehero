@@ -346,6 +346,11 @@ export function assembleChartFiles({
   return entries;
 }
 
+/** Stand-in title for a chart whose name is blank. Exported because the
+ *  analytics song key has to recognise it as "not named yet" rather than
+ *  hashing it and collapsing every unnamed chart onto one value. */
+export const UNTITLED_CHART_NAME = 'Untitled';
+
 /**
  * Build the download file name for a chart package following the Clone Hero
  * convention `Artist - Song (Charter)`. Preserve punctuation and symbols from
@@ -357,7 +362,7 @@ export function chartPackageFileName(
   extension: string,
 ): string {
   const artist = metadata.artist.trim() || 'Unknown Artist';
-  const song = metadata.name.trim() || 'Untitled';
+  const song = metadata.name.trim() || UNTITLED_CHART_NAME;
   const charter = metadata.charter.trim() || 'MusicCharts.tools';
   const base = `${artist} - ${song} (${charter})`;
   return `${base.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')}.${extension}`;

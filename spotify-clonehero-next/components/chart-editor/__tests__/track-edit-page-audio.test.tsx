@@ -41,6 +41,14 @@ import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {decodeAtRate} from '@/lib/audio-pipeline/decode-audio';
 import TrackEditPage from '../TrackEditPage';
 import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
+import type {AssistRunContext} from '@/components/assist/useAssistRunner';
+
+/** Any run context will do for these tests: they assert on run lifecycle,
+ *  not on the analytics dimensions the context carries. */
+const TEST_RUN_CONTEXT: AssistRunContext = {
+  origin: 'chart-editor',
+  entrypoint: 'assist-card',
+};
 
 // jsdom has no ResizeObserver; the Stems mixer's Radix Slider needs one.
 class FakeResizeObserver {
@@ -257,7 +265,7 @@ function SeparatingRunProbe() {
       <button
         type="button"
         onClick={() => {
-          runner.start(task, {}).catch((err: unknown) => {
+          runner.start(task, {}, TEST_RUN_CONTEXT).catch((err: unknown) => {
             setError(err instanceof Error ? err.message : String(err));
           });
         }}>

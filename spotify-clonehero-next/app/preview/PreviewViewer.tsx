@@ -21,6 +21,7 @@ import {
 } from '@/components/chart-editor';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {audioSamples} from '@/components/chart-editor/audioSamples';
+import {NO_TOOLS_APPLIED} from '@/components/chart-editor/hooks/useToolsApplied';
 
 export interface PreviewChart {
   metadata: ChartResponseEncore;
@@ -162,6 +163,9 @@ function PreviewViewerInner({chart}: {chart: PreviewChart}) {
 
   return (
     <ChartEditor
+      // Preview cannot export or run an assist task, so there is nothing to
+      // record and nothing to report.
+      toolsApplied={NO_TOOLS_APPLIED}
       chart={parsedChart}
       audioManager={audioManager}
       audioData={samples}

@@ -47,7 +47,11 @@ import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
 import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
 import {buildChartFromSynctrack} from '@/lib/tempo-map/build-chart';
 
-import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
+import {track} from '@/lib/analytics/track';
+import {
+  useAssistRunnerControls,
+  type AssistRunContext,
+} from '@/components/assist/useAssistRunner';
 import {
   generateTempoMapTask,
   type GenerateTempoMapInput,
@@ -59,6 +63,7 @@ import {
 } from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
+import {useToolLandingView} from '@/components/analytics/useToolLandingView';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -119,9 +124,14 @@ export interface TempoClientProps {
   task?: AssistTaskDef<GenerateTempoMapResult, GenerateTempoMapInput>;
 }
 
+/** Every run on this page belongs to the tempo tool's own landing flow, and
+ *  the project it creates below is stamped `tempo` to match. */
+const LANDING_RUN: AssistRunContext = {origin: 'tempo', entrypoint: 'landing'};
+
 export default function TempoClient({
   task = generateTempoMapTask,
 }: TempoClientProps = {}) {
+  useToolLandingView('tempo');
   const [webGPU, setWebGPU] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<
     'pick' | 'pick-audio' | 'pick-chart' | 'processing'
@@ -237,9 +247,11 @@ export default function TempoClient({
           return;
         }
 
-        const taskResult = await startAssistTask(task, {
-          audio: {...assistAudio, stemFingerprint},
-        });
+        const taskResult = await startAssistTask(
+          task,
+          {audio: {...assistAudio, stemFingerprint}},
+          LANDING_RUN,
+        );
         const sync = taskResult.synctrack;
         if (!decodedMix && loadDecodedMix) decodedMix = await loadDecodedMix();
         if (decodedMix) songLengthMs = decodedMix.duration * 1000;
@@ -273,6 +285,18 @@ export default function TempoClient({
           sourceFormat: sourceFormat ?? 'folder',
           originalName,
           stemFingerprint,
+        });
+        // The funnel's step 2 for this tool — see `AddLyricsClient` for why
+        // the hand-off reports it rather than the editor.
+        track({
+          event: 'chart_opened',
+          origin: 'tempo',
+          // `null` here means the run started from a song rather than from a
+          // chart package. The project's own `sourceFormat` field cannot say
+          // that — it names a container format — but the funnel's does, and
+          // reporting `folder` would put this tool's primary path in the
+          // column for users who arrived with a chart folder.
+          sourceFormat: sourceFormat ?? 'audio',
         });
         router.push(`/chart-editor?project=${projectId}`);
       } catch (err) {

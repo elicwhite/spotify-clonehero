@@ -68,6 +68,14 @@ import {
   useAssistRunnerContext,
 } from '../AssistRunnerProvider';
 import {ConnectedAssistRunCard} from '../AssistRunCard';
+import type {AssistRunContext} from '../useAssistRunner';
+
+/** Any run context will do for these tests: they assert on run lifecycle,
+ *  not on the analytics dimensions the context carries. */
+const TEST_RUN_CONTEXT: AssistRunContext = {
+  origin: 'chart-editor',
+  entrypoint: 'assist-card',
+};
 
 /** A surface that can start the shared run and shows whatever the runner
  *  told it when a start was refused. */
@@ -85,7 +93,7 @@ function StartSurface({
       <button
         onClick={() => {
           setMessage(null);
-          start(task, {}).catch((e: unknown) => {
+          start(task, {}, TEST_RUN_CONTEXT).catch((e: unknown) => {
             if (e instanceof DOMException && e.name === 'AbortError') return;
             setMessage(e instanceof Error ? e.message : String(e));
           });

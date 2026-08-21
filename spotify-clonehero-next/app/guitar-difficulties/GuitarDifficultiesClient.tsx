@@ -4,6 +4,7 @@ import {Calculator, ListMusic, Repeat, StretchHorizontal} from 'lucide-react';
 
 import DifficultyGenerationFlow from '@/components/difficulty-generation/DifficultyGenerationFlow';
 import {DifficultyLanding} from '@/components/difficulty-generation/landing/DifficultyLanding';
+import {useToolLandingView} from '@/components/analytics/useToolLandingView';
 
 /**
  * The /guitar-difficulties page. Copy lives here, at the call site. Model
@@ -16,6 +17,7 @@ import {DifficultyLanding} from '@/components/difficulty-generation/landing/Diff
  * Hard and Medium the first 60 of the same ordering).
  */
 export default function GuitarDifficultiesClient() {
+  useToolLandingView('guitar-difficulties');
   return (
     <DifficultyGenerationFlow
       instrument="guitar"

@@ -10,7 +10,7 @@ import {Clock, RefreshCw} from 'lucide-react';
 
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
-import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
+import {useAssistTaskRun} from '../hooks/useAssistTaskRun';
 import {generateTempoMapTask} from '@/lib/assist/tasks/generate-tempo-map';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 

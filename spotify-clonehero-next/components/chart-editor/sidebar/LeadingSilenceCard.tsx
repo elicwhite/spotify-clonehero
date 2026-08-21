@@ -17,7 +17,7 @@ import {toast} from 'sonner';
 
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
-import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
+import {useAssistTaskRun} from '../hooks/useAssistTaskRun';
 import {addLeadingSilenceTask} from '@/lib/assist/tasks/add-leading-silence';
 import type {AddLeadingSilenceResult} from '@/lib/assist/tasks/add-leading-silence';
 import type {ChartDocument} from '@/lib/chart-edit';

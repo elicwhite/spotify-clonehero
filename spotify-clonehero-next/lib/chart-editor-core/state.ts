@@ -16,6 +16,7 @@ import type {LoopRegion} from '@/lib/preview/loopRegion';
 import type {EditorScope} from '@/components/chart-editor/scope';
 import type {EditorClipboard} from './clipboard';
 import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
+import type {ProjectOrigin} from '@/lib/project-storage/types';
 import type {TrackKey} from '@/lib/chart-edit';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
 
@@ -76,6 +77,18 @@ export interface ChartEditorState {
    * use {@link selectActiveTrack} to resolve the scoped track.
    */
   chartDoc: ChartDocument | null;
+
+  /**
+   * Which chart-authoring tool this chart came from — the project's persisted
+   * `ProjectOrigin` (plan 0105). Null until a project is loaded, and on hosts
+   * that open a chart without one.
+   *
+   * Editor surfaces read it to report the provenance of a run they start.
+   * It deliberately does not follow the current route: every tool is becoming
+   * a landing page that redirects into the editor, after which the route says
+   * `chart-editor` for all of them.
+   */
+  chartOrigin: ProjectOrigin | null;
 
   /**
    * Downbeat-flag store (plan 0061 §3b) — the canonical source of truth for
@@ -268,6 +281,9 @@ export type ChartEditorAction =
    * generated track and its provenance together.
    */
   | {type: 'SET_ASSIST_PROVENANCE'; provenance: AssistProvenance}
+  /** Records which tool the loaded project came from. Dispatched once as a
+   *  project opens, beside the doc it belongs to. */
+  | {type: 'SET_CHART_ORIGIN'; origin: ProjectOrigin | null}
   /**
    * The song-details dialog's save: a doc whose `song.ini` metadata (and the
    * drum recommendation's provenance) differ from the current one. Not
@@ -320,6 +336,7 @@ export interface ChartEditorContextValue {
 /** @internal — exported for unit tests. */
 export const initialState: ChartEditorState = {
   chartDoc: null,
+  chartOrigin: null,
   downbeatFlags: {downbeats: [{tick: 0, denominator: 4}]},
   tempoGlueMode: 'audio',
   pendingTempoCandidate: null,

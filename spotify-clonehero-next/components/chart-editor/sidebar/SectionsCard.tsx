@@ -19,7 +19,7 @@ import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
-import {useAssistTaskRun} from '@/components/assist/useAssistTaskRun';
+import {useAssistTaskRun} from '../hooks/useAssistTaskRun';
 import {generateSectionsTask} from '@/lib/assist/tasks/generate-sections';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {

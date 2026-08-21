@@ -40,7 +40,7 @@ import {
   type ProjectMetadata,
   type ProjectSummary,
 } from './opfsProjectStore';
-import type {ProjectRecord} from './types';
+import type {ProjectOrigin, ProjectRecord} from './types';
 
 /** The namespace new chart-package projects are written to. */
 export const CHART_EDITOR_NAMESPACE = 'chart-editor';
@@ -276,6 +276,9 @@ export interface CreateBlankProjectOptions {
   artist?: string | undefined;
   charter?: string | undefined;
   songLengthMs?: number | undefined;
+  /** Which tool the user started this chart from. Defaults to the editor,
+   *  which is where a chart started from nothing normally begins. */
+  origin?: ProjectOrigin | undefined;
 }
 
 /**
@@ -288,6 +291,7 @@ export async function createBlankProject({
   artist = '',
   charter = '',
   songLengthMs = DEFAULT_BLANK_SONG_LENGTH_MS,
+  origin = 'chart-editor',
 }: CreateBlankProjectOptions): Promise<ProjectRecord> {
   const doc = createBlankChartDocument({name, artist, charter, songLengthMs});
   const files = writeChartFolder(doc);
@@ -303,7 +307,7 @@ export async function createBlankProject({
     chartFile: chart,
     audioFiles: [],
     allFiles: files,
-    origin: 'chart-editor',
+    origin,
   });
 
   return chartPackageRecord({...meta, namespace: CHART_EDITOR_NAMESPACE});

@@ -40,10 +40,17 @@ import {
   chartPackageFileName,
   packageChartFiles,
   transcodeAudioFilesToOpus,
+  UNTITLED_CHART_NAME,
   type ChartPackageMetadata,
   type PackageFormat,
 } from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
+import {track} from '@/lib/analytics/track';
+import type {ChartOrigin} from '@/lib/project-storage/types';
+import {toolsParam} from '@/lib/analytics/tools-param';
+import {charterParam} from '@/lib/analytics/charter-param';
+import {songKey} from '@/lib/analytics/song-key';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
 import type {DifficultyField} from '@/lib/chart-difficulty';
@@ -79,7 +86,7 @@ function buildCleanMetadata(args: {
 }): ChartPackageMetadata {
   const {songName, artistName, charterName, iniMetadata} = args;
   return {
-    name: songName.trim() || 'Untitled',
+    name: songName.trim() || UNTITLED_CHART_NAME,
     artist: (artistName ?? '').trim(),
     charter: (charterName ?? '').trim(),
     ...(iniMetadata
@@ -309,6 +316,13 @@ interface ExportDialogProps {
   artistName?: string | undefined;
   /** Charter credit written into the exported `song.ini`. Read-only here. */
   charterName?: string | undefined;
+  /** Which tool this chart came from, for the export event (plan 0105).
+   *  Required: a host that does not know passes `UNSET_ORIGIN` explicitly,
+   *  so the hole is a decision someone made rather than a default nobody
+   *  saw. */
+  origin: ChartOrigin;
+  /** Assist tasks already run against this chart, for the export event. */
+  toolsApplied: readonly AssistTaskKey[];
   /**
    * Provides the chart text to export. Must return a valid .chart string.
    * This decouples the dialog from any specific storage backend. Ignored
@@ -415,6 +429,8 @@ export default function ExportDialog({
   songName,
   artistName,
   charterName,
+  origin,
+  toolsApplied,
   getChartText,
   getChartFile,
   chartDoc,
@@ -597,6 +613,19 @@ export default function ExportDialog({
         // 4. Trigger browser download, named `Artist - Song (Charter)`
         downloadBlob(blob, chartPackageFileName(cleanMetadata, extension));
 
+        // The funnel's terminal event. `charter` is a credit the charter
+        // publishes inside every chart they release; the song itself is sent
+        // as an opaque key, so a repeat export of one chart is countable
+        // without its title ever leaving the browser (plan 0105).
+        track({
+          event: 'chart_exported',
+          origin,
+          format: packageFormat,
+          charter: charterParam(cleanMetadata.charter),
+          songKey: songKey(cleanMetadata.artist, cleanMetadata.name),
+          tools: toolsParam(toolsApplied),
+        });
+
         const audioNote =
           audioFiles.length > 0
             ? ` with ${audioFiles.length} audio file${audioFiles.length === 1 ? '' : 's'}`
@@ -611,7 +640,15 @@ export default function ExportDialog({
         setExportingFormat(null);
       }
     },
-    [songName, artistName, charterName, iniMetadata, loadExportInputs],
+    [
+      songName,
+      artistName,
+      charterName,
+      iniMetadata,
+      loadExportInputs,
+      origin,
+      toolsApplied,
+    ],
   );
 
   return (

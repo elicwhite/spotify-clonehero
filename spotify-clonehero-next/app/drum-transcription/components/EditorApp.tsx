@@ -75,6 +75,8 @@ import {
 } from '@/lib/chart-files/chart-file-names';
 import type {AudioSource} from '@/components/chart-editor/ExportDialog';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
+import {useProjectToolsApplied} from '@/components/chart-editor/hooks/useToolsApplied';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
 import {audioSamples} from '@/components/chart-editor/audioSamples';
 import {stemOriginsOf} from '@/components/chart-editor/sidebar/StemsMixer';
@@ -111,7 +113,8 @@ export default function EditorApp({
   // Add Lyrics dialog). `useAssistRunActivity` subscribes to the run's
   // identity only — never its step list — so a run in flight doesn't
   // re-render this whole component on every progress tick (Design B).
-  const {store: assistStore} = useAssistRunnerContext();
+  const assistRunner = useAssistRunnerContext();
+  const {store: assistStore} = assistRunner;
   const assistActivity = useAssistRunActivity(assistStore);
   // A drum-transcription run rewrites the project's chart and deletes its
   // review progress, so autosave has to stand down for its duration or a
@@ -128,6 +131,21 @@ export default function EditorApp({
   const [, setLoadingStep] = useState<string>('Loading project metadata...');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null);
+  // Which assist tasks this chart has been through, for the export event.
+  // Wrapped, not inline: a new function identity every render would tear
+  // down and re-install the hook's store subscription every render.
+  const recordTools = useCallback(
+    (id: string, patch: {toolsApplied: AssistTaskKey[]}) =>
+      updateProject(id, patch),
+    [],
+  );
+  const toolsApplied = useProjectToolsApplied({
+    runner: assistRunner,
+    projectId,
+    projectMeta,
+    setProjectMeta,
+    updateProject: recordTools,
+  });
   const [audioMeta, setAudioMeta] = useState<AudioStorageMeta | null>(null);
   // Separated vocals stem PCM (plan 0063 Round 2 §5) — background waveform
   // in the piano-roll's lyrics row. null when no vocals stem is cached yet
@@ -305,6 +323,14 @@ export default function EditorApp({
         const meta = await getProject(projectId);
         if (cancelled) return;
         setProjectMeta(meta);
+        // Publish this chart's provenance before anything can start a run or
+        // an export against it. Without it every export from this editor
+        // would report an unset origin, and the tool with the second-largest
+        // funnel would be invisible in its own numbers (plan 0105).
+        // `?? null`, not a guess at `'drum-transcription'`: a project
+        // written before the field existed is not evidence of which tool
+        // made it, and `unset` has to keep meaning exactly one thing.
+        dispatch({type: 'SET_CHART_ORIGIN', origin: meta.origin ?? null});
 
         // 2. Load chart - prefer edited version, fall back to generated.
         // Format-agnostic: the project's persisted chart file is whichever
@@ -791,6 +817,7 @@ export default function EditorApp({
   return (
     <ChartEditor
       chart={chart}
+      toolsApplied={toolsApplied}
       audioManager={audioManager}
       audioData={fullMixSamples}
       highwayAudioData={drumStemSamples}

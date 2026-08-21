@@ -33,6 +33,7 @@ import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {addLyricsTask} from '@/lib/assist/tasks/add-lyrics';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
+import {selectReportedOrigin} from '@/lib/chart-editor-core';
 
 type Status = 'input' | 'processing' | 'error';
 
@@ -74,6 +75,13 @@ export default function AddLyricsDialog({
   const [error, setError] = useState<string | null>(null);
   const [warningAcked, setWarningAcked] = useState(false);
 
+  // Derived here rather than inside the callback: reading the whole `state`
+  // there would capture a snapshot that can predate the project's
+  // `SET_CHART_ORIGIN`, and report the run under the wrong tool with nothing
+  // looking wrong. A primitive is a dependency the callback can actually
+  // track.
+  const origin = selectReportedOrigin(state);
+
   const existingLyrics = Boolean(
     state.chartDoc && hasExistingLyrics(state.chartDoc.parsedChart.vocalTracks),
   );
@@ -111,10 +119,11 @@ export default function AddLyricsDialog({
       // cache under the key the stems were actually stored under, and the
       // bytes themselves are only read if that probe misses and the Demucs
       // fallback runs.
-      const result = await startAssistTask(addLyricsTask, {
-        lyrics,
-        vocals: {kind: 'resolve', audio: await loadAudio()},
-      });
+      const result = await startAssistTask(
+        addLyricsTask,
+        {lyrics, vocals: {kind: 'resolve', audio: await loadAudio()}},
+        {origin, entrypoint: 'dialog'},
+      );
 
       const command = new ReplaceLyricsCommand(result.syllables);
       executeCommand(command);
@@ -135,6 +144,7 @@ export default function AddLyricsDialog({
       setStatus('error');
     }
   }, [
+    origin,
     state.chartDoc,
     lyrics,
     loadAudio,

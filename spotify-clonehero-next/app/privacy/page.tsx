@@ -46,6 +46,20 @@ export default function PrivacyPage() {
           <code>lib/analytics/track.ts</code> in the source repo.
         </li>
         <li>
+          When a chart is exported from the chart editor: the{' '}
+          <code>charter</code> credit written in that chart&apos;s{' '}
+          <code>song.ini</code> — the name a charter publishes with their own
+          work — plus which tools were used on it. This is how we know which
+          charters the editing tools are useful to.
+        </li>
+        <li>
+          With that export, a short checksum of the song&apos;s artist and
+          title, so that exporting the same chart twice can be counted once. The
+          artist and title themselves are never sent. The checksum is not a
+          secret: it cannot be unscrambled on its own, but someone holding both
+          it and a list of songs could confirm which one it matches.
+        </li>
+        <li>
           For signed-in users, your Supabase user ID (a UUID) so a session can
           be stitched across devices. No email or other PII is sent.
         </li>
@@ -68,7 +82,9 @@ export default function PrivacyPage() {
         <li>
           No content of files you load: audio, charts, lyrics, and Spotify
           history all stay in your browser&apos;s storage (OPFS / SQLocal /
-          localStorage).
+          localStorage). The one exception is the export event described above,
+          which sends the charter credit and a hash of the song&apos;s identity
+          — never notes, audio, lyrics, or the song title.
         </li>
       </ul>
 

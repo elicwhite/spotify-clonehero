@@ -27,6 +27,7 @@ import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
 import {DIFFICULTY_ORIGIN} from '@/lib/project-storage/difficultyOrigins';
+import {track, type ChartOpenFailureReason} from '@/lib/analytics/track';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
@@ -109,7 +110,10 @@ export interface GenerationCandidate {
 
 export type ChartInspection =
   | {ok: true; candidate: GenerationCandidate}
-  | {ok: false; error: string};
+  // `reason` classifies the rejection for analytics; `error` is what the
+  // user reads. They are separate because the message names the instrument
+  // and the chart, and analytics must carry neither (plan 0105).
+  | {ok: false; error: string; reason: ChartOpenFailureReason};
 
 /**
  * Reads a dropped chart package and decides whether generation can run on
@@ -130,6 +134,7 @@ export function inspectDroppedChart(
     return {
       ok: false,
       error: e instanceof Error ? e.message : 'Failed to read chart',
+      reason: 'parse-error',
     };
   }
 
@@ -142,6 +147,7 @@ export function inspectDroppedChart(
         'no-expert-track',
         'picker',
       ),
+      reason: 'no-supported-track',
     };
   }
 
@@ -154,12 +160,17 @@ export function inspectDroppedChart(
         built.reason,
         'picker',
       ),
+      reason: 'no-supported-track',
     };
   }
 
   const audioFiles = findAudioFiles(loaded.files);
   if (audioFiles.length === 0) {
-    return {ok: false, error: 'No audio files found in chart package.'};
+    return {
+      ok: false,
+      error: 'No audio files found in chart package.',
+      reason: 'no-audio',
+    };
   }
 
   return {
@@ -307,7 +318,9 @@ function DifficultyGenerationFlowInner({
   const handleChartLoaded = useCallback(
     async (dropped: LoadedFiles) => {
       const inspection = inspectDroppedChart(dropped, instrument);
+      const origin = DIFFICULTY_ORIGIN[instrument];
       if (!inspection.ok) {
+        track({event: 'chart_open_failed', origin, reason: inspection.reason});
         setFlow({kind: 'picker', error: inspection.error});
         return;
       }
@@ -324,6 +337,12 @@ function DifficultyGenerationFlowInner({
             dispatch({type: 'SET_PLAYING', isPlaying: false}),
         });
       } catch (e) {
+        // The chart was accepted; building its audio pipeline on this device
+        // failed. `prepareChartPackageAudio` deliberately tolerates a file
+        // that will not decode — it drops the waveform and plays on — so
+        // reaching here means the pipeline itself could not start, which is
+        // the same class of failure the other entry surface reports.
+        track({event: 'chart_open_failed', origin, reason: 'storage-error'});
         setFlow({
           kind: 'picker',
           error: e instanceof Error ? e.message : 'Failed to load audio',
@@ -337,6 +356,17 @@ function DifficultyGenerationFlowInner({
         audio.audioManager.destroy();
         return;
       }
+
+      // Reported once the chart is genuinely open: after the audio is built,
+      // and after the check that the user is still here. Reporting earlier
+      // overstates the funnel's second step by every audio failure and every
+      // user who walked away while the audio was being built — and both of
+      // those can never reach step 3, so they read as drop-off.
+      track({
+        event: 'chart_opened',
+        origin,
+        sourceFormat: dropped.sourceFormat,
+      });
 
       const loaded: LoadedChart = {
         candidate,
@@ -352,7 +382,12 @@ function DifficultyGenerationFlowInner({
       setFlow({kind: 'generating', loaded, error: null});
 
       try {
-        const result = await runner.start(task, candidate.input);
+        const result = await runner.start(task, candidate.input, {
+          // The same origin the project below is stamped with, so a run and
+          // the chart it produced report the same tool.
+          origin,
+          entrypoint: 'landing',
+        });
         // The command is applied directly to the document this run started
         // from. Nothing on this page edits that document while the run is in
         // flight, and the result goes straight to the project write below.

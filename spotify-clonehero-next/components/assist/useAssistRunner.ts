@@ -36,6 +36,8 @@ import {
   type PlannedStep,
   type StepProgressEvent,
 } from '@/lib/assist/run-to-steps';
+import {track, type AssistEntrypoint} from '@/lib/analytics/track';
+import type {ChartOrigin} from '@/lib/project-storage/types';
 
 /** How long a finished run's step list stays on screen before the card
  *  clears itself. Errors don't auto-clear (the message is the point) — they
@@ -46,6 +48,24 @@ const TERMINAL_FLASH_MS = 4000;
  *  Surfaced to the user by the caller (toast / dialog error line). */
 export const ASSIST_RUN_BUSY_MESSAGE =
   'Another assist task is already running. Wait for it to finish, or cancel it first.';
+
+/**
+ * Who is asking for this run, for analytics (plan 0105). Required, not
+ * optional with a default: an optional one silently labels every future call
+ * site as whatever the default is, and a mislabelled run is worse than an
+ * uncounted one — it lands in the wrong column and nothing looks wrong.
+ */
+export interface AssistRunContext {
+  /** The chart's persisted `ProjectOrigin`. On a landing route that has not
+   *  created its project yet, that route's own tool. */
+  origin: ChartOrigin;
+  /** Which surface started this run. */
+  entrypoint: AssistEntrypoint;
+}
+
+/** Reported as the failing step when a run ends before `planSteps` resolves,
+ *  so a planning failure is a fact of its own rather than a blank field. */
+const PLANNING_STEP = 'plan-steps';
 
 export interface AssistRunnerControls {
   /** The run's external store. Pass it to `ConnectedAssistRunCard` (or any
@@ -71,6 +91,7 @@ export interface AssistRunnerControls {
   start: <Result, Input>(
     task: AssistTaskDef<Result, Input>,
     input: Input,
+    context: AssistRunContext,
   ) => Promise<Result>;
   /** Aborts the currently active run, if any. A no-op when idle. */
   cancel: () => void;
@@ -121,14 +142,28 @@ export function useAssistRunnerControls(): AssistRunnerControls {
     <Result, Input>(
       task: AssistTaskDef<Result, Input>,
       input: Input,
+      context: AssistRunContext,
     ): Promise<Result> => {
       // One active run per runner, and one runner per editor: a second start
       // is refused rather than silently abandoning the run in flight.
+      // A refused run is not a run, and reports nothing: counting it would
+      // inflate the started total with work that never began.
       if (store.getState().status === 'running') {
         return Promise.reject(new Error(ASSIST_RUN_BUSY_MESSAGE));
       }
 
       const taskKey = task.key;
+      const dimensions = {
+        task: taskKey,
+        origin: context.origin,
+        entrypoint: context.entrypoint,
+      };
+      const startedAt = performance.now();
+      const elapsedMs = () => Math.round(performance.now() - startedAt);
+      // The last step reported in flight, which is the one a failure or a
+      // cancellation ended on. `reportProgress` clears `activeKey` between
+      // steps, so remember the last real value rather than reading the tick.
+      let lastActiveStep: string | null = null;
 
       clearFlashTimer();
       const controller = new AbortController();
@@ -140,6 +175,7 @@ export function useAssistRunnerControls(): AssistRunnerControls {
       // of `cancel()` and the unmount abort. The step list starts empty and
       // is filled in once `planSteps` resolves.
       store.setState({task: taskKey, steps: [], status: 'running'});
+      track({event: 'assist_run_started', ...dimensions});
       const signal = controller.signal;
       const timer = createStepTimer();
       // Guards against a *superseded* run writing over a newer one's state —
@@ -151,6 +187,11 @@ export function useAssistRunnerControls(): AssistRunnerControls {
         let plannedSteps: PlannedStep[] = [];
         try {
           plannedSteps = await task.planSteps(input);
+          // Planning is done, so the run is on its first step whether or not
+          // the task has reported progress yet. Without this a cancel in
+          // that window — the commonest cancel there is — would be reported
+          // as a planning failure that never happened.
+          lastActiveStep = plannedSteps[0]?.key ?? null;
 
           if (isCurrent()) {
             store.setState({
@@ -166,6 +207,7 @@ export function useAssistRunnerControls(): AssistRunnerControls {
 
           const reportProgress = (event: StepProgressEvent) => {
             if (!isCurrent()) return;
+            if (event.activeKey !== null) lastActiveStep = event.activeKey;
             markStepCompletions(plannedSteps, event, timer);
             store.setState({
               task: taskKey,
@@ -175,6 +217,12 @@ export function useAssistRunnerControls(): AssistRunnerControls {
           };
 
           const result = await task.run(input, signal, reportProgress);
+          // A task that ignores its abort signal can resolve after the user
+          // left the editor. That is a cancellation whatever the task
+          // thinks, and counting it as a completion would report work the
+          // user never received. Thrown rather than reported here, so the
+          // one catch below stays the only place a terminal event is sent.
+          if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
           if (isCurrent()) {
             store.setState({
               task: taskKey,
@@ -184,6 +232,11 @@ export function useAssistRunnerControls(): AssistRunnerControls {
                 timer,
               ),
               status: 'success',
+            });
+            track({
+              event: 'assist_run_completed',
+              ...dimensions,
+              durationMs: elapsedMs(),
             });
             scheduleFlashClear();
           }
@@ -200,6 +253,14 @@ export function useAssistRunnerControls(): AssistRunnerControls {
                 : e instanceof Error
                   ? e.message
                   : String(e),
+            });
+            // The message stays on screen and out of analytics: it can name
+            // a file the user loaded.
+            track({
+              event: aborted ? 'assist_run_cancelled' : 'assist_run_failed',
+              ...dimensions,
+              durationMs: elapsedMs(),
+              step: lastActiveStep ?? PLANNING_STEP,
             });
             // An error keeps its message on screen until dismissed; a
             // cancellation has nothing left to say.

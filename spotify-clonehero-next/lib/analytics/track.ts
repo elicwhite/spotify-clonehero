@@ -1,5 +1,44 @@
 import {sendGAEvent} from '@next/third-parties/google';
 
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
+import type {SourceFormat} from '@/lib/chart-files/chart-package';
+import type {PackageFormat} from '@/lib/chart-export';
+import type {ChartOrigin, ProjectOrigin} from '@/lib/project-storage/types';
+
+/** The tools with a landing route of their own. The editor is where they all
+ *  arrive, so it never fires a landing view. */
+export type LandingTool = Exclude<ProjectOrigin, 'chart-editor'>;
+
+/**
+ * How this particular run was started. Distinct from `ChartOrigin`, which
+ * says where the chart came from: a chart with `origin: 'tempo'` collecting
+ * `assist-card` runs is the normal case, not a contradiction.
+ */
+export type AssistEntrypoint =
+  | 'landing'
+  | 'assist-card'
+  | 'matrix-row'
+  | 'dialog';
+
+/** Why the editor refused a chart. A closed set the loader already branches
+ *  on, so it can never degrade into the `"unknown"` that made
+ *  `add_lyrics_align_failed` useless for 90 days. */
+export type ChartOpenFailureReason =
+  | 'no-supported-track'
+  | 'no-audio'
+  | 'parse-error'
+  /**
+   * The chart itself was accepted; preparing it on this device failed —
+   * an OPFS write, the navigation, or starting the audio pipeline. Not a
+   * property of the chart, so it must not be counted among the users who
+   * arrive with charts a tool refuses.
+   */
+  | 'storage-error';
+
+/** How a chart entered the editor: the package format it was loaded from, or
+ *  the two ways one can be started from nothing. */
+export type ChartOpenSource = SourceFormat | 'blank' | 'audio';
+
 /**
  * Where a chart download came from. `downloadSong` takes this same type, so the
  * two stay in step. 'sheet_music' and 'karaoke' are forward-declared — those
@@ -59,7 +98,72 @@ export type AnalyticsEvent =
   // The funnel's terminal event. The page aligns and then hands the chart to
   // /chart-editor, so reaching the editor is the conversion; the export that
   // used to end the funnel now happens there, against a saved project.
-  | {event: 'add_lyrics_handed_off'};
+  | {event: 'add_lyrics_handed_off'}
+
+  // Chart-authoring funnel (plan 0105). One shape for every tool, keyed on
+  // `origin`/`entrypoint`/`task` rather than on the route, so a tool keeps
+  // reporting under its own name after its landing page becomes a redirect.
+  //
+  //   1. tool_landing_viewed   each landing route
+  //   2. chart_opened          the editor accepted a chart
+  //   3. assist_run_started    a task began
+  //   4. assist_run_completed  it finished
+  //   5. chart_exported        the chart was downloaded
+  //
+  // A run started from the sidebar is not a funnel of its own: the chart was
+  // already open, so steps 1 and 2 belong to whatever opened it. Segment
+  // `assist_run_*` by `entrypoint` instead of defining a second funnel.
+  | {event: 'tool_landing_viewed'; tool: LandingTool}
+  | {event: 'chart_opened'; origin: ChartOrigin; sourceFormat: ChartOpenSource}
+  | {
+      event: 'chart_open_failed';
+      origin: ChartOrigin;
+      reason: ChartOpenFailureReason;
+    }
+  | ({event: 'assist_run_started'} & AssistRunDimensions)
+  | ({event: 'assist_run_completed'; durationMs: number} & AssistRunDimensions)
+  // `step` is the planned step that was active when the run ended, which the
+  // runner already tracks. The error message itself is never sent: it can
+  // contain a file name, and file names are user data.
+  | ({
+      event: 'assist_run_failed';
+      durationMs: number;
+      step: string;
+    } & AssistRunDimensions)
+  | ({
+      event: 'assist_run_cancelled';
+      durationMs: number;
+      step: string;
+    } & AssistRunDimensions)
+  | {
+      event: 'chart_exported';
+      origin: ChartOrigin;
+      format: PackageFormat;
+      /**
+       * The `charter` credit from `song.ini`, trimmed and capped. A charter
+       * writes this about themselves and publishes it inside every chart
+       * they release, so it is a credit rather than personal data — and it
+       * is the only field that can answer which charters use the tool.
+       */
+      charter: string;
+      /**
+       * An opaque hash of the song's identity, never its title. Two exports
+       * of one chart share a key, so repeat exports collapse to a single
+       * funnel run instead of reading as new charts.
+       */
+      songKey: string;
+      /** Which assist tasks were applied to this chart before it shipped,
+       *  sorted and comma-joined. Empty when the user only edited by hand. */
+      tools: string;
+    };
+
+/** The three dimensions every assist-run event carries. Shared so a new
+ *  terminal state cannot be added with only some of them. */
+interface AssistRunDimensions {
+  task: AssistTaskKey;
+  origin: ChartOrigin;
+  entrypoint: AssistEntrypoint;
+}
 
 // Latest user_id passed to setAnalyticsUserId. AuthProvider's effect
 // can resolve before gtag.js loads, in which case the immediate

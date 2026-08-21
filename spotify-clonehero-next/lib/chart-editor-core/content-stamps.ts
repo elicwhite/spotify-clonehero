@@ -28,6 +28,7 @@ import type {
   ParsedTrackData,
 } from '@/lib/chart-edit';
 import type {SupportedTrackInstrument, TrackKeyId} from './trackInventory';
+import {fnvDigest} from '@/lib/hash/fnv';
 import {trackKeyId} from './trackInventory';
 
 /** Stamp value used when no chart is loaded. Distinct from any real hash
@@ -37,23 +38,6 @@ export const EMPTY_STAMP = '';
 // ---------------------------------------------------------------------------
 // Hashing
 // ---------------------------------------------------------------------------
-
-/** 32-bit FNV-1a over a string, folded to an unsigned 32-bit int. */
-function fnv1a(input: string, seed: number): number {
-  let hash = seed;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-/** Two independently-seeded FNV-1a passes, folded to a 16-hex-char stamp. */
-function stampFromParts(serialized: string): string {
-  const a = fnv1a(serialized, 0x811c9dc5);
-  const b = fnv1a(serialized, 0x9e3779b9);
-  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
-}
 
 function serializeTrackContent(track: ParsedTrackData): string {
   const parts: string[] = [];
@@ -97,13 +81,13 @@ function serializeTempoMap(chart: ParsedChart): string {
 
 /** Content stamp for one track (note/SP/lane events only — no tempo). */
 export function computeTrackStamp(track: ParsedTrackData): string {
-  return stampFromParts(serializeTrackContent(track));
+  return fnvDigest(serializeTrackContent(track));
 }
 
 /** Content stamp for the tempo map (SyncTrack: tempos + time signatures). */
 export function computeTempoStamp(chartDoc: ChartDocument | null): string {
   if (!chartDoc) return EMPTY_STAMP;
-  return stampFromParts(serializeTempoMap(chartDoc.parsedChart));
+  return fnvDigest(serializeTempoMap(chartDoc.parsedChart));
 }
 
 /** Full recompute of every track's content stamp. Used on

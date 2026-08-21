@@ -18,6 +18,8 @@ import EditorHeaderRow from './EditorHeaderRow';
 import HighwayEditor from './HighwayEditor';
 import TransportControls from './TransportControls';
 import ExportDialog from './ExportDialog';
+import {selectReportedOrigin} from '@/lib/chart-editor-core';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import SongMetadataDialog, {type AlbumArtSlot} from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
@@ -161,6 +163,11 @@ export interface ChartEditorProps {
   chartFormatSelectable?: boolean | undefined;
   /** Use the shared timeline with stacked, independently editable track rows. */
   stackedPianoRoll?: boolean | undefined;
+  /** Assist tasks already run against this chart — reported with the export
+   *  (plan 0105). A host that does not track them passes `NO_TOOLS_APPLIED`,
+   *  so reporting none is a decision someone made rather than a default
+   *  nobody saw. */
+  toolsApplied: readonly AssistTaskKey[];
 }
 
 /**
@@ -255,6 +262,7 @@ export default function ChartEditor({
   albumArt,
   defaultExportFormat,
   sourceChartFormat,
+  toolsApplied,
   chartFormatSelectable,
   stackedPianoRoll = false,
 }: ChartEditorProps) {
@@ -376,6 +384,8 @@ export default function ChartEditor({
                   defaultFormat={defaultExportFormat}
                   sourceChartFormat={sourceChartFormat}
                   chartFormatSelectable={chartFormatSelectable}
+                  origin={selectReportedOrigin(state)}
+                  toolsApplied={toolsApplied}
                 />
               </div>
             )}

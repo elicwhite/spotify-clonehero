@@ -11,6 +11,19 @@ import type {ChartEditorState} from './state';
 import {EMPTY_STAMP, getAssistProvenance, isStampStale} from './content-stamps';
 import type {TempoDerivedFeature} from './content-stamps';
 import type {SupportedTrackInstrument, TrackKeyId} from './trackInventory';
+import {UNSET_ORIGIN, type ChartOrigin} from '@/lib/project-storage/types';
+
+/**
+ * Which chart-authoring tool the open chart came from, for analytics
+ * (plan 0105).
+ *
+ * A host that loads a project must publish it with `SET_CHART_ORIGIN`.
+ * One that has not reports `UNSET_ORIGIN` rather than the editor: a wrong
+ * attribution is invisible in a report, and a hole is not.
+ */
+export function selectReportedOrigin(state: ChartEditorState): ChartOrigin {
+  return state.chartOrigin ?? UNSET_ORIGIN;
+}
 
 // ---------------------------------------------------------------------------
 // Selection helpers

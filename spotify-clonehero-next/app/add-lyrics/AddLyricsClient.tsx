@@ -29,6 +29,7 @@ import {
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import {track} from '@/lib/analytics/track';
+import type {AssistRunContext} from '@/components/assist/useAssistRunner';
 import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
 import {
   addLyricsTask,
@@ -36,6 +37,7 @@ import {
 } from '@/lib/assist/tasks/add-lyrics';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {AddLyricsLanding} from './landing/AddLyricsLanding';
+import {useToolLandingView} from '@/components/analytics/useToolLandingView';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -131,7 +133,15 @@ function pickSongFile(chart: LoadedChart): {
 // Page Component
 // ---------------------------------------------------------------------------
 
+/** Every run on this page is this tool's own landing flow. The project it
+ *  later creates is stamped `add-lyrics` to match. */
+const LANDING_RUN: AssistRunContext = {
+  origin: 'add-lyrics',
+  entrypoint: 'landing',
+};
+
 export default function AddLyricsClient() {
+  useToolLandingView('add-lyrics');
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [chart, setChart] = useState<LoadedChart | null>(null);
@@ -215,6 +225,14 @@ export default function AddLyricsClient() {
           sngMetadata: chart.sngMetadata,
         });
         track({event: 'add_lyrics_handed_off'});
+        // The funnel's step 2 for this tool. The editor cannot report it:
+        // opening a project there is also what reopening one looks like, so
+        // the hand-off is the only place that knows a chart just arrived.
+        track({
+          event: 'chart_opened',
+          origin: 'add-lyrics',
+          sourceFormat: chart.sourceFormat,
+        });
         router.push(`/chart-editor?project=${projectId}`);
       } catch (e) {
         setPendingDoc(doc);
@@ -255,7 +273,7 @@ export default function AddLyricsClient() {
               audio: {loadOriginalBytes: async () => pickSongFile(chart).data},
             },
       };
-      let result = await runner.start(addLyricsTask, input);
+      let result = await runner.start(addLyricsTask, input, LANDING_RUN);
 
       // Tier-2 fallback: when pass 1 resolved vocals without separating the
       // mix itself (a bundled stem, or a roformer stem out of the cache) and
@@ -272,16 +290,20 @@ export default function AddLyricsClient() {
 
       if (canEscalate) {
         setTierPass(2);
-        result = await runner.start(addLyricsTask, {
-          lyrics,
-          vocals: {
-            kind: 'stems',
-            stems: chart.audioFiles.map(f => ({
-              data: f.data,
-              mimeType: getMimeForExtension(getExtension(f.fileName)),
-            })),
+        result = await runner.start(
+          addLyricsTask,
+          {
+            lyrics,
+            vocals: {
+              kind: 'stems',
+              stems: chart.audioFiles.map(f => ({
+                data: f.data,
+                mimeType: getMimeForExtension(getExtension(f.fileName)),
+              })),
+            },
           },
-        });
+          LANDING_RUN,
+        );
       }
 
       track({

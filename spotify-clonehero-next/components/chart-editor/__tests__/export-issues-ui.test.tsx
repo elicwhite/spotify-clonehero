@@ -21,7 +21,14 @@ async function openDialog() {
 
 test('shows the bulleted issue list for a chart package missing audio', async () => {
   const chartDoc = makeFixtureDoc();
-  render(<ExportDialog songName="Song" chartDoc={chartDoc} />);
+  render(
+    <ExportDialog
+      origin="chart-editor"
+      toolsApplied={[]}
+      songName="Song"
+      chartDoc={chartDoc}
+    />,
+  );
   await openDialog();
 
   expect(
@@ -46,6 +53,8 @@ test('shows nothing when the assembled package has no chart-checker issues', asy
   const chartDoc = makeFixtureDoc();
   render(
     <ExportDialog
+      origin="chart-editor"
+      toolsApplied={[]}
       songName="Song"
       artistName="Artist"
       charterName="Charter"

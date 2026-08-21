@@ -224,6 +224,8 @@ export function chartEditorReducer(
       }
       return {...state, hovered: next};
     }
+    case 'SET_CHART_ORIGIN':
+      return {...state, chartOrigin: action.origin};
     case 'SET_ACTIVE_TOOL':
       return {...state, activeTool: action.tool};
     case 'SET_GRID_DIVISION':

@@ -55,6 +55,7 @@ import {
 } from '@/lib/chart-files/chart-file-names';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from '@/lib/project-storage/types';
+import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -99,6 +100,9 @@ export interface ProjectMetadata {
    * is what every project in this layout was until now.
    */
   origin?: ProjectOrigin | undefined;
+  /** Assist tasks run against this chart from inside the editor, for the
+   *  export event (plan 0105). Mirrors the chart-package store's field. */
+  toolsApplied?: AssistTaskKey[] | undefined;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   /** Duration of the original audio in seconds, set after decode */
@@ -318,6 +322,7 @@ export async function updateProject(
       | 'stemFingerprint'
       | 'audioAnchor'
       | 'assistProvenance'
+      | 'toolsApplied'
     >
   >,
 ): Promise<ProjectMetadata> {

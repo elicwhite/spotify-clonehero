@@ -26,6 +26,10 @@ function readRegion(): string | null {
 // Find Music is not excluded. `track()` only accepts `AnalyticsEvent`, a closed
 // union with no song, artist or playlist name in any member, so funnel data from
 // that page carries what the user did and not which songs they did it to.
+// `chart_exported` is the one member carrying anything chart-derived: the
+// `charter` credit, which a charter publishes with their own work, and an
+// opaque hash of the song's identity that makes a repeat export countable
+// without the title. See `app/privacy/page.tsx`.
 export default function RegionAwareAnalytics({gaId}: {gaId: string}) {
   // The region cookie is fixed for the session, so subscribe is a no-op and we
   // read it directly. SSR renders nothing; the client resolves the real value.

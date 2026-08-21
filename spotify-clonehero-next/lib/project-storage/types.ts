@@ -21,6 +21,67 @@ export type ProjectOrigin =
   | 'drum-difficulties'
   | 'guitar-difficulties';
 
+/**
+ * A `ProjectOrigin` as reported to analytics, which has one more case: the
+ * chart is open but nothing told the editor which tool it came from.
+ *
+ * It lives here rather than in `lib/analytics` so the editor's own state can
+ * name it without the domain layer importing the analytics layer.
+ */
+export type ChartOrigin = ProjectOrigin | typeof UNSET_ORIGIN;
+
+/**
+ * Reported when nothing published the open chart's origin.
+ *
+ * It exists so a host that forgets shows up in the data as a hole rather
+ * than as extra `chart-editor` traffic. A default of `'chart-editor'` is
+ * indistinguishable from the truth, and telling the tools apart is the whole
+ * point of this dimension.
+ */
+export const UNSET_ORIGIN = 'unset';
+
+/**
+ * Every {@link ProjectOrigin}, for validating one that arrived as a string.
+ *
+ * Written as a keyed object rather than an array because
+ * `satisfies readonly ProjectOrigin[]` would accept a SUBSET — a seventh
+ * origin could be added and silently rejected by `?from=`, with nothing
+ * failing. `Record<ProjectOrigin, true>` is total, so the compiler refuses
+ * an incomplete list.
+ */
+const ALL_PROJECT_ORIGINS = {
+  'chart-editor': true,
+  'drum-transcription': true,
+  tempo: true,
+  'add-lyrics': true,
+  'drum-difficulties': true,
+  'guitar-difficulties': true,
+} as const satisfies Record<ProjectOrigin, true>;
+
+export const PROJECT_ORIGINS = Object.keys(
+  ALL_PROJECT_ORIGINS,
+) as readonly ProjectOrigin[];
+
+/**
+ * Reads an origin out of a `?from=` search parameter, or null when the
+ * parameter is absent or names something that is not a tool.
+ *
+ * The tools are becoming landing pages that redirect into `/chart-editor`
+ * before a project exists. Without this the editor would stamp every one of
+ * those charts `chart-editor`, and each landing page would attribute its own
+ * work to the editor — the exact signal the origin field exists to carry
+ * (plan 0105). An unrecognized value is rejected rather than trusted: this
+ * comes from the URL, so anyone can type anything into it.
+ */
+export function parseProjectOrigin(
+  value: string | null | undefined,
+): ProjectOrigin | null {
+  const origins: readonly string[] = PROJECT_ORIGINS;
+  return value != null && origins.includes(value)
+    ? (value as ProjectOrigin)
+    : null;
+}
+
 /** Which on-disk shape a project's directory has. */
 export type ProjectLayout = 'chart-package' | 'drum-transcription';
 
