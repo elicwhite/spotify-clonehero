@@ -184,40 +184,53 @@ next run, and dropping it costs a 336 MB download.
 
 `lib/browser-storage.ts` gains:
 
-- `getCacheRoot(): Promise<FileSystemDirectoryHandle>` — opens
-  `navigator.storageBuckets.open('cache')` and returns its `getDirectory()`.
-  Falls back to `navigator.storage.getDirectory()` where `storageBuckets` does
-  not exist (Firefox, Safari), so those browsers keep today's behavior.
-- The resolved promise is the cache, as in `lib/local-db/client.ts`.
-- Must work in a worker: `stem-cache.ts` is called from `pcm-worker` and the
-  tempo worker. `navigator.storageBuckets` is on `WorkerNavigator` too.
+- `getCacheRoot()` — the root new cache data is written to. Opens
+  `navigator.storageBuckets.open('cache', {durability: 'relaxed'})`, not
+  persisted, and falls back to the default root where `storageBuckets` does not
+  exist (Firefox, Safari), so those browsers keep today's behavior.
+- `getCacheRoots()` — every root a cache entry may be in, the written-to one
+  first.
+- `getCacheDir(path)` and `getCacheDirs(path)` — the write and read forms. Both
+  caches use these rather than each holding its own copy of the two-root rule.
+- Only the bucket is memoized, and only on success. A remembered failure would
+  send every later write in the session into the bucket that must not be
+  evicted, and this is the bucket the browser is expected to take, so failing
+  to open it is a normal event.
 
-Declare `StorageBucketManager` and `StorageBucket` in `types/navigator.d.ts`, on
-both `Navigator` and `WorkerNavigator`. The DOM lib has no types for them.
+Declare `StorageBucketManager` and `StorageBucket` in `types/navigator.d.ts`.
+The DOM lib has no types for them. `Navigator` alone: `tsconfig`'s `lib` has no
+`webworker`, so worker code is checked against `lib.dom` and augmenting
+`WorkerNavigator` would declare an interface nothing uses.
 
-`getCacheEntryDir` (`lib/audio-pipeline/stem-cache.ts:244`) and the two
-directory lookups in `lib/lyrics-align/model-cache.ts` (lines 100 and 153) then
-resolve from `getCacheRoot()`.
+**`getCacheDir` throws rather than falling back.** Writing cache data beside the
+chart projects, silently, is the exact outcome the bucket exists to prevent. The
+one recovery it does make is for its own hazard: a bucket evicted mid-session
+leaves a dead handle, so a failed descent drops the memo and opens the bucket
+again before giving up.
 
 **Write new entries to the bucket; read old ones where they already are. Do not
 copy.** Copying transiently doubles the footprint of a user who is by hypothesis
 near the quota — the copy is most likely to fail, or to cause the eviction, for
-exactly the users it is for. The repo already settled this question twice:
+exactly the users it is for. The repo already settled this twice:
 `ROFORMER_SEPARATOR_ID` abandons superseded entries rather than migrating them
-(`stem-cache.ts:80`), and `opfsProjectStore` reads `legacyNamespaces` in place
-(`opfsProjectStore.ts:152-195`).
+(`stem-cache.ts`), and `opfsProjectStore` reads `legacyNamespaces` in place.
 
-So the lookup takes a legacy fallback, and it must be in **every** entry point,
-not just the loaders. `hasStem` and `hasStemOpus` are branch deciders — they
-choose whether a pipeline re-separates
-(`lib/assist/tasks/add-lyrics.ts:212`, `transcribe-drums-from-audio.ts:110`,
-`generate-tempo-map.ts:136`, `roformer-separation.ts:146,180`). A probe that
-misses a legacy entry costs a full GPU re-separation, which is the exact cost
-this phase exists to avoid. The probes stay metadata-only: a second
-`getDirectoryHandle` and `getFile().size`, no payload read, no copy.
+The legacy fallback is in **every** entry point, not just the loaders. `hasStem`
+and `hasStemOpus` are branch deciders — they choose whether a pipeline
+re-separates (`lib/assist/tasks/add-lyrics.ts:212`,
+`transcribe-drums-from-audio.ts:110`, `generate-tempo-map.ts:136`,
+`roformer-separation.ts:146,180`). A probe that misses a legacy entry costs a
+full GPU re-separation, which is the exact cost this phase exists to avoid.
 
-Phase 3's pruner reaps the legacy tree over time, so the old location empties
-itself.
+**A usable payload picks the root, not a directory.** `getFileHandle(name,
+{create: true})` materializes a zero-length file before anything is written, so
+an interrupted store leaves a payload that exists and holds nothing. Choosing on
+existence would let that placeholder in the bucket hide a complete copy in the
+older root. Each payload resolves on its own, so an entry whose drums are in the
+bucket and whose vocals are still in the older root works.
+
+Phase 3's pruner walks both roots and deletes through the handle of the root
+that holds the entry, so an old entry is reclaimed once it falls out of use.
 
 ## Phase 5 — tell the user what is protected
 
@@ -264,8 +277,13 @@ while this one decides which root a handle comes from. Different jobs.
   `storageBuckets` exists, the default root when it does not, and a legacy entry
   is found by `hasStem`, `hasStemOpus`, `loadStem` and `loadStemOpus` alike,
   without being copied.
-- In Chrome, with the `check-opfs` skill: new cache entries land under the
-  `cache` bucket, the projects and the database do not, and
-  `navigator.storage.persisted()` answers true.
+- In Chrome: new cache entries land under the `cache` bucket, the projects and
+  the database do not, and `navigator.storage.persisted()` answers true. Not
+  with the `check-opfs` skill — the `opfs_*` WebMCP tools read the default root
+  only, so they cannot see the bucket. Use DevTools, or make those tools
+  bucket-aware first.
+- In Chrome: whether `navigator.storage.estimate()` counts a non-default
+  bucket. If it does not, moving the caches into one makes the origin look
+  emptier, and Phase 3's budget relaxes exactly when it should tighten.
 - In Firefox: no `storageBuckets`, everything still works from the default root,
   the pruner still runs, and nothing prompts on load.

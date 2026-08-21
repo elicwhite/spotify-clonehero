@@ -26,7 +26,11 @@
  */
 
 import {MODEL_URLS} from '@/lib/lyrics-align/model-urls';
-import {getStoragePressure} from '@/lib/browser-storage';
+import {
+  getCacheDir,
+  getCacheDirs,
+  getStoragePressure,
+} from '@/lib/browser-storage';
 import {
   getWebLocks,
   STEM_CACHE_PRUNE_LOCK,
@@ -253,20 +257,64 @@ export function stereoStemToMono(stem: StereoStem): Float32Array {
 // OPFS cache API
 // ---------------------------------------------------------------------------
 
-async function getStemCacheDir(
-  create: boolean,
-): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory();
-  const nsDir = await root.getDirectoryHandle(NAMESPACE, {create});
-  return nsDir.getDirectoryHandle(STEM_CACHE_DIR, {create});
+/**
+ * Where cache entries are written, and everywhere they are read from.
+ *
+ * New entries go to the cache bucket. Entries written before that bucket
+ * existed stay where they are and are read in place — copying them would
+ * double the footprint of a user who is, by hypothesis, already short of
+ * room, which is the moment a copy is most likely to fail or to cause the
+ * eviction it was meant to prevent. The pruner walks both roots, so an entry
+ * in the old one is reclaimed once it falls out of use.
+ */
+const STEM_CACHE_PATH = [NAMESPACE, STEM_CACHE_DIR];
+
+/** The directory new entries are written to. */
+function getStemCacheDir(): Promise<FileSystemDirectoryHandle> {
+  return getCacheDir(STEM_CACHE_PATH);
 }
 
-async function getCacheEntryDir(
+/** Every directory entries are read from, the written-to one first. */
+function getStemCacheDirs(): Promise<FileSystemDirectoryHandle[]> {
+  return getCacheDirs(STEM_CACHE_PATH);
+}
+
+/** The directory a new entry is written into. */
+async function createCacheEntryDir(
   fingerprint: string,
-  create: boolean,
 ): Promise<FileSystemDirectoryHandle> {
-  const cacheDir = await getStemCacheDir(create);
-  return cacheDir.getDirectoryHandle(fingerprint, {create});
+  const cacheDir = await getStemCacheDir();
+  return cacheDir.getDirectoryHandle(fingerprint, {create: true});
+}
+
+/**
+ * The entry directory holding a usable `payloadName`, or null.
+ *
+ * A usable payload picks the root, not the entry directory and not the file's
+ * mere existence. `getFileHandle(name, {create: true})` materializes a
+ * zero-length file before anything is written to it, so an interrupted store
+ * leaves a payload that exists and holds nothing. Selecting on existence
+ * would let that placeholder in the bucket hide a complete copy of the same
+ * stem in the older root, and the song would be separated again on every run.
+ *
+ * An entry can also be split across the roots — the drums re-stored into the
+ * bucket while the vocals of the same song are still in the older one — so
+ * each payload is resolved on its own. This is the rule `opfsProjectStore`
+ * uses to decide which namespace owns a project.
+ */
+async function findCacheEntryDir(
+  fingerprint: string,
+  payloadName: string,
+): Promise<FileSystemDirectoryHandle | null> {
+  for (const cacheDir of await getStemCacheDirs()) {
+    try {
+      const dir = await cacheDir.getDirectoryHandle(fingerprint);
+      if (await hasMarked(dir, payloadName)) return dir;
+    } catch {
+      // No entry for this fingerprint in this root.
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -410,7 +458,7 @@ export async function storeStemBytes(
   stemName: string,
   bytes: Uint8Array,
 ): Promise<void> {
-  const dir = await getCacheEntryDir(fingerprint, true);
+  const dir = await createCacheEntryDir(fingerprint);
   await writeMarked(
     dir,
     `${stemName}.f32.gz`,
@@ -439,10 +487,10 @@ export async function loadStem(
   stemName: string,
 ): Promise<StereoStem | null> {
   const payloadName = `${stemName}.f32.gz`;
-  let dir: FileSystemDirectoryHandle;
+  const dir = await findCacheEntryDir(fingerprint, payloadName);
+  if (dir == null) return null;
   let bytes: Uint8Array<ArrayBuffer>;
   try {
-    dir = await getCacheEntryDir(fingerprint, false);
     bytes = await readPayload(dir, payloadName);
   } catch {
     return null;
@@ -461,12 +509,7 @@ export async function hasStem(
   fingerprint: string,
   stemName: string,
 ): Promise<boolean> {
-  try {
-    const dir = await getCacheEntryDir(fingerprint, false);
-    return await hasMarked(dir, `${stemName}.f32.gz`);
-  } catch {
-    return false;
-  }
+  return (await findCacheEntryDir(fingerprint, `${stemName}.f32.gz`)) != null;
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +526,7 @@ export async function storeStemOpus(
   stemName: string,
   opusBytes: Uint8Array,
 ): Promise<void> {
-  const dir = await getCacheEntryDir(fingerprint, true);
+  const dir = await createCacheEntryDir(fingerprint);
   await writeMarked(
     dir,
     `${stemName}.opus`,
@@ -501,10 +544,10 @@ export async function loadStemOpus(
   stemName: string,
 ): Promise<Uint8Array | null> {
   const payloadName = `${stemName}.opus`;
-  let dir: FileSystemDirectoryHandle;
+  const dir = await findCacheEntryDir(fingerprint, payloadName);
+  if (dir == null) return null;
   let bytes: Uint8Array<ArrayBuffer>;
   try {
-    dir = await getCacheEntryDir(fingerprint, false);
     bytes = await readPayload(dir, payloadName);
   } catch {
     return null;
@@ -522,12 +565,7 @@ export async function hasStemOpus(
   fingerprint: string,
   stemName: string,
 ): Promise<boolean> {
-  try {
-    const dir = await getCacheEntryDir(fingerprint, false);
-    return await hasMarked(dir, `${stemName}.opus`);
-  } catch {
-    return false;
-  }
+  return (await findCacheEntryDir(fingerprint, `${stemName}.opus`)) != null;
 }
 
 // ---------------------------------------------------------------------------
@@ -578,25 +616,35 @@ export interface PruneResult {
  * while the alternative is deleting stems on a failed read.
  */
 export async function listStemCacheEntries(): Promise<StemCacheEntry[]> {
-  let cacheDir: FileSystemDirectoryHandle;
-  try {
-    cacheDir = await getStemCacheDir(false);
-  } catch {
-    return [];
-  }
-  return listEntriesIn(cacheDir);
+  return (await measureAllEntries()).map(
+    ({fingerprint, sizeBytes, lastUsedMs}) => ({
+      fingerprint,
+      sizeBytes,
+      lastUsedMs,
+    }),
+  );
 }
 
-async function listEntriesIn(
-  cacheDir: FileSystemDirectoryHandle,
-): Promise<StemCacheEntry[]> {
-  const entries: StemCacheEntry[] = [];
-  for await (const [fingerprint, handle] of cacheDir.entries()) {
-    if (handle.kind !== 'directory') continue;
-    try {
-      entries.push(await measureEntry(fingerprint, handle));
-    } catch {
-      // Deleted by another tab mid-walk, or unreadable. Not a candidate.
+/** An entry, plus the directory it has to be deleted from. The same
+ *  fingerprint can be in both roots: a re-store lands in the bucket while the
+ *  older copy is still in the default root, and both take up room. */
+interface LocatedEntry extends StemCacheEntry {
+  parent: FileSystemDirectoryHandle;
+}
+
+async function measureAllEntries(): Promise<LocatedEntry[]> {
+  const entries: LocatedEntry[] = [];
+  for (const cacheDir of await getStemCacheDirs()) {
+    for await (const [fingerprint, handle] of cacheDir.entries()) {
+      if (handle.kind !== 'directory') continue;
+      try {
+        entries.push({
+          ...(await measureEntry(fingerprint, handle)),
+          parent: cacheDir,
+        });
+      } catch {
+        // Deleted by another tab mid-walk, or unreadable. Not a candidate.
+      }
     }
   }
   return entries;
@@ -625,11 +673,12 @@ async function measureEntry(
  * which OPFS refuses to remove.
  */
 export async function deleteStemEntry(fingerprint: string): Promise<boolean> {
-  try {
-    return await removeEntryFrom(await getStemCacheDir(false), fingerprint);
-  } catch {
-    return false;
+  let deleted = false;
+  for (const cacheDir of await getStemCacheDirs()) {
+    // Every root, not the first hit: an entry in both takes room in both.
+    if (await removeEntryFrom(cacheDir, fingerprint)) deleted = true;
   }
+  return deleted;
 }
 
 async function removeEntryFrom(
@@ -686,14 +735,7 @@ async function pruneUnlocked(options: {
 }): Promise<PruneResult> {
   const keep = new Set(options.keep ?? []);
 
-  let cacheDir: FileSystemDirectoryHandle;
-  try {
-    cacheDir = await getStemCacheDir(false);
-  } catch {
-    return {deletedFingerprints: [], freedBytes: 0, remainingBytes: 0};
-  }
-
-  const entries = await listEntriesIn(cacheDir);
+  const entries = await measureAllEntries();
   let totalBytes = entries.reduce((sum, entry) => sum + entry.sizeBytes, 0);
   const largestBytes = entries.reduce(
     (max, entry) => Math.max(max, entry.sizeBytes),
@@ -722,7 +764,7 @@ async function pruneUnlocked(options: {
     // An entry that would not delete stays on the disk and in the total.
     // Counting it as freed would end the prune early and report bytes that
     // are still there.
-    if (!(await removeEntryFrom(cacheDir, entry.fingerprint))) continue;
+    if (!(await removeEntryFrom(entry.parent, entry.fingerprint))) continue;
     totalBytes -= entry.sizeBytes;
     freedBytes += entry.sizeBytes;
     deletedFingerprints.push(entry.fingerprint);

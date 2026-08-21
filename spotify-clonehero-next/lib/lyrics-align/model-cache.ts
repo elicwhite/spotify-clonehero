@@ -10,8 +10,39 @@
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/model-cache.ts
  */
 
+import {getCacheDir, getCacheDirs} from '@/lib/browser-storage';
+
 /** Directory inside OPFS every cached model file lives in. */
 const MODEL_CACHE_DIR = 'model-cache';
+
+/**
+ * Where a cached model is written, and everywhere one is read from.
+ *
+ * Downloads go to the cache bucket, which the browser is welcome to evict
+ * before it touches the chart projects. A model cached before that bucket
+ * existed stays where it is and is read in place: it is 336 MB, and copying
+ * it across would double that on the disk of a user who is by hypothesis
+ * already short of room.
+ */
+const MODEL_CACHE_PATH = [MODEL_CACHE_DIR];
+
+/** The cached file, from whichever root holds it. Null when none does. */
+async function findCachedModel(
+  cacheKey: string,
+): Promise<FileSystemFileHandle | null> {
+  for (const dir of await getCacheDirs(MODEL_CACHE_PATH)) {
+    try {
+      const handle = await dir.getFileHandle(cacheKey);
+      // A zero-length file is what `getFileHandle(…, {create: true})` leaves
+      // behind when a download never completed. Treating it as the cached
+      // model would hide a good copy in the other root.
+      if ((await handle.getFile()).size > 0) return handle;
+    } catch {
+      // Not in this root.
+    }
+  }
+  return null;
+}
 
 export interface ModelDownloadProgress {
   loadedBytes: number;
@@ -96,32 +127,27 @@ export async function getCachedModel(
 
   // Try loading from OPFS cache
   try {
-    const root = await navigator.storage.getDirectory();
-    const dirHandle = await root.getDirectoryHandle(MODEL_CACHE_DIR, {
-      create: true,
-    });
-
-    try {
-      const fileHandle = await dirHandle.getFileHandle(cacheKey);
-      const file = await fileHandle.getFile();
-      const buffer = await file.arrayBuffer();
-      assertLooksLikeModel(buffer, minBytes);
-      log(`Loaded ${label} from cache (${(file.size / 1e6).toFixed(0)} MB)`);
-      return buffer;
-    } catch (e) {
-      // Missing, too small, or corrupt cache entry. Drop it so a bad
-      // download can't poison the origin permanently, then re-download.
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!/object could not be found|not be found|NotFoundError/i.test(msg)) {
+    const cached = await findCachedModel(cacheKey);
+    if (cached != null) {
+      try {
+        const file = await cached.getFile();
+        const buffer = await file.arrayBuffer();
+        assertLooksLikeModel(buffer, minBytes);
+        log(`Loaded ${label} from cache (${(file.size / 1e6).toFixed(0)} MB)`);
+        return buffer;
+      } catch (e) {
+        // Too small or corrupt. Drop it so a bad download can't poison the
+        // origin permanently, then re-download.
+        const msg = e instanceof Error ? e.message : String(e);
         log(`Ignoring bad cached model (${msg}) — re-downloading`);
-        await dirHandle.removeEntry(cacheKey).catch(() => {});
+        await removeCachedModel(cacheKey);
       }
     }
 
     const buffer = await downloadModel(url, log, minBytes, label);
 
     log(`Caching for next time...`);
-    await writeToCache(dirHandle, cacheKey, buffer);
+    await writeToCache(await getCacheDir(MODEL_CACHE_PATH), cacheKey, buffer);
     log(`Downloaded ${label} (${(buffer.byteLength / 1e6).toFixed(0)} MB)`);
     return buffer;
   } catch (e) {
@@ -149,13 +175,18 @@ export async function hasCachedModel(
   minBytes: number = 1_000_000,
 ): Promise<boolean> {
   try {
-    const root = await navigator.storage.getDirectory();
-    const dirHandle = await root.getDirectoryHandle(MODEL_CACHE_DIR);
-    const fileHandle = await dirHandle.getFileHandle(cacheKey);
-    const file = await fileHandle.getFile();
-    return file.size >= minBytes;
+    const cached = await findCachedModel(cacheKey);
+    if (cached == null) return false;
+    return (await cached.getFile()).size >= minBytes;
   } catch {
     return false;
+  }
+}
+
+/** Drops a bad cache entry from every root that holds one. */
+async function removeCachedModel(cacheKey: string): Promise<void> {
+  for (const dir of await getCacheDirs(MODEL_CACHE_PATH)) {
+    await dir.removeEntry(cacheKey).catch(() => {});
   }
 }
 

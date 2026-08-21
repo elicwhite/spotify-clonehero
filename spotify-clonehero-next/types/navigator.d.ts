@@ -49,6 +49,37 @@ interface GPU {
 }
 
 // ---------------------------------------------------------------------------
+// Storage Buckets — navigator.storageBuckets
+//
+// Not in the DOM lib. Workers reach this through the same `Navigator` type,
+// since `lib.webworker` is not in tsconfig's `lib` and worker code here is
+// checked against `lib.dom`.
+// ---------------------------------------------------------------------------
+
+interface StorageBucketOptions {
+  /** Ask for the bucket to be exempt from automatic eviction. */
+  persisted?: boolean;
+  /** 'relaxed' lets the browser batch writes; 'strict' flushes them. */
+  durability?: 'strict' | 'relaxed';
+  expires?: number;
+}
+
+interface StorageBucket {
+  readonly name: string;
+  /** This bucket's own OPFS root, separate from every other bucket's. */
+  getDirectory(): Promise<FileSystemDirectoryHandle>;
+  persist(): Promise<boolean>;
+  persisted(): Promise<boolean>;
+  estimate(): Promise<StorageEstimate>;
+}
+
+interface StorageBucketManager {
+  open(name: string, options?: StorageBucketOptions): Promise<StorageBucket>;
+  keys(): Promise<string[]>;
+  delete(name: string): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
 // Navigator augmentation
 // ---------------------------------------------------------------------------
 
@@ -58,4 +89,7 @@ interface Navigator {
 
   /** WebGPU entry point (experimental API, not available in all browsers). */
   gpu?: GPU;
+
+  /** Storage Buckets (Chromium only at the time of writing). */
+  storageBuckets?: StorageBucketManager;
 }
