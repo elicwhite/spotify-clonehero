@@ -14,6 +14,10 @@ import {cn} from '@/lib/utils';
  * navigation, not content, and giving it body-copy weight would make it
  * compete with the closing line above it.
  *
+ * Storage sits beside it for the same reason, and because of who needs it: a
+ * user whose projects have disappeared has no tool page left to find the
+ * explanation on, so the link has to be somewhere every page carries.
+ *
  * `children` is the closing line, which is content: `/`'s doorway through to
  * the charting tools. Pages with nothing to say there render the link row
  * alone.
@@ -28,9 +32,12 @@ export function LandingFooter({children}: {children?: ReactNode}) {
       ) : null}
       <div
         className={cn(
-          'flex justify-end text-xs text-muted-foreground',
+          'flex justify-end gap-4 text-xs text-muted-foreground',
           children ? 'mt-8' : null,
         )}>
+        <Link href="/storage" className="hover:underline">
+          Storage
+        </Link>
         <Link href="/privacy" className="hover:underline">
           Privacy
         </Link>

@@ -234,16 +234,31 @@ that holds the entry, so an old entry is reclaimed once it falls out of use.
 
 ## Phase 5 — tell the user what is protected
 
-A storage panel, reachable without an account (a user who lost their charts may
-never have made one), showing: bytes used against the quota from
-`getStoragePressure()`, whether storage is persistent from
-`isStoragePersisted()`, what the caches hold, a button that empties them
-(Phase 3's `deleteStemEntry`), and the button that asks for persistence on the
-browsers Phase 2 does not ask silently.
+A `/storage` route, reachable without an account: a user who lost their charts
+may never have made one. It shows the bytes used against the quota, the
+separated stems and their size, the downloaded models and theirs, and whether
+storage is persistent — plus a button that frees the stems, and one that asks
+for persistence.
 
-`formatBytes` already exists in `lib/sng/file-utils.ts`. The page shell and its
-primitives are owned by `components/landing/`; the `design-system` skill governs
-this phase, and forking the shell fails a test.
+Both cache figures are shown, not just the stems. The models are ~336 MB and
+the stems can be more; a readout that showed one and not the other would leave
+the user unable to account for the difference, and the honest reading of that
+gap is "my charts are enormous". Freeing still covers the stems only: dropping
+a model costs a 336 MB download and buys a user nothing they asked for.
+
+The persistence button appears whenever the data is not already kept and the
+browser has not already refused — which includes a permission that is granted
+but not yet taken, a state one silent call settles. Where the browser has
+refused, the page says so rather than showing a button that cannot work.
+
+`formatBytes` already exists in `lib/sng/file-utils.ts`, and `LandingProse` in
+`components/landing/Prose.tsx`. The page shell and its primitives are owned by
+`components/landing/`; the `design-system` skill governs this phase, and
+forking the shell fails a test.
+
+The link lives in `LandingFooter`, beside Privacy, so it is on every landing
+page. A user whose projects have disappeared has no tool page left to find the
+explanation on.
 
 ## Out of scope
 

@@ -407,3 +407,26 @@ async function writeToCache(
     console.warn('Failed to write to OPFS cache:', e);
   }
 }
+
+/**
+ * Bytes the cached models occupy, across every root that holds one.
+ *
+ * The models are the largest single thing this site stores and they are a
+ * cache, so a storage readout that leaves them out cannot account for what is
+ * on the disk. 0 where nothing is cached, or where the count cannot be taken:
+ * a reading that fails must not be shown as a number.
+ */
+export async function getCachedModelBytes(): Promise<number> {
+  let total = 0;
+  try {
+    for (const dir of await getCacheDirs(MODEL_CACHE_PATH)) {
+      for await (const [, handle] of dir.entries()) {
+        if (handle.kind !== 'file') continue;
+        total += (await handle.getFile()).size;
+      }
+    }
+  } catch {
+    return 0;
+  }
+  return total;
+}
