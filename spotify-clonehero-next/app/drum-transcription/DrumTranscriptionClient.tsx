@@ -331,10 +331,9 @@ function DrumTranscriptionInner() {
           primary.fileName,
         );
         const primaryNameLower = primary.fileName.toLowerCase();
-        // The same test `readChart` applies above, so the project stores the
-        // same set of passthrough assets the document carries. A chart file
-        // under any name is regenerated on export, so keeping one here would
-        // only waste storage.
+        // Everything but the chart files and the primary audio, which have
+        // their own storage paths. A chart file under any name is regenerated
+        // on export, so keeping one here would only waste storage.
         const extraAssets = loaded.files.filter(
           f =>
             !isChartOrIniFileName(f.fileName) &&

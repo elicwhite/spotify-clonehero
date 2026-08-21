@@ -24,6 +24,7 @@ import {
   chartFileFormatOf,
   editedVariant,
   isCanonicalChartFileName,
+  isChartOrIniFileName,
   type ChartFileFormat,
 } from '@/lib/chart-files/chart-file-names';
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
@@ -652,9 +653,7 @@ export function createOpfsProjectStore(
     const files: {fileName: string; data: Uint8Array}[] = [];
     for (const entry of await readManifest(dir)) {
       if (entry.storedIn !== 'root') continue;
-      const lower = entry.fileName.toLowerCase();
-      if (isCanonicalChartFileName(lower)) continue;
-      if (lower === 'song.ini') continue;
+      if (isChartOrIniFileName(entry.fileName)) continue;
       try {
         const handle = await dir.getFileHandle(entry.fileName);
         const file = await handle.getFile();

@@ -67,4 +67,15 @@ describe('readChart with an autosave-named chart file', () => {
     const entries = assembleChartFiles({chartDoc: doc, metadata});
     expect(entries.map(e => e.fileName)).toContain('album.png');
   });
+
+  it('keeps a .midi asset, which scan-chart does not read as a chart', () => {
+    // `hasChartExtension` accepts `.chart` and `.mid` only, so a `.midi`
+    // file beside the chart causes no chart-checker error. Dropping it would
+    // lose a charter's file for nothing.
+    const {data} = chartDocToFolderFiles(blankDoc('chart')).chart;
+    const stray = {fileName: 'original.midi', data: new Uint8Array([1])};
+    const doc = readChart([{fileName: 'notes.chart', data}, stray]);
+
+    expect(doc.assets.map(a => a.fileName)).toEqual(['original.midi']);
+  });
 });
