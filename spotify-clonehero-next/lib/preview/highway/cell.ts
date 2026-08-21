@@ -144,6 +144,122 @@ export async function loadCellTextures(
 }
 
 /**
+ * Every texture set on one stage, loaded once each and shared.
+ *
+ * A stage draws its highways as separate passes over one canvas, and they all
+ * show the same art — the same scrolling floor, the same flames, the same
+ * fret buttons — while two difficulties of one instrument also share their
+ * note sprites. A set per highway meant a private copy of every animated
+ * texture, each redrawn into its own canvas and re-uploaded to the GPU every
+ * frame, four times over for the same picture.
+ *
+ * Sharing is safe because nothing here is written to per highway. The floor's
+ * scroll offset is derived from the frame's elapsed time, which every pass in
+ * a frame shares, and a note's material is already shared by every note of
+ * its type within a highway.
+ *
+ * The stage owns this and disposes it; a highway that goes away must not take
+ * the art its neighbours are still drawing with.
+ */
+export class SharedCellTextures {
+  private readonly manager = new AnimatedTextureManager();
+  private highway: Promise<THREE.Texture> | null = null;
+  private sustains: Promise<HighwaySustainTextures> | null = null;
+  private flames: Promise<HighwayFlameTextures> | null = null;
+  private frets: Promise<HighwayFretTextures> | null = null;
+  private readonly notes = new Map<
+    string,
+    Promise<{getTextureForNote: CellTextures['getTextureForNote']}>
+  >();
+  private disposed = false;
+
+  constructor(
+    private readonly textureLoader: THREE.TextureLoader,
+    private readonly tomStyle: 'square' | 'round' = 'square',
+  ) {}
+
+  /**
+   * The set one highway needs. Gated by instrument exactly as a private set
+   * was, so a highway is still handed `null` for art its instrument never
+   * draws with.
+   */
+  async forInstrument(instrument: Instrument | null): Promise<CellTextures> {
+    const fretted = instrument === 'guitar' || instrument === 'bass';
+    const padded = fretted || instrument === 'drums';
+    const [highwayTexture, sustainTextures, flameTextures, fretTextures] =
+      await Promise.all([
+        (this.highway ??= getHighwayTexture(this.textureLoader)),
+        fretted
+          ? (this.sustains ??= loadHighwaySustainTextures(
+              this.textureLoader,
+              this.manager,
+            ))
+          : null,
+        padded
+          ? (this.flames ??= loadHighwayFlameTextures(
+              this.textureLoader,
+              this.manager,
+            ))
+          : null,
+        padded
+          ? (this.frets ??= loadHighwayFretTextures(
+              this.textureLoader,
+              this.manager,
+            ))
+          : null,
+      ]);
+    const {getTextureForNote} = instrument
+      ? await this.noteTextures(instrument)
+      : {getTextureForNote: () => new THREE.SpriteMaterial()};
+    return {
+      highwayTexture,
+      sustainTextures,
+      flameTextures,
+      fretTextures,
+      getTextureForNote,
+      animatedTextureManager: this.manager,
+    };
+  }
+
+  private noteTextures(
+    instrument: Instrument,
+  ): Promise<{getTextureForNote: CellTextures['getTextureForNote']}> {
+    const key = `${instrument}|${this.tomStyle}`;
+    let loaded = this.notes.get(key);
+    if (loaded === undefined) {
+      loaded = loadNoteTextures(
+        this.textureLoader,
+        instrument,
+        this.manager,
+        this.tomStyle,
+      );
+      this.notes.set(key, loaded);
+    }
+    return loaded;
+  }
+
+  /** Advance every animated texture on the stage. Once a frame, not once a
+   *  highway — they are the same textures. */
+  tick(): void {
+    if (!this.disposed) this.manager.tick();
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.manager.dispose();
+    // A load still in flight when the stage goes away still has to be handed
+    // back, so dispose on arrival rather than dropping it.
+    void this.highway?.then(texture => texture.dispose()).catch(() => {});
+    this.highway = null;
+    this.sustains = null;
+    this.flames = null;
+    this.frets = null;
+    this.notes.clear();
+  }
+}
+
+/**
  * What a highway draws: notes. Beat/measure grid lines come from
  * `GridOverlay`, which is geometry rather than an element kind. Every marker
  * kind — section, tempo, time-signature, lyric, phrase — belongs to the piano

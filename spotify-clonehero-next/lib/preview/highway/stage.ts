@@ -24,8 +24,7 @@ import {HighwayRoot} from './HighwayRoot';
 import {
   buildHighwayCell,
   createHighwayClippingPlanes,
-  disposeCellTextures,
-  loadCellTextures,
+  SharedCellTextures,
   type CellTextures,
   type HighwayClippingPlanes,
 } from './cell';
@@ -182,6 +181,10 @@ interface StageContext {
   textureLoader: THREE.TextureLoader;
   clippingPlanes: HighwayClippingPlanes;
   tomStyle: 'square' | 'round';
+  /** Texture sets for every highway on the stage, loaded once each. The
+   *  stage owns them; a highway must not dispose what its neighbours draw
+   *  with. */
+  textures: SharedCellTextures;
   /** The playback clock, read fresh every frame — see `setupStage`. */
   getAudioManager: () => AudioManager | null;
   /** Chart time minus audio delay, in ms. Shared by every highway. */
@@ -307,15 +310,10 @@ class StageHighway implements StageHighwayHandle {
 
   private async build(opts: AddHighwayOptions): Promise<void> {
     const {ctx} = this;
-    const textures = await loadCellTextures(
-      ctx.textureLoader,
+    const textures = await ctx.textures.forInstrument(
       opts.track?.instrument ?? null,
-      ctx.tomStyle,
     );
-    if (this.disposed) {
-      disposeCellTextures(textures);
-      return;
-    }
+    if (this.disposed) return;
     this.textures = textures;
 
     const core = await buildHighwayCell(this.root, {
@@ -518,11 +516,8 @@ class StageHighway implements StageHighwayHandle {
   /** Everything this highway does per frame before its own render pass. */
   update(elapsedTime: number): void {
     const audioManager = this.ctx.getAudioManager();
-    const isPlaying = audioManager?.isPlaying && audioManager?.isInitialized;
-    if (isPlaying && this.textures) {
-      // Update animated textures only during playback.
-      this.textures.animatedTextureManager.tick();
-    }
+    // Animated textures are shared across the stage and advanced once per
+    // frame in `draw`, not once per pass.
     if (this.textures) {
       // Scroll the highway floor. Re-set per pass because the passes within a
       // frame are sequential and each highway owns its own offset.
@@ -566,10 +561,9 @@ class StageHighway implements StageHighwayHandle {
     this.waveformSurface?.dispose();
     this.gridOverlay?.dispose();
     // The context outlives every highway on it, so the cell's own floor /
-    // hitbox meshes and its texture set have to be handed back explicitly --
-    // nothing reclaims them on removal otherwise.
+    // hitbox meshes have to be handed back explicitly -- nothing reclaims
+    // them on removal otherwise. Its textures belong to the stage.
     this.disposeCellMeshes?.();
-    if (this.textures) disposeCellTextures(this.textures);
     this.disposeCellMeshes = null;
     this.sceneOverlays = null;
     this.interactionManager = null;
@@ -754,12 +748,15 @@ export function setupStage(
     arm();
   }
 
+  const sharedTextures = new SharedCellTextures(textureLoader, tomStyle);
+
   const context: StageContext = {
     scene,
     chart,
     textureLoader,
     clippingPlanes,
     tomStyle,
+    textures: sharedTextures,
     getAudioManager,
     getElapsedMs,
     getTiming: () => timing,
@@ -896,7 +893,7 @@ export function setupStage(
       elapsedMs,
       isPlaying,
     });
-    if (decision.render) draw(elapsedMs);
+    if (decision.render) draw(elapsedMs, isPlaying);
     if (!decision.keepAwake) {
       // THREE re-arms its own rAF immediately after this callback returns, so
       // parking has to wait for the stack to unwind or the cancel would race
@@ -924,8 +921,12 @@ export function setupStage(
     }
   }
 
-  function draw(elapsedTime: number): void {
+  function draw(elapsedTime: number, isPlaying = false): void {
     try {
+      // Animated textures advance during playback only, once for the stage
+      // rather than once per pass -- every pass draws the same ones.
+      if (isPlaying) sharedTextures.tick();
+
       // Clear the whole canvas once, before any scissor is in force: with
       // scissor testing on, a clear only touches the scissor rect, leaving
       // the inter-highway gaps and any dead edge strip filled with stale,
@@ -1002,6 +1003,7 @@ export function setupStage(
     highways.clear();
     lyricsOverlay?.dispose();
     lyricsOverlay = null;
+    sharedTextures.dispose();
   }
 
   return {
