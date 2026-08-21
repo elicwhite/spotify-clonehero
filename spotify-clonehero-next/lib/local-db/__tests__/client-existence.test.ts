@@ -2,7 +2,8 @@
 
 jest.mock('sqlocal/kysely', () => ({SQLocalKysely: jest.fn()}));
 
-import {LOCAL_DB_PATH, localDbExists} from '../client';
+import {localDbExists} from '../client';
+import {LOCAL_DB_PATH} from '../path';
 
 const {SQLocalKysely} = jest.requireMock('sqlocal/kysely') as {
   SQLocalKysely: jest.Mock;

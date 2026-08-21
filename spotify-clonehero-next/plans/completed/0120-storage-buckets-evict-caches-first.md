@@ -296,16 +296,60 @@ Done in Chrome, against the dev server:
   `persistent-storage` permission as `denied`, and the page states it instead
   of showing a button that cannot work.
 
-Still to check in a browser, on a real profile:
+Done in Chrome, driving CDP directly:
 
-- That an entry cached before this work is still found once the bucket exists.
-  The unit tests cover it against a fake OPFS; nobody has watched a real
-  legacy entry survive.
-- Firefox and Brave: no `storageBuckets`, everything working from the default
-  root, the pruner still running, and nothing prompting on load.
+- **The two buckets carry different eviction policies.** With `durableStorage`
+  granted, the default bucket reports `persisted: true` and the `cache` bucket
+  `persisted: false`. A named bucket opened with `{persisted: true}` is granted,
+  which confirms that a named bucket's persistence asks for the same permission
+  `navigator.storage.persist()` does — so moving the projects into one would
+  have bought nothing.
+- **A legacy entry is found in place, and freed from there.** A stem planted in
+  the default root was reported by the page as one cached song, and the Free
+  button deleted it: usage fell from 3 MB to 872 B, and a project planted beside
+  it was untouched.
+- **Exceeding the origin quota is an error, not an eviction.** With the quota
+  lowered through `Storage.overrideQuotaForOrigin`, a write into the
+  non-persisted `cache` bucket threw `QuotaExceededError`. Chrome evicted
+  nothing — not even the bucket it is free to evict. Bucket eviction answers
+  disk pressure, not one origin filling its share. See "What this changed"
+  below.
+
+Done in Firefox, against the real browser:
+
+- No `navigator.storageBuckets`, so the fallback path is what runs.
+- `permissions.query({name: 'persistent-storage'})` answers `'prompt'` rather
+  than throwing, so the gate holds and nothing is asked on load.
+- `navigator.locks`, OPFS writes, directory iteration and `File.lastModified`
+  all work, which is everything the pruner's LRU needs.
+
+Still to check:
+
+- Brave.
 - Not with the `check-opfs` skill — the `opfs_*` WebMCP tools read the default
   root only, so they cannot see the bucket. Use DevTools, or make those tools
   bucket-aware first.
+
+## What the browser check changed
+
+**A store at the quota now frees room and tries again.** The prune ran after a
+store, so a store that failed for want of room skipped it — leaving a user at
+their quota with a lost separation and no way out, forever. This was invisible
+from the code: it needed the measurement above to know that the browser frees
+nothing on its own.
+
+**The cache reaches its own older location.** `drum-transcription/stem-cache/`
+sits inside a project namespace, which the project readout skips. It was
+measured by nothing and reclaimed by nothing, so a user carrying gigabytes of
+pre-move stems would have seen them in the origin total, in no row, and behind
+no button.
+
+**The page names the user's own work.** A row for the projects and the
+databases, and an "Everything else" row for the remainder, because rows that do
+not add up to the total read as "my charts are enormous" — which is the reading
+a user reaches for when their charts have just vanished. The persistence row
+says "your charts" specifically: the stems and the models are in the bucket
+that is meant to go first, and a bare "Yes" claimed to cover them.
 
 Covered by tests:
 

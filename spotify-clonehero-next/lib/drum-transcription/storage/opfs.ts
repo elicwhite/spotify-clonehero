@@ -43,6 +43,7 @@
  */
 
 import {writeFile, readJsonFile, readTextFile} from '@/lib/fileSystemHelpers';
+import {DRUM_TRANSCRIPTION_NAMESPACE} from '@/lib/project-storage/namespaces';
 import {
   decodeAudio,
   interleaveAudioBuffer,
@@ -61,7 +62,7 @@ import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 // Constants
 // ---------------------------------------------------------------------------
 
-const NAMESPACE = 'drum-transcription';
+const NAMESPACE = DRUM_TRANSCRIPTION_NAMESPACE;
 const METADATA_FILE = 'metadata.json';
 const AUDIO_DIR = 'audio';
 const AUDIO_PCM_FILE = 'full.pcm';

@@ -96,6 +96,8 @@ class FakeFileHandle {
     return new FakeFile(data, this.clock.timeOf(this.path));
   }
   async createWritable(): Promise<FakeWritable> {
+    const queued = queuedWriteFailures.shift();
+    if (queued) throw queued;
     return new FakeWritable(this.path, this.store, this.clock);
   }
 }
@@ -103,6 +105,9 @@ class FakeFileHandle {
 /** Paths `removeEntry` refuses, modelling OPFS refusing to remove a
  *  directory that holds a file open in another context. */
 const unremovable = new Set<string>();
+
+/** Errors queued for the next writes, one each, oldest first. */
+const queuedWriteFailures: DOMException[] = [];
 
 class FakeDirectoryHandle {
   readonly kind = 'directory' as const;
@@ -231,13 +236,16 @@ const EPOCH = 1_700_000_000_000;
  * Installs a fake `navigator.storage.getDirectory()` backed by an in-memory
  * store. Returns a handle to reset/inspect the store between tests, and
  * `setNow` to choose the time later writes are stamped with, and
- * `refuseRemovalOf` to make one path undeletable.
+ * `refuseRemovalOf` to make one path undeletable, and `failNextWrite` to make
+ * the next write fail — a quota exhaustion, say, which on the platform throws
+ * rather than freeing anything.
  */
 export function installFakeOPFS(): {
   store: Map<string, ArrayBuffer>;
   reset: () => void;
   setNow: (ms: number) => void;
   refuseRemovalOf: (path: string) => void;
+  failNextWrite: (name: string, message?: string) => void;
 } {
   const store = new Map<string, ArrayBuffer>();
   const clock = new Clock();
@@ -254,8 +262,11 @@ export function installFakeOPFS(): {
       store.clear();
       clock.reset();
       unremovable.clear();
+      queuedWriteFailures.length = 0;
     },
     setNow: (ms: number) => clock.set(ms),
     refuseRemovalOf: (path: string) => unremovable.add(path),
+    failNextWrite: (name: string, message = name) =>
+      queuedWriteFailures.push(new DOMException(message, name)),
   };
 }

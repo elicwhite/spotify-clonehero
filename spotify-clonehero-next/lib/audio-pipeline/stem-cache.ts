@@ -26,6 +26,7 @@
  */
 
 import {MODEL_URLS} from '@/lib/lyrics-align/model-urls';
+import {DRUM_TRANSCRIPTION_NAMESPACE} from '@/lib/project-storage/namespaces';
 import {
   getCacheDir,
   getCacheDirs,
@@ -269,14 +270,29 @@ export function stereoStemToMono(stem: StereoStem): Float32Array {
  */
 const STEM_CACHE_PATH = [NAMESPACE, STEM_CACHE_DIR];
 
+/**
+ * Where the fingerprint-keyed cache lived before it moved under
+ * `audio-pipeline/`. Read and pruned, never written to.
+ *
+ * It is inside a project namespace, so the readout that measures the user's
+ * projects deliberately skips it — which would leave it counted by nothing and
+ * reclaimed by nothing if the cache did not reach it here. A user carrying
+ * gigabytes of pre-move stems would see them in the origin total, in no row,
+ * and behind no button.
+ */
+const LEGACY_STEM_CACHE_PATH = [DRUM_TRANSCRIPTION_NAMESPACE, STEM_CACHE_DIR];
+
 /** The directory new entries are written to. */
 function getStemCacheDir(): Promise<FileSystemDirectoryHandle> {
   return getCacheDir(STEM_CACHE_PATH);
 }
 
 /** Every directory entries are read from, the written-to one first. */
-function getStemCacheDirs(): Promise<FileSystemDirectoryHandle[]> {
-  return getCacheDirs(STEM_CACHE_PATH);
+async function getStemCacheDirs(): Promise<FileSystemDirectoryHandle[]> {
+  return [
+    ...(await getCacheDirs(STEM_CACHE_PATH)),
+    ...(await getCacheDirs(LEGACY_STEM_CACHE_PATH)),
+  ];
 }
 
 /** The directory a new entry is written into. */
@@ -447,6 +463,86 @@ async function hasMarked(
   return nonEmptyEntryExists(dir, payloadName);
 }
 
+/**
+ * Whether a write failed for want of room rather than for any other reason.
+ *
+ * Matched on the name rather than the class: a `QuotaExceededError` that
+ * crossed a realm keeps its name and loses its prototype, and this module runs
+ * in workers as well as on the main thread.
+ *
+ * A physically full disk can surface under other names. Those are left alone
+ * deliberately — deleting the user's stems will not create disk that does not
+ * exist.
+ */
+function isQuotaError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error != null &&
+    (error as {name?: unknown}).name === 'QuotaExceededError'
+  );
+}
+
+/**
+ * Writes a payload, and keeps the cache inside its budget afterwards.
+ *
+ * A store that runs out of room frees some and tries once more. Measured in
+ * Chrome, with the origin quota lowered through
+ * `Storage.overrideQuotaForOrigin`: a write past the quota throws, and the
+ * browser evicts nothing to make room — not even a bucket it is free to
+ * evict, since that is a response to disk pressure rather than to one origin
+ * filling its share. Without this, the prune below is unreachable at exactly
+ * the moment it is needed, and a user at their quota loses a separation that
+ * took minutes of GPU and stays stuck there for good.
+ *
+ * It frees the whole cache but the entry being written, rather than trimming
+ * to a budget. The budget's two-song floor is a byte floor, so a cache holding
+ * one large entry would free nothing from it, and half a rescue is a wasted
+ * 90 MB write. The stems exist to be given up; the alternative is losing a
+ * separation that is already done.
+ *
+ * A prune that frees nothing — an empty cache, another tab holding the lock,
+ * an entry that will not delete — ends it. Retrying the write into the same
+ * absent room would fail the same way and lose the original error.
+ */
+async function storeAndPrune(
+  fingerprint: string,
+  payloadName: string,
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<void> {
+  try {
+    await writeMarked(
+      await createCacheEntryDir(fingerprint),
+      payloadName,
+      bytes,
+    );
+  } catch (error) {
+    if (!isQuotaError(error)) throw error;
+    if (!(await freedRoom(fingerprint))) throw error;
+    await writeMarked(
+      await createCacheEntryDir(fingerprint),
+      payloadName,
+      bytes,
+    );
+  }
+  await pruneStemCacheToBudget([fingerprint]);
+}
+
+/**
+ * Frees what it can, and answers whether anything came back.
+ *
+ * The prune is not allowed to replace the quota failure the caller is holding
+ * with one of its own, so its errors are swallowed and read as "nothing
+ * freed".
+ */
+async function freedRoom(fingerprint: string): Promise<boolean> {
+  try {
+    const result = await pruneStemCache({targetBytes: 0, keep: [fingerprint]});
+    return result != null && result.freedBytes > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Stores an already-encoded (`encodeStemCacheBytes`) stem payload. The entry
  * point for callers that gzipped elsewhere - on the main thread that means
  * `pcm-worker.ts`, since Blink deflates a single write in one uninterrupted
@@ -458,13 +554,11 @@ export async function storeStemBytes(
   stemName: string,
   bytes: Uint8Array,
 ): Promise<void> {
-  const dir = await createCacheEntryDir(fingerprint);
-  await writeMarked(
-    dir,
+  await storeAndPrune(
+    fingerprint,
     `${stemName}.f32.gz`,
     bytes as Uint8Array<ArrayBuffer>,
   );
-  await pruneStemCacheToBudget([fingerprint]);
 }
 
 /** Stores a stem (planar stereo Float32 @ 44.1 kHz) in the cache, gzipping it
@@ -526,13 +620,11 @@ export async function storeStemOpus(
   stemName: string,
   opusBytes: Uint8Array,
 ): Promise<void> {
-  const dir = await createCacheEntryDir(fingerprint);
-  await writeMarked(
-    dir,
+  await storeAndPrune(
+    fingerprint,
     `${stemName}.opus`,
     opusBytes as Uint8Array<ArrayBuffer>,
   );
-  await pruneStemCacheToBudget([fingerprint]);
 }
 
 /** Loads a cached Opus-encoded stem's raw bytes (undecoded). Returns null

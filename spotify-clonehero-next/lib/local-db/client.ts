@@ -7,12 +7,12 @@ import {
   getWebLocks,
   withWebLock,
 } from '@/lib/web-locks';
+import {LOCAL_DB_PATH} from './path';
 
 // The resolved promise IS the cache: `getLocalDb` awaits it on every call, so a
 // second variable holding the same database could only ever disagree with it.
 let dbInitializationPromise: Promise<Kysely<DB>> | null = null;
 let sqlocalClient: SQLocalKysely | null = null;
-export const LOCAL_DB_PATH = 'spotify-clonehero-local.sqlite3';
 
 /** Checks OPFS without creating the SQLocal database or running migrations. */
 export async function localDbExists(): Promise<boolean> {

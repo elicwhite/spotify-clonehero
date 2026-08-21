@@ -2,6 +2,8 @@ import {
   deleteStemEntry,
   encodeStemCacheBytes,
   hasStem,
+  hasStemOpus,
+  storeStemOpus,
   listStemCacheEntries,
   loadStem,
   pruneStemCache,
@@ -316,5 +318,77 @@ describe('pruneStemCacheToBudget', () => {
     setStorageEstimate(null);
 
     await expect(pruneStemCacheToBudget([], budgets)).resolves.not.toBeNull();
+  });
+});
+
+describe('a store that runs out of room', () => {
+  /**
+   * Verified in Chrome: exceeding the origin quota throws rather than evicting
+   * anything. The browser frees nothing, so a store that fails this way leaves
+   * the prune that follows it unreachable — and a user at their quota stuck
+   * there, losing a separation that took minutes of GPU.
+   */
+  it('frees room and completes the store', async () => {
+    await writeEntry('older', {size: 100, at: 1_000});
+    opfs.failNextWrite('QuotaExceededError');
+
+    opfs.setNow(2_000);
+    await storeStemBytes('new', 'drums', payload(50));
+
+    // The finished separation is kept; the cache is what was given up.
+    expect(await hasStem('new', 'drums')).toBe(true);
+    expect(await remaining()).toEqual(['new']);
+  });
+
+  it('keeps the entry it is writing while it frees the rest', async () => {
+    // A first payload of this song is already cached; the second must not
+    // delete it on the way in.
+    await writeEntry('song', {size: 100, at: 1_000});
+    await writeEntry('other', {size: 100, at: 2_000});
+    opfs.failNextWrite('QuotaExceededError');
+
+    await storeStemOpus('song', 'vocals', payload(10));
+
+    expect(await remaining()).toEqual(['song']);
+    expect(await hasStem('song', 'drums')).toBe(true);
+    expect(await hasStemOpus('song', 'vocals')).toBe(true);
+  });
+
+  it('gives up with the original error when nothing can be freed', async () => {
+    // An empty cache, or a lock another tab holds. Retrying the write into
+    // room that was never made would fail the same way and lose the error the
+    // caller needs.
+    opfs.failNextWrite('QuotaExceededError', 'no room');
+
+    await expect(storeStemBytes('new', 'drums', payload(50))).rejects.toThrow(
+      'no room',
+    );
+    // The entry directory the failed store created is left behind, holding
+    // nothing. It costs no space and sorts first for deletion.
+    expect(await hasStem('new', 'drums')).toBe(false);
+  });
+
+  it('reclaims the cache location that predates audio-pipeline/', async () => {
+    // These stems sit inside a project namespace, which the project readout
+    // skips. If the cache did not reach them they would be counted by nothing
+    // and freed by nothing.
+    opfs.store.set(
+      '/drum-transcription/stem-cache/old-fingerprint/drums.f32.gz',
+      payload(300).buffer as ArrayBuffer,
+    );
+
+    expect(
+      (await listStemCacheEntries()).map(entry => entry.fingerprint),
+    ).toEqual(['old-fingerprint']);
+    expect(await deleteStemEntry('old-fingerprint')).toBe(true);
+    expect(await listStemCacheEntries()).toEqual([]);
+  });
+
+  it('does not swallow a failure that is not about room', async () => {
+    opfs.failNextWrite('NotFoundError', 'gone');
+
+    await expect(storeStemBytes('new', 'drums', payload(50))).rejects.toThrow(
+      'gone',
+    );
   });
 });

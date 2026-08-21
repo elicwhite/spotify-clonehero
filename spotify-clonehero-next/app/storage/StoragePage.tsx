@@ -24,7 +24,7 @@ export function StoragePage() {
 
       <LandingSection
         title="This browser"
-        intro="A separated stem is the drums or the vocals taken out of a song you added, kept so the same song does not have to be separated twice. A model is the file that does the separating.">
+        intro="A separated stem is the drums or the vocals taken out of a song you added, kept so the same song does not have to be separated twice. A model is the file that does the separating. Only your charts are covered by the promise on the last row: the stems and the models are what a browser short of room is meant to take first.">
         <StoragePanel />
       </LandingSection>
 

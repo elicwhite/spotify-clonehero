@@ -15,6 +15,10 @@ import {
   pruneStemCache,
 } from '@/lib/audio-pipeline/stem-cache';
 import {getCachedModelBytes} from '@/lib/lyrics-align/model-cache';
+import {
+  measureProjectStorage,
+  type ProjectStorage,
+} from '@/lib/project-storage/measureProjects';
 import {attachStorageContext} from '@/lib/sentry/storage-context';
 import {formatBytes} from '@/lib/sng/file-utils';
 
@@ -30,6 +34,7 @@ interface StorageReading {
   cachedSongs: number;
   cachedBytes: number;
   modelBytes: number;
+  projects: ProjectStorage;
 }
 
 /**
@@ -41,13 +46,14 @@ interface StorageReading {
  * "Reading storage…" for good.
  */
 async function readStorage(): Promise<StorageReading> {
-  const [pressure, persisted, permission, entries, modelBytes] =
+  const [pressure, persisted, permission, entries, modelBytes, projects] =
     await Promise.all([
       getStoragePressure(),
       isStoragePersisted(),
       getPersistencePermission(),
       listStemCacheEntries().catch(() => []),
       getCachedModelBytes(),
+      measureProjectStorage(),
     ]);
   return {
     pressure,
@@ -58,6 +64,7 @@ async function readStorage(): Promise<StorageReading> {
     cachedSongs: new Set(entries.map(entry => entry.fingerprint)).size,
     cachedBytes: entries.reduce((sum, entry) => sum + entry.sizeBytes, 0),
     modelBytes,
+    projects,
   };
 }
 
@@ -162,10 +169,31 @@ export function StoragePanel() {
   // yet taken, which one call settles silently.
   const canAsk = !reading.persisted && reading.permission !== 'denied';
 
+  // What the origin holds that no row above names: site code the browser has
+  // cached, and anything this page has not learned to measure. Stating it is
+  // what stops the rows from looking like they disagree with the total, which
+  // is the reading a user reaches for when their charts have just vanished.
+  const named =
+    reading.projects.bytes + reading.cachedBytes + reading.modelBytes;
+  const unaccountedBytes = Math.max(
+    0,
+    (reading.pressure?.usageBytes ?? named) - named,
+  );
+
   return (
     <div className="space-y-6">
       <dl>
         <Row label="Used by this site" value={usageValue(reading.pressure)} />
+        <Row
+          label="Your charts and audio"
+          value={
+            reading.projects.projectCount === 0
+              ? 'None'
+              : `${reading.projects.projectCount} ${
+                  reading.projects.projectCount === 1 ? 'project' : 'projects'
+                }, ${formatBytes(reading.projects.bytes)}`
+          }
+        />
         <Row
           label="Separated stems"
           value={
@@ -182,8 +210,9 @@ export function StoragePanel() {
             reading.modelBytes === 0 ? 'None' : formatBytes(reading.modelBytes)
           }
         />
+        <Row label="Everything else" value={formatBytes(unaccountedBytes)} />
         <Row
-          label="Kept when space runs short"
+          label="Your charts kept when space runs short"
           value={reading.persisted ? 'Yes' : 'Not promised'}
         />
       </dl>

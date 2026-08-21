@@ -41,19 +41,10 @@ import {
   type ProjectSummary,
 } from './opfsProjectStore';
 import type {ProjectOrigin, ProjectRecord} from './types';
-
-/** The namespace new chart-package projects are written to. */
-export const CHART_EDITOR_NAMESPACE = 'chart-editor';
-
-/**
- * Namespaces written by routes that have since been folded into
- * `/chart-editor`. Their projects stay listable and editable in place.
- */
-export const CHART_EDITOR_LEGACY_NAMESPACES = [
-  'drum-edit',
-  'guitar-edit',
-  'bass-edit',
-] as const;
+import {
+  CHART_EDITOR_LEGACY_NAMESPACES,
+  CHART_EDITOR_NAMESPACE,
+} from './namespaces';
 
 let store: ReturnType<typeof createOpfsProjectStore> | null = null;
 

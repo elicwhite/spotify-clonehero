@@ -13,6 +13,7 @@ const requestPersistentStorage = jest.fn();
 const listStemCacheEntries = jest.fn();
 const pruneStemCache = jest.fn();
 const getCachedModelBytes = jest.fn();
+const measureProjectStorage = jest.fn();
 const attachStorageContext = jest.fn();
 
 jest.mock('../../lib/browser-storage', () => ({
@@ -31,6 +32,10 @@ jest.mock('../../lib/lyrics-align/model-cache', () => ({
   getCachedModelBytes: () => getCachedModelBytes(),
 }));
 
+jest.mock('../../lib/project-storage/measureProjects', () => ({
+  measureProjectStorage: () => measureProjectStorage(),
+}));
+
 jest.mock('../../lib/sentry/storage-context', () => ({
   attachStorageContext: () => attachStorageContext(),
 }));
@@ -39,14 +44,17 @@ const MB = 1024 * 1024;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // A coherent origin: 60 of projects, 200 of stems, 336 of models, and 104
+  // the page cannot name, adding up to the 700 reported.
   getStoragePressure.mockResolvedValue({
-    usageBytes: 500 * MB,
+    usageBytes: 700 * MB,
     quotaBytes: 1000 * MB,
-    ratio: 0.5,
+    ratio: 0.7,
   });
   isStoragePersisted.mockResolvedValue(true);
   getPersistencePermission.mockResolvedValue('granted');
   getCachedModelBytes.mockResolvedValue(336 * MB);
+  measureProjectStorage.mockResolvedValue({projectCount: 3, bytes: 60 * MB});
   listStemCacheEntries.mockResolvedValue([
     {fingerprint: 'a', sizeBytes: 100 * MB, lastUsedMs: 1},
     {fingerprint: 'b', sizeBytes: 100 * MB, lastUsedMs: 2},
@@ -62,13 +70,36 @@ describe('StoragePanel', () => {
   it('reports usage, the cached stems, and whether storage is kept', async () => {
     render(<StoragePanel />);
 
-    expect(await screen.findByText('500 MB of 1000 MB (50%)')).toBeVisible();
+    expect(await screen.findByText('700 MB of 1000 MB (70%)')).toBeVisible();
     expect(screen.getByText('2 songs, 200 MB')).toBeVisible();
     // The models are the largest single thing stored. Leaving them out left
     // the user unable to account for the difference between the two numbers
     // above, and the honest reading of that gap is "my charts are enormous".
     expect(screen.getByText('336 MB')).toBeVisible();
+    // The user's own work, named. Without it the gap between the total and
+    // the caches is unexplained, and the reading available to someone staring
+    // at that gap is that their charts are the problem.
+    expect(screen.getByText('3 projects, 60 MB')).toBeVisible();
     expect(screen.getByText('Yes')).toBeVisible();
+    // 500 used, 60 + 200 + 336 named. Naming the remainder is what stops the
+    // rows looking like they disagree with the total — the reading a user
+    // reaches for when their charts have just vanished.
+    expect(screen.getByText('104 MB')).toBeVisible();
+  });
+
+  it('never reports a negative remainder', async () => {
+    // The cache walk and the estimate are taken at slightly different moments,
+    // and the estimate rounds. Neither is a reason to show a number below zero.
+    getStoragePressure.mockResolvedValue({
+      usageBytes: 1 * MB,
+      quotaBytes: 1000 * MB,
+      ratio: 0.001,
+    });
+
+    render(<StoragePanel />);
+
+    await screen.findByText('3 projects, 60 MB');
+    expect(screen.getByText('0 B')).toBeVisible();
   });
 
   it('counts a song cached in both roots once', async () => {
@@ -167,8 +198,10 @@ describe('StoragePanel', () => {
 
     render(<StoragePanel />);
 
-    expect(await screen.findByText('500 MB of 1000 MB (50%)')).toBeVisible();
+    expect(await screen.findByText('700 MB of 1000 MB (70%)')).toBeVisible();
+    // The stems row degrades to None; the rest of the panel still reports.
     expect(screen.getByText('None')).toBeVisible();
+    expect(screen.getByText('3 projects, 60 MB')).toBeVisible();
   });
 
   it('says so when another tab holds the prune lock', async () => {
@@ -231,7 +264,7 @@ describe('StoragePanel', () => {
 
     render(<StoragePanel />);
 
-    await screen.findByText('500 MB of 1000 MB (50%)');
+    await screen.findByText('700 MB of 1000 MB (70%)');
     expect(screen.queryByRole('button', {name: /Free/})).toBeNull();
   });
 });
