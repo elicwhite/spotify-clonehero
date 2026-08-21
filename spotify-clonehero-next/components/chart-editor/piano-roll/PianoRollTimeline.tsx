@@ -553,6 +553,9 @@ export default function PianoRollTimeline({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stackedTopCanvasRef = useRef<HTMLCanvasElement>(null);
   const stackedRowsCanvasRef = useRef<HTMLCanvasElement>(null);
+  /** The rows band's scroll viewport. Only the slice of the stacked rows
+   *  inside it is on screen, so only those rows are painted. */
+  const rowsScrollRef = useRef<HTMLDivElement>(null);
   const stackedWaveCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   /** The popover subtree, which the container's wheel listener must not eat:
@@ -1119,6 +1122,19 @@ export default function PianoRollTimeline({
     const rowLayout =
       stacked && scene ? stackedRowGeometry(scene, laneTop) : null;
     const laneBottom = rowLayout ? laneTop + rowLayout.height : h - WAVE_ROW_H;
+    // Stacked rows are taller than the band that shows them, and the band
+    // scrolls. Painting a row nobody can see costs a full pass over its notes,
+    // so rows outside the scrolled slice are skipped; `handleRowsScroll`
+    // repaints before the browser paints the new scroll position.
+    const rowsScroll = rowsScrollRef.current;
+    const rowsVisibleTop =
+      rowLayout && rowsScroll ? laneTop + rowsScroll.scrollTop : laneTop;
+    const rowsVisibleBottom =
+      rowLayout && rowsScroll
+        ? rowsVisibleTop + rowsScroll.clientHeight
+        : laneBottom;
+    const rowOnScreen = (row: TrackRowGeometry): boolean =>
+      row.bottom >= rowsVisibleTop && row.top <= rowsVisibleBottom;
     const laneCount = Math.max(1, scene?.lanes.length ?? 1);
     const laneH = (laneBottom - laneTop) / laneCount;
 
@@ -1130,6 +1146,7 @@ export default function PianoRollTimeline({
     if (showNotes) {
       if (rowLayout && scene) {
         for (const row of rowLayout.rows) {
+          if (!rowOnScreen(row)) continue;
           for (let lane = 0; lane < row.row.lanes.length; lane++) {
             ctx.fillStyle = lane % 2 ? COLORS.laneAlt : COLORS.laneBg;
             ctx.fillRect(
@@ -1155,6 +1172,7 @@ export default function PianoRollTimeline({
       if (showNotes) {
         if (rowLayout) {
           for (const row of rowLayout.rows) {
+            if (!rowOnScreen(row)) continue;
             const rowScene = sceneForTrackRow(scene, row.row);
             const rowSelection = new Set(
               localNoteIdsForTrack(selection, row.row.key),
@@ -1587,6 +1605,18 @@ export default function PianoRollTimeline({
       if (rafId) cancelAnimationFrame(rafId);
       if (intervalId !== null) clearInterval(intervalId);
     };
+  }, [audioManager]);
+
+  /**
+   * Scrolling the rows band brings rows into view that `draw` skipped as
+   * off-screen. Repaint inline rather than flagging the frame loop: the
+   * browser paints the new scroll offset at the end of this task, and a row
+   * that has not been painted yet would show as empty lanes until the next
+   * frame — which, with the transport paused, is a poll away.
+   */
+  const handleRowsScroll = useCallback(() => {
+    dirtyRef.current = true;
+    drawRef.current(Math.max(0, audioManager.chartTime * 1000));
   }, [audioManager]);
 
   // -- Interaction helpers ---------------------------------------------------
@@ -4414,7 +4444,10 @@ export default function PianoRollTimeline({
               onPointerLeave={handlePointerLeave}
               onContextMenu={handleContextMenu}
             />
-            <div className="no-scrollbar min-h-0 flex-1 overflow-auto">
+            <div
+              ref={rowsScrollRef}
+              onScroll={handleRowsScroll}
+              className="no-scrollbar min-h-0 flex-1 overflow-auto">
               <canvas
                 ref={stackedRowsCanvasRef}
                 data-piano-roll-region="rows"
