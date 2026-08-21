@@ -4,6 +4,7 @@ import {useEffect} from 'react';
 import {usePathname} from 'next/navigation';
 import {runRawSql} from '@/lib/local-db/client';
 import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
+import {getStoragePressure} from '@/lib/browser-storage';
 
 function currentRoutePrivacyError() {
   if (!rendersPersonalTasteData(window.location.pathname)) return null;
@@ -278,19 +279,22 @@ export default function WebMCPTools() {
       execute: async () => {
         const privacyError = currentRoutePrivacyError();
         if (privacyError) return privacyError;
-        const estimate = await navigator.storage.estimate();
+        const pressure = await getStoragePressure();
+        if (pressure == null) {
+          return {
+            content: [
+              {type: 'text', text: 'This browser reports no storage estimate.'},
+            ],
+          };
+        }
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify({
-                used: ((estimate.usage ?? 0) / 1048576).toFixed(1) + ' MB',
-                quota: ((estimate.quota ?? 0) / 1048576).toFixed(0) + ' MB',
-                percent:
-                  (
-                    ((estimate.usage ?? 0) / (estimate.quota ?? 1)) *
-                    100
-                  ).toFixed(1) + '%',
+                used: (pressure.usageBytes / 1048576).toFixed(1) + ' MB',
+                quota: (pressure.quotaBytes / 1048576).toFixed(0) + ' MB',
+                percent: (pressure.ratio * 100).toFixed(1) + '%',
               }),
             },
           ],

@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import {getSentryEnvironment, isSentryEnabled} from '@/lib/sentry/environment';
 import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
 import {markReplayRegistered} from '@/lib/sentry/replay';
+import {attachStorageContext} from '@/lib/sentry/storage-context';
 import {
   filterTasteBreadcrumb,
   filterTasteTransaction,
@@ -71,6 +72,12 @@ Sentry.init({
   beforeBreadcrumb: breadcrumb =>
     filterTasteBreadcrumb(breadcrumb, currentPathname()),
 });
+
+// A Chrome eviction destroys the user's chart projects and is reported as
+// "my songs are gone", never as a quota figure. Reading the quota here puts
+// that figure on the events this session sends once the read resolves, so the
+// next such report can be told apart from a bug that only looks like one.
+void attachStorageContext();
 
 export const onRouterTransitionStart = (
   ...args: Parameters<typeof Sentry.captureRouterTransitionStart>
