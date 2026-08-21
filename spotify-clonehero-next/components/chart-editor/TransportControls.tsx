@@ -94,7 +94,16 @@ export default function TransportControls({
   className,
 }: TransportControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  /** Exact playback position, for the cold-start seek below. Held in a ref
+   *  because nothing renders it — the readout reads `audioManager.chartTime`
+   *  directly — so tracking it in state would re-render on every frame. */
+  const currentTimeRef = useRef(0);
+  /** The whole second the readout is showing. Re-rendering the transport is
+   *  what refreshes the readout, and the readout only ever shows whole
+   *  seconds, so this changes 1x per second rather than 1x per frame. The
+   *  bar carries a row of tooltips, and re-rendering those every frame cost
+   *  more main thread than the piano roll's entire grid. */
+  const [, setDisplaySecond] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const {capabilities} = useChartEditorContext();
   const {undo, redo, canUndo, canRedo} = useUndoRedo();
@@ -118,8 +127,13 @@ export default function TransportControls({
 
     const sample = () => {
       if (audioManager.isInitialized) {
-        setCurrentTime(Math.min(audioManager.currentTime, durationSeconds));
+        currentTimeRef.current = Math.min(
+          audioManager.currentTime,
+          durationSeconds,
+        );
       }
+      const chartSecond = Math.floor(audioManager.chartTime);
+      setDisplaySecond(Number.isFinite(chartSecond) ? chartSecond : 0);
       setIsPlaying(audioManager.isPlaying);
     };
 
@@ -175,10 +189,10 @@ export default function TransportControls({
     } else if (audioManager.isInitialized) {
       await audioManager.resume();
     } else {
-      await audioManager.play({time: currentTime});
+      await audioManager.play({time: currentTimeRef.current});
     }
     kickTransportPollRef.current();
-  }, [audioManager, currentTime]);
+  }, [audioManager]);
 
   // Section jumping
   // Section msTime values are chart time — use playChartTime for seeking
