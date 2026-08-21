@@ -11,6 +11,7 @@
  */
 
 import '@testing-library/jest-dom';
+import Link from 'next/link';
 import {render, screen} from '@testing-library/react';
 import SiteHeader, {SiteMain} from '../SiteChrome';
 import EditorHeaderRow from '../chart-editor/EditorHeaderRow';
@@ -26,7 +27,12 @@ jest.mock('../../lib/supabase/AuthProvider', () => ({
 }));
 
 function SiteNavStub() {
-  return <nav>Music Charts Tools</nav>;
+  return (
+    <nav>
+      <Link href="/">Music Charts Tools</Link>
+      <Link href="/chart">Chart</Link>
+    </nav>
+  );
 }
 
 function renderChrome(children?: React.ReactNode) {
@@ -47,9 +53,9 @@ describe('SiteHeader', () => {
     renderChrome();
 
     expect(screen.getByText('Music Charts Tools')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', {name: 'Music Charts Tools home'}),
-    ).not.toBeInTheDocument();
+    // Both headers link home, so the discriminator is the audience links:
+    // they are the full nav's alone, and the compact row omits them.
+    expect(screen.getByRole('link', {name: 'Chart'})).toBeInTheDocument();
     expect(screen.queryByText('Log In')).not.toBeInTheDocument();
   });
 

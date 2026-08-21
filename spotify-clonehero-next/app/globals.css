@@ -153,6 +153,13 @@
    * render exactly as they did before this scope existed — nothing here
    * is a global token edit.
    *
+   * The root attribute is no longer the only scope. `--ed-control-h` is the
+   * app's control-height knob, and `components/SiteNav.tsx` sets it on its
+   * own row to shrink the site nav's controls below `md`. A second scope is
+   * what the fallback contract below is for; the token is not renamed off
+   * the `--ed-` prefix because the editor density scope still owns every
+   * other token here.
+   *
    * Consumers read `var(--ed-token, <pre-scope value>)`, in inline styles
    * or Tailwind arbitrary-value classes (e.g.
    * `p-[var(--ed-pad-section,1rem)]`). The fallback is what the component
