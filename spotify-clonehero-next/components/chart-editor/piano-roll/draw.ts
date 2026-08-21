@@ -36,6 +36,7 @@ import {
   PHRASE_EDGE_LINE_W,
 } from './lyricsScene';
 import {loopFlagXs} from './loopFlags';
+import {measureTextWidth} from './textWidth';
 import {sampleAmpRange, type AmpPyramid} from './wavePeaks';
 import {
   COLORS,
@@ -485,7 +486,7 @@ export function drawTempoLane(
   tsWidthsOut.clear();
   for (const ts of scene.timeSignatures) {
     const dragging = tsDrag?.moved === true && tsDrag.originalTick === ts.tick;
-    const tw = ctx.measureText(ts.label).width;
+    const tw = measureTextWidth(ctx, ts.label);
     tsWidthsOut.set(ts.tick, tw);
     let ms = ts.ms;
     if (dragging) {
@@ -759,7 +760,7 @@ export function drawLyricsRow(
     );
     const ms = tickToMs(previewTick, scene.timedTempos, scene.resolution);
     const x = msToX(ms, view);
-    const tw = ctx.measureText(chip.text).width;
+    const tw = measureTextWidth(ctx, chip.text);
     widthsOut.set(chip.id, tw);
     if (x < -60 || x > w + 10) continue;
     const selected = selection.has(chip.id);
@@ -860,7 +861,7 @@ export function drawRuler(
       );
     }
     if (x > w + 10) continue;
-    const tw = ctx.measureText(s.name).width;
+    const tw = measureTextWidth(ctx, s.name);
     if (x + tw + 14 < 0) continue;
     const selected = selectedSectionTicks.has(s.tick);
     ctx.fillStyle = COLORS.sectionFlag;

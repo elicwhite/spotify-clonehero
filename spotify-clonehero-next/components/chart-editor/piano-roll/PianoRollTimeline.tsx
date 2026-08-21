@@ -188,6 +188,7 @@ import {
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick} from './scene';
+import {measureTextWidth} from './textWidth';
 import BpmValuePopover from './BpmValuePopover';
 import TapTempoPopover from './TapTempoPopover';
 import {useSetClickSuppressed} from '../AudioServiceContext';
@@ -4594,7 +4595,7 @@ function hitSection(
   ctx.font = '600 10px system-ui, sans-serif';
   for (const s of scene.sections) {
     const fx = msToX(s.ms, view);
-    const labelW = ctx.measureText(s.name).width;
+    const labelW = measureTextWidth(ctx, s.name);
     if (x >= fx - 3 && x <= fx + labelW + 12) return s;
   }
   return null;
