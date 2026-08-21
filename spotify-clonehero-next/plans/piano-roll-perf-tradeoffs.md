@@ -100,6 +100,34 @@ taken silently because getting the grouping wrong is a visible change.
 
 ---
 
+## 2b. ALREADY LANDED — an unpainted frame after a very large scroll jump
+
+**Also committed. Smaller than item 1, and the risk is narrower, but it is a
+behaviour change under stress rather than a pure win.**
+
+The stacked rows band only paints rows inside its scrolled slice plus a
+screenful of margin either side. The band scrolls on the compositor, so a
+frame can be composited at an offset the last draw never saw — the margin is
+the lookahead that covers it.
+
+A scroll that jumps further than a screenful between repaints would bring
+unpainted rows into view for a frame, showing empty lanes until the next
+draw. In practice:
+
+- the band's scrollbar is hidden (`no-scrollbar`), so scrolling is trackpad
+  and wheel only, which arrives incrementally
+- nothing in the app scrolls the band programmatically
+- a fast flick on a heavily loaded machine is the one case that could
+  outrun it, and only for a frame
+
+**If you would rather not have that at all:** widen the margin (cheap, costs
+the rest of the saving) or drop the row skipping. The saving here is 49.6ms →
+46.2ms per draw with four highways, growing with the number of rows held off
+screen — so it is worth more to someone with six or eight highways open than
+to the four-highway case it was measured on.
+
+---
+
 ## 3. Skip labels that are already covered by the next label
 
 **Win: large — up to 7 of the 8 ms in `fillText`, plus the text shaping behind
