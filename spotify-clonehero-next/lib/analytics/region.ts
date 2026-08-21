@@ -44,13 +44,16 @@ export function isEeaCountry(country: string | null | undefined): boolean {
 export const VERCEL_COUNTRY_HEADER = 'x-vercel-ip-country';
 export const REGION_COOKIE = 'gaRegion';
 
-/** The one cookie value that allows analytics: the proxy classified this
- *  visitor as outside the EEA/UK/CH. Every other state — missing, corrupted
- *  or 'eea' — means the visitor is not processed at all. */
+/** The two values the proxy writes. `REGION_ALLOWED` is the only one that
+ *  allows analytics: it says the visitor is outside the EEA/UK/CH. Every
+ *  other state — `REGION_EEA`, missing, or corrupted — means the visitor is
+ *  not processed at all. */
 export const REGION_ALLOWED = 'other';
+export const REGION_EEA = 'eea';
 
 /** Reads the region cookie the proxy set. Browser only: on the server there
- *  is no cookie on `document` to read, and the answer is "not known yet". */
+ *  is no cookie on `document` to read, so the answer is `null` and
+ *  `analyticsAllowed` reads that as "no". */
 export function readRegionCookie(): string | null {
   if (typeof document === 'undefined') return null;
   for (const part of document.cookie.split(/;\s*/)) {

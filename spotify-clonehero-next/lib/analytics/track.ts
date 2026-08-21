@@ -184,10 +184,10 @@ function applyUserId(): void {
 /**
  * Events reported before gtag.js existed, waiting for it.
  *
- * A landing page reports its view from a mount effect, which React runs in
- * the hydration commit — a whole commit before `RegionAwareAnalytics` can
- * read the region cookie and mount <GoogleAnalytics>. Sent at that moment
- * the event has nowhere to go, so every first landing view was discarded.
+ * gtag.js does not exist until `RegionAwareAnalytics` has read the region
+ * cookie and mounted <GoogleAnalytics>, which is a commit later than the
+ * mount effect a landing page reports its view from. Everything reported
+ * in that window waits here.
  *
  * Only a visitor the cookie says may be processed is held here. For anyone
  * else the event is dropped where it is reported: a queue that is never
@@ -203,10 +203,7 @@ const PENDING_LIMIT = 20;
 
 /** gtag's init script defines `window.gtag` and pushes `config` in the same
  *  breath, so this answers both "can an event be sent" and "will it be
- *  attributed". Sending through `window.gtag` rather than the
- *  `sendGAEvent` wrapper is what makes it answerable at all: the wrapper
- *  drops an event silently unless its own module-private state says the
- *  component has rendered, and nothing can read that state. */
+ *  attributed". */
 function gaReady(): boolean {
   return typeof window !== 'undefined' && typeof window.gtag === 'function';
 }
@@ -248,7 +245,17 @@ export function track(payload: AnalyticsEvent): void {
 export function flushPendingEvents(): void {
   if (!gaReady()) return;
   const queued = pending.splice(0, pending.length);
-  for (const [event, params] of queued) send(event, params);
+  for (const [event, params] of queued) {
+    // Per event, not around the loop: `gtag` is third-party code once
+    // gtag.js has replaced the inline stub, and one event that makes it
+    // throw must not swallow the rest — nor reach the React commit this
+    // runs in. Analytics never throws into product code.
+    try {
+      send(event, params);
+    } catch {
+      // ignore
+    }
+  }
 }
 
 // Stitches sessions across devices for logged-in users. Pass null on
