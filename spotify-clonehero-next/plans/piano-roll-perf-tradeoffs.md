@@ -1,33 +1,37 @@
 # Piano-roll perf: changes that would trade pixels for speed
 
 A log of optimizations that are **not** safe to take silently, because they
-change what the user sees. Everything landed so far renders byte-identical
-output; these are the ones that need a human decision.
+change what the user sees, and of what it would actually take to hit 60fps
+under 10x CPU throttling.
 
 Measured on `/chart-editor` with 4 highways (Guitar·Expert, Bass·Expert,
 Drums·Expert, Drums·Hard) on a real 4:10 chart, Chrome at 10x CPU throttling,
-song position 0:20–0:52. Counts are per piano-roll draw and are reproducible
-to within ~0.1% across runs at the same position.
+playing from 0:18, in a ~36s trace window.
 
-## Reference: where a draw goes now
+## Where it stands
 
-After the three landed fixes (binary-search tempo lookup, cached text widths,
-guarded native `roundRect`):
+| | piano-roll draw | highway frame |
+| --- | --- | --- |
+| before any of this work | 58.2 ms | 71.5 ms |
+| now | **20.1 ms** | **21.2 ms** |
 
-| canvas call | per draw | ms per draw |
-| ----------- | -------- | ----------- |
-| `fill`      | 6,445    | 17.5        |
-| `roundRect` | 5,419    | 9.7         |
-| `fillText`  | 678      | 8.0         |
-| `beginPath` | 7,036    | 5.2         |
-| `fillRect`  | 2,534    | 4.1         |
-| `lineTo`    | 2,555    | 1.6         |
-| `stroke`    | 629      | 1.1         |
-| `moveTo`    | 1,617    | 1.1         |
-| `closePath` | 1,026    | 0.8         |
-| `arcTo`     | 464      | 0.4         |
+About 3x on both. A 60fps budget under 10x throttling is 16.6 ms for
+*everything* in the frame; the two together are ~41 ms, so the target is
+still ~2.5x away. See "What 60fps would actually take" at the bottom.
 
-Total 49.5 ms of canvas calls per draw, at 4.09 draws/sec.
+## Where a draw goes now
+
+Share of the trace window, by the nearest app-level frame:
+
+| | share |
+| --- | --- |
+| `draw` (highway, all 4 panes) | 16.6% |
+| `copyCanvasRegion` (piano roll) | 10.3% |
+| `paintFretGlyph` | 9.1% |
+| `drawLyricsRow` | 7.3% |
+| `roundRect` | 5.3% |
+| `tick` (highway animated textures) | 4.6% |
+| `drawNotes` | 3.0% |
 
 ---
 
@@ -128,43 +132,7 @@ to the four-highway case it was measured on.
 
 ---
 
-## 3. Skip labels that are already covered by the next label
-
-**Win: large — up to 7 of the 8 ms in `fillText`, plus the text shaping behind
-it.**
-
-Every text label whose x lands inside the viewport is painted, however little
-room it has. At a normal zoom on this chart that is, per draw:
-
-| label            | painted per draw |
-| ---------------- | ---------------- |
-| lyric syllables  | 253              |
-| BPM markers      | 66               |
-| bar numbers      | 21               |
-| section names    | 13               |
-
-253 lyric chips across a 1461 px lane is one label every ~5.8 px, so they
-overlap into an unreadable smear — the same is true of the BPM lane, which is
-why the tempo row reads as a solid blue band rather than as numbers. The
-pixels are being paid for and then covered up.
-
-**The trade:** track the right edge of the last label drawn in each lane and
-skip any label that would start before it (or before it plus a small gap).
-The lane then shows as many labels as actually fit, and nothing else.
-
-This is a visible change, but it is very likely an improvement: today the
-dense regions are illegible, and after the change they would show a readable
-subset. It does mean a given syllable is not always on screen at low zoom,
-which matters if someone is scanning for one — the chips are still hit-
-testable either way, so only the painted text changes.
-
-**Recommendation:** worth doing, but it changes what the lyrics and tempo
-lanes look like, so it is your call. Would be the single largest remaining
-piano-roll win after the fill batching.
-
----
-
-## 4. Not pursued — these would change the product, not just pixels
+## 3. Not pursued — these would change the product, not just pixels
 
 Listed so it is clear they were considered and rejected:
 
@@ -173,6 +141,52 @@ Listed so it is clear they were considered and rejected:
 - Capping how many highways render at once, or dropping the piano roll's
   frame rate while more than N rows are visible.
 - Reducing the piano roll's rendering resolution below the device pixel ratio.
+- Thinning out the lyric, tempo or section labels when they crowd together.
+  Scrolling and zooming around the chart is the main thing the panel is for,
+  and a label that disappears at some zooms is worse than a crowded lane.
 
 None of these are on the table; they trade the editing experience itself
 rather than a handful of antialiased pixels.
+
+---
+
+## What 60fps under 10x throttling would actually take
+
+A 16.6 ms budget for the whole frame. The two renderers currently spend ~41 ms
+between them, and the remaining safe, invisible optimizations do not close
+that. Adding up every one still on the table:
+
+| | worth |
+| --- | --- |
+| Drawing the bands straight into their canvases, deleting the offscreen copy | ~10% |
+| Batching opaque note heads into one fill per lane | ~5% |
+| Sharing the highway's animated textures across the four panes | ~5% |
+| Pooling the Object3Ds the reconciler allocates every frame | ~1% |
+
+That is roughly another 20%, landing near 33 ms. Still twice the budget.
+
+Getting the rest means changing *when* pixels are produced, not how fast:
+
+**Scroll-blit the piano roll.** During playback and scrolling the view
+translates horizontally: almost every pixel of the next frame is the previous
+frame shifted sideways. Copying the previous frame by the scroll delta and
+repainting only the newly exposed strip makes a frame cost scale with how far
+it moved rather than with how much is on screen — plausibly 5-10x on the
+panel, and it is the case the panel is used in most.
+
+The catch is that the shift has to land on whole device pixels, so the view's
+left edge would snap to a half-CSS-pixel grid at dpr 2 instead of moving
+continuously. At that size it should be invisible, and arguably crisper, but
+it is a real change to how scrolling looks and it is the kind of thing that
+has to be looked at rather than argued about. Zooming still costs a full
+repaint, which is correct — the geometry genuinely changes.
+
+**The highway needs its own pass.** It is 4 panes rendered from one shared
+`THREE.Scene`, so every pane's render traverses all four panes' objects, and
+each pane owns a duplicate set of animated textures it ticks and uploads
+separately. Fixing both is mechanical but it is a day's careful work, not an
+afternoon's.
+
+Below ~30fps at 10x throttling the honest answer may be that four WebGL
+highways plus a full-width 2D panel is more than the budget allows, and the
+lever left is resolution rather than algorithms.
