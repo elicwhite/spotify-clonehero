@@ -48,6 +48,79 @@ export function buildTimedTempos(
 }
 
 /**
+ * Whether a tempo map ascends in both `tick` and `msTime`.
+ *
+ * Usually it does — `buildTimedTempos` derives `msTime` by walking the events
+ * in order — but nothing upstream guarantees it. scan-chart's `.chart` parser
+ * keeps `[SyncTrack]` entries in file order without sorting, so a chart whose
+ * tempo events are out of order produces a map that steps backwards.
+ *
+ * The answer is cached per array. Every tempo map comes out of
+ * `buildTimedTempos` as a fresh array and nothing mutates one in place, so a
+ * map is only ever walked once no matter how many notes are converted.
+ */
+const ascendingMaps = new WeakMap<TimedTempo[], boolean>();
+
+function isAscending(timedTempos: TimedTempo[]): boolean {
+  const cached = ascendingMaps.get(timedTempos);
+  if (cached !== undefined) return cached;
+  let ascending = true;
+  for (let i = 1; i < timedTempos.length; i++) {
+    if (
+      timedTempos[i].tick < timedTempos[i - 1].tick ||
+      timedTempos[i].msTime < timedTempos[i - 1].msTime
+    ) {
+      ascending = false;
+      break;
+    }
+  }
+  ascendingMaps.set(timedTempos, ascending);
+  return ascending;
+}
+
+/**
+ * Index of the tempo segment in force at `position`, where `of` reads the
+ * comparable field — `tick` or `msTime` — off a segment.
+ *
+ * The segment in force is the last one at or before the position. On the
+ * ordinary ascending map that is a binary search, which is what makes this
+ * cheap enough for the piano roll to convert every note on every row on every
+ * frame.
+ *
+ * An out-of-order map has no "last one at or before" to find, so it keeps the
+ * scan that stops at the first step backwards. That is not more correct — the
+ * map itself is nonsense — but it is what every caller has always been given,
+ * and a binary search over unordered data would move notes on those charts.
+ */
+function activeTempoIndex(
+  timedTempos: TimedTempo[],
+  position: number,
+  of: (tempo: TimedTempo) => number,
+): number {
+  if (!isAscending(timedTempos)) {
+    let found = 0;
+    for (let i = 1; i < timedTempos.length; i++) {
+      if (of(timedTempos[i]) <= position) found = i;
+      else break;
+    }
+    return found;
+  }
+  let lo = 1;
+  let hi = timedTempos.length - 1;
+  let found = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (of(timedTempos[mid]) <= position) {
+      found = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return found;
+}
+
+/**
  * Convert a millisecond timestamp to a tick position using the tempo map.
  *
  * Formula (inverse of scan-chart's setEventMsTimes):
@@ -62,17 +135,8 @@ export function msToTick(
   resolution: number,
   rounding: 'round' | 'ceil' | 'floor' = 'round',
 ): number {
-  // Find the active tempo at this msTime
-  let tempoIndex = 0;
-  for (let i = 1; i < timedTempos.length; i++) {
-    if (timedTempos[i].msTime <= msTime) {
-      tempoIndex = i;
-    } else {
-      break;
-    }
-  }
-
-  const tempo = timedTempos[tempoIndex];
+  const tempo =
+    timedTempos[activeTempoIndex(timedTempos, msTime, t => t.msTime)];
   const elapsedMs = msTime - tempo.msTime;
   const tickOffset = (elapsedMs * tempo.beatsPerMinute * resolution) / 60000;
   const raw = tempo.tick + tickOffset;
@@ -93,17 +157,7 @@ export function tickToMs(
   timedTempos: TimedTempo[],
   resolution: number,
 ): number {
-  // Find the active tempo at this tick
-  let tempoIndex = 0;
-  for (let i = 1; i < timedTempos.length; i++) {
-    if (timedTempos[i].tick <= tick) {
-      tempoIndex = i;
-    } else {
-      break;
-    }
-  }
-
-  const tempo = timedTempos[tempoIndex];
+  const tempo = timedTempos[activeTempoIndex(timedTempos, tick, t => t.tick)];
   return (
     tempo.msTime +
     ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * resolution)
