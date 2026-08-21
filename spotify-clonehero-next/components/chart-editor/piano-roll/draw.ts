@@ -1005,6 +1005,30 @@ export function drawStackedGutter(
   }
 }
 
+const HAS_NATIVE_ROUND_RECT =
+  typeof CanvasRenderingContext2D !== 'undefined' &&
+  typeof CanvasRenderingContext2D.prototype.roundRect === 'function';
+
+/**
+ * Trace a rounded rectangle. The caller fills or strokes it.
+ *
+ * Note glyphs, their halos and sustain tails are all rounded rectangles, so
+ * this runs thousands of times per frame — over 20,000 `arcTo` calls per
+ * piano-roll draw on a dense chart, which the native call collapses into one
+ * path operation.
+ *
+ * The guard keeps the two paths tracing the SAME OUTLINE. Once `r` exceeds
+ * half a side they diverge in shape: the spec has `roundRect` scale the radii
+ * down to fit, while `arcTo` lets the corner arcs overrun each other into a
+ * pinched outline. A very narrow glyph at a zoomed-out view hits exactly that
+ * case, so it keeps the arcTo outline it has always had.
+ *
+ * Within the guard the geometry matches but the rasterization is not quite
+ * bit-for-bit: Skia antialiases the corners of a native round rect slightly
+ * differently from the equivalent arcTo chain. Measured over random in-guard
+ * shapes, about one in seven differs, by a handful of corner subpixels. See
+ * `plans/piano-roll-perf-tradeoffs.md`.
+ */
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -1013,6 +1037,11 @@ function roundRect(
   h: number,
   r: number,
 ): void {
+  if (HAS_NATIVE_ROUND_RECT && r * 2 <= w && r * 2 <= h) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
