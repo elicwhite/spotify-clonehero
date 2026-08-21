@@ -72,35 +72,41 @@ branch in `draw.ts`).
 
 ---
 
-## 2. Batch note glyphs into one fill per colour
+## 2. TRIED AND REVERTED — batching note glyphs into one fill per colour
 
-**Win: large — potentially most of the 17.5 ms in `fill` and the 5.2 ms in
-`beginPath`.**
+**Both halves of the case for this turned out to be wrong. Measured, not
+argued — do not re-attempt without re-measuring.**
 
-Every note head, halo and sustain tail is its own `beginPath` + shape +
-`fill`, which is why there are ~6,445 fills per draw. Adding every glyph of a
-given lane colour to a single `Path2D` and issuing one `fill()` per colour
-would cut that to roughly one fill per lane.
+The idea was that every note head costs its own `beginPath` + shape + `fill`,
+~2,500 of them a draw, and that collecting them into one `Path2D` per lane
+colour would be free of visual change (opaque, one colour per lane) and would
+recover the per-call overhead.
 
-Almost all of it is note heads. Of 2,129 rounded rects in one draw at a normal
-zoom, 1,851 are the same shape: under 4 px wide, 13 px tall — one per visible
-note across the four rows, none off-screen. Each costs a `beginPath`, a
-`roundRect` and a `fill`, and at that size the fill is nearly all per-call
-overhead rather than pixels.
+Implemented, it did collapse the calls: **2,497 fills per draw became 741**,
+1,806 `fillRect`s became 145, and 2,466 glyphs went into 10 path fills.
 
-**The trade:** this is pixel-identical for opaque shapes, but **not** where the
-current code overlaps shapes at `globalAlpha < 1`. Today two overlapping
-translucent shapes darken where they cross; batched into one path they would
-fill once and not darken. Sustain tails under note heads, and the selection
-halo behind a glyph, are exactly that case.
+**It made the panel slower.** Piano-roll draw went 20.9 ms → 22.1 ms. The work
+just moved: `flushHeads` 7.0% and `traceRoundRect` 5.3% against the 9.1% +
+5.6% they replaced. The cost was never the per-call overhead — it is path
+construction and rasterization, and Skia does not get faster tessellating one
+big multi-subpath path than many small ones. Building a fresh `Path2D` every
+frame may cost more than it saves.
 
-**Options:** batch only the plain opaque note heads — they are drawn at
-`globalAlpha = 1`, one per lane per tick, so a per-lane batch is provably
-identical and still collects the 1,851. Leave halos, ghosts and sustains as
-individual fills.
+**And it is not pixel-identical.** Comparing separate fills against one
+batched fill of the same shapes, on a fresh canvas each time:
 
-**Recommendation:** worth doing, opaque groups only. Flagged here rather than
-taken silently because getting the grouping wrong is a visible change.
+| | differing subpixels | max delta |
+| --- | --- | --- |
+| two overlapping heads | 102 | 51 |
+| two **non**-overlapping heads | 98 | 51 |
+
+Non-overlapping matters: it means the difference is not about compositing
+order or translucent overlap, which is what the original reasoning here
+assumed. A multi-subpath fill is antialiased differently from separate fills,
+full stop. The real panel confirmed it — the rows canvas hashed differently
+with batching on, and returned to its exact baseline hash when reverted.
+
+So it costs pixels on every glyph *and* costs time. Reverted.
 
 ---
 
@@ -159,11 +165,12 @@ that. Adding up every one still on the table:
 | | worth |
 | --- | --- |
 | Drawing the bands straight into their canvases, deleting the offscreen copy | ~10% |
-| Batching opaque note heads into one fill per lane | ~5% |
 | Sharing the highway's animated textures across the four panes | ~5% |
 | Pooling the Object3Ds the reconciler allocates every frame | ~1% |
 
-That is roughly another 20%, landing near 33 ms. Still twice the budget.
+That is roughly another 15%, landing near 34 ms. Still twice the budget.
+(Batching note heads was on this list at ~5%; it was tried, measured slower,
+and removed — see item 2.)
 
 Getting the rest means changing *when* pixels are produced, not how fast:
 
