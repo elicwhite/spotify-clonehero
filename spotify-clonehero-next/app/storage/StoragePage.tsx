@@ -31,21 +31,24 @@ export function StoragePage() {
       <LandingSection
         title="Why a browser deletes it"
         intro="A browser that runs short of room deletes a whole site's data at once, without asking first. Nothing on this site is on a server, so there is nothing to restore it from.">
-        <LandingProse>
-          Two things guard against that. The stems and the models are held to a
-          size limit, so the site asks for less room than it otherwise would.
-          And the site asks the browser to promise to keep what is left.
-        </LandingProse>
-        <LandingProse>
-          Each browser decides that promise on its own terms. Some grant it
-          without asking you. Some put the question to you, and the button above
-          is where that question is asked.
-        </LandingProse>
-        <LandingProse>
-          In browsers that support separate storage areas, the stems and the
-          models are also kept in an area the browser is told it may clear
-          first.
-        </LandingProse>
+        <div className="space-y-4">
+          <LandingProse>
+            Two things guard against that. The stems and the models are held to
+            a size limit, so the site asks for less room than it otherwise
+            would. And the site asks the browser to promise to keep what is
+            left.
+          </LandingProse>
+          <LandingProse>
+            Each browser decides that promise on its own terms. Some grant it
+            without asking you. Some ask you first, and some can be told no,
+            which is what the panel above reports.
+          </LandingProse>
+          <LandingProse>
+            In browsers that support separate storage areas, the stems and the
+            models are also kept in an area the browser is told it may clear
+            first.
+          </LandingProse>
+        </div>
       </LandingSection>
 
       <LandingSection

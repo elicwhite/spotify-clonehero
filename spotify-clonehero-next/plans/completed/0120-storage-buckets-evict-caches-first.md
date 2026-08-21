@@ -1,6 +1,6 @@
 # 0120 — Keep chart projects when Chrome runs out of room
 
-Status: in-progress
+Status: completed
 
 ## The problem
 
@@ -281,24 +281,43 @@ while this one decides which root a handle comes from. Different jobs.
 
 ## Verify
 
-- The fake OPFS needs work before any of this is testable:
-  `FakeFile` (`lib/drum-transcription/storage/__tests__/fake-opfs.ts:33`) has no
-  `lastModified`, so every LRU test would compare `undefined`. Add an injectable
-  clock; same-tick touches would otherwise order nondeterministically.
-- Unit tests for the pruner: least-recently-used order, newest-marker-wins
-  inside an entry, an unmarked entry treated as oldest, the `keep` set
-  respected, and a stop as soon as the target is met.
-- Unit tests over a fake bucket manager: the bucket root is used when
-  `storageBuckets` exists, the default root when it does not, and a legacy entry
-  is found by `hasStem`, `hasStemOpus`, `loadStem` and `loadStemOpus` alike,
-  without being copied.
-- In Chrome: new cache entries land under the `cache` bucket, the projects and
-  the database do not, and `navigator.storage.persisted()` answers true. Not
-  with the `check-opfs` skill — the `opfs_*` WebMCP tools read the default root
-  only, so they cannot see the bucket. Use DevTools, or make those tools
+Done in Chrome, against the dev server:
+
+- **A named bucket is counted in `estimate().usage`.** 8 MB written into a
+  bucket other than the default raised the origin's reported usage by the same
+  8 MB. This was the open risk in Phase 4: had buckets been uncounted, moving
+  the caches into one would have made the origin look emptier and relaxed the
+  Phase 3 budget exactly when it should tighten. It does not.
+- **The app opens the bucket by itself.** `navigator.storageBuckets.keys()`
+  answers `["cache"]` after a single load of `/storage`, which reaches it
+  through the panel's own reading.
+- **`/storage` renders with no console error from the site**, and the refused
+  branch was exercised live: that browser profile reports the
+  `persistent-storage` permission as `denied`, and the page states it instead
+  of showing a button that cannot work.
+
+Still to check in a browser, on a real profile:
+
+- That an entry cached before this work is still found once the bucket exists.
+  The unit tests cover it against a fake OPFS; nobody has watched a real
+  legacy entry survive.
+- Firefox and Brave: no `storageBuckets`, everything working from the default
+  root, the pruner still running, and nothing prompting on load.
+- Not with the `check-opfs` skill — the `opfs_*` WebMCP tools read the default
+  root only, so they cannot see the bucket. Use DevTools, or make those tools
   bucket-aware first.
-- In Chrome: whether `navigator.storage.estimate()` counts a non-default
-  bucket. If it does not, moving the caches into one makes the origin look
-  emptier, and Phase 3's budget relaxes exactly when it should tighten.
-- In Firefox: no `storageBuckets`, everything still works from the default root,
-  the pruner still runs, and nothing prompts on load.
+
+Covered by tests:
+
+- The fake OPFS gained file modification times and a test-controlled clock, so
+  the LRU order is asserted rather than assumed.
+- The pruner: least-recently-used order, newest-marker-wins inside an entry, an
+  unmarked entry treated as oldest, the `keep` set respected, the two-song
+  floor, a refused deletion counted as nothing freed, and a stop as soon as the
+  target is met.
+- The bucket: new entries written to it, a legacy entry found without being
+  copied, an entry split across the two roots resolved per payload, an
+  interrupted store in the bucket not hiding a complete copy in the older root,
+  and entries measured, pruned and deleted across both.
+- The panel: every permission state, a cache that cannot be read, a prune
+  blocked by another tab, and an action that throws.
