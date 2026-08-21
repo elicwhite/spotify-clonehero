@@ -1,12 +1,19 @@
 # 0105 — Funnel analytics for the chart-authoring tools
 
-Status: in-progress
+Status: completed
 
 ## Implementation notes
 
-Stages 1 to 5 are built. Stage 6 is a manual change in the GA4 admin UI and
-is the one outstanding item — until it is done the events are collected but
-no report can read them.
+All six stages are done. The custom dimensions and the `durationMs` metric
+were registered on 2026-08-21, so events from that date forward are
+readable. Anything collected before it is not, and cannot be made so —
+registration is never retroactive.
+
+Registration lives outside the repo, in the property's own configuration.
+Adding a parameter to `lib/analytics/track.ts` therefore means registering
+it too, in the same piece of work — a parameter that ships unregistered is
+collected and unreadable, and stays unreadable for every event that arrived
+before someone notices.
 
 **Where the events fire.**
 
@@ -449,12 +456,19 @@ group, and its events answer a different question.
 ## Stage 6 — register the dimensions
 
 Event parameters are not reportable until they are registered as custom
-dimensions in the GA4 admin UI. This is manual, and skipping it makes the
-whole plan collect data no report can read.
+dimensions. Skipping it makes the whole plan collect data no report can
+read, and registration is not retroactive, so the cost of doing it late is
+paid permanently by every event that arrived first.
 
-Register `origin`, `entrypoint`, `task`, `step`, `reason`, `charter`,
-`songKey` and `tools` as dimensions, and `durationMs` as a metric.
-`sourceFormat` and `format` already exist.
+Done. `origin`, `entrypoint`, `task`, `step`, `reason`, `tool`, `charter`,
+`songKey` and `tools` are registered as dimensions and `durationMs` as a
+metric, alongside the pre-existing `sourceFormat` and `format`.
+
+This is a manual step, done in the GA4 admin UI against the property behind
+`G-LEE7EDJH14`. Every dimension is event-scoped, and each `parameterName`
+has to match the property name in `lib/analytics/track.ts` character for
+character — GA4 matches on the wire name, so a near-miss registers a
+dimension that stays empty forever rather than failing.
 
 GA4 allows 50 event-scoped custom dimensions. 11 are used, so there is room.
 

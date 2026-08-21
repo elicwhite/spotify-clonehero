@@ -25,6 +25,7 @@
 import '@testing-library/jest-dom';
 import {useState} from 'react';
 import {
+  configure,
   fireEvent,
   render,
   screen,
@@ -49,6 +50,14 @@ const TEST_RUN_CONTEXT: AssistRunContext = {
   origin: 'chart-editor',
   entrypoint: 'assist-card',
 };
+
+// Every case here mounts the whole editor and waits on a stem list that is
+// several awaits deep — a real chart parse, an audio decode, and the mixer
+// render. Testing Library's 1s default is enough for that in isolation and
+// not under a loaded parallel run, where these were the first assertions to
+// time out. The work is the same either way; only the scheduler latency
+// differs, so the wait is what needs to be longer.
+configure({asyncUtilTimeout: 10_000});
 
 // jsdom has no ResizeObserver; the Stems mixer's Radix Slider needs one.
 class FakeResizeObserver {
