@@ -16,6 +16,14 @@ function setStorage(storage: unknown): void {
   });
 }
 
+/** Installs a `navigator.permissions` that answers `state`. */
+function setPermissionState(state: PermissionState): void {
+  Object.defineProperty(navigator, 'permissions', {
+    value: {query: async () => ({state})},
+    configurable: true,
+  });
+}
+
 beforeEach(() => {
   setTag.mockClear();
   setContext.mockClear();
@@ -34,12 +42,15 @@ describe('attachStorageContext', () => {
       estimate: async () => ({usage: 250, quota: 1000}),
       persisted: async () => true,
     });
+    setPermissionState('granted');
 
     await attachStorageContext();
 
     expect(setTag).toHaveBeenCalledWith('storage.persisted', true);
+    expect(setTag).toHaveBeenCalledWith('storage.permission', 'granted');
     expect(setContext).toHaveBeenCalledWith('storage', {
       persisted: true,
+      permission: 'granted',
       estimateAvailable: true,
       usageBytes: 250,
       quotaBytes: 1000,
@@ -49,6 +60,7 @@ describe('attachStorageContext', () => {
 
   it('still reports persistence when the browser gives no estimate', async () => {
     setStorage({persisted: async () => false});
+    setPermissionState('denied');
 
     await attachStorageContext();
 
@@ -57,6 +69,7 @@ describe('attachStorageContext', () => {
     expect(setTag).toHaveBeenCalledWith('storage.persisted', false);
     expect(setContext).toHaveBeenCalledWith('storage', {
       persisted: false,
+      permission: 'denied',
       estimateAvailable: false,
     });
   });
@@ -66,6 +79,7 @@ describe('attachStorageContext', () => {
       estimate: async () => ({usage: 1, quota: 2}),
       persisted: async () => true,
     });
+    setPermissionState('granted');
     setTag.mockImplementation(() => {
       throw new Error('no client');
     });

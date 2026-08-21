@@ -1,5 +1,9 @@
 import * as Sentry from '@sentry/nextjs';
-import {getStoragePressure, isStoragePersisted} from '@/lib/browser-storage';
+import {
+  getPersistencePermission,
+  getStoragePressure,
+  isStoragePersisted,
+} from '@/lib/browser-storage';
 
 /**
  * Attaches the origin's storage state to every later Sentry event.
@@ -18,23 +22,32 @@ import {getStoragePressure, isStoragePersisted} from '@/lib/browser-storage';
  * The tag is what makes the question askable across reports — how many of the
  * users who lost data had persistence refused. The context holds the numbers.
  *
- * Usage and quota are counts of bytes. They say nothing about what the user
- * has, so they are outside what `lib/sentry/taste-filters` guards.
+ * The permission state rides along because persistence is only ever taken
+ * where the browser already granted it. Without the state on the event, a
+ * session that was never asked cannot be told from one that asked and was
+ * refused, and the gate that decides between them could be wrong in every
+ * session of some browser with nothing to show for it.
+ *
+ * Usage, quota and a permission state say nothing about what the user has, so
+ * they are outside what `lib/sentry/taste-filters` guards.
  */
 export async function attachStorageContext(): Promise<void> {
   try {
-    const [pressure, persisted] = await Promise.all([
+    const [pressure, persisted, permission] = await Promise.all([
       getStoragePressure(),
       isStoragePersisted(),
+      getPersistencePermission(),
     ]);
 
     Sentry.setTag('storage.persisted', persisted);
+    Sentry.setTag('storage.permission', permission);
     Sentry.setContext(
       'storage',
       pressure == null
-        ? {persisted, estimateAvailable: false}
+        ? {persisted, permission, estimateAvailable: false}
         : {
             persisted,
+            permission,
             estimateAvailable: true,
             usageBytes: pressure.usageBytes,
             quotaBytes: pressure.quotaBytes,

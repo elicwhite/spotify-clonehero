@@ -85,7 +85,7 @@ itself, in every browser. That is why buckets come last.
 
 ## Phase 1 — see the truth
 
-New `lib/opfs-storage.ts`:
+New `lib/browser-storage.ts`:
 
 - `getStoragePressure()` over `navigator.storage.estimate()` — `usageBytes`,
   `quotaBytes`, and the ratio between them.
@@ -106,19 +106,26 @@ caches, and nothing can empty them until Phase 3 exists, so it is Phase 5.
 
 ## Phase 2 — ask for persistence
 
-`requestPersistentStorage()` in `lib/opfs-storage.ts`, over
-`navigator.storage.persist()`.
+`requestPersistentStorage()` in `lib/browser-storage.ts`, over
+`navigator.storage.persist()`, and `collectEarnedPersistence()`, which is the
+one that is safe to call on load.
 
-**Do not call it unconditionally on load.** Chrome answers from engagement
-heuristics with no prompt, so calling it at startup there is free. Firefox shows
-a permission prompt for persistent storage (verify this before shipping — it is
-not verifiable from this repo). An unexplained storage prompt on first paint
-would be a regression for Firefox users, whom
-`plans/todo/0116-find-music-firefox-brave.md` is actively courting.
+**Do not call `persist()` unconditionally on load.** Some browsers answer it
+with a permission prompt, and an unexplained "store data permanently?" before
+the visitor knows what the site is would be a regression — for Firefox users
+above all, whom `plans/todo/0116-find-music-firefox-brave.md` is courting.
 
-So: ask silently where the browser is known not to prompt, and behind an
-explicit button in the Phase 5 storage panel everywhere else. Until that panel
-exists, the browsers that prompt are simply not asked.
+The gate is the permission state, not the browser name:
+`permissions.query({name: 'persistent-storage'})` reports `'granted'` only where
+the decision is already made and nobody will be interrupted. This removes the
+need to verify which browsers prompt, since a browser that would prompt reports
+`'prompt'`. Everywhere else the ask belongs behind the Phase 5 button. Until
+that panel exists, those browsers are not asked.
+
+The gate assumes no browser decides inside `persist()` what `query()` called
+undecided. If one does, users it would have granted silently are never asked.
+Phase 1's context therefore carries the permission state, so that shows up in
+the reports rather than staying an assumption.
 
 ## Phase 3 — prune the caches before Chrome does
 
@@ -163,7 +170,7 @@ next run, and dropping it costs a 336 MB download.
 
 ## Phase 4 — move the caches into an evictable bucket
 
-`lib/opfs-storage.ts` gains:
+`lib/browser-storage.ts` gains:
 
 - `getCacheRoot(): Promise<FileSystemDirectoryHandle>` — opens
   `navigator.storageBuckets.open('cache')` and returns its `getDirectory()`.
@@ -227,7 +234,7 @@ this phase, and forking the shell fails a test.
 in-progress plan `0066-unified-stem-cache-and-audio-session.md`. Phases 3 and 4
 both change it. Check that plan's state before starting either.
 
-`lib/opfs-storage.ts` is a new module rather than an addition to
+`lib/browser-storage.ts` is a new module rather than an addition to
 `lib/fileSystemHelpers.ts`: that file holds three handle-level helpers
 (`writeFile`, `readJsonFile`, `readTextFile`) and takes handles it is given,
 while this one decides which root a handle comes from. Different jobs.

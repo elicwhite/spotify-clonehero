@@ -64,3 +64,73 @@ export async function isStoragePersisted(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * What `requestPersistentStorage()` would do, asked without doing it.
+ *
+ * `'unknown'` covers a browser with no Permissions API and one that does not
+ * recognize the `persistent-storage` permission name — for which the query
+ * throws rather than answering.
+ */
+export async function getPersistencePermission(): Promise<
+  PermissionState | 'unknown'
+> {
+  if (typeof navigator === 'undefined' || !navigator.permissions?.query) {
+    return 'unknown';
+  }
+  try {
+    const status = await navigator.permissions.query({
+      name: 'persistent-storage',
+    });
+    return status.state;
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Asks the browser to exempt this origin's default bucket from automatic
+ * eviction — the bucket holding the chart projects, the project audio and the
+ * database.
+ *
+ * Some browsers answer this with a permission prompt, so call it from a user
+ * gesture. `persistIfAlreadyPermitted()` is the one that is safe on load.
+ */
+export async function requestPersistentStorage(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.storage?.persist) {
+    return false;
+  }
+  try {
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Takes persistence where it is already permitted, and asks for it nowhere
+ * else. True only when this call newly won it, so the caller can tell "we
+ * changed something" from "there was nothing to do".
+ *
+ * A permission that is already granted is not persistence: the bit stays
+ * unset until something calls `persist()`. This is the call that collects
+ * what the origin has already earned.
+ *
+ * The gate is the permission state, not the browser name. A browser that
+ * would put a prompt in front of the user reports `'prompt'`, never
+ * `'granted'`, so it is not asked — and an unexplained "store data
+ * permanently?" on first paint, before the visitor knows what the site is,
+ * is worth less than the persistence it would win, because a refusal sticks.
+ * Everywhere the state is not `'granted'`, the ask belongs behind a button
+ * with an explanation beside it.
+ *
+ * This assumes a browser never decides the question inside `persist()` that
+ * `query()` reported as undecided. If one does, a user it would have granted
+ * silently is never asked and stays evictable. `lib/sentry/storage-context`
+ * reports the permission state so that case is visible rather than assumed.
+ */
+export async function collectEarnedPersistence(): Promise<boolean> {
+  if (await isStoragePersisted()) return false;
+  if ((await getPersistencePermission()) !== 'granted') return false;
+  return requestPersistentStorage();
+}

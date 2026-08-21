@@ -11,6 +11,7 @@ import WebMCPTools from './WebMCPTools';
 import {getSiteUrl} from '@/lib/site-url';
 import RegionAwareAnalytics from './RegionAwareAnalytics';
 import TasteDataPrivacyBoundary from './TasteDataPrivacyBoundary';
+import PersistStorage from './PersistStorage';
 
 // The measurement voice on the landing pages: eyebrows, stat values,
 // provenance, stage numbers. Wired into Tailwind's `font-mono`.
@@ -64,6 +65,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
         <WebMCPInit />
         <WebMCPTools />
         <TasteDataPrivacyBoundary />
+        <PersistStorage />
         <RegionAwareAnalytics gaId="G-LEE7EDJH14" />
       </body>
     </html>
