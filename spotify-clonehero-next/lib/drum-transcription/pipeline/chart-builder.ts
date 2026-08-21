@@ -45,7 +45,7 @@ import {
   tickToMs,
   getNextMeasureTick,
 } from '../timing';
-import {getChartMapping} from '../ml/class-mapping';
+import {drumNoteFlagsFor, getChartMapping} from '../ml/class-mapping';
 import type {RawDrumEvent} from '../ml/types';
 import {
   SYSTEMATIC_ONSET_MS_CHART_FLOW,
@@ -67,7 +67,6 @@ import {computePhaseAlignShiftMs, type PhaseAlignResult} from './phase-align';
  * model-predicted grid, which carries its own bias).
  */
 export type OnsetFlow = 'chart' | 'audio';
-import {noteFlags} from '@eliwhite/scan-chart';
 import type {DrumNote, TimedTempo} from '../chart-types';
 
 /** Default resolution (ticks per quarter note). */
@@ -511,7 +510,7 @@ function dedupSnappedNotes(
         !existing.isCymbal);
     if (!wins) continue;
 
-    const flags = mapping.isCymbal ? noteFlags.cymbal : 0;
+    const flags = drumNoteFlagsFor(event.drumClass);
     byKey.set(key, {
       note: {tick, type: mapping.noteType, length: 0, flags},
       confidence: event.confidence,

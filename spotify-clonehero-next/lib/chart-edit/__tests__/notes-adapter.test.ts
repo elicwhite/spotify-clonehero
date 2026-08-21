@@ -169,6 +169,41 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
     expect(legalizeFlagBits(schema, noteTypes.redDrum, noteFlags.tom)).toBe(0);
   });
 
+  it('legalizeFlagBits gives a bare pad note the tom flag', () => {
+    // `.mid` reads an unmarked yellow, blue or green pad as a cymbal, so a
+    // pad note that carries neither flag would change instrument when the
+    // user exports that format.
+    for (const type of [
+      noteTypes.yellowDrum,
+      noteTypes.blueDrum,
+      noteTypes.greenDrum,
+    ]) {
+      expect(legalizeFlagBits(schema, type, 0)).toBe(noteFlags.tom);
+    }
+    expect(legalizeFlagBits(schema, noteTypes.kick, 0)).toBe(0);
+    expect(legalizeFlagBits(schema, noteTypes.redDrum, 0)).toBe(0);
+    // An explicit cymbal is left alone.
+    expect(
+      legalizeFlagBits(schema, noteTypes.yellowDrum, noteFlags.cymbal),
+    ).toBe(noteFlags.cymbal);
+  });
+
+  it('moveNote onto a pad lane keeps the note a tom, not a cymbal', () => {
+    const t = track();
+    const chart = createEmptyChart({
+      format: 'chart',
+      resolution: 480,
+      bpm: 120,
+    });
+    addNote(t, {tick: 0, type: noteTypes.redDrum, flags: 0}, schema);
+
+    moveNote(chart, t, 0, noteTypes.redDrum, 0, 1, schema);
+
+    const moved = findNote(t, 0, noteTypes.yellowDrum)!;
+    expect(moved.flags & noteFlags.tom).toBeTruthy();
+    expect(moved.flags & noteFlags.cymbal).toBeFalsy();
+  });
+
   it('addNote legalizes flags at insert time', () => {
     const t = track();
     // A caller passing an illegal cymbal bit on red gets it stripped.

@@ -21,6 +21,7 @@
 
 import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import type {NoteType} from '@eliwhite/scan-chart';
+import {isCymbalLegalNoteType} from '@/lib/chart-edit';
 import type {DrumNote, TimedTempo} from '../chart-types';
 import {buildTimedTempos, msToTick} from '../timing';
 import type {RawDrumEvent, DrumClassName} from './types';
@@ -127,6 +128,25 @@ const CLASS_TO_CHART: Record<DrumClassName, ChartNoteMapping> = {
 };
 
 /**
+ * The note flags a transcribed hit carries.
+ *
+ * A pad hit that is not a cymbal must carry `noteFlags.tom`. An empty flag
+ * set is not sufficient: `.chart` reads an unmarked yellow, blue or green
+ * pad as a tom, but `.mid` reads it as a cymbal and needs a tom marker (110,
+ * 111, 112) on each tom. scan-chart's MIDI writer emits those markers only
+ * for a note that carries the flag, so a flagless tom becomes a cymbal in a
+ * `.mid` export.
+ *
+ * Kick and red take neither flag. Each is one pad, so no marker applies (see
+ * `isCymbalLegalNoteType`).
+ */
+export function drumNoteFlagsFor(drumClass: DrumClassName): number {
+  const mapping = CLASS_TO_CHART[drumClass];
+  if (!isCymbalLegalNoteType(mapping.noteType)) return noteFlags.none;
+  return mapping.isCymbal ? noteFlags.cymbal : noteFlags.tom;
+}
+
+/**
  * Get the chart note mapping for a drum class.
  */
 export function getChartMapping(drumClass: DrumClassName): ChartNoteMapping {
@@ -186,7 +206,7 @@ export function rawEventsToDrumNotes(
       tick,
       type: mapping.noteType,
       length: 0, // Drums are always non-sustained
-      flags: mapping.isCymbal ? noteFlags.cymbal : 0,
+      flags: drumNoteFlagsFor(event.drumClass),
     };
   });
 

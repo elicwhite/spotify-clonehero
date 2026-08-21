@@ -128,11 +128,21 @@ export function shiftLane(
 }
 
 /**
- * Clear any flag bit whose binding's `appliesTo` excludes `type` (and its
- * `complementFlag` bit, if any) — the lane-legality gate (§6, invariant 4):
- * a note that changes type (lane shift, kick↔pad conversion) can't carry
- * over a flag that's illegal on its new type (e.g. a cymbal note dragged
- * onto red must drop the cymbal bit).
+ * Make `bits` legal for a note of `type`, per `schema`'s bindings.
+ *
+ * Two rules:
+ *
+ *  1. Lane legality (§6, invariant 4): clear any flag bit whose binding's
+ *     `appliesTo` excludes `type`, and its `complementFlag` bit. A note that
+ *     changes type (lane shift, kick↔pad conversion) must not carry over a
+ *     flag that is illegal on its new type — a cymbal note dragged onto red
+ *     drops the cymbal bit.
+ *  2. A complement pair is never both-clear on a type it applies to. Drums'
+ *     `cymbal`/`tom` pair is the case that matters: `.chart` reads an
+ *     unmarked yellow, blue or green pad as a tom, but `.mid` reads it as a
+ *     cymbal, so a flagless pad note changes what the game plays when the
+ *     user exports the other format. The complement (`tom`) is the default,
+ *     which is what the `.chart` reader already assumes.
  */
 export function legalizeFlagBits(
   schema: InstrumentSchema,
@@ -141,9 +151,15 @@ export function legalizeFlagBits(
 ): number {
   let result = bits;
   for (const b of schema.flagBindings) {
-    if (!b.appliesTo || b.appliesTo.includes(type)) continue;
-    result &= ~noteFlags[b.flag];
-    if (b.complementFlag) result &= ~noteFlags[b.complementFlag];
+    const applies = !b.appliesTo || b.appliesTo.includes(type);
+    if (!applies) {
+      result &= ~noteFlags[b.flag];
+      if (b.complementFlag) result &= ~noteFlags[b.complementFlag];
+      continue;
+    }
+    if (!b.complementFlag) continue;
+    const pair = noteFlags[b.flag] | noteFlags[b.complementFlag];
+    if ((result & pair) === 0) result |= noteFlags[b.complementFlag];
   }
   return result;
 }
