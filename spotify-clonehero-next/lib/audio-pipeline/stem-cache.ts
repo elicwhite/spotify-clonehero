@@ -26,6 +26,17 @@
  */
 
 import {MODEL_URLS} from '@/lib/lyrics-align/model-urls';
+import {getStoragePressure} from '@/lib/browser-storage';
+import {
+  getWebLocks,
+  STEM_CACHE_PRUNE_LOCK,
+  withWebLockIfAvailable,
+} from '@/lib/web-locks';
+import {
+  DEFAULT_STEM_CACHE_BUDGETS,
+  stemCacheBudgetBytes,
+  type StemCacheBudgets,
+} from '@/lib/audio-pipeline/stem-cache-budget';
 
 const NAMESPACE = 'audio-pipeline';
 
@@ -242,13 +253,19 @@ export function stereoStemToMono(stem: StereoStem): Float32Array {
 // OPFS cache API
 // ---------------------------------------------------------------------------
 
-async function getCacheEntryDir(
-  fingerprint: string,
+async function getStemCacheDir(
   create: boolean,
 ): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
   const nsDir = await root.getDirectoryHandle(NAMESPACE, {create});
-  const cacheDir = await nsDir.getDirectoryHandle(STEM_CACHE_DIR, {create});
+  return nsDir.getDirectoryHandle(STEM_CACHE_DIR, {create});
+}
+
+async function getCacheEntryDir(
+  fingerprint: string,
+  create: boolean,
+): Promise<FileSystemDirectoryHandle> {
+  const cacheDir = await getStemCacheDir(create);
   return cacheDir.getDirectoryHandle(fingerprint, {create});
 }
 
@@ -275,8 +292,13 @@ async function getCacheEntryDir(
 //   - no marker, payload empty       -> an interrupted first store, miss.
 //
 // Emptiness is read from the file's size, so probes stay a metadata check —
-// no decode, no payload read. The public API (stemName + bytes in, stemName
-// out) is unchanged.
+// no decode, no payload read.
+//
+// The marker carries a second thing: its modification time is when the entry
+// was last used, which is what the pruner sorts on. A read leaves no trace of
+// its own, so a load stamps the marker on the way out — after it has
+// validated the payload, never before. That makes a load a write, and a probe
+// still not one.
 // ---------------------------------------------------------------------------
 
 function markerName(payloadName: string): string {
@@ -331,29 +353,32 @@ async function writeMarked(
   await touchFile(dir, markerName(payloadName));
 }
 
-interface MarkedRead {
-  bytes: Uint8Array<ArrayBuffer>;
-  /** False for an entry written before the marker existed: the caller
-   *  validates the payload and backfills the marker on success. */
-  marked: boolean;
-}
-
 /** Reads `payloadName`'s bytes. Throws (callers catch and treat as a miss)
- * when the payload itself is missing. */
-async function readMarked(
+ * when the payload itself is missing. The marker is not consulted: a loader
+ * validates the payload itself, and stamps the marker afterwards whether or
+ * not one was already there. */
+async function readPayload(
   dir: FileSystemDirectoryHandle,
   payloadName: string,
-): Promise<MarkedRead> {
-  const marked = await entryExists(dir, markerName(payloadName));
+): Promise<Uint8Array<ArrayBuffer>> {
   const fileHandle = await dir.getFileHandle(payloadName);
   const file = await fileHandle.getFile();
-  return {bytes: new Uint8Array(await file.arrayBuffer()), marked};
+  return new Uint8Array(await file.arrayBuffer());
 }
 
-/** Marks an unmarked payload complete once a loader has validated it, so
- * later probes see it without re-reading. Best effort: a failure here only
- * costs the next probe another validation pass. */
-async function backfillMarker(
+/**
+ * Stamps a payload's marker after a loader has read it.
+ *
+ * The marker does two jobs. It says the payload is complete, so a later probe
+ * accepts it without re-reading. Its modification time also says when the
+ * entry was last used, which is what the pruner sorts on — a read leaves no
+ * trace of its own, so the write here is the only record that the entry is
+ * still wanted.
+ *
+ * Best effort. A failure costs the next probe a validation pass, and makes
+ * the entry look older than it is.
+ */
+async function markUsed(
   dir: FileSystemDirectoryHandle,
   payloadName: string,
 ): Promise<void> {
@@ -378,7 +403,8 @@ async function hasMarked(
  * point for callers that gzipped elsewhere - on the main thread that means
  * `pcm-worker.ts`, since Blink deflates a single write in one uninterrupted
  * task. Atomic: an interrupted store never leaves a later load/probe seeing a
- * truncated payload. */
+ * truncated payload. Prunes the cache to its budget afterwards, protecting
+ * the fingerprint just written. */
 export async function storeStemBytes(
   fingerprint: string,
   stemName: string,
@@ -390,6 +416,7 @@ export async function storeStemBytes(
     `${stemName}.f32.gz`,
     bytes as Uint8Array<ArrayBuffer>,
   );
+  await pruneStemCacheToBudget([fingerprint]);
 }
 
 /** Stores a stem (planar stereo Float32 @ 44.1 kHz) in the cache, gzipping it
@@ -405,24 +432,24 @@ export async function storeStem(
 
 /** Loads a cached stem. Returns null on a cache miss, an interrupted write,
  * or a corrupt entry — never throws — matching the safer default for a
- * cache. An unmarked entry is decoded and, if valid, marked complete on the
- * way out so later probes see it directly. */
+ * cache. A hit stamps the entry's marker on the way out: that is what makes
+ * it complete for later probes, and what records it as recently used. */
 export async function loadStem(
   fingerprint: string,
   stemName: string,
 ): Promise<StereoStem | null> {
   const payloadName = `${stemName}.f32.gz`;
   let dir: FileSystemDirectoryHandle;
-  let entry: MarkedRead;
+  let bytes: Uint8Array<ArrayBuffer>;
   try {
     dir = await getCacheEntryDir(fingerprint, false);
-    entry = await readMarked(dir, payloadName);
+    bytes = await readPayload(dir, payloadName);
   } catch {
     return null;
   }
-  const stem = await decodeStemCacheBytesAuto(entry.bytes);
+  const stem = await decodeStemCacheBytesAuto(bytes);
   if (!stem) return null;
-  if (!entry.marked) await backfillMarker(dir, payloadName);
+  await markUsed(dir, payloadName);
   return stem;
 }
 
@@ -448,7 +475,9 @@ export async function hasStem(
 // ---------------------------------------------------------------------------
 
 /** Stores an already Opus-encoded stem in the cache. Atomic: an interrupted
- * store never leaves a later load/probe seeing a truncated payload. */
+ * store never leaves a later load/probe seeing a truncated payload. Prunes
+ * the cache to its budget afterwards, protecting the fingerprint just
+ * written. */
 export async function storeStemOpus(
   fingerprint: string,
   stemName: string,
@@ -460,28 +489,29 @@ export async function storeStemOpus(
     `${stemName}.opus`,
     opusBytes as Uint8Array<ArrayBuffer>,
   );
+  await pruneStemCacheToBudget([fingerprint]);
 }
 
 /** Loads a cached Opus-encoded stem's raw bytes (undecoded). Returns null
  * on a cache miss, an interrupted write, or an empty payload — never throws.
- * An unmarked entry is marked complete on the way out so later probes see it
- * directly. */
+ * A hit stamps the entry's marker on the way out: that is what makes it
+ * complete for later probes, and what records it as recently used. */
 export async function loadStemOpus(
   fingerprint: string,
   stemName: string,
 ): Promise<Uint8Array | null> {
   const payloadName = `${stemName}.opus`;
   let dir: FileSystemDirectoryHandle;
-  let entry: MarkedRead;
+  let bytes: Uint8Array<ArrayBuffer>;
   try {
     dir = await getCacheEntryDir(fingerprint, false);
-    entry = await readMarked(dir, payloadName);
+    bytes = await readPayload(dir, payloadName);
   } catch {
     return null;
   }
-  if (entry.bytes.byteLength === 0) return null;
-  if (!entry.marked) await backfillMarker(dir, payloadName);
-  return entry.bytes;
+  if (bytes.byteLength === 0) return null;
+  await markUsed(dir, payloadName);
+  return bytes;
 }
 
 /** Whether an Opus-encoded stem is present in the cache for this
@@ -497,5 +527,229 @@ export async function hasStemOpus(
     return await hasMarked(dir, `${stemName}.opus`);
   } catch {
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pruning
+//
+// Chrome evicts an origin under storage pressure and takes everything: the
+// chart projects and the database go with the stems. The stems are the large
+// regenerable part, so holding them inside a budget is the one part of the
+// origin this code can keep from growing without limit. It does not make
+// eviction impossible — the projects, the project audio, the database and the
+// model cache are all unbounded — it keeps the cache from being the reason.
+//
+// Every store prunes, because `separateStems` is not the only thing that
+// writes here: the tempo worker separates and stores on its own, and so does
+// the drum-transcription path for a project with no stored original. The
+// store functions are the one place all of them pass through.
+// ---------------------------------------------------------------------------
+
+export interface StemCacheEntry {
+  fingerprint: string;
+  /** Every file in the entry: payloads and markers. */
+  sizeBytes: number;
+  /**
+   * Newest marker time in the entry, in ms. An entry holds several payloads —
+   * `/tempo` reads the drums, `/add-lyrics` the vocals — and any one of them
+   * being read means the entry is in use, so the newest marker wins.
+   *
+   * 0 for an entry with no marker at all: one written before markers existed,
+   * or one whose store was interrupted. Both sort oldest, which is where a
+   * cache entry nobody can date belongs.
+   */
+  lastUsedMs: number;
+}
+
+export interface PruneResult {
+  deletedFingerprints: string[];
+  freedBytes: number;
+  /** Cache size after the prune, including entries `keep` protected. */
+  remainingBytes: number;
+}
+
+/**
+ * Measures every entry in the cache. Metadata only — no payload is read.
+ *
+ * An entry that cannot be measured is skipped rather than reported as empty,
+ * because a zero-byte entry sorts as free to delete and would be deleted for
+ * nothing. Such an entry is also never reclaimed, which is the right trade
+ * while the alternative is deleting stems on a failed read.
+ */
+export async function listStemCacheEntries(): Promise<StemCacheEntry[]> {
+  let cacheDir: FileSystemDirectoryHandle;
+  try {
+    cacheDir = await getStemCacheDir(false);
+  } catch {
+    return [];
+  }
+  return listEntriesIn(cacheDir);
+}
+
+async function listEntriesIn(
+  cacheDir: FileSystemDirectoryHandle,
+): Promise<StemCacheEntry[]> {
+  const entries: StemCacheEntry[] = [];
+  for await (const [fingerprint, handle] of cacheDir.entries()) {
+    if (handle.kind !== 'directory') continue;
+    try {
+      entries.push(await measureEntry(fingerprint, handle));
+    } catch {
+      // Deleted by another tab mid-walk, or unreadable. Not a candidate.
+    }
+  }
+  return entries;
+}
+
+async function measureEntry(
+  fingerprint: string,
+  dir: FileSystemDirectoryHandle,
+): Promise<StemCacheEntry> {
+  let sizeBytes = 0;
+  let lastUsedMs = 0;
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind !== 'file') continue;
+    const file = await handle.getFile();
+    sizeBytes += file.size;
+    if (name.endsWith('.ok')) {
+      lastUsedMs = Math.max(lastUsedMs, file.lastModified);
+    }
+  }
+  return {fingerprint, sizeBytes, lastUsedMs};
+}
+
+/**
+ * Removes one entry and everything in it. False when it is still there
+ * afterwards: never stored, or a file inside it is open in another context,
+ * which OPFS refuses to remove.
+ */
+export async function deleteStemEntry(fingerprint: string): Promise<boolean> {
+  try {
+    return await removeEntryFrom(await getStemCacheDir(false), fingerprint);
+  } catch {
+    return false;
+  }
+}
+
+async function removeEntryFrom(
+  cacheDir: FileSystemDirectoryHandle,
+  fingerprint: string,
+): Promise<boolean> {
+  try {
+    await cacheDir.removeEntry(fingerprint, {recursive: true});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deletes whole entries, least recently used first, until the cache fits in
+ * `targetBytes`. Answers null when another context is already pruning.
+ *
+ * Whole entries, because half an entry is a cache miss that still occupies
+ * the disk. `keep` names the fingerprints the caller is working with; they
+ * count toward the total but are never deleted, so a caller that is about to
+ * write a stem cannot have it deleted underneath itself.
+ *
+ * `keep` covers the calling context only. Another tab mid-pipeline is
+ * invisible here, and an entry deleted under it costs that tab a separation —
+ * `loadStem` answers null for every failure, so nothing breaks, it only takes
+ * longer.
+ */
+export async function pruneStemCache(options: {
+  targetBytes: number;
+  keep?: Iterable<string>;
+  /**
+   * Room to leave for this many entries the size of the largest one, even
+   * where `targetBytes` is smaller. A cache that cannot hold two songs makes
+   * a user working across two of them re-separate on every switch, which
+   * costs minutes of GPU to save disk that is about to be used again.
+   *
+   * 0, the default, prunes to exactly `targetBytes` — which is how the cache
+   * is emptied on request.
+   */
+  keepRoomForLargest?: number;
+}): Promise<PruneResult | null> {
+  const locks = getWebLocks();
+  if (locks == null) return pruneUnlocked(options);
+  return withWebLockIfAvailable(STEM_CACHE_PRUNE_LOCK, locks, () =>
+    pruneUnlocked(options),
+  );
+}
+
+async function pruneUnlocked(options: {
+  targetBytes: number;
+  keep?: Iterable<string>;
+  keepRoomForLargest?: number;
+}): Promise<PruneResult> {
+  const keep = new Set(options.keep ?? []);
+
+  let cacheDir: FileSystemDirectoryHandle;
+  try {
+    cacheDir = await getStemCacheDir(false);
+  } catch {
+    return {deletedFingerprints: [], freedBytes: 0, remainingBytes: 0};
+  }
+
+  const entries = await listEntriesIn(cacheDir);
+  let totalBytes = entries.reduce((sum, entry) => sum + entry.sizeBytes, 0);
+  const largestBytes = entries.reduce(
+    (max, entry) => Math.max(max, entry.sizeBytes),
+    0,
+  );
+  const targetBytes = Math.max(
+    options.targetBytes,
+    largestBytes * (options.keepRoomForLargest ?? 0),
+  );
+
+  const deletedFingerprints: string[] = [];
+  let freedBytes = 0;
+
+  // Oldest first, and by fingerprint where the times are equal: two entries
+  // stamped in the same millisecond must not make the deletion order depend
+  // on the order the directory happened to list them in.
+  const candidates = entries
+    .filter(entry => !keep.has(entry.fingerprint))
+    .sort(
+      (a, b) =>
+        a.lastUsedMs - b.lastUsedMs || (a.fingerprint < b.fingerprint ? -1 : 1),
+    );
+
+  for (const entry of candidates) {
+    if (totalBytes <= targetBytes) break;
+    // An entry that would not delete stays on the disk and in the total.
+    // Counting it as freed would end the prune early and report bytes that
+    // are still there.
+    if (!(await removeEntryFrom(cacheDir, entry.fingerprint))) continue;
+    totalBytes -= entry.sizeBytes;
+    freedBytes += entry.sizeBytes;
+    deletedFingerprints.push(entry.fingerprint);
+  }
+
+  return {deletedFingerprints, freedBytes, remainingBytes: totalBytes};
+}
+
+/**
+ * Prunes to the budget the current origin pressure allows.
+ *
+ * Returns null when the prune did not run — another context holds the lock,
+ * or something failed. Nothing here is worth failing a store over: the cost
+ * of a skipped prune is disk, and the next store prunes again.
+ */
+export async function pruneStemCacheToBudget(
+  keep: Iterable<string> = [],
+  budgets: StemCacheBudgets = DEFAULT_STEM_CACHE_BUDGETS,
+): Promise<PruneResult | null> {
+  try {
+    const pressure = await getStoragePressure();
+    return await pruneStemCache({
+      targetBytes: stemCacheBudgetBytes(pressure, budgets),
+      keep,
+      keepRoomForLargest: 2,
+    });
+  } catch {
+    return null;
   }
 }

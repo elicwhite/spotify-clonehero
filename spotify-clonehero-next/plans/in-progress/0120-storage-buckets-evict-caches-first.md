@@ -132,35 +132,47 @@ the reports rather than staying an assumption.
 The stem cache has no delete function and no record of when an entry was last
 used. Add both, in `lib/audio-pipeline/stem-cache.ts`:
 
-- **Last-use time.** Every hit touches the payload's `.ok` marker with the
-  existing `touchFile` (line 287); `getFile().lastModified` reads it back. A
-  read alone does not change a file's time, so the marker carries the time. An
-  entry holds several payloads — `/tempo` touches `drums.f32.gz.ok`,
-  `/add-lyrics` touches `vocals.opus.ok` — so an entry's last-use time is the
-  **newest** marker in its directory. An entry with no marker at all counts as
-  oldest.
-- **`deleteStemEntry(fingerprint)`** — removes the fingerprint directory.
-- **`pruneStemCache({targetBytes, keep})`** — deletes whole entries, least
-  recently used first, until the cache is under `targetBytes`. `keep` is the set
-  of fingerprints the caller is using.
+- **Last-use time.** Every load that decodes touches the payload's `.ok` marker
+  with the existing `touchFile`; `getFile().lastModified` reads it back. A read
+  leaves no trace of its own, so the marker carries the time. An entry holds
+  several payloads — `/tempo` reads the drums, `/add-lyrics` the vocals — so an
+  entry's time is the **newest** marker in its directory. An entry with no
+  marker counts as oldest. Probes stay metadata-only: a probe is not a use.
+- **`deleteStemEntry(fingerprint)`** — removes the entry, and reports whether it
+  is gone. OPFS refuses to remove a directory holding an open file, and a prune
+  that counted a refused deletion as freed bytes would stop early and overstate
+  the room it recovered.
+- **`pruneStemCache({targetBytes, keep, keepRoomForLargest})`** — deletes whole
+  entries, least recently used first. `keep` is the set of fingerprints the
+  caller is using. `keepRoomForLargest` is the anti-thrash floor: a cache that
+  cannot hold two songs makes a user working across two of them re-separate on
+  every switch. It defaults to 0, so Phase 5's "empty the cache" still empties
+  it.
 
 **Size the target against the cache, not the origin.** A high-water mark over
 `estimate().usage / quota` is the wrong scope: if the projects alone exceed the
 low-water mark, the pruner empties the whole cache on every run and still
-reports failure. Prune to a cache byte budget, and use the origin ratio only to
-lower that budget under pressure.
+reports failure. The budget is cache bytes, in `stem-cache-budget.ts`, and the
+origin ratio only chooses between a relaxed and a tight one. Keeping the policy
+in its own module also lets a test prune a few hundred bytes instead of
+fabricating a gigabyte.
 
-The trigger is a large write, not a timer: before a separation starts, and after
-it finishes. Those are the moments the usage grows and the user is already
-waiting.
+**The trigger is the store, not the separator.** `separateStems` is not the only
+thing that writes here: `lib/tempo-map/pipeline-worker.ts` separates and stores
+on its own, and so does `roformer-separation.ts` for a project with no stored
+original. `storeStemBytes` and `storeStemOpus` are the one place all five write
+paths pass through, so the prune goes there, protecting the fingerprint just
+written.
+
+Two tabs must not walk and delete the same directory at once, so the prune takes
+`STEM_CACHE_PRUNE_LOCK`. It takes it with `ifAvailable`: an exclusive request has
+no timeout, and a prune is never worth making another tab's separation wait.
 
 Two known limits, accepted rather than solved:
 
 - **Another tab.** `keep` covers the calling context only. Pruning an entry a
   second tab is about to read costs that tab a re-separation; it does not
-  corrupt anything, because `loadStem` returns null for every failure
-  (`stem-cache.ts:407`). Web Locks (`lib/web-locks.ts`) are the escape if this
-  is ever seen in practice.
+  corrupt anything, because `loadStem` returns null for every failure.
 - **Disk pressure below the quota.** Chrome can evict while the origin is far
   under its quota, in which case no threshold this pruner watches will ever
   fire. Phase 1's telemetry is what would show this.
