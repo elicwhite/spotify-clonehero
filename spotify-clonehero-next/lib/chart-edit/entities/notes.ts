@@ -137,12 +137,14 @@ export function shiftLane(
  *     changes type (lane shift, kick↔pad conversion) must not carry over a
  *     flag that is illegal on its new type — a cymbal note dragged onto red
  *     drops the cymbal bit.
- *  2. A complement pair is never both-clear on a type it applies to. Drums'
- *     `cymbal`/`tom` pair is the case that matters: `.chart` reads an
- *     unmarked yellow, blue or green pad as a tom, but `.mid` reads it as a
- *     cymbal, so a flagless pad note changes what the game plays when the
- *     user exports the other format. The complement (`tom`) is the default,
- *     which is what the `.chart` reader already assumes.
+ *  2. A complement pair is never both-clear on a type it applies to. If a
+ *     caller supplies neither bit, the complement is filled in.
+ *
+ *     Drums' `cymbal`/`tom` pair is the case that matters. In four-lane
+ *     pro drums, `.chart` reads an unmarked yellow, blue or green pad as a
+ *     tom, but `.mid` reads it as a cymbal. A flagless pad note therefore
+ *     changes instrument when the user exports the other format. `tom` is
+ *     the complement, which agrees with the `.chart` reader.
  */
 export function legalizeFlagBits(
   schema: InstrumentSchema,
@@ -191,8 +193,9 @@ export function defaultFlagBits(
  * Toggle `flag` on `currentBits` for a note of `type`, per `schema`'s
  * binding. A no-op (bits stay clear) when `flag`'s `appliesTo` excludes
  * `type` (lane legality, e.g. kick/red can never be a cymbal). Bindings
- * with `complementFlag` toggle tri-state (unset → flag → complement →
- * flag → …, matching drums' cymbal/tom pair). Guitar/bass technique flags
+ * with `complementFlag` toggle between the two states of the pair (flag →
+ * complement → flag → …, matching drums' cymbal/tom). Guitar/bass technique
+ * flags
  * are mutually exclusive: toggling the active technique clears it to natural;
  * toggling another technique replaces the current one. Other flags toggle as
  * a plain bit.

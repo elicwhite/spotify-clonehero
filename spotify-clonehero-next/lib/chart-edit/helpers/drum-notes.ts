@@ -11,9 +11,8 @@
 
 import type {NoteType} from '@eliwhite/scan-chart';
 import type {ParsedTrackData, DrumNote} from '../types';
-import {noteFlags} from '../types';
 import {type ChartTiming} from '../retime';
-import {drums4LaneSchema, isCymbalLegalNoteType} from '../instruments/drums';
+import {drums4LaneSchema} from '../instruments/drums';
 import {
   addNote,
   removeNote,
@@ -119,17 +118,15 @@ export function setDrumNoteFlags(
 // ---------------------------------------------------------------------------
 
 /**
- * Legalize a flag bitmask for `type`: the schema's generic
- * `legalizeFlagBits`, plus drum lane legality (§6, invariant 4: kick/red
- * can never carry `cymbal`/`tom`) — the single choke point every view
- * funnels through so no gesture (highway drag, piano-roll drag, context
- * menu) can construct an illegal red/kick cymbal.
+ * Legalize a flag bitmask for `type` against the 4-lane drum schema — the
+ * single choke point every view funnels through, so no gesture (highway
+ * drag, piano-roll drag, context menu) can construct an illegal red/kick
+ * cymbal or a pad note that is neither a cymbal nor a tom.
+ *
+ * Both rules come from the schema's `cymbal` binding: its `appliesTo` gives
+ * drum lane legality (§6, invariant 4), and its `complementFlag` makes `tom`
+ * the fill for a pad note the caller left flagless. See `legalizeFlagBits`.
  */
 function legalizeDrumFlagBits(bits: number, type: NoteType): number {
-  let result = legalizeFlagBits(drums4LaneSchema, type, bits);
-  if (!isCymbalLegalNoteType(type)) {
-    result &= ~noteFlags.cymbal;
-    result &= ~noteFlags.tom;
-  }
-  return result;
+  return legalizeFlagBits(drums4LaneSchema, type, bits);
 }

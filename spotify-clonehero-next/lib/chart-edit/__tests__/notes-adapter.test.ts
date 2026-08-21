@@ -145,7 +145,7 @@ describe('drums4LaneSchema-specific note adapter behavior', () => {
     expect(defaultFlagBits(schema, noteTypes.redDrum)).toBe(0);
   });
 
-  it('toggleFlagBits cycles cymbal tri-state: unset -> cymbal -> tom -> cymbal', () => {
+  it('toggleFlagBits cycles cymbal against tom: cymbal -> tom -> cymbal', () => {
     let bits = 0;
     bits = toggleFlagBits(schema, noteTypes.yellowDrum, bits, 'cymbal');
     expect(bits & noteFlags.cymbal).toBeTruthy();

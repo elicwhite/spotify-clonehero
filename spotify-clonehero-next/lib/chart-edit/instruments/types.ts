@@ -93,10 +93,12 @@ export interface FlagBinding {
   /** When true, a freshly-added note of an `appliesTo` NoteType carries
    *  this flag set by default (e.g. drums' cymbal-by-default lanes). */
   defaultOn?: boolean;
-  /** The complementary flag name this one toggles against, for tri-state
-   *  flags (unset / this-flag / complement-flag) rather than a plain
-   *  on/off bit — e.g. drums' `cymbal` toggles against `tom` so "not a
-   *  cymbal" is stored distinctly from "cymbal-ness unset". */
+  /** The complementary flag name this one toggles against, for a pair of
+   *  opposite states rather than a plain on/off bit — e.g. drums' `cymbal`
+   *  toggles against `tom`. On a type the binding applies to, exactly one
+   *  of the pair is always set: `legalizeFlagBits` fills in the complement
+   *  when a caller supplies neither, so "not a cymbal" is stored as `tom`
+   *  and never as an empty flag set. */
   complementFlag?: NoteFlagName;
   /** When true, this flag is shared across every note in the same tick's
    *  group rather than per-note (e.g. drums' `flam`, which marks a whole
