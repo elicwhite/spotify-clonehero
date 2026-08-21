@@ -1124,17 +1124,26 @@ export default function PianoRollTimeline({
     const laneBottom = rowLayout ? laneTop + rowLayout.height : h - WAVE_ROW_H;
     // Stacked rows are taller than the band that shows them, and the band
     // scrolls. Painting a row nobody can see costs a full pass over its notes,
-    // so rows outside the scrolled slice are skipped; `handleRowsScroll`
-    // repaints before the browser paints the new scroll position.
+    // so rows outside the scrolled slice are skipped.
+    //
+    // A screenful either side is painted anyway. The band scrolls on the
+    // compositor and `handleRowsScroll` only runs once the main thread gets
+    // the event, so a frame can be composited at a scroll offset this draw
+    // never saw — with no margin that frame shows empty lanes. The margin is
+    // how far a fast scroll can outrun the repaint before anything unpainted
+    // comes into view.
     const rowsScroll = rowsScrollRef.current;
-    const rowsVisibleTop =
+    const rowsSliceTop =
       rowLayout && rowsScroll ? laneTop + rowsScroll.scrollTop : laneTop;
-    const rowsVisibleBottom =
+    const rowsOverscan = rowsScroll ? rowsScroll.clientHeight : 0;
+    const rowsPaintTop =
+      rowLayout && rowsScroll ? rowsSliceTop - rowsOverscan : laneTop;
+    const rowsPaintBottom =
       rowLayout && rowsScroll
-        ? rowsVisibleTop + rowsScroll.clientHeight
+        ? rowsSliceTop + rowsScroll.clientHeight + rowsOverscan
         : laneBottom;
     const rowOnScreen = (row: TrackRowGeometry): boolean =>
-      row.bottom >= rowsVisibleTop && row.top <= rowsVisibleBottom;
+      row.bottom >= rowsPaintTop && row.top <= rowsPaintBottom;
     const laneCount = Math.max(1, scene?.lanes.length ?? 1);
     const laneH = (laneBottom - laneTop) / laneCount;
 
