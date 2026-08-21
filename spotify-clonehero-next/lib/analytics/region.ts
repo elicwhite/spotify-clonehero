@@ -43,3 +43,29 @@ export function isEeaCountry(country: string | null | undefined): boolean {
 
 export const VERCEL_COUNTRY_HEADER = 'x-vercel-ip-country';
 export const REGION_COOKIE = 'gaRegion';
+
+/** The one cookie value that allows analytics: the proxy classified this
+ *  visitor as outside the EEA/UK/CH. Every other state — missing, corrupted
+ *  or 'eea' — means the visitor is not processed at all. */
+export const REGION_ALLOWED = 'other';
+
+/** Reads the region cookie the proxy set. Browser only: on the server there
+ *  is no cookie on `document` to read, and the answer is "not known yet". */
+export function readRegionCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const part of document.cookie.split(/;\s*/)) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq) !== REGION_COOKIE) continue;
+    return part.slice(eq + 1) || null;
+  }
+  return null;
+}
+
+/** Whether this visitor's events may be processed at all. Read by
+ *  `RegionAwareAnalytics` to decide whether to load gtag.js, and by
+ *  `track()` to decide whether an event reported before gtag.js exists may
+ *  be held in memory until it does. */
+export function analyticsAllowed(): boolean {
+  return readRegionCookie() === REGION_ALLOWED;
+}

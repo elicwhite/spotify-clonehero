@@ -1,19 +1,9 @@
 'use client';
 
-import {useSyncExternalStore} from 'react';
+import {useEffect, useSyncExternalStore} from 'react';
 import {GoogleAnalytics} from '@next/third-parties/google';
-import {REGION_COOKIE} from '@/lib/analytics/region';
-
-function readRegion(): string | null {
-  if (typeof document === 'undefined') return null;
-  for (const part of document.cookie.split(/;\s*/)) {
-    const eq = part.indexOf('=');
-    if (eq === -1) continue;
-    if (part.slice(0, eq) !== REGION_COOKIE) continue;
-    return part.slice(eq + 1) || null;
-  }
-  return null;
-}
+import {analyticsAllowed} from '@/lib/analytics/region';
+import {flushPendingEvents} from '@/lib/analytics/track';
 
 // Renders <GoogleAnalytics> only when the proxy explicitly classified the
 // visitor as outside the EEA/UK/CH (region cookie === 'other'). EEA/UK/CH
@@ -35,9 +25,21 @@ export default function RegionAwareAnalytics({gaId}: {gaId: string}) {
   // read it directly. SSR renders nothing; the client resolves the real value.
   const shouldLoad = useSyncExternalStore(
     () => () => {},
-    () => readRegion() === 'other',
+    analyticsAllowed,
     () => false,
   );
+
+  // Events reported before this component decided to load gtag.js are held
+  // in memory by `track()`, and this is the first moment they can be sent.
+  // The flush belongs in this component's own effect, not in a mount effect
+  // anywhere else: React runs the child <GoogleAnalytics> effects first, so
+  // by the time this runs the init script has defined `gtag` and pushed
+  // `config`. An event pushed ahead of `config` is not attributed to the
+  // property, and a mount effect on any page runs a whole commit before the
+  // store resolves the cookie and mounts GA at all.
+  useEffect(() => {
+    if (shouldLoad) flushPendingEvents();
+  }, [shouldLoad]);
 
   if (!shouldLoad) return null;
   return <GoogleAnalytics gaId={gaId} />;

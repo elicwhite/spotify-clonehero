@@ -1,6 +1,7 @@
 import {type NextRequest} from 'next/server';
 import {updateSession} from './lib/supabase/middleware';
 import {
+  REGION_ALLOWED,
   REGION_COOKIE,
   VERCEL_COUNTRY_HEADER,
   isEeaCountry,
@@ -18,7 +19,7 @@ export async function proxy(request: NextRequest) {
   // middleware already sets cookies on every response, so this just
   // rides along with the existing cost.)
   const country = request.headers.get(VERCEL_COUNTRY_HEADER);
-  const desired = isEeaCountry(country) ? 'eea' : 'other';
+  const desired = isEeaCountry(country) ? 'eea' : REGION_ALLOWED;
   const existing = request.cookies.get(REGION_COOKIE)?.value;
   if (existing !== desired) {
     response.cookies.set(REGION_COOKIE, desired, {

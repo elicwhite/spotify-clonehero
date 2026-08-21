@@ -1,4 +1,4 @@
-import {sendGAEvent} from '@next/third-parties/google';
+import {analyticsAllowed} from '@/lib/analytics/region';
 
 import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
@@ -181,18 +181,74 @@ function applyUserId(): void {
   window.gtag('set', {user_id: cachedUserId ?? undefined});
 }
 
-// `sendGAEvent` is a thin wrapper that pushes `arguments` onto the
-// dataLayer, so it must be called with gtag's positional form
-// (gtag('event', name, params)) — passing a single object pushes
-// `[{event, ...}]` which gtag rejects as "Invalid command name".
+/**
+ * Events reported before gtag.js existed, waiting for it.
+ *
+ * A landing page reports its view from a mount effect, which React runs in
+ * the hydration commit — a whole commit before `RegionAwareAnalytics` can
+ * read the region cookie and mount <GoogleAnalytics>. Sent at that moment
+ * the event has nowhere to go, so every first landing view was discarded.
+ *
+ * Only a visitor the cookie says may be processed is held here. For anyone
+ * else the event is dropped where it is reported: a queue that is never
+ * flushed is still a record of what that visitor did, kept for the length
+ * of the session, and the rule this file works under is not to hold it.
+ */
+const pending: [event: string, params: Record<string, unknown>][] = [];
+
+/** Enough for a landing view and a first run's worth of events. Past it the
+ *  newest are dropped rather than the oldest: the events that arrive before
+ *  gtag.js are the start of the funnel, which is what this exists to save. */
+const PENDING_LIMIT = 20;
+
+/** gtag's init script defines `window.gtag` and pushes `config` in the same
+ *  breath, so this answers both "can an event be sent" and "will it be
+ *  attributed". Sending through `window.gtag` rather than the
+ *  `sendGAEvent` wrapper is what makes it answerable at all: the wrapper
+ *  drops an event silently unless its own module-private state says the
+ *  component has rendered, and nothing can read that state. */
+function gaReady(): boolean {
+  return typeof window !== 'undefined' && typeof window.gtag === 'function';
+}
+
+// gtag takes its positional form (gtag('event', name, params)) — a single
+// object is rejected as "Invalid command name".
+function send(event: string, params: Record<string, unknown>): void {
+  applyUserId();
+  window.gtag?.('event', event, params);
+}
+
 export function track(payload: AnalyticsEvent): void {
   try {
-    applyUserId();
     const {event, ...params} = payload;
-    sendGAEvent('event', event, params);
+    if (gaReady()) {
+      send(event, params);
+      return;
+    }
+    // Nothing to wait for on the server, and no `document` to classify the
+    // visitor with. Module state there is shared by every request, so a
+    // queue would mix visitors and never drain.
+    if (typeof window === 'undefined') return;
+    if (!analyticsAllowed()) return;
+    if (pending.length < PENDING_LIMIT) pending.push([event, params]);
   } catch {
     // Analytics never throws into product code.
   }
+}
+
+/**
+ * Sends everything `track()` held while gtag.js was missing. Called by
+ * `RegionAwareAnalytics` from the commit that mounts <GoogleAnalytics>,
+ * which is the first moment `window.gtag` exists.
+ *
+ * The queue is emptied before anything is sent, so a second call — React
+ * Strict Mode runs every effect twice in development — reports nothing
+ * rather than reporting each event twice.
+ */
+export function flushPendingEvents(): void {
+  if (!gaReady()) return;
+  const queued = pending.splice(0, pending.length);
+  for (const [event, params] of queued) send(event, params);
 }
 
 // Stitches sessions across devices for logged-in users. Pass null on
