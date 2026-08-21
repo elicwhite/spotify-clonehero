@@ -18,7 +18,10 @@ import type {
 } from '@eliwhite/scan-chart';
 
 import {readChart, writeChartFolder} from '@/lib/chart-edit';
-import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
+import {
+  isChartOrIniFileName,
+  type ChartFileFormat,
+} from '@/lib/chart-files/chart-file-names';
 import {DIFFICULTY_FIELDS, type DifficultyField} from '@/lib/chart-difficulty';
 
 /** Metadata the user supplies (or confirms) at export time. */
@@ -64,15 +67,6 @@ export interface PackageAudioSource {
 export interface ChartPackageFile {
   fileName: string;
   data: Uint8Array;
-}
-
-/** True for a chart file (`.chart` / `.mid` / `.midi`) or `song.ini` — the
- * files this module regenerates authoritatively. Used both to canonicalize
- * the incoming chart name and to reject any passthrough that would shadow the
- * assembled chart (e.g. a stray `notes.edited.chart` in `extraAssets`). */
-function isChartOrIniFileName(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return lower === 'song.ini' || /\.(chart|mid|midi)$/.test(lower);
 }
 
 /** Canonical chart file name for a (possibly variant-named) input: `.mid` /

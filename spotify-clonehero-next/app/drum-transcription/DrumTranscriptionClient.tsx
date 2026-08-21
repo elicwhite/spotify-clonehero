@@ -26,6 +26,7 @@ import SourcePicker from './components/SourcePicker';
 import {DrumTranscriptionLanding} from './landing/DrumTranscriptionLanding';
 import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import {readChart} from '@/lib/chart-edit';
+import {isChartOrIniFileName} from '@/lib/chart-files/chart-file-names';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {pickPrimaryAudioFile} from '@/lib/audio/pickPrimaryAudioFile';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
@@ -330,14 +331,13 @@ function DrumTranscriptionInner() {
           primary.fileName,
         );
         const primaryNameLower = primary.fileName.toLowerCase();
-        const chartFileNames = new Set([
-          'notes.chart',
-          'notes.mid',
-          'song.ini',
-        ]);
+        // The same test `readChart` applies above, so the project stores the
+        // same set of passthrough assets the document carries. A chart file
+        // under any name is regenerated on export, so keeping one here would
+        // only waste storage.
         const extraAssets = loaded.files.filter(
           f =>
-            !chartFileNames.has(f.fileName.toLowerCase()) &&
+            !isChartOrIniFileName(f.fileName) &&
             f.fileName.toLowerCase() !== primaryNameLower,
         );
 

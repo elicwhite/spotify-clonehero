@@ -73,3 +73,22 @@ export function chartFileFormatOf(fileName: string): ChartFileFormat | null {
   if (lower.endsWith('.chart')) return 'chart';
   return null;
 }
+
+/**
+ * Whether a file name is a chart file (in any naming) or `song.ini` — the
+ * two things `writeChartFolder` regenerates from the document itself.
+ *
+ * Wider than {@link isCanonicalChartFileName} on purpose: this is the test
+ * for "must not be carried as a passthrough asset". A package that ships a
+ * second chart file under any name (`notes.edited.chart`, a charter's
+ * backup, an alternate take) makes Clone Hero's chart checker report two
+ * errors. Only the assembled chart may reach the output.
+ *
+ * `.midi` counts here, although {@link chartFileFormatOf} does not accept
+ * it: a `.midi` file is a chart the export path canonicalizes to
+ * `notes.mid`, so passing it through as an asset would duplicate it.
+ */
+export function isChartOrIniFileName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower === 'song.ini' || /\.(chart|mid|midi)$/.test(lower);
+}

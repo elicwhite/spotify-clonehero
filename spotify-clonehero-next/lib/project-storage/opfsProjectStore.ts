@@ -483,10 +483,9 @@ export function createOpfsProjectStore(
    *
    * The name returned is always the canonical one for the format, never the
    * `.edited.` variant the bytes may have come from. Which file on disk is
-   * newest is this store's business; a caller parsing the chart needs a name
-   * scan-chart recognizes, and `notes.edited.chart` is classified as a
-   * passthrough asset instead — which would ship a second, stale chart file
-   * inside every export.
+   * newest is this store's business. A caller gets a name scan-chart
+   * recognizes, so nothing downstream has to know that the autosave sibling
+   * exists.
    *
    * Never assume `notes.chart` exists: a MIDI-sourced project only ever has
    * `notes.mid`.

@@ -15,6 +15,8 @@ import {
 } from '@eliwhite/scan-chart';
 import type {ChartDocument, File} from '@eliwhite/scan-chart';
 
+import {isChartOrIniFileName} from '@/lib/chart-files/chart-file-names';
+
 import {drumTypes} from './types';
 
 // Re-export the scan-chart surface consumers depend on
@@ -311,10 +313,11 @@ export function readChart(
       result.chartFolderIssues[0]?.description ?? 'Could not parse chart';
     throw new Error(reason);
   }
-  const chartFileNames = new Set(['notes.chart', 'notes.mid', 'song.ini']);
-  const assets = files.filter(
-    f => !chartFileNames.has(f.fileName.toLowerCase()),
-  );
+  // Wider than `isCanonicalChartFileName`: a chart file under any other
+  // name (the editor's `notes.edited.chart` autosave, a charter's backup)
+  // must not become a passthrough asset. `writeChartFolder` re-emits assets
+  // verbatim, so it would ship a second chart file beside the assembled one.
+  const assets = files.filter(f => !isChartOrIniFileName(f.fileName));
 
   const {parsedChart} = result;
 
