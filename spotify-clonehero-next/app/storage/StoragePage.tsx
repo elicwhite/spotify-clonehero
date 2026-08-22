@@ -6,8 +6,9 @@ import {LandingSection} from '@/components/landing/Section';
 import {StoragePanel} from './StoragePanel';
 
 /**
- * The /storage page: what this browser is holding for the site, and what can
- * be freed without losing work.
+ * The /storage page: everything this browser holds for the site, split by what
+ * happens to it when the browser runs short of room, and what can be done with
+ * each part.
  *
  * It is reachable without an account on purpose. A user whose projects have
  * disappeared may never have made one, and this page is where the question
@@ -19,12 +20,12 @@ export function StoragePage() {
       <LandingHero
         eyebrow="Storage"
         title="What this browser is holding for you"
-        lede="Your charts and your audio never leave this browser, which means the browser decides how long they stay. Here is what is stored, and what you can free without losing work."
+        lede="Your charts and your audio never leave this browser, which means the browser decides how long they stay. Here is everything that is stored, what you can free, and what to take a copy of first."
       />
 
       <LandingSection
         title="This browser"
-        intro="A separated stem is the drums or the vocals taken out of a song you added, kept so the same song does not have to be separated twice. A model is the file that does the separating. Only your charts are covered by the promise on the last row: the stems and the models are what a browser short of room is meant to take first.">
+        intro="Two groups, because a browser short of room treats them differently. Your charts are what it is asked to keep. The stems and the models are what it is told it may take, and what you can free yourself at any time.">
         <StoragePanel />
       </LandingSection>
 
@@ -35,8 +36,7 @@ export function StoragePage() {
           <LandingProse>
             Two things guard against that. The stems and the models are held to
             a size limit, so the site asks for less room than it otherwise
-            would. And the site asks the browser to promise to keep what is
-            left.
+            would. And the site asks the browser to promise to keep the rest.
           </LandingProse>
           <LandingProse>
             Each browser decides that promise on its own terms. Some grant it
@@ -52,14 +52,20 @@ export function StoragePage() {
       </LandingSection>
 
       <LandingSection
-        title="What freeing the stems costs"
-        intro="Nothing you have charted.">
-        <LandingProse>
-          A stem is only there to save the work of separating the same song
-          again. Freeing the stems means the next time you open one of those
-          songs, it is separated again. Your projects, your charts, your audio
-          and your library are untouched.
-        </LandingProse>
+        title="Before you delete a chart"
+        intro="Download it. A chart is the one thing here that nothing can rebuild.">
+        <div className="space-y-4">
+          <LandingProse>
+            Download opens the same export the editor uses, so the package you
+            get here is the package you would get there — a .zip or a .sng, with
+            the chart, the audio and any artwork that came with it.
+          </LandingProse>
+          <LandingProse>
+            Freeing a stem or a model costs nothing but time. The next time you
+            open that song it is separated again, and the models download again
+            the first time they are needed.
+          </LandingProse>
+        </div>
       </LandingSection>
     </LandingPage>
   );

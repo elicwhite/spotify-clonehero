@@ -2,6 +2,16 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {Button} from '@/components/ui/button';
 import {
   getPersistencePermission,
@@ -11,42 +21,51 @@ import {
   type StoragePressure,
 } from '@/lib/browser-storage';
 import {
+  deleteStemEntry,
   listStemCacheEntries,
   pruneStemCache,
+  type StemCacheEntry,
 } from '@/lib/audio-pipeline/stem-cache';
-import {getCachedModelBytes} from '@/lib/lyrics-align/model-cache';
 import {
+  deleteCachedModels,
+  getCachedModelBytes,
+} from '@/lib/lyrics-align/model-cache';
+import {
+  deleteStoredProject,
   measureProjectStorage,
   type ProjectStorage,
-} from '@/lib/project-storage/measureProjects';
+  type StoredProject,
+} from '@/lib/project-storage/storedProjects';
 import {attachStorageContext} from '@/lib/sentry/storage-context';
 import {formatBytes} from '@/lib/sng/file-utils';
+
+import {ChartExportDialog} from './ChartExportDialog';
+import {StorageGroup, StorageRow} from './StorageRow';
+import {UsageBar, type UsageSegment} from './UsageBar';
 
 interface StorageReading {
   pressure: StoragePressure | null;
   persisted: boolean;
   /**
    * The permission state, not a pair of booleans derived from it. A four-value
-   * answer flattened into two flags is how the "granted but not yet taken"
-   * case ends up with no branch at all.
+   * answer flattened into flags is how the "granted but not yet taken" case
+   * ends up with no branch at all.
    */
   permission: PermissionState | 'unknown';
-  cachedSongs: number;
-  cachedBytes: number;
+  stems: StemCacheEntry[];
   modelBytes: number;
-  projects: ProjectStorage;
+  work: ProjectStorage;
 }
 
 /**
  * Takes every reading, and never rejects.
  *
- * `listStemCacheEntries` walks OPFS, which can fail outright — Firefox private
- * browsing has no OPFS at all. This is the page a user opens because their
- * storage misbehaved, so one failed reading must not be what leaves it saying
- * "Reading storage…" for good.
+ * The cache walk can fail outright — Firefox private browsing has no OPFS at
+ * all. This is the page a user opens because their storage misbehaved, so one
+ * failed reading must not be what leaves it saying "Reading storage…" for good.
  */
 async function readStorage(): Promise<StorageReading> {
-  const [pressure, persisted, permission, entries, modelBytes, projects] =
+  const [pressure, persisted, permission, stems, modelBytes, work] =
     await Promise.all([
       getStoragePressure(),
       isStoragePersisted(),
@@ -55,39 +74,24 @@ async function readStorage(): Promise<StorageReading> {
       getCachedModelBytes(),
       measureProjectStorage(),
     ]);
-  return {
-    pressure,
-    persisted,
-    permission,
-    // By fingerprint: the walk returns an entry per root, and a song cached
-    // before the cache bucket existed and re-separated since is in both.
-    cachedSongs: new Set(entries.map(entry => entry.fingerprint)).size,
-    cachedBytes: entries.reduce((sum, entry) => sum + entry.sizeBytes, 0),
-    modelBytes,
-    projects,
-  };
+  return {pressure, persisted, permission, stems, modelBytes, work};
 }
 
-/** One labelled figure. */
-function Row({label, value}: {label: string; value: string}) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-t border-border py-3 first:border-t-0 first:pt-0">
-      <dt className="text-sm text-foreground/70">{label}</dt>
-      <dd className="font-mono text-sm text-foreground">{value}</dd>
-    </div>
-  );
+function sum(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
 }
 
-function usageValue(pressure: StoragePressure | null): string {
-  if (pressure == null) return 'This browser does not say';
-  if (pressure.quotaBytes <= 0) return formatBytes(pressure.usageBytes);
-  return `${formatBytes(pressure.usageBytes)} of ${formatBytes(
-    pressure.quotaBytes,
-  )} (${Math.round(pressure.ratio * 100)}%)`;
+/** A readable date, or nothing at all rather than a guess. */
+function formatDate(iso: string | null): string | null {
+  if (iso == null) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.toLocaleDateString(undefined, {dateStyle: 'medium'});
 }
 
 /**
- * What this browser is holding, and whether it has promised to keep it.
+ * What this browser is holding, and what can be done about each part of it.
  *
  * The readings come from the browser at mount rather than from any stored
  * state: the numbers a user needs are the ones true right now, and there is no
@@ -97,6 +101,12 @@ export function StoragePanel() {
   const [reading, setReading] = useState<StorageReading | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  /** The chart whose export dialog is open, if any. */
+  const [exporting, setExporting] = useState<StoredProject | null>(null);
+  /** True until that dialog has loaded — seconds, on a cold click. */
+  const [opening, setOpening] = useState(false);
+  /** The chart the delete confirmation is asking about, if any. */
+  const [confirming, setConfirming] = useState<StoredProject | null>(null);
   /** Rising count, so a slow reading cannot overwrite a newer one. */
   const latestRead = useRef(0);
 
@@ -110,47 +120,38 @@ export function StoragePanel() {
     void refresh();
   }, [refresh]);
 
-  const emptyCache = async () => {
-    setBusy(true);
-    setStatus('');
-    try {
-      // Target 0, and no floor: this is the one caller that means "delete all
-      // of it" rather than "prune to a budget".
-      const result = await pruneStemCache({targetBytes: 0});
-      await refresh();
-      // Null means another tab holds the prune lock — a separation running
-      // somewhere else. Saying nothing would look like a button that does
-      // nothing.
-      setStatus(
-        result == null
-          ? 'Another tab is working on a song right now. Try again when it has finished.'
-          : `Freed ${formatBytes(result.freedBytes)}.`,
-      );
-    } catch {
-      setStatus('This browser would not let the stems be deleted.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  // Stable, because the export dialog lists them in an effect's dependencies.
+  // New identities on every render made it re-read the chart, and a second
+  // read that failed would have closed the dialog while the user was in it.
+  const closeExport = useCallback(() => setExporting(null), []);
+  const exportReady = useCallback(() => setOpening(false), []);
+  const exportFailed = useCallback((reason: string) => {
+    setExporting(null);
+    setOpening(false);
+    setStatus(reason);
+  }, []);
 
-  const askForPersistence = async () => {
+  /**
+   * Runs one action, reports what happened, and never leaves the page busy.
+   *
+   * The action says what to report, including for its own failures — several
+   * of these answer false rather than throwing, and a caller that only handled
+   * the throw would print a saving the next redraw contradicts.
+   */
+  const run = async (work: () => Promise<string>): Promise<void> => {
     setBusy(true);
     setStatus('');
     try {
-      const granted = await requestPersistentStorage();
-      // The tag written at load says this session is unprotected. Left alone
-      // it would say that for the rest of the session's life. Not awaited: it
-      // re-reads the quota, which is the slowest call there is on a large
-      // origin, and the user is waiting on the numbers below.
-      if (granted) void attachStorageContext();
+      const said = await work();
+      await refresh();
+      setStatus(said);
+    } catch (error) {
       await refresh();
       setStatus(
-        granted
-          ? 'This browser will keep your data.'
-          : 'This browser did not agree to keep your data.',
+        error instanceof Error
+          ? `That did not work: ${error.message}`
+          : 'That did not work.',
       );
-    } catch {
-      setStatus('This browser could not answer.');
     } finally {
       setBusy(false);
     }
@@ -164,71 +165,268 @@ export function StoragePanel() {
     );
   }
 
+  const stemBytes = sum(reading.stems.map(entry => entry.sizeBytes));
+  const named = reading.work.bytes + stemBytes + reading.modelBytes;
+  // What the origin holds that no group names: site code the browser has
+  // cached, and anything this page has not learned to measure. Stating it is
+  // what stops the parts from looking like they disagree with the whole.
+  const otherBytes = Math.max(
+    0,
+    (reading.pressure?.usageBytes ?? named) - named,
+  );
+
+  const segments: UsageSegment[] = [
+    {
+      key: 'work',
+      label: 'Your charts and audio',
+      bytes: reading.work.bytes,
+      swatch: 'bg-foreground',
+    },
+    {
+      key: 'stems',
+      label: 'Separated stems',
+      bytes: stemBytes,
+      swatch: 'bg-foreground/70',
+    },
+    {
+      key: 'models',
+      label: 'Downloaded models',
+      bytes: reading.modelBytes,
+      swatch: 'bg-foreground/45',
+    },
+    {
+      key: 'other',
+      label: 'Everything else',
+      bytes: otherBytes,
+      swatch: 'bg-foreground/20',
+    },
+  ];
+
   // Asking helps whenever the browser has not already been told no and the
   // data is not already kept — including a permission that is granted but not
   // yet taken, which one call settles silently.
   const canAsk = !reading.persisted && reading.permission !== 'denied';
 
-  // What the origin holds that no row above names: site code the browser has
-  // cached, and anything this page has not learned to measure. Stating it is
-  // what stops the rows from looking like they disagree with the total, which
-  // is the reading a user reaches for when their charts have just vanished.
-  const named =
-    reading.projects.bytes + reading.cachedBytes + reading.modelBytes;
-  const unaccountedBytes = Math.max(
-    0,
-    (reading.pressure?.usageBytes ?? named) - named,
-  );
+  /** The chart a cached stem belongs to, where one claims it. */
+  const chartFor = (fingerprint: string): StoredProject | undefined =>
+    reading.work.projects.find(
+      project => project.stemFingerprint === fingerprint,
+    );
 
   return (
-    <div className="space-y-6">
-      <dl>
-        <Row label="Used by this site" value={usageValue(reading.pressure)} />
-        <Row
-          label="Your charts and audio"
-          value={
-            reading.projects.projectCount === 0
-              ? 'None'
-              : `${reading.projects.projectCount} ${
-                  reading.projects.projectCount === 1 ? 'project' : 'projects'
-                }, ${formatBytes(reading.projects.bytes)}`
-          }
+    <div className="space-y-10">
+      {exporting ? (
+        <ChartExportDialog
+          // Keyed, so choosing another chart builds a fresh dialog rather
+          // than reusing one still holding the last chart's format choice.
+          key={`${exporting.namespace}/${exporting.id}`}
+          project={exporting}
+          onClose={closeExport}
+          onReady={exportReady}
+          onFailed={exportFailed}
         />
-        <Row
-          label="Separated stems"
-          value={
-            reading.cachedSongs === 0
-              ? 'None'
-              : `${reading.cachedSongs} ${
-                  reading.cachedSongs === 1 ? 'song' : 'songs'
-                }, ${formatBytes(reading.cachedBytes)}`
-          }
-        />
-        <Row
-          label="Downloaded models"
-          value={
-            reading.modelBytes === 0 ? 'None' : formatBytes(reading.modelBytes)
-          }
-        />
-        <Row label="Everything else" value={formatBytes(unaccountedBytes)} />
-        <Row
-          label="Your charts kept when space runs short"
-          value={reading.persisted ? 'Yes' : 'Not promised'}
-        />
-      </dl>
+      ) : null}
+
+      <UsageBar
+        segments={segments}
+        quotaBytes={reading.pressure?.quotaBytes ?? 0}
+      />
+
+      <StorageGroup
+        title="Your charts — kept"
+        totalBytes={reading.work.bytes}
+        note={
+          reading.persisted
+            ? 'This browser has promised to keep these. Nothing here is deleted to make room.'
+            : 'This browser has not promised to keep these. It may delete them if it runs short of room.'
+        }>
+        {reading.work.projects.length === 0 ? (
+          <StorageRow title="No charts stored yet" />
+        ) : (
+          reading.work.projects.map(project => (
+            <StorageRow
+              key={`${project.namespace}/${project.id}`}
+              title={project.name}
+              detail={
+                [
+                  project.artist,
+                  project.isProject
+                    ? formatDate(project.updatedAt)
+                    : 'Unfinished — never opened as a chart',
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || undefined
+              }
+              sizeBytes={project.sizeBytes}
+              actions={
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || opening || !project.isProject}
+                    onClick={() => {
+                      setStatus('');
+                      setOpening(true);
+                      setExporting(project);
+                    }}>
+                    {opening && exporting?.id === project.id
+                      ? 'Opening…'
+                      : 'Download'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy || opening}
+                    onClick={() => setConfirming(project)}>
+                    Delete
+                  </Button>
+                </>
+              }
+            />
+          ))
+        )}
+        {reading.work.databaseBytes > 0 ? (
+          <StorageRow
+            title="Song library and matching Chorus charts"
+            detail="Kept with your charts, and not removable from here"
+            sizeBytes={reading.work.databaseBytes}
+          />
+        ) : null}
+      </StorageGroup>
+
+      <StorageGroup
+        title="Rebuildable — safe to free"
+        totalBytes={stemBytes + reading.modelBytes}
+        note="Nothing here is your work. Freeing it costs time the next time you use one of these songs, and nothing else.">
+        {reading.stems.map(entry => {
+          const chart = chartFor(entry.fingerprint);
+          return (
+            <StorageRow
+              key={entry.fingerprint}
+              title={chart?.name ?? 'Separated stems'}
+              detail={
+                chart
+                  ? 'Separated drums and vocals'
+                  : 'Not linked to a chart you still have'
+              }
+              sizeBytes={entry.sizeBytes}
+              actions={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () =>
+                      (await deleteStemEntry(entry.fingerprint))
+                        ? `Freed ${formatBytes(entry.sizeBytes)}.`
+                        : 'Those stems are in use somewhere else right now.',
+                    )
+                  }>
+                  Free
+                </Button>
+              }
+            />
+          );
+        })}
+        {reading.modelBytes > 0 ? (
+          <StorageRow
+            title="Separation models"
+            detail="Downloaded again the next time you separate a song"
+            sizeBytes={reading.modelBytes}
+            actions={
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    // What went, not what was expected to go.
+                    const freed = await deleteCachedModels();
+                    return freed > 0
+                      ? `Freed ${formatBytes(freed)}.`
+                      : 'The models could not be freed right now.';
+                  })
+                }>
+                Free
+              </Button>
+            }
+          />
+        ) : null}
+        {reading.stems.length === 0 && reading.modelBytes === 0 ? (
+          <StorageRow title="Nothing cached" />
+        ) : null}
+      </StorageGroup>
 
       <div className="flex flex-wrap gap-3">
-        {reading.cachedSongs > 0 ? (
-          <Button variant="outline" onClick={emptyCache} disabled={busy}>
-            Free {formatBytes(reading.cachedBytes)}
+        {stemBytes > 0 ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const result = await pruneStemCache({targetBytes: 0});
+                return result == null
+                  ? 'Another tab is working on a song right now. Try again when it has finished.'
+                  : `Freed ${formatBytes(result.freedBytes)}.`;
+              })
+            }>
+            Free all stems ({formatBytes(stemBytes)})
           </Button>
         ) : null}
         {canAsk ? (
-          <Button onClick={askForPersistence} disabled={busy}>
-            Ask this browser to keep your data
+          <Button
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const granted = await requestPersistentStorage();
+                // The tag written at load says this session is unprotected.
+                // Left alone it would say that for the session's whole life.
+                if (granted) void attachStorageContext();
+                return granted
+                  ? 'This browser will keep your charts.'
+                  : 'This browser did not agree to keep your charts.';
+              })
+            }>
+            Ask this browser to keep my charts
           </Button>
         ) : null}
       </div>
+
+      <AlertDialog
+        open={confirming != null}
+        onOpenChange={next => {
+          if (!next) setConfirming(null);
+        }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete &ldquo;{confirming?.name}&rdquo;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the chart and its audio from this browser. Nothing is
+              stored anywhere else, so this cannot be undone. Download it first
+              if you want a copy. Any separated stems for it stay, and can be
+              freed below.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const project = confirming;
+                setConfirming(null);
+                if (project == null) return;
+                void run(async () =>
+                  (await deleteStoredProject(project.namespace, project.id))
+                    ? `Deleted ${project.name}.`
+                    : `Could not delete ${project.name}.`,
+                );
+              }}>
+              Delete it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <p
         role="status"

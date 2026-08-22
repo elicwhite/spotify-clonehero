@@ -12,7 +12,8 @@
  * (`chartDoc` over `getChartFile` over `getChartText`); the chart-file format
  * reaching the packager; the secondary chart-file-format and stem controls
  * rendering only when the caller opts in;
- * and the busy state disabling both buttons mid-export.
+ * the busy state disabling both buttons mid-export;
+ * and the controlled-open / chart-check props a host outside the editor uses.
  */
 
 import '@testing-library/jest-dom';
@@ -353,4 +354,77 @@ test('disables both buttons while an export is in flight', async () => {
       screen.queryByRole('button', {name: /download \.sng package/i}),
     ).not.toBeInTheDocument(),
   );
+});
+
+// ---------------------------------------------------------------------------
+// Hosted from outside the editor
+//
+// The storage page renders one dialog on behalf of a list of charts, so it
+// opens the dialog itself rather than through a trigger, and turns the chart
+// check off — it is not offering to fix anything.
+// ---------------------------------------------------------------------------
+
+test('opened from outside, it renders no trigger of its own', async () => {
+  const onOpenChange = jest.fn();
+  render(
+    <ExportDialog
+      {...ANALYTICS_PROPS}
+      songName="Song"
+      getChartText={async () => '.chart text'}
+      open
+      onOpenChange={onOpenChange}
+      showChartCheck={false}
+    />,
+  );
+  await act(async () => {});
+
+  // A trigger would be a second Export button beside the host's own.
+  expect(screen.queryByRole('button', {name: /^export$/i})).toBeNull();
+  expect(
+    screen.getByRole('button', {name: /download \.zip package/i}),
+  ).toBeInTheDocument();
+});
+
+test('closing tells the host rather than closing itself', async () => {
+  const onOpenChange = jest.fn();
+  render(
+    <ExportDialog
+      {...ANALYTICS_PROPS}
+      songName="Song"
+      getChartText={async () => '.chart text'}
+      open
+      onOpenChange={onOpenChange}
+      showChartCheck={false}
+    />,
+  );
+  await act(async () => {});
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', {name: /close/i}));
+  });
+
+  // The host owns the state; a dialog that closed itself would leave the two
+  // disagreeing about whether it is open.
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  expect(
+    screen.getByRole('button', {name: /download \.zip package/i}),
+  ).toBeInTheDocument();
+});
+
+test('with the chart check off, nothing is scanned', async () => {
+  render(
+    <ExportDialog
+      {...ANALYTICS_PROPS}
+      songName="Song"
+      getChartText={async () => '.chart text'}
+      open
+      showChartCheck={false}
+    />,
+  );
+  await act(async () => {});
+
+  expect(screen.queryByText(/checking for errors/i)).toBeNull();
+  // The scan is the expensive part — it assembles the whole package and
+  // parses it — so a host that does not show the result must not pay for it.
+  expect(assembleChartFiles).not.toHaveBeenCalled();
 });

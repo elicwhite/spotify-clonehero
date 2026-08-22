@@ -402,6 +402,24 @@ interface ExportDialogProps {
    * carry (`.chart` has no `diff_*` fields).
    */
   iniMetadata?: SongIniMetadataValue | undefined;
+  /**
+   * Opens the dialog from outside, and suppresses its own trigger button.
+   *
+   * For a host rendering one dialog on behalf of a list — the storage page
+   * has a Download button per chart, and mounting a dialog under each of them
+   * would load the chart scanner once per row.
+   */
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+  /**
+   * Whether to check the chart for issues and show the result. On by default.
+   *
+   * A host that is not offering to fix anything turns it off: the storage
+   * page's job is to get a copy of the chart onto the user's disk before they
+   * delete it, and a list of problems they cannot act on from there is one
+   * more thing between them and the file.
+   */
+  showChartCheck?: boolean | undefined;
 }
 
 /** A passthrough asset file for package assembly (see {@link getExtraAssets}). */
@@ -440,8 +458,20 @@ export default function ExportDialog({
   sourceChartFormat,
   chartFormatSelectable = false,
   iniMetadata,
+  open: controlledOpen,
+  onOpenChange,
+  showChartCheck = true,
 }: ExportDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (!controlled) setUncontrolledOpen(next);
+      onOpenChange?.(next);
+    },
+    [controlled, onOpenChange],
+  );
   const [exportingFormat, setExportingFormat] = useState<PackageFormat | null>(
     null,
   );
@@ -456,7 +486,7 @@ export default function ExportDialog({
       }
       setOpen(next);
     },
-    [sourceChartFormat],
+    [sourceChartFormat, setOpen],
   );
 
   /**
@@ -519,7 +549,9 @@ export default function ExportDialog({
   });
 
   useEffect(() => {
-    if (!open) return;
+    // The scan is the expensive part — it assembles the whole package and
+    // parses it — so a host that does not show the result does not pay for it.
+    if (!open || !showChartCheck) return;
     let cancelled = false;
 
     (async () => {
@@ -564,7 +596,7 @@ export default function ExportDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, showChartCheck]);
 
   const handleExport = useCallback(
     async (packageFormat: PackageFormat) => {
@@ -648,17 +680,21 @@ export default function ExportDialog({
       loadExportInputs,
       origin,
       toolsApplied,
+      chartFileFormat,
+      setOpen,
     ],
   );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Download className="h-4 w-4 mr-1" />
-          Export
-        </Button>
-      </DialogTrigger>
+      {controlled ? null : (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Download className="h-4 w-4 mr-1" />
+            Export
+          </Button>
+        </DialogTrigger>
+      )}
 
       <DialogContent>
         <DialogHeader>
@@ -711,8 +747,9 @@ export default function ExportDialog({
           )}
 
           {/* Chart-checker result: informational only, never blocks either
-              export button. Always rendered — see `IssueCheckState`. */}
-          <ChartCheckBox check={issueCheck} />
+              export button. Rendered in every state — see `IssueCheckState` —
+              unless the host has turned the check off. */}
+          {showChartCheck ? <ChartCheckBox check={issueCheck} /> : null}
 
           {/* Package format: two equal-weight buttons, each downloads
               immediately on click. */}

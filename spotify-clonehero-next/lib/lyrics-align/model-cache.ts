@@ -430,3 +430,37 @@ export async function getCachedModelBytes(): Promise<number> {
   }
   return total;
 }
+
+/**
+ * Removes every cached model, from each root that holds one, and answers how
+ * many bytes actually went.
+ *
+ * Offered on the storage page, so a user short of room can reclaim the biggest
+ * single thing the site stores. It costs the download again the next time they
+ * separate a song, which is why nothing does this automatically.
+ *
+ * Listed first, then deleted, then counted — the same order the stem pruner
+ * uses, and for the same two reasons. Removing entries while iterating the
+ * directory that holds them can skip one, and a caller that reported the size
+ * it expected to free rather than the size it freed would print a saving the
+ * next redraw contradicts.
+ */
+export async function deleteCachedModels(): Promise<number> {
+  let freedBytes = 0;
+  for (const dir of await getCacheDirs(MODEL_CACHE_PATH)) {
+    const files: {name: string; size: number}[] = [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== 'file') continue;
+      files.push({name, size: (await handle.getFile()).size});
+    }
+    for (const file of files) {
+      try {
+        await dir.removeEntry(file.name);
+        freedBytes += file.size;
+      } catch {
+        // In use, or already gone. Not counted either way.
+      }
+    }
+  }
+  return freedBytes;
+}
