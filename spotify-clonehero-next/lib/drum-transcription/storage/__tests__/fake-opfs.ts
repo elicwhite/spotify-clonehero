@@ -255,6 +255,15 @@ export function installFakeOPFS(): {
     value: {getDirectory: async () => root},
     configurable: true,
   });
+  // Jest gives every test file a fresh global but the same `navigator`
+  // object, so a `storageBuckets` another file put there is still on it. The
+  // cache roots would then include a bucket of that file's store, and cache
+  // writes here would land somewhere this store cannot see. A suite that
+  // wants buckets installs its own after this call.
+  Object.defineProperty(globalThis.navigator, 'storageBuckets', {
+    value: undefined,
+    configurable: true,
+  });
 
   return {
     store,

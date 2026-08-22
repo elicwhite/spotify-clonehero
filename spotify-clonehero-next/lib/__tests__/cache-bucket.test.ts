@@ -53,6 +53,16 @@ function installFakeBuckets(): {opened: string[]} {
   return {opened};
 }
 
+/**
+ * Takes the bucket API back off `navigator`.
+ *
+ * Jest hands every test file a fresh global but the SAME `navigator` object,
+ * so a `storageBuckets` left on it is still there for the next file — one
+ * whose `open` hands back a directory of THIS file's fake OPFS. Every cache
+ * write in that file would then land in a store it cannot see. Hence the
+ * `afterEach` below as well as the `beforeEach`: this file must leave the
+ * shared object as it found it.
+ */
 function removeBuckets(): void {
   Object.defineProperty(navigator, 'storageBuckets', {
     value: undefined,
@@ -77,6 +87,8 @@ beforeEach(() => {
   resetCacheBucketForTests();
   removeBuckets();
 });
+
+afterEach(removeBuckets);
 
 describe('getCacheRoots', () => {
   it('is the default root alone where the browser has no buckets', async () => {
