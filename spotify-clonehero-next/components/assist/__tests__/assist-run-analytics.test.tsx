@@ -23,6 +23,11 @@ jest.mock('../../../lib/analytics/track', () => ({
   track: (payload: unknown) => trackMock(payload),
 }));
 
+const reportMock = jest.fn();
+jest.mock('../../../lib/sentry/report-infra-error', () => ({
+  reportInfraError: (...args: unknown[]) => reportMock(...args),
+}));
+
 import {
   useAssistRunnerControls,
   type AssistRunContext,
@@ -92,6 +97,7 @@ function controllableTask({honoursAbort = true, reportsProgress = true} = {}): {
 
 beforeEach(() => {
   trackMock.mockClear();
+  reportMock.mockClear();
 });
 
 test('a successful run reports one start and one completion, with its dimensions', async () => {
@@ -154,6 +160,59 @@ test('a failed run reports the step it was on, and never the error message', asy
   // days. It has to be the real step.
   expect(failed[0]).toMatchObject({step: 'meter', task: 'generate-tempo-map'});
   expect(JSON.stringify(failed[0])).not.toContain('My Song');
+});
+
+test('a failed run is reported to Sentry, with the task and the step', async () => {
+  const {task, fail, started} = controllableTask();
+  const {result} = renderHook(() => useAssistRunnerControls());
+
+  const error = new Error('model download died');
+  let run!: Promise<string>;
+  act(() => {
+    run = result.current.start(task, {}, CONTEXT);
+  });
+  await act(async () => {
+    await started;
+  });
+  await act(async () => {
+    fail(error);
+    await run.catch(() => {});
+  });
+
+  // The count says a run died. This is what says why, and a failure with no
+  // step is the one that cannot be chased.
+  expect(reportMock).toHaveBeenCalledTimes(1);
+  expect(reportMock).toHaveBeenCalledWith(error, {
+    summary: 'assist run failed at meter',
+    tags: {
+      task: 'generate-tempo-map',
+      step: 'meter',
+      origin: 'tempo',
+      entrypoint: 'assist-card',
+    },
+  });
+});
+
+test('a cancelled run is not reported to Sentry', async () => {
+  const {task, started} = controllableTask();
+  const {result} = renderHook(() => useAssistRunnerControls());
+
+  let run!: Promise<string>;
+  act(() => {
+    run = result.current.start(task, {}, CONTEXT);
+  });
+  await act(async () => {
+    await started;
+  });
+  await act(async () => {
+    result.current.cancel();
+    await run.catch(() => {});
+  });
+
+  // Someone pressing cancel is not a fault. Reporting it would fill Sentry
+  // with the slowest steps — separating, transcribing — which is exactly
+  // where people give up.
+  expect(reportMock).not.toHaveBeenCalled();
 });
 
 test('a cancelled run is reported as cancelled, not as a failure', async () => {

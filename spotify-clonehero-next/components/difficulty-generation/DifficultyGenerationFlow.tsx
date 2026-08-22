@@ -28,6 +28,7 @@ import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
 import {DIFFICULTY_ORIGIN} from '@/lib/project-storage/difficultyOrigins';
 import {track, type ChartOpenFailureReason} from '@/lib/analytics/track';
+import {reportInfraError} from '@/lib/sentry/report-infra-error';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
@@ -343,6 +344,10 @@ function DifficultyGenerationFlowInner({
         // reaching here means the pipeline itself could not start, which is
         // the same class of failure the other entry surface reports.
         track({event: 'chart_open_failed', origin, reason: 'storage-error'});
+        reportInfraError(e, {
+          summary: 'chart audio pipeline failed to start',
+          tags: {reason: 'storage-error', origin},
+        });
         setFlow({
           kind: 'picker',
           error: e instanceof Error ? e.message : 'Failed to load audio',

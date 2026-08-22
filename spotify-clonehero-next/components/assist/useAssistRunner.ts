@@ -28,6 +28,7 @@ import {
   type AssistRunStatus,
 } from '@/lib/assist/assist-store';
 import type {AssistTaskDef, AssistTaskKey} from '@/lib/assist/tasks/types';
+import {reportInfraError} from '@/lib/sentry/report-infra-error';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
   createStepTimer,
@@ -254,14 +255,25 @@ export function useAssistRunnerControls(): AssistRunnerControls {
                   ? e.message
                   : String(e),
             });
+            const step = lastActiveStep ?? PLANNING_STEP;
             // The message stays on screen and out of analytics: it can name
             // a file the user loaded.
             track({
               event: aborted ? 'assist_run_cancelled' : 'assist_run_failed',
               ...dimensions,
               durationMs: elapsedMs(),
-              step: lastActiveStep ?? PLANNING_STEP,
+              step,
             });
+            // A cancellation is the user's decision, so only a real failure
+            // is reported. The count says a run died; this says what killed
+            // it — a model download that never finished, a device out of
+            // room — which a count never can.
+            if (!aborted) {
+              reportInfraError(e, {
+                summary: `assist run failed at ${step}`,
+                tags: {...dimensions, step},
+              });
+            }
             // An error keeps its message on screen until dismissed; a
             // cancellation has nothing left to say.
             if (aborted) scheduleFlashClear();

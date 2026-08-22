@@ -50,6 +50,7 @@ import type {ChartResponseEncore} from '@/lib/chartSelection';
 import {difficultyInstrumentOf} from '@/lib/project-storage/difficultyOrigins';
 import {parseProjectOrigin} from '@/lib/project-storage/types';
 import {track} from '@/lib/analytics/track';
+import {reportInfraError} from '@/lib/sentry/report-infra-error';
 import {
   chartOpenFailureReason,
   NO_AUDIO_MESSAGE,
@@ -347,11 +348,22 @@ function TrackEditInner({config}: {config: TrackEditPageConfig}) {
         // with a chart the editor refuses, so the refusal is reported with
         // the reason rather than only shown. The message itself never
         // leaves the page: it can name the file the user loaded.
+        const reason = chartOpenFailureReason(err, chartAccepted);
         track({
           event: 'chart_open_failed',
           origin: newProjectOrigin,
-          reason: chartOpenFailureReason(err, chartAccepted),
+          reason,
         });
+        // Only the device class. A chart with no audio, no supported track,
+        // or one that will not parse is the user's chart being refused, and
+        // the funnel already counts those. `storage-error` is ours: the OPFS
+        // write or the navigation failed after the chart was accepted.
+        if (reason === 'storage-error') {
+          reportInfraError(err, {
+            summary: 'chart open failed after the chart was accepted',
+            tags: {reason, origin: newProjectOrigin},
+          });
+        }
         toast.error(msg);
         console.error('Failed to load chart:', err);
         setPageState('load');
