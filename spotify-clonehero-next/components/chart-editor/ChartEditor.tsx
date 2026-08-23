@@ -24,6 +24,7 @@ import SongMetadataDialog, {type AlbumArtSlot} from './SongMetadataDialog';
 import LeftSidebar from './LeftSidebar';
 import type {ChartAssistProps} from './sidebar/ChartAssist';
 import type {StemsMixerHostProps} from './sidebar/StemsMixer';
+import type {StemSeparationHostProps} from './stemSeparation';
 import PianoRollTimeline from './piano-roll/PianoRollTimeline';
 import EditorMCPTools from './EditorMCPTools';
 import {useChartEditorContext} from './ChartEditorContext';
@@ -129,6 +130,10 @@ export interface ChartEditorProps {
    * `capabilities.showStemsMixer` is on.
    */
   stemsMixer?: StemsMixerHostProps | undefined;
+  /** On-demand stem separation, offered by the Stems mixer and the piano
+   *  roll's waveform menu. Omitted by a host with no runner or no audio
+   *  behind it, and neither surface then draws an affordance. */
+  stemSeparation?: StemSeparationHostProps | undefined;
   /** Callback to provide chart text for export. */
   getChartText?: (() => Promise<string>) | undefined;
   /** Format-agnostic alternative to `getChartText` — see ExportDialog's
@@ -255,6 +260,7 @@ export default function ChartEditor({
   leftPanelChildren,
   chartAssist,
   stemsMixer,
+  stemSeparation,
   getChartText,
   getChartFile,
   getAudioSources,
@@ -416,6 +422,7 @@ export default function ChartEditor({
           leftPanelChildren={leftPanelChildren}
           chartAssist={chartAssist}
           stemsMixer={stemsMixer}
+          stemSeparation={stemSeparation}
         />
       </aside>
 
@@ -476,6 +483,7 @@ export default function ChartEditor({
           lyricsWaveData={lyricsWaveData}
           lyricsWaveChannels={lyricsWaveChannels}
           decodedOnsets={decodedOnsets}
+          stemSeparation={stemSeparation}
           stackedPianoRoll={stackedPianoRoll && hasMultipleStackedTracks}
           className="border-t border-[color:var(--ed-surface-hover)]"
         />

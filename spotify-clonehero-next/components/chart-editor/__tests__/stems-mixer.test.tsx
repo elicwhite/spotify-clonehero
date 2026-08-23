@@ -28,6 +28,8 @@ import {
 
 import {TooltipProvider} from '@/components/ui/tooltip';
 import type {AudioManager} from '@/lib/preview/audioManager';
+import {AssistStore} from '@/lib/assist/assist-store';
+import type {StemSeparationHostProps} from '../stemSeparation';
 import StemsMixer from '../sidebar/StemsMixer';
 
 // jsdom has no ResizeObserver; Radix's Slider needs one.
@@ -456,5 +458,83 @@ describe('StemsMixer drop-to-add naming', () => {
       expect(name).not.toContain('drums');
     }
     expect(new Set(added).size).toBe(added.length);
+  });
+});
+
+describe('StemsMixer on-demand separation', () => {
+  function separation(
+    overrides: Partial<StemSeparationHostProps> = {},
+  ): StemSeparationHostProps {
+    return {
+      offer: {demucs: true, roformer: true},
+      running: false,
+      onSeparate: jest.fn(),
+      store: new AssistStore(),
+      onCancel: jest.fn(),
+      onDismiss: jest.fn(),
+      ...overrides,
+    };
+  }
+
+  it('offers nothing at all on a host that cannot separate', () => {
+    renderMixer({audioManager: makeAudioManager(['song'])});
+    expect(screen.queryByRole('button', {name: 'Good and fast'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Great and slow'})).toBeNull();
+  });
+
+  it('offers both options, and starts the run the user picked', () => {
+    const stemSeparation = separation();
+    renderMixer({audioManager: makeAudioManager(['song']), stemSeparation});
+
+    fireEvent.click(screen.getByRole('button', {name: 'Great and slow'}));
+
+    expect(stemSeparation.onSeparate).toHaveBeenCalledWith({
+      model: 'roformer',
+      entrypoint: 'stems-mixer',
+    });
+  });
+
+  it('offers only what the host says would add a stem', () => {
+    // The fast separator has already produced everything this project
+    // lacks, so only the upgrade to the better one is left.
+    renderMixer({
+      audioManager: makeAudioManager(['song']),
+      stemSeparation: separation({offer: {demucs: false, roformer: true}}),
+    });
+
+    expect(screen.queryByRole('button', {name: 'Good and fast'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Great and slow'})).toBeVisible();
+  });
+
+  it('draws nothing when neither option would add a stem', () => {
+    renderMixer({
+      audioManager: makeAudioManager(['song']),
+      stemSeparation: separation({offer: {demucs: false, roformer: false}}),
+    });
+
+    expect(screen.queryByRole('button', {name: 'Good and fast'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Great and slow'})).toBeNull();
+  });
+
+  it('replaces the options with the run while one is in flight', () => {
+    const store = new AssistStore();
+    store.setState({task: 'separate-stems', steps: [], status: 'running'});
+    renderMixer({
+      audioManager: makeAudioManager(['song']),
+      stemSeparation: separation({running: true, store}),
+    });
+
+    expect(screen.queryByRole('button', {name: 'Good and fast'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Cancel'})).toBeVisible();
+  });
+
+  it('disables the options, with the host’s reason, while the audio is busy', () => {
+    renderMixer({
+      audioManager: makeAudioManager(['song']),
+      stemSeparation: separation({disabledReason: 'Rebuilding audio'}),
+    });
+
+    expect(screen.getByRole('button', {name: 'Good and fast'})).toBeDisabled();
+    expect(screen.getAllByText('Rebuilding audio').length).toBeGreaterThan(0);
   });
 });

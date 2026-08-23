@@ -18,7 +18,9 @@ export type AssistEntrypoint =
   | 'landing'
   | 'assist-card'
   | 'matrix-row'
-  | 'dialog';
+  | 'dialog'
+  | 'stems-mixer'
+  | 'waveform-menu';
 
 /** Why the editor refused a chart. A closed set the loader already branches
  *  on, so it can never degrade into the `"unknown"` that made

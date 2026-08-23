@@ -82,6 +82,7 @@ import {
   type DecodedPackageAudio,
 } from './hooks/projectAudio';
 import {useSeparatedStems} from './hooks/useSeparatedStems';
+import {useStemSeparation} from './hooks/useStemSeparation';
 import {
   createOpfsProjectStore,
   type ProjectMetadata,
@@ -997,13 +998,15 @@ function TrackEditEditor({
     [projectId, store],
   );
 
-  const separatedStems = useSeparatedStems({
-    projectId,
-    packageAudio,
-    loadAssistAudio: chartPackage.chartAssist.loadAudio,
-    storedFingerprint: storedStemFingerprint,
-    onFingerprintResolved: handleFingerprintResolved,
-  });
+  const {stems: separatedStems, offer: stemSeparationOffer} = useSeparatedStems(
+    {
+      projectId,
+      packageAudio,
+      loadAssistAudio: chartPackage.chartAssist.loadAudio,
+      storedFingerprint: storedStemFingerprint,
+      onFingerprintResolved: handleFingerprintResolved,
+    },
+  );
 
   // Everything the live AudioManager plays: the package's own files, plus
   // whatever an assist run separated out of them.
@@ -1129,6 +1132,23 @@ function TrackEditEditor({
       hasAudio,
     ],
   );
+
+  /**
+   * On-demand stem separation (plan 0123). Offered against the same audio the
+   * assist cards run on, and withheld for the same reasons: no audio to
+   * split, or a padded-audio rebuild in flight that is about to replace the
+   * tracks a fresh stem would join.
+   */
+  const stemSeparation = useStemSeparation({
+    runner: assistRunner,
+    loadAudio: hasAudio ? chartPackage.chartAssist.loadAudio : null,
+    offer: stemSeparationOffer,
+    disabledReason: audioLoading
+      ? 'Loading audio'
+      : audioRebuilding
+        ? 'Rebuilding audio'
+        : undefined,
+  });
 
   // The song-details dialog has already written its edit into the chart doc,
   // which the autosave above persists. The identity fields are also the
@@ -1260,6 +1280,7 @@ function TrackEditEditor({
         getExtraAssets={getExtraAssets}
         albumArt={albumArtSlot}
         chartAssist={chartAssist}
+        stemSeparation={stemSeparation}
         stemsMixer={{
           stemOrigins: stemOrigins,
           onAddStem: input => void handleAddStem(input),

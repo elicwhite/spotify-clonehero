@@ -176,8 +176,15 @@ jest.mock('../../../lib/audio-pipeline/stem-cache', () => {
     // this keeps both properties (different audio or different separator,
     // different key) without the crypto.
     computeStemFingerprint: jest.fn(
-      async (bytes: Uint8Array, separatorId: string) =>
-        `${separatorId === actual.DEMUCS_SEPARATOR_ID ? 'demucs-' : ''}fingerprint-${bytes[0]}`,
+      async (bytes: Uint8Array, separatorId: string) => {
+        const prefix =
+          separatorId === actual.DEMUCS_SEPARATOR_ID
+            ? 'demucs-'
+            : separatorId === actual.DEMUCS_STEREO_SEPARATOR_ID
+              ? 'demucs-stereo-'
+              : '';
+        return `${prefix}fingerprint-${bytes[0]}`;
+      },
     ),
     loadStem: jest.fn(async (fingerprint: string, stemName: string) =>
       stemName === 'drums' && fingerprint === cachedDrumFingerprint
@@ -188,6 +195,16 @@ jest.mock('../../../lib/audio-pipeline/stem-cache', () => {
       stemName === 'vocals' && fingerprint === cachedVocalsFingerprint
         ? cachedVocalsOpus
         : null,
+    ),
+    // The probes the separation offer is decided from. Stubbed for the same
+    // reason the loads are: the real ones read OPFS, which jsdom has none of.
+    hasStem: jest.fn(
+      async (fingerprint: string, stemName: string) =>
+        stemName === 'drums' && fingerprint === cachedDrumFingerprint,
+    ),
+    hasStemOpus: jest.fn(
+      async (fingerprint: string, stemName: string) =>
+        stemName === 'vocals' && fingerprint === cachedVocalsFingerprint,
     ),
   };
 });
@@ -313,6 +330,59 @@ beforeEach(() => {
   delete pianoRollProps.lyricsWaveChannels;
   mockWriteEditedChart.mockClear();
   mockUpdateProject.mockClear();
+});
+
+describe('/chart-editor on-demand separation', () => {
+  /** Mounts the editor and waits for the mixer to have its rows. */
+  async function mount() {
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+    await screen.findByTestId('stem-row-song');
+  }
+
+  it('offers both separations on a project whose cache holds nothing', async () => {
+    await mount();
+
+    expect(
+      await screen.findByRole('button', {name: 'Good and fast'}),
+    ).toBeVisible();
+    expect(screen.getByRole('button', {name: 'Great and slow'})).toBeVisible();
+  });
+
+  it('offers neither once BS-Roformer has produced both stems', async () => {
+    cachedDrumStem = {
+      left: new Float32Array([0.1, 0.2]),
+      right: new Float32Array([0.3, 0.4]),
+    };
+    cachedDrumFingerprint = 'fingerprint-1';
+    cachedVocalsOpus = new Uint8Array([1, 2, 3]);
+    cachedVocalsFingerprint = 'fingerprint-1';
+
+    await mount();
+    await screen.findByTestId('stem-row-vocals');
+
+    expect(screen.queryByRole('button', {name: 'Good and fast'})).toBeNull();
+    expect(screen.queryByRole('button', {name: 'Great and slow'})).toBeNull();
+  });
+
+  it('still offers both when all the cache holds is the lyrics tool’s 16 kHz vocals', async () => {
+    // Those vocals play, and they are all `add-lyrics` ever needed — but
+    // neither separator has produced the drums, and neither has produced
+    // full-rate vocals, so both runs would still add something.
+    cachedVocalsOpus = new Uint8Array([4, 5, 6]);
+    cachedVocalsFingerprint = 'demucs-fingerprint-1';
+
+    await mount();
+    await screen.findByTestId('stem-row-vocals');
+
+    expect(
+      await screen.findByRole('button', {name: 'Good and fast'}),
+    ).toBeVisible();
+    expect(screen.getByRole('button', {name: 'Great and slow'})).toBeVisible();
+  });
 });
 
 describe('/chart-editor Stems list', () => {

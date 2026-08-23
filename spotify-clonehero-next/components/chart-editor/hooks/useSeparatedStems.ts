@@ -19,11 +19,19 @@
  * metadata link. On open, the editor resolves the key from the project's
  * canonical audio bytes, persists it, and probes the cache. This makes cache
  * contents authoritative regardless of which entrypoint created the project.
+ *
+ * The same probe answers the other half of the question (plan 0123): which
+ * `separate-stems` runs would still add something. It is the one place that
+ * knows both what the package lacks and what each separator has already
+ * produced, so deciding it anywhere else would mean probing the cache twice
+ * and risking two different answers.
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import {
+  hasStem,
+  hasStemOpus,
   loadStem,
   loadStemOpus,
   STEM_CACHE_SAMPLE_RATE,
@@ -32,6 +40,7 @@ import type {StereoStem} from '@/lib/audio-pipeline/stem-cache';
 import {DRUMS_STEM, VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {resampleStereoInWorker} from '@/lib/audio-pipeline/pcm-client';
 import {
+  resolveDemucsStereoStemFingerprint,
   resolveDemucsStemFingerprint,
   resolveStemFingerprint,
 } from '@/lib/assist/tasks/types';
@@ -49,6 +58,7 @@ const SEPARATING_TASKS = new Set([
   'generate-tempo-map',
   'add-lyrics',
   'transcribe-drums',
+  'separate-stems',
 ]);
 
 /** A cached stem's planar L/R as the interleaved stereo PCM the rest of the
@@ -88,16 +98,46 @@ async function stemAtPackageRate(
   return interleaveStereoStem(resampled);
 }
 
-/** Two stem lists carry the same stems, by name. Used to leave the live list
- *  alone when a re-probe found exactly what is already playing — swapping in
- *  freshly-decoded copies of the same stems would rebuild the AudioManager
- *  for nothing. */
-function sameStemNames(
-  a: ReadonlyArray<AudioStemInput>,
-  b: ReadonlyArray<AudioStemInput>,
-): boolean {
-  return a.length === b.length && a.every((stem, i) => stem.name === b[i].name);
+/**
+ * Which separator a stem on the mixer came out of. Carried beside the stem
+ * list so a re-probe can tell "the same two stems" from "the same two stems,
+ * upgraded" — running BS-Roformer over a project that only had the 16 kHz
+ * Demucs vocals produces a list with identical names, and comparing names
+ * alone would leave the worse audio playing.
+ */
+type StemSource = 'roformer' | 'demucs';
+
+interface ProbedStem {
+  name: string;
+  source: StemSource;
 }
+
+/** Two probes found the same stems, from the same separators. */
+function sameStems(
+  a: ReadonlyArray<ProbedStem>,
+  b: ReadonlyArray<ProbedStem>,
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((stem, i) => stem.name === b[i].name && stem.source === b[i].source)
+  );
+}
+
+/**
+ * Which separators are worth running on this project, from what the cache
+ * already holds.
+ *
+ * A separator is offered while it does not hold every stem the package
+ * itself lacks. BS-Roformer holding all of them also retires the Demucs
+ * option: it is the faster and worse of the two, so once the better output
+ * exists there is nothing left for it to add.
+ */
+export interface StemSeparationOffer {
+  demucs: boolean;
+  roformer: boolean;
+}
+
+const NO_OFFER: StemSeparationOffer = {demucs: false, roformer: false};
 
 export interface UseSeparatedStemsParams {
   /** Identity of the project being edited. Everything here is per-project:
@@ -119,21 +159,33 @@ export interface UseSeparatedStemsParams {
   onFingerprintResolved: (fingerprint: string) => void;
 }
 
+export interface SeparatedStems {
+  /** The separated stems to play, in mixer order. */
+  stems: ReadonlyArray<AudioStemInput>;
+  /** Which `separate-stems` runs would still add something. */
+  offer: StemSeparationOffer;
+}
+
 export function useSeparatedStems({
   projectId,
   packageAudio,
   loadAssistAudio,
   storedFingerprint,
   onFingerprintResolved,
-}: UseSeparatedStemsParams): ReadonlyArray<AudioStemInput> {
+}: UseSeparatedStemsParams): SeparatedStems {
   const [stems, setStems] = useState<ReadonlyArray<AudioStemInput>>([]);
+  const [offer, setOffer] = useState<StemSeparationOffer>(NO_OFFER);
   // The fingerprint in hand: the persisted one, or one computed after a
   // separating run. Cleared on a project switch (the effect below).
   const fingerprintRef = useRef<string | null>(null);
-  // The Demucs vocals key, hashed at most once per project. It is never the
-  // persisted fingerprint (that one is BS-Roformer's) and is only paid for
-  // when the roformer vocals probe misses.
+  // The two Demucs keys, hashed at most once per project each. Neither is
+  // ever the persisted fingerprint (that one is BS-Roformer's): the stereo
+  // key files what an on-demand fast separation wrote, the mono key what an
+  // `add-lyrics` fallback wrote.
+  const demucsStereoFingerprintRef = useRef<string | null>(null);
   const demucsFingerprintRef = useRef<string | null>(null);
+  // What the last published list actually was, by name AND separator.
+  const publishedRef = useRef<ReadonlyArray<ProbedStem>>([]);
   // Identity of the last assist run this hook reacted to, so one run's
   // success triggers exactly one probe.
   const lastAssistOutcomeRef = useRef('');
@@ -141,14 +193,18 @@ export function useSeparatedStems({
   useEffect(() => {
     return () => {
       fingerprintRef.current = null;
+      demucsStereoFingerprintRef.current = null;
       demucsFingerprintRef.current = null;
+      publishedRef.current = [];
       lastAssistOutcomeRef.current = '';
       setStems([]);
+      setOffer(NO_OFFER);
     };
   }, [projectId]);
 
   /**
-   * Reads back whatever the cache holds for this project and publishes it.
+   * Reads back whatever the cache holds for this project and publishes it,
+   * along with which separators still have work to do.
    * `mayComputeFingerprint` remains explicit so callers can choose whether a
    * missing key should be resolved before probing.
    *
@@ -162,10 +218,13 @@ export function useSeparatedStems({
       // Decide what could possibly be wanted BEFORE paying for a
       // fingerprint: a package that ships its own drums and its own vocals
       // has no room for either separated stem, so there is nothing to look
-      // up.
+      // up and nothing to offer separating.
       const wantDrums = !packageHasDrumsAudio(pkg);
       const wantVocals = !pkg.stems.some(stem => stem.name === VOCALS_STEM);
-      if (!wantDrums && !wantVocals) return;
+      if (!wantDrums && !wantVocals) {
+        setOffer(NO_OFFER);
+        return;
+      }
 
       try {
         let fingerprint = fingerprintRef.current ?? storedFingerprint ?? null;
@@ -176,25 +235,64 @@ export function useSeparatedStems({
         }
         fingerprintRef.current = fingerprint;
 
+        // The full-rate Demucs key. Paid for once per project: every probe
+        // below needs it, both to play what a fast separation produced and
+        // to decide whether running one again would add anything.
+        const demucsStereoFingerprint = (demucsStereoFingerprintRef.current ??=
+          await resolveDemucsStereoStemFingerprint(await loadAssistAudio()));
+
         const {sampleRate} = pkg.meta;
         const next: AudioStemInput[] = [];
+        const probed: ProbedStem[] = [];
+        // What each separator holds of what this package lacks. Seeded true
+        // for a stem the package ships itself: neither separator owes it.
+        const roformerHas = {drums: !wantDrums, vocals: !wantVocals};
+        const demucsHas = {drums: !wantDrums, vocals: !wantVocals};
+
         if (wantDrums) {
-          const drums = await loadStem(fingerprint, DRUMS_STEM);
+          const roformerDrums = await loadStem(fingerprint, DRUMS_STEM);
+          roformerHas.drums = roformerDrums != null;
+          const drums =
+            roformerDrums ??
+            (await loadStem(demucsStereoFingerprint, DRUMS_STEM));
+          // A load answers the demucs probe too when the roformer one
+          // missed; otherwise ask the cache directly rather than reading a
+          // stem this render will not play.
+          demucsHas.drums = roformerDrums
+            ? await hasStem(demucsStereoFingerprint, DRUMS_STEM)
+            : drums != null;
           if (drums) {
             next.push({
               name: DRUMS_STEM,
               pcm: await stemAtPackageRate(drums, sampleRate),
               origin: 'ai-separated',
             });
+            probed.push({
+              name: DRUMS_STEM,
+              source: roformerDrums ? 'roformer' : 'demucs',
+            });
           }
         }
         if (wantVocals) {
-          // BS-Roformer's 44.1 kHz stereo vocals first; the lyrics tool's
-          // 16 kHz mono Demucs fallback, under its own separator key, only
-          // when a separation run never left the better stem behind. Both
-          // were produced for this project's audio, and either is a real
-          // track the mixer and the piano roll can show.
+          // Best first: BS-Roformer's 44.1 kHz stereo vocals, then the
+          // 44.1 kHz stereo vocals an on-demand Demucs run left, then the
+          // lyrics tool's 16 kHz mono Demucs fallback under its own
+          // separator key. All three were produced for this project's audio,
+          // and any of them is a real track the mixer and the piano roll can
+          // show.
+          let source: StemSource = 'roformer';
           let vocalsOpus = await loadStemOpus(fingerprint, VOCALS_STEM);
+          roformerHas.vocals = vocalsOpus != null;
+          if (!vocalsOpus) {
+            vocalsOpus = await loadStemOpus(
+              demucsStereoFingerprint,
+              VOCALS_STEM,
+            );
+            source = 'demucs';
+          }
+          demucsHas.vocals = roformerHas.vocals
+            ? await hasStemOpus(demucsStereoFingerprint, VOCALS_STEM)
+            : vocalsOpus != null;
           if (!vocalsOpus) {
             demucsFingerprintRef.current ??= await resolveDemucsStemFingerprint(
               await loadAssistAudio(),
@@ -212,9 +310,22 @@ export function useSeparatedStems({
             const pcm = interleaveAudioBuffer(decoded);
             rememberDecodedBuffer(pcm, decoded);
             next.push({name: VOCALS_STEM, pcm, origin: 'ai-separated'});
+            probed.push({name: VOCALS_STEM, source});
           }
         }
-        setStems(prev => (sameStemNames(prev, next) ? prev : next));
+
+        const roformerComplete = roformerHas.drums && roformerHas.vocals;
+        setOffer({
+          roformer: !roformerComplete,
+          demucs: !roformerComplete && !(demucsHas.drums && demucsHas.vocals),
+        });
+
+        // Leave the live list alone when the re-probe found exactly what is
+        // already playing: swapping in freshly-decoded copies of the same
+        // stems would rebuild the AudioManager for nothing.
+        if (sameStems(publishedRef.current, probed)) return;
+        publishedRef.current = probed;
+        setStems(next);
       } catch (err) {
         console.warn('Could not read separated stems for this project:', err);
       }
@@ -249,5 +360,5 @@ export function useSeparatedStems({
     })();
   }, [assistActivity, probe]);
 
-  return stems;
+  return {stems, offer};
 }

@@ -40,9 +40,22 @@ const EXPECTED: Record<string, string> = {
   'app/add-lyrics/AddLyricsClient.tsx': 'landing',
   'app/tempo/TempoClient.tsx': 'landing',
   'app/drum-transcription/DrumTranscriptionClient.tsx': 'landing',
+  // On-demand stem separation is offered from two surfaces, and each names
+  // itself where the user clicked. The hook that starts the run
+  // (`useStemSeparation`) forwards whichever it was given, so it carries no
+  // literal — the known limit at the top of this file.
+  'components/chart-editor/sidebar/StemsMixer.tsx': 'stems-mixer',
+  'components/chart-editor/piano-roll/PianoRollTimeline.tsx': 'waveform-menu',
 };
 
-const ENTRYPOINTS = ['landing', 'assist-card', 'matrix-row', 'dialog'];
+const ENTRYPOINTS = [
+  'landing',
+  'assist-card',
+  'matrix-row',
+  'dialog',
+  'stems-mixer',
+  'waveform-menu',
+];
 const DECLARES_ENTRYPOINT = /entrypoint:\s*'([a-z-]+)'/g;
 
 function sourceFiles(dir: string): string[] {

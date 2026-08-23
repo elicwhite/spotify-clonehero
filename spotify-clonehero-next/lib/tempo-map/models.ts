@@ -27,3 +27,9 @@ export const BEAT_THIS_MIN_BYTES = 70_000_000; // real size ~83 MB
 export function hasBeatThisModelCached(): Promise<boolean> {
   return hasCachedModel(BEAT_THIS_CACHE_KEY, BEAT_THIS_MIN_BYTES);
 }
+
+/** Whether BS-Roformer is already in the OPFS model cache, so a run that
+ *  needs it will read it locally instead of downloading ~336 MB. */
+export function hasRoformerModelCached(): Promise<boolean> {
+  return hasCachedModel(ROFORMER_CACHE_KEY, ROFORMER_MIN_BYTES);
+}

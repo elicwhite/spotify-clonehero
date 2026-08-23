@@ -24,6 +24,10 @@ export const TOOL_ANALYTICS_ID = {
   'generate-difficulties': 'difficulties',
   'generate-sections': 'sections',
   'generate-tempo-map': 'tempo',
+  // Fills the stem cache only. Never reaches `toolsApplied` — see
+  // `CHART_EDITING_TASKS` — but the map is total over `AssistTaskKey`, so a
+  // task without an id would not compile.
+  'separate-stems': 'stems',
   'transcribe-drums': 'drums',
 } as const satisfies Record<AssistTaskKey, string>;
 

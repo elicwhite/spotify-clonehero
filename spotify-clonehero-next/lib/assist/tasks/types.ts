@@ -24,6 +24,7 @@
 import {
   computeStemFingerprint,
   DEMUCS_SEPARATOR_ID,
+  DEMUCS_STEREO_SEPARATOR_ID,
   ROFORMER_SEPARATOR_ID,
 } from '@/lib/audio-pipeline/stem-cache';
 import type {PlannedStep, StepProgressEvent} from '../run-to-steps';
@@ -34,7 +35,27 @@ export type AssistTaskKey =
   | 'generate-sections'
   | 'add-lyrics'
   | 'generate-difficulties'
-  | 'add-leading-silence';
+  | 'add-leading-silence'
+  | 'separate-stems';
+
+/**
+ * The tasks whose success changes the chart itself.
+ *
+ * `separate-stems` is the one that does not: it fills the stem cache so the
+ * mixer and the piano roll have isolated audio to show, and writes no note,
+ * no tempo and no exported byte. That distinction is what
+ * `useProjectToolsApplied` filters on — `toolsApplied` is reported on export
+ * as the tools the shipped chart was built with, and a chart that was only
+ * listened to was not built with one.
+ */
+export const CHART_EDITING_TASKS: ReadonlySet<AssistTaskKey> = new Set([
+  'transcribe-drums',
+  'generate-tempo-map',
+  'generate-sections',
+  'add-lyrics',
+  'generate-difficulties',
+  'add-leading-silence',
+]);
 
 export interface AssistAudio {
   /** Loads the raw audio bytes on demand. Lazy because a task that resolves
@@ -113,5 +134,22 @@ export async function resolveDemucsStemFingerprint(
   return computeStemFingerprint(
     bytes ?? (await audio.loadOriginalBytes()),
     DEMUCS_SEPARATOR_ID,
+  );
+}
+
+/**
+ * The fingerprint this audio's full-rate Demucs stems are cached under.
+ * Always hashed from the bytes, for the same reason
+ * {@link resolveDemucsStemFingerprint} is: `audio.stemFingerprint` is the
+ * host's BS-Roformer key, and reusing it would file Demucs output in the
+ * roformer entry's directory.
+ */
+export async function resolveDemucsStereoStemFingerprint(
+  audio: AssistAudio,
+  bytes?: Uint8Array,
+): Promise<string> {
+  return computeStemFingerprint(
+    bytes ?? (await audio.loadOriginalBytes()),
+    DEMUCS_STEREO_SEPARATOR_ID,
   );
 }

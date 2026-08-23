@@ -48,6 +48,7 @@ describe('runDemucsInWorker', () => {
 
     const resultPromise = runDemucsInWorker(
       buffer,
+      {vocals16k: true},
       p => progress.push(p),
       () => {
         fake = new FakeWorker();
@@ -65,6 +66,7 @@ describe('runDemucsInWorker', () => {
     expect(fake!.posted).toHaveLength(2);
     expect(fake!.posted[1].type).toBe('separate');
     expect(fake!.posted[1].numSamples).toBe(3);
+    expect(fake!.posted[1].want).toEqual({vocals16k: true});
     expect(Array.from(fake!.posted[1].audioData as Float32Array)).toEqual([
       1, 4, 2, 5, 3, 6,
     ]);
@@ -79,20 +81,41 @@ describe('runDemucsInWorker', () => {
     const vocals16k = new Float32Array([7, 8]);
     fake!.emit({type: 'result', vocals16k});
 
-    await expect(resultPromise).resolves.toBe(vocals16k);
+    // Only the requested product comes back; the rest of the result shape is
+    // absent rather than an empty buffer the caller would have to check.
+    await expect(resultPromise).resolves.toEqual({
+      drums: undefined,
+      vocals: undefined,
+      vocals16k,
+    });
     expect(fake!.terminated).toBe(true);
 
     // Setup messages carry no percent; the separation message carries both.
+    // `phase` divides the model download from the separation itself, which
+    // only the client can tell apart (the `loaded` handshake is what moves
+    // it on).
     expect(progress).toEqual([
-      {message: 'Starting Demucs worker...'},
+      {phase: 'loading-model', message: 'Starting Demucs worker...'},
       {
+        phase: 'loading-model',
         message: 'Downloading audio separator...',
         percent: undefined,
         etaSeconds: undefined,
       },
-      {message: 'Preparing audio for separation...'},
-      {message: 'Separating segment 1/2', percent: 0.5, etaSeconds: 12},
-      {message: 'Worker terminated — WASM memory reclaimed'},
+      {
+        phase: 'separating',
+        message: 'Preparing audio for separation...',
+      },
+      {
+        phase: 'separating',
+        message: 'Separating segment 1/2',
+        percent: 0.5,
+        etaSeconds: 12,
+      },
+      {
+        phase: 'separating',
+        message: 'Worker terminated — WASM memory reclaimed',
+      },
     ]);
   });
 
@@ -100,10 +123,15 @@ describe('runDemucsInWorker', () => {
     let fake: FakeWorker;
     const buffer = fakeAudioBuffer([new Float32Array([1, 2])]);
 
-    const resultPromise = runDemucsInWorker(buffer, undefined, () => {
-      fake = new FakeWorker();
-      return fake as unknown as Worker;
-    });
+    const resultPromise = runDemucsInWorker(
+      buffer,
+      {vocals16k: true},
+      undefined,
+      () => {
+        fake = new FakeWorker();
+        return fake as unknown as Worker;
+      },
+    );
 
     fake!.emit({type: 'loaded'});
 
@@ -119,6 +147,7 @@ describe('runDemucsInWorker', () => {
     let fake: FakeWorker;
     const resultPromise = runDemucsInWorker(
       fakeAudioBuffer([new Float32Array(1)]),
+      {vocals16k: true},
       undefined,
       () => {
         fake = new FakeWorker();
@@ -136,6 +165,7 @@ describe('runDemucsInWorker', () => {
     let fake: FakeWorker;
     const resultPromise = runDemucsInWorker(
       fakeAudioBuffer([new Float32Array(1)]),
+      {vocals16k: true},
       undefined,
       () => {
         fake = new FakeWorker();
@@ -156,6 +186,7 @@ describe('runDemucsInWorker', () => {
 
     const resultPromise = runDemucsInWorker(
       fakeAudioBuffer([new Float32Array(1)]),
+      {vocals16k: true},
       undefined,
       () => {
         spawned = true;
@@ -174,6 +205,7 @@ describe('runDemucsInWorker', () => {
 
     const resultPromise = runDemucsInWorker(
       fakeAudioBuffer([new Float32Array(1)]),
+      {vocals16k: true},
       undefined,
       () => {
         fake = new FakeWorker();
@@ -196,6 +228,7 @@ describe('runDemucsInWorker', () => {
 
     const resultPromise = runDemucsInWorker(
       fakeAudioBuffer([new Float32Array(1)]),
+      {vocals16k: true},
       undefined,
       () => {
         fake = new FakeWorker();

@@ -14,6 +14,7 @@ import NoteInspector from './NoteInspector';
 import ChartMatrix from './sidebar/ChartMatrix';
 import ChartAssist, {type ChartAssistProps} from './sidebar/ChartAssist';
 import StemsMixer, {type StemsMixerHostProps} from './sidebar/StemsMixer';
+import type {StemSeparationHostProps} from './stemSeparation';
 import UtilityCluster from './sidebar/UtilityCluster';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
@@ -30,6 +31,8 @@ interface LeftSidebarProps {
   /** Host wiring for the Stems mixer section, passed through untouched.
    *  Each field is documented on `StemsMixerHostProps`. */
   stemsMixer?: StemsMixerHostProps | undefined;
+  /** On-demand stem separation, passed straight through to the mixer. */
+  stemSeparation?: StemSeparationHostProps | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -41,6 +44,7 @@ export default function LeftSidebar({
   leftPanelChildren,
   chartAssist,
   stemsMixer,
+  stemSeparation,
 }: LeftSidebarProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
 
@@ -148,7 +152,11 @@ export default function LeftSidebar({
          *  show, from `capabilities.showStemsMixer` and the loaded
          *  AudioManager. */}
         {capabilities.showStemsMixer && (
-          <StemsMixer audioManager={audioManager} {...stemsMixer} />
+          <StemsMixer
+            audioManager={audioManager}
+            {...stemsMixer}
+            stemSeparation={stemSeparation}
+          />
         )}
 
         {/* Page-specific panels — stay last before the utility cluster. */}

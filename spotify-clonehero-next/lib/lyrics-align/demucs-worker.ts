@@ -1,17 +1,23 @@
 /**
- * Web Worker that runs Demucs vocal separation in its own WASM context.
- * Terminated after use to fully reclaim WASM memory.
+ * Web Worker that runs Demucs separation in its own WASM context. Terminated
+ * after use to fully reclaim WASM memory.
  *
  * Reuses the STFT/iSTFT code from lib/drum-transcription/audio/stft.ts.
+ *
+ * The model emits four sources and the caller says which ones it wants back,
+ * because its two callers want different things: vocal alignment wants only
+ * the 16 kHz mono vocals, and on-demand stem separation wants full-rate drums
+ * and vocals for the mixer. Extracting a source costs one iSTFT pass and one
+ * song-length buffer per segment, so an unwanted one is never computed.
  *
  * Messages:
  *   IN:  { type: "load" }
  *   OUT: { type: "progress", message: string }
  *   OUT: { type: "loaded" }
  *
- *   IN:  { type: "separate", audioData: Float32Array, numSamples: number }
+ *   IN:  { type: "separate", audioData, numSamples, want }
  *   OUT: { type: "progress", message: string }
- *   OUT: { type: "result", vocals16k: Float32Array }
+ *   OUT: { type: "result", drums?, vocals?, vocals16k? }
  *
  *   OUT: { type: "error", message: string }
  *
@@ -29,21 +35,61 @@ import {
   SEGMENT_SAMPLES,
 } from '@/lib/drum-transcription/audio/stft';
 import {getCachedModel} from './model-cache';
-import {MODEL_URLS} from './model-urls';
+import {DEMUCS_CACHE_KEY, DEMUCS_MIN_BYTES, MODEL_URLS} from './model-urls';
 
 const ORT_WASM_CDN =
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/';
 
 const DEMUCS_MODEL_URL = MODEL_URLS.demucs;
 const SAMPLE_RATE = 44100;
-const VOCALS_INDEX = 3;
+/** htdemucs emits its four sources in this order. */
+const SOURCE_INDEX = {drums: 0, bass: 1, other: 2, vocals: 3} as const;
+/** Rate the mono vocals product is resampled to — the aligner's input rate. */
+const VOCALS_16K_SAMPLE_RATE = 16000;
 const NUM_CHANNELS = 2;
 const OVERLAP = Math.floor(SEGMENT_SAMPLES * 0.5);
 const STEP = SEGMENT_SAMPLES - OVERLAP;
 
 let session: ort.InferenceSession | null = null;
 
-type OutboundMessage =
+/** A separated stem as planar 44.1 kHz stereo. */
+export interface DemucsStereoStem {
+  left: Float32Array;
+  right: Float32Array;
+}
+
+/**
+ * What a run should send back. `vocals` and `vocals16k` are separate flags
+ * because they are two products of one extraction: alignment wants only the
+ * small one, and handing it the 44.1 kHz buffer as well would transfer tens
+ * of megabytes it immediately drops.
+ */
+export interface DemucsSeparationRequest {
+  /** 44.1 kHz stereo drums. */
+  drums?: boolean | undefined;
+  /** 44.1 kHz stereo vocals. */
+  vocals?: boolean | undefined;
+  /** 16 kHz mono vocals. */
+  vocals16k?: boolean | undefined;
+}
+
+export interface DemucsSeparationRunRequest {
+  type: 'separate';
+  /** The whole song, interleaved 44.1 kHz stereo. */
+  audioData: Float32Array;
+  numSamples: number;
+  want: DemucsSeparationRequest;
+}
+
+/** A run's products. Each field is present exactly when the request asked
+ *  for it. */
+export interface DemucsSeparationResult {
+  drums?: DemucsStereoStem | undefined;
+  vocals?: DemucsStereoStem | undefined;
+  vocals16k?: Float32Array | undefined;
+}
+
+export type DemucsWorkerMessage =
   | {
       type: 'progress';
       message: string;
@@ -53,8 +99,10 @@ type OutboundMessage =
       etaSeconds?: number | undefined;
     }
   | {type: 'loaded'}
-  | {type: 'result'; vocals16k: Float32Array}
+  | ({type: 'result'} & DemucsSeparationResult)
   | {type: 'error'; message: string};
+
+type OutboundMessage = DemucsWorkerMessage;
 
 function post(msg: OutboundMessage, transfer?: Transferable[]) {
   self.postMessage(msg, {transfer: transfer ?? []});
@@ -77,7 +125,7 @@ async function loadModel() {
   progress('Downloading audio separator...');
   const buffer = await getCachedModel(
     DEMUCS_MODEL_URL,
-    'htdemucs_fp32.onnx',
+    DEMUCS_CACHE_KEY,
     (msg, info) =>
       progress(
         msg,
@@ -85,7 +133,7 @@ async function loadModel() {
           ? {percent: info.loadedBytes / info.totalBytes}
           : undefined,
       ),
-    140_000_000, // real size ~169 MB (htdemucs_fp32)
+    DEMUCS_MIN_BYTES,
     'audio separator',
   );
 
@@ -107,11 +155,43 @@ async function loadModel() {
   post({type: 'loaded'});
 }
 
-async function separate(audioInterleaved: Float32Array, numSamples: number) {
+async function separate(
+  audioInterleaved: Float32Array,
+  numSamples: number,
+  want: DemucsSeparationRequest,
+) {
   if (!session) throw new Error('Model not loaded');
 
+  // The 16 kHz mono product is a downmix of the same buffer the stereo one
+  // comes from, so either flag extracts vocals exactly once.
+  const wantVocals = want.vocals === true || want.vocals16k === true;
+  const sources: Array<{
+    name: 'drums' | 'vocals';
+    index: number;
+    left: Float32Array;
+    right: Float32Array;
+  }> = [];
+  if (want.drums === true) {
+    sources.push({
+      name: 'drums',
+      index: SOURCE_INDEX.drums,
+      left: new Float32Array(numSamples),
+      right: new Float32Array(numSamples),
+    });
+  }
+  if (wantVocals) {
+    sources.push({
+      name: 'vocals',
+      index: SOURCE_INDEX.vocals,
+      left: new Float32Array(numSamples),
+      right: new Float32Array(numSamples),
+    });
+  }
+  if (sources.length === 0) {
+    throw new Error('Demucs separation was asked for no stems');
+  }
+
   const numSegments = Math.ceil((numSamples - OVERLAP) / STEP);
-  const vocalsOutput = new Float32Array(numSamples * NUM_CHANNELS);
 
   const fadeIn = new Float32Array(OVERLAP);
   const fadeOut = new Float32Array(OVERLAP);
@@ -182,52 +262,58 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
     const segMs = performance.now() - segT0;
     avgSegMs = seg === 0 ? segMs : avgSegMs * 0.7 + segMs * 0.3; // exponential moving average
 
-    const s = VOCALS_INDEX;
-    const specOffset = s * NUM_CHANNELS * stft.numBins * stft.numFrames;
+    // One iSTFT pass per requested source. The scratch spectrogram and the
+    // iSTFT buffers are reused across sources: each pass fully overwrites
+    // what it reads, and its output is consumed before the next pass runs.
+    for (const source of sources) {
+      const specOffset =
+        source.index * NUM_CHANNELS * stft.numBins * stft.numFrames;
 
-    sourceReal.fill(0);
-    sourceImag.fill(0);
-    for (let c = 0; c < NUM_CHANNELS; c++) {
-      const cOffset = c * stft.numBins * stft.numFrames;
-      for (let b = 0; b < stft.numBins; b++) {
-        for (let t = 0; t < stft.numFrames; t++) {
-          const idx = b * stft.numFrames + t;
-          sourceReal[cOffset + idx] = specRealData[specOffset + cOffset + idx];
-          sourceImag[cOffset + idx] = specImagData[specOffset + cOffset + idx];
+      sourceReal.fill(0);
+      sourceImag.fill(0);
+      for (let c = 0; c < NUM_CHANNELS; c++) {
+        const cOffset = c * stft.numBins * stft.numFrames;
+        for (let b = 0; b < stft.numBins; b++) {
+          for (let t = 0; t < stft.numFrames; t++) {
+            const idx = b * stft.numFrames + t;
+            sourceReal[cOffset + idx] =
+              specRealData[specOffset + cOffset + idx];
+            sourceImag[cOffset + idx] =
+              specImagData[specOffset + cOffset + idx];
+          }
         }
       }
-    }
 
-    const freqAudio = computeISTFT(
-      sourceReal,
-      sourceImag,
-      NUM_CHANNELS,
-      stft.numBins,
-      stft.numFrames,
-      SEGMENT_SAMPLES,
-      istftBuffers,
-    );
+      const freqAudio = computeISTFT(
+        sourceReal,
+        sourceImag,
+        NUM_CHANNELS,
+        stft.numBins,
+        stft.numFrames,
+        SEGMENT_SAMPLES,
+        istftBuffers,
+      );
 
-    const sourceWaveOffset = s * NUM_CHANNELS * SEGMENT_SAMPLES;
+      const sourceWaveOffset = source.index * NUM_CHANNELS * SEGMENT_SAMPLES;
 
-    for (let i = 0; i < segLength; i++) {
-      const globalIdx = segStart + i;
-      if (globalIdx >= numSamples) continue;
-      const outIdx = globalIdx * NUM_CHANNELS;
+      for (let i = 0; i < segLength; i++) {
+        const globalIdx = segStart + i;
+        if (globalIdx >= numSamples) continue;
 
-      const leftVal = freqAudio[i] + waveData[sourceWaveOffset + i];
-      const rightVal =
-        freqAudio[SEGMENT_SAMPLES + i] +
-        waveData[sourceWaveOffset + SEGMENT_SAMPLES + i];
+        const leftVal = freqAudio[i] + waveData[sourceWaveOffset + i];
+        const rightVal =
+          freqAudio[SEGMENT_SAMPLES + i] +
+          waveData[sourceWaveOffset + SEGMENT_SAMPLES + i];
 
-      let weight = 1.0;
-      if (seg > 0 && i < OVERLAP) weight = fadeIn[i];
-      if (seg < numSegments - 1 && i >= SEGMENT_SAMPLES - OVERLAP) {
-        weight = fadeOut[i - (SEGMENT_SAMPLES - OVERLAP)];
+        let weight = 1.0;
+        if (seg > 0 && i < OVERLAP) weight = fadeIn[i];
+        if (seg < numSegments - 1 && i >= SEGMENT_SAMPLES - OVERLAP) {
+          weight = fadeOut[i - (SEGMENT_SAMPLES - OVERLAP)];
+        }
+
+        source.left[globalIdx] += leftVal * weight;
+        source.right[globalIdx] += rightVal * weight;
       }
-
-      vocalsOutput[outIdx] += leftVal * weight;
-      vocalsOutput[outIdx + 1] += rightVal * weight;
     }
 
     specRealTensor.dispose();
@@ -238,27 +324,48 @@ async function separate(audioInterleaved: Float32Array, numSamples: number) {
     results['out_wave'].dispose();
   }
 
-  // Convert to mono 16kHz
-  progress('Converting to mono...');
-  const mono44k = new Float32Array(numSamples);
-  for (let i = 0; i < numSamples; i++) {
-    mono44k[i] = (vocalsOutput[i * 2] + vocalsOutput[i * 2 + 1]) / 2;
+  const vocalsSource = sources.find(source => source.name === 'vocals');
+  const drumsSource = sources.find(source => source.name === 'drums');
+
+  const result: DemucsSeparationResult = {};
+  const transfer: Transferable[] = [];
+
+  if (want.vocals16k === true && vocalsSource) {
+    progress('Converting to mono...');
+    const mono44k = new Float32Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      mono44k[i] = (vocalsSource.left[i] + vocalsSource.right[i]) / 2;
+    }
+
+    progress('Resampling to 16kHz...');
+    const ratio = VOCALS_16K_SAMPLE_RATE / SAMPLE_RATE;
+    const outLen = Math.floor(numSamples * ratio);
+    const mono16k = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const srcIdx = i / ratio;
+      const low = Math.floor(srcIdx);
+      const high = Math.min(low + 1, numSamples - 1);
+      const frac = srcIdx - low;
+      mono16k[i] = mono44k[low] * (1 - frac) + mono44k[high] * frac;
+    }
+    result.vocals16k = mono16k;
+    transfer.push(mono16k.buffer);
   }
 
-  progress('Resampling to 16kHz...');
-  const ratio = 16000 / SAMPLE_RATE;
-  const outLen = Math.floor(numSamples * ratio);
-  const mono16k = new Float32Array(outLen);
-  for (let i = 0; i < outLen; i++) {
-    const srcIdx = i / ratio;
-    const low = Math.floor(srcIdx);
-    const high = Math.min(low + 1, numSamples - 1);
-    const frac = srcIdx - low;
-    mono16k[i] = mono44k[low] * (1 - frac) + mono44k[high] * frac;
+  // The full-rate buffers are transferred, so they are only kept when the
+  // caller asked for them — an unwanted one is dropped here rather than
+  // copied across the boundary.
+  if (want.drums === true && drumsSource) {
+    result.drums = {left: drumsSource.left, right: drumsSource.right};
+    transfer.push(drumsSource.left.buffer, drumsSource.right.buffer);
+  }
+  if (want.vocals === true && vocalsSource) {
+    result.vocals = {left: vocalsSource.left, right: vocalsSource.right};
+    transfer.push(vocalsSource.left.buffer, vocalsSource.right.buffer);
   }
 
-  progress('Vocal separation complete');
-  post({type: 'result', vocals16k: mono16k}, [mono16k.buffer]);
+  progress('Separation complete');
+  post({type: 'result', ...result}, transfer);
 }
 
 self.onmessage = async (e: MessageEvent) => {
@@ -266,7 +373,8 @@ self.onmessage = async (e: MessageEvent) => {
     if (e.data.type === 'load') {
       await loadModel();
     } else if (e.data.type === 'separate') {
-      await separate(e.data.audioData, e.data.numSamples);
+      const req = e.data as DemucsSeparationRunRequest;
+      await separate(req.audioData, req.numSamples, req.want);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

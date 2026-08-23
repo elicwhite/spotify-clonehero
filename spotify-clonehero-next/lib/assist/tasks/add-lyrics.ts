@@ -189,8 +189,12 @@ export function makeAddLyricsTask({
   ): Promise<Float32Array> {
     if (signal.aborted) throw makeAbortError();
     progress({activeKey: 'separate', progress: 0});
-    const vocals16k = await runDemucsInWorker(
+    // Only the 16 kHz mono product: alignment never looks at the full-rate
+    // stereo vocals, and asking for them would transfer tens of megabytes
+    // this task drops on the next line.
+    const {vocals16k} = await runDemucsInWorker(
       audioBuffer,
+      {vocals16k: true},
       p =>
         progress({
           activeKey: 'separate',
@@ -201,6 +205,9 @@ export function makeAddLyricsTask({
       createDemucsWorker,
       signal,
     );
+    if (!vocals16k) {
+      throw new Error('Demucs separation returned no vocals');
+    }
     progress({activeKey: 'separate', progress: 1});
     return vocals16k;
   }

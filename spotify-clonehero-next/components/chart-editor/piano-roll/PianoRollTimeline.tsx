@@ -238,6 +238,10 @@ import {
   defaultWaveformSourceId,
   type WaveformSource,
 } from './waveformSources';
+import {
+  offeredStemSeparations,
+  type StemSeparationHostProps,
+} from '../stemSeparation';
 
 import {
   COLORS,
@@ -583,6 +587,11 @@ export interface PianoRollTimelineProps {
   lyricsWaveData?: AudioSamples | undefined;
   /** Channel count for `lyricsWaveData`. */
   lyricsWaveChannels?: number | undefined;
+  /** On-demand stem separation (plan 0123), offered under the waveform row's
+   *  source list. Absent on a host that cannot separate — a project with no
+   *  audio, a surface with no assist runner — and then the menu carries the
+   *  source list alone. */
+  stemSeparation?: StemSeparationHostProps | undefined;
   /** Render all supported instrument/difficulty lanes in one shared canvas. */
   stackedPianoRoll?: boolean | undefined;
   className?: string | undefined;
@@ -597,6 +606,7 @@ export default function PianoRollTimeline({
   decodedOnsets,
   lyricsWaveData,
   lyricsWaveChannels = 2,
+  stemSeparation,
   stackedPianoRoll = false,
   className,
 }: PianoRollTimelineProps) {
@@ -3908,18 +3918,36 @@ export default function PianoRollTimeline({
     [capabilities, executeCommand, snappedTickAt],
   );
 
-  // Waveform-source picker menu (§11): radio-style list of the project's audio
-  // sources, current one checked. Shared by the waveform-row right-click and
-  // the corner chip.
-  const buildSourceMenu = useCallback(
-    (): MenuItem[] =>
-      waveSources.map(s => ({
-        label: s.label,
-        checked: s.id === selectedSourceId,
-        onSelect: () => setSelectedSourceId(s.id),
-      })),
-    [waveSources, selectedSourceId],
-  );
+  // Waveform-row right-click menu (§11): a radio-style list of the project's
+  // audio sources with the current one checked, followed by the separations
+  // that would add a source it does not have yet.
+  const buildSourceMenu = useCallback((): MenuItem[] => {
+    const sources: MenuItem[] = waveSources.map(s => ({
+      label: s.label,
+      checked: s.id === selectedSourceId,
+      onSelect: () => setSelectedSourceId(s.id),
+    }));
+    // The stems this project does not have yet, offered where the user
+    // just looked for them (plan 0123). Disabled rather than hidden while a
+    // run is in flight, so a second right-click doesn't queue a second one;
+    // the progress and its Cancel live on the Stems mixer.
+    const separations = stemSeparation
+      ? offeredStemSeparations(stemSeparation.offer).map(
+          (option): MenuItem => ({
+            label: option.menuLabel,
+            disabled:
+              stemSeparation.running ||
+              stemSeparation.disabledReason !== undefined,
+            onSelect: () =>
+              stemSeparation.onSeparate({
+                model: option.model,
+                entrypoint: 'waveform-menu',
+              }),
+          }),
+        )
+      : [];
+    return [...sources, ...separations];
+  }, [waveSources, selectedSourceId, stemSeparation]);
 
   /** Open the inline text editor at canvas position `(x, y)`, prefilled
    *  with `initialText`. `onCommit` runs on Enter or blur with the input's

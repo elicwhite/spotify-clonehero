@@ -33,7 +33,7 @@
 
 import {useEffect, useMemo, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
-import {AudioWaveform, Loader2, Timer, Upload} from 'lucide-react';
+import {AudioWaveform, Loader2, Sparkles, Timer, Upload} from 'lucide-react';
 import {toast} from 'sonner';
 
 import type {AudioManager} from '@/lib/preview/audioManager';
@@ -47,6 +47,12 @@ import {pickFiles} from '@/lib/chart-files/entries';
 import {cn} from '@/lib/utils';
 import type {AudioStem} from '../hooks/usePaddedAudio';
 import InstrumentIcon, {type IconableInstrument} from '../InstrumentIcon';
+import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
+import {
+  offeredStemSeparations,
+  type StemSeparationHostProps,
+} from '../stemSeparation';
+import {CardAction} from './CardShell';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import StemMixerRow from './StemMixerRow';
 import {
@@ -137,6 +143,16 @@ export interface StemsMixerHostProps {
 
 export interface StemsMixerProps extends StemsMixerHostProps {
   audioManager: AudioManager;
+  /**
+   * On-demand stem separation. Its own prop rather than part of
+   * {@link StemsMixerHostProps} because `LeftSidebar` gets it from
+   * `ChartEditor` directly — the piano roll's waveform menu offers the same
+   * runs, so it is editor-level wiring, not mixer-level wiring.
+   *
+   * Omitted by a host that cannot separate (no runner, or no audio to
+   * split), and then the section carries no separation affordance at all.
+   */
+  stemSeparation?: StemSeparationHostProps | undefined;
 }
 
 function displayLabel(name: string): string {
@@ -219,6 +235,7 @@ export default function StemsMixer({
   audioManager,
   stemOrigins,
   onAddStem,
+  stemSeparation,
   lockedTrackNames,
   emptyState = false,
   loadingAudio = false,
@@ -345,6 +362,17 @@ export default function StemsMixer({
 
   if (trackNames.length === 0 && !loadingAudio && !audioError) return null;
 
+  // The separation offer is the host's answer to "would a run add a stem
+  // this project does not have" (`useSeparatedStems`), so this only decides
+  // how to draw it. It stays on screen while a run is in flight — that is
+  // where the run card and its Cancel live.
+  const separationOptions = stemSeparation
+    ? offeredStemSeparations(stemSeparation.offer)
+    : [];
+  const showSeparation =
+    stemSeparation != null &&
+    (separationOptions.length > 0 || stemSeparation.running);
+
   const dropTargetLabel = emptyState
     ? 'Drop an audio file here to add it to this chart'
     : 'Drop an audio file to add a stem';
@@ -416,6 +444,44 @@ export default function StemsMixer({
           );
         })}
       </div>
+
+      {showSeparation && stemSeparation && (
+        <div className="space-y-1.5 pt-0.5">
+          {!stemSeparation.running && (
+            <>
+              <p className="px-1 text-[11px] text-muted-foreground">
+                No separated stems yet. Split this song into drums and vocals to
+                mix and inspect them on their own.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {separationOptions.map(option => (
+                  <CardAction
+                    key={option.model}
+                    disabledReason={stemSeparation.disabledReason}
+                    onClick={() =>
+                      stemSeparation.onSeparate({
+                        model: option.model,
+                        entrypoint: 'stems-mixer',
+                      })
+                    }
+                    icon={Sparkles}
+                    label={option.label}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {/* The run card renders itself only while a separation run is the
+           *  active one, and keeps a terminal message on screen for a moment
+           *  after — the same contract every Chart Assist card holds. */}
+          <ConnectedAssistRunCard
+            store={stemSeparation.store}
+            task="separate-stems"
+            onCancel={stemSeparation.onCancel}
+            onDismiss={stemSeparation.onDismiss}
+          />
+        </div>
+      )}
 
       {onAddStem && (
         <div

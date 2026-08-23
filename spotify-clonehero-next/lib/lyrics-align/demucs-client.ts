@@ -2,18 +2,34 @@
  * Client for the Demucs web worker.
  * Spawns a worker, runs separation, then terminates it to fully reclaim WASM memory.
  *
+ * The message protocol and its types live in `demucs-worker.ts`, the one
+ * authority on what a run can produce; they are imported as types only, so no
+ * worker module reaches the page bundle.
+ *
  * Ported from ~/projects/vocal-alignment/browser-aligner/src/demucs-client.ts
  */
 
 import {runAbortableWorker} from '@/lib/workers/abortable-worker';
+import type {
+  DemucsSeparationRequest,
+  DemucsSeparationResult,
+  DemucsWorkerMessage,
+} from './demucs-worker';
 
 export interface DemucsProgress {
+  /**
+   * Which half of the run this tick came from. The worker reports the model
+   * download and the separation itself on one channel, and only the client
+   * sees the `loaded` handshake that divides them — so a caller wanting two
+   * steps out of one run cannot work it out from the message text.
+   */
+  phase: 'loading-model' | 'separating';
   /** Human-readable status line. */
   message: string;
   /** 0..1 progress within the separation step. Omitted for setup messages. */
-  percent?: number;
+  percent?: number | undefined;
   /** Estimated seconds remaining in the separation step. */
-  etaSeconds?: number;
+  etaSeconds?: number | undefined;
 }
 
 export function defaultCreateDemucsWorker(): Worker {
@@ -23,9 +39,13 @@ export function defaultCreateDemucsWorker(): Worker {
 }
 
 /**
- * Runs one Demucs separation and resolves with the vocals stem as 16kHz mono
- * PCM — the aligner's input format. The worker downmixes and resamples
- * internally, so nothing crosses the boundary at 44.1kHz stereo.
+ * Runs one Demucs separation and resolves with the stems `want` asked for.
+ *
+ * `want` is explicit rather than defaulted: extracting a source costs an
+ * iSTFT pass per segment and a song-length buffer, and the 44.1 kHz stems are
+ * tens of megabytes each, so every call site names what it is paying for.
+ * The worker downmixes and resamples the 16 kHz vocals internally, so that
+ * product never crosses the boundary at 44.1 kHz stereo.
  *
  * `createWorker` is an injectable factory (defaults to the real
  * demucs-worker.ts) so tests can substitute a fake Worker without a real
@@ -36,21 +56,24 @@ export function defaultCreateDemucsWorker(): Worker {
  */
 export async function runDemucsInWorker(
   audioBuffer: AudioBuffer,
+  want: DemucsSeparationRequest,
   onProgress?: (progress: DemucsProgress) => void,
   createWorker: () => Worker = defaultCreateDemucsWorker,
   signal?: AbortSignal,
-): Promise<Float32Array> {
-  const log = (progress: DemucsProgress) => {
-    if (onProgress) onProgress(progress);
-    else console.log(progress.message);
+): Promise<DemucsSeparationResult> {
+  let phase: DemucsProgress['phase'] = 'loading-model';
+  const log = (progress: Omit<DemucsProgress, 'phase'>) => {
+    const event = {...progress, phase};
+    if (onProgress) onProgress(event);
+    else console.log(event.message);
   };
 
-  return runAbortableWorker<Float32Array>(
+  return runAbortableWorker<DemucsSeparationResult>(
     createWorker,
     signal,
     (worker, settle) => {
       worker.onmessage = (e: MessageEvent) => {
-        const msg = e.data;
+        const msg = e.data as DemucsWorkerMessage;
 
         if (msg.type === 'progress') {
           log({
@@ -60,6 +83,7 @@ export async function runDemucsInWorker(
           });
         } else if (msg.type === 'loaded') {
           // Model loaded — now send audio
+          phase = 'separating';
           log({message: 'Preparing audio for separation...'});
 
           const numSamples = audioBuffer.length;
@@ -77,12 +101,16 @@ export async function runDemucsInWorker(
           }
 
           worker.postMessage(
-            {type: 'separate', audioData: interleaved, numSamples},
+            {type: 'separate', audioData: interleaved, numSamples, want},
             [interleaved.buffer],
           );
         } else if (msg.type === 'result') {
           // Settling terminates the worker, reclaiming all WASM memory.
-          settle.resolve(msg.vocals16k as Float32Array);
+          settle.resolve({
+            drums: msg.drums,
+            vocals: msg.vocals,
+            vocals16k: msg.vocals16k,
+          });
           log({message: 'Worker terminated — WASM memory reclaimed'});
         } else if (msg.type === 'error') {
           settle.reject(new Error(msg.message));

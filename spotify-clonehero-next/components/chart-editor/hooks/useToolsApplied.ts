@@ -23,11 +23,17 @@
  * Landing-page runs are deliberately outside this. They happen before the
  * project exists, and the tool that did that work is what the project's
  * `origin` already says.
+ *
+ * So is a run that changes nothing about the chart. `separate-stems` fills
+ * the stem cache so the mixer has isolated audio to play; the exported chart
+ * is byte-for-byte what it would have been. `CHART_EDITING_TASKS` is the
+ * authority on that distinction.
  */
 
 import {useEffect, useRef} from 'react';
 
 import type {AssistRunStatus} from '@/lib/assist/assist-store';
+import {CHART_EDITING_TASKS} from '@/lib/assist/tasks/types';
 import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
 
@@ -129,6 +135,7 @@ export function useProjectToolsApplied<M extends HasToolsApplied>({
 
       if (!wasRunning || status !== 'success') return;
       if (task === null || projectId === null) return;
+      if (!CHART_EDITING_TASKS.has(task)) return;
 
       const known = [...new Set([...toolsApplied, ...written.current])];
       if (known.includes(task)) return;

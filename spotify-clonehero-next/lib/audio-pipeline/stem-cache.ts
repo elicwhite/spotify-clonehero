@@ -111,6 +111,18 @@ export const DEMUCS_VOCALS_SAMPLE_RATE = 16000;
  */
 export const DEMUCS_SEPARATOR_ID = `${MODEL_URLS.demucs}|vocals|mono|${DEMUCS_VOCALS_SAMPLE_RATE}|fp32`;
 
+/**
+ * Identity of an on-demand Demucs separation, which produces 44.1 kHz STEREO
+ * drums and vocals — the same shape BS-Roformer's entries carry, from a
+ * faster and lower-quality model.
+ *
+ * Its own id for the same reason {@link DEMUCS_SEPARATOR_ID} has one: entries
+ * under a single id are interchangeable, and these are neither the 16 kHz
+ * mono vocals the aligner caches nor the BS-Roformer output a transcription
+ * run is handed.
+ */
+export const DEMUCS_STEREO_SEPARATOR_ID = `${MODEL_URLS.demucs}|drums|stereo|44100|fp32`;
+
 // ---------------------------------------------------------------------------
 // Planar gzip format — [L‖R] Float32, gzip-compressed. Lossless, so cache-hit
 // runs feed CRNN/Beat This! byte-identical audio to a fresh separation (a

@@ -226,3 +226,29 @@ test('a real run after an inherited one is still recorded', async () => {
     toolsApplied: ['generate-tempo-map'],
   });
 });
+
+test('a separation run is not recorded: it changes nothing about the chart', async () => {
+  // `separate-stems` fills the stem cache so the mixer has isolated audio to
+  // play. The exported chart is byte-for-byte what it would have been, so
+  // reporting it as a tool the chart was built with would be a false claim on
+  // every export after it.
+  const store = new AssistStore();
+  const {updateProject} = harness(store);
+
+  await runTask(store, 'separate-stems');
+
+  expect(updateProject).not.toHaveBeenCalled();
+});
+
+test('a chart-editing run after a separation run is still recorded', async () => {
+  const store = new AssistStore();
+  const {updateProject} = harness(store);
+
+  await runTask(store, 'separate-stems');
+  await runTask(store, 'add-lyrics');
+
+  expect(updateProject).toHaveBeenCalledTimes(1);
+  expect(updateProject).toHaveBeenCalledWith('project-a', {
+    toolsApplied: ['add-lyrics'],
+  });
+});
