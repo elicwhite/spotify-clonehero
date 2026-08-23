@@ -649,12 +649,26 @@ before the code was fixed:
   "correction" to 166 / 3166.4 was wrong. The values are computed in the
   tests now, not asserted in prose.
 
-## What is left
+Slice 2 is implemented and green too (427 suites, 4466 tests):
 
-- **Slice 2:** the tempo-lane "Music starts here" item, migration (step 8),
-  the `[-] [+]` control, and the regeneration order (step 7). Until step 7
-  lands, regenerating a tempo map on a padded doc still installs the map in
-  the unpadded frame.
+- **Step 7.** `ReplaceTempoMapCommand` shifts the incoming map by the pad
+  before installing it (`shiftSynctrackMs`), records the opening from the
+  UNSHIFTED map, and re-runs the recompute so the map is re-installed at the
+  new pad with the opening re-emitted. A test reproduced the original defect
+  first: a change the pipeline measured at 4000 ms landed at chart ms 4000 on
+  a doc padded 2000 ms.
+- **Step 8.** `barsForExistingPad` back-derives the count for a project
+  padded by the old model, and `SetSongStartCommand` uses it on the first
+  gesture. Its tests pin the bound: exactly two bars stays put, 3000 ms moves
+  half a bar, and 500 ms rounds to zero bars and is clamped up.
+- **Step 4's second control.** "Music starts here" on the tempo lane, which
+  refuses a tap inside the lead-in rather than clamping it to zero.
+- **The bar count.** "Add a bar" and "Remove a bar" on the card, both routed
+  through the same task, so the audio is re-padded under the same progress
+  card. `replanLeadIn` now returns null when there is no lead-in: a recompute
+  must never create silence the user did not ask for.
+
+## What is left
 - **Slice 3:** the two promotions and step 6b's "Move the song start here".
 - **Not yet verified in a browser.** The jsdom tests drive the real card,
   the real `TrackEditPage` and the real piano-roll menu, but nothing has run

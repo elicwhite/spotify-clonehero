@@ -465,6 +465,31 @@ describe('ChartAssist leading-silence recommendation', () => {
     expect(within(card).getByText(/Lead-in: \d+ bars?\./)).toBeInTheDocument();
   });
 
+  it('adds a bar, then removes one, without stacking pads', async () => {
+    renderChartAssist(makeDoc());
+    const card = screen.getByRole('group', {name: 'Add leading silence'});
+    const note = () =>
+      within(card).getByText(/Lead-in: \d+ bars?\./).textContent;
+
+    fireEvent.click(
+      within(card).getByRole('button', {name: /set song start/i}),
+    );
+    await settle();
+    fireEvent.click(
+      within(card).getByRole('button', {name: /add leading silence/i}),
+    );
+    await settle();
+    const first = note();
+
+    fireEvent.click(within(card).getByRole('button', {name: /add a bar/i}));
+    await settle();
+    expect(note()).not.toBe(first);
+
+    fireEvent.click(within(card).getByRole('button', {name: /remove a bar/i}));
+    await settle();
+    expect(note()).toBe(first);
+  });
+
   it('adding leading silence does not flag the drum transcription stale', async () => {
     // The whole grid shifts by one fixed pad and the drums shift with it, so
     // nothing landed on a different beat — flagging staleness here would be

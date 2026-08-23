@@ -147,6 +147,7 @@ import {
   RemoveTimeSignatureCommand,
   SetTimeSignatureCommand,
   SetOpeningMeterCommand,
+  SetSongStartCommand,
   AddLyricCommand,
   DeleteLyricCommand,
   SetLyricTextCommand,
@@ -3800,6 +3801,34 @@ export default function PianoRollTimeline({
             executeCommand(
               new RephaseDownbeatsCommand(beatTick, scene.endTick),
             ),
+        },
+        {
+          // The pad is measured from here (plan 0124 step 4), and only the
+          // user can say where it is: the tempo map's origin is grid phase,
+          // and lands within one bar of audio sample 0 whatever silence the
+          // file carries. A tap inside the lead-in is refused rather than
+          // clamped to zero, which would move the song start somewhere the
+          // user did not point at.
+          label: 'Music starts here',
+          disabled: !capabilities.showEditingControls,
+          onSelect: () => {
+            const doc = editStateRef.current.chartDoc;
+            if (!doc) return;
+            const padMs = getAudioAnchor(doc)?.ms ?? 0;
+            const chartMs = tickToMs(
+              beatTick,
+              scene.timedTempos,
+              scene.resolution,
+            );
+            if (chartMs < padMs - 1e-6) {
+              toast.error('That point is inside the lead-in', {
+                description:
+                  'The song start is where the music begins, after the silence.',
+              });
+              return;
+            }
+            executeCommand(new SetSongStartCommand(chartMs - padMs));
+          },
         },
         {
           // Placed at the pointer's tick, not the nearest beat: a beat can be

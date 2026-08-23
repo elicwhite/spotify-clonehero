@@ -12,7 +12,7 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {AudioWaveform, Crosshair} from 'lucide-react';
+import {AudioWaveform, Crosshair, Minus} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
@@ -57,6 +57,18 @@ export default function LeadingSilenceCard({
   const leadInBars = getLeadIn(doc)?.bars ?? null;
   const needsSongStart = songStart === null;
 
+  /** The count the next run should use. `[+]`/`[-]`/Reset set it; a plain
+   *  press leaves it unset, and the task picks the minimum (a first press) or
+   *  one more bar (a later one). */
+  const barsOverrideRef = useRef<number | null>(null);
+  const takeRequestedBars = (): number | undefined => {
+    const override = barsOverrideRef.current;
+    barsOverrideRef.current = null;
+    if (override !== null) return override;
+    const current = getLeadIn(docRef.current);
+    return current === null ? undefined : current.bars + 1;
+  };
+
   // The run reads the doc rather than closing over it: a run takes about a
   // second, and the plan it applies has to describe the chart at the end of
   // that second, not the render that started it.
@@ -80,10 +92,7 @@ export default function LeadingSilenceCard({
         padAudioAhead: getPadAudioAhead() ?? undefined,
         // A card that has never been used asks for the minimum; a later press
         // adds one more bar.
-        bars:
-          getLeadIn(docRef.current) === null
-            ? undefined
-            : getLeadIn(docRef.current)!.bars + 1,
+        bars: takeRequestedBars(),
       }),
       [getPadAudioAhead],
     ),
@@ -112,6 +121,13 @@ export default function LeadingSilenceCard({
       );
     },
   });
+
+  /** Re-run the pad at an explicit bar count. The same task runs, so the
+   *  audio is re-padded under the same progress card. */
+  const setBars = (bars: number) => {
+    barsOverrideRef.current = bars;
+    run();
+  };
 
   return (
     <CardShell
@@ -148,6 +164,18 @@ export default function LeadingSilenceCard({
               label={leadInBars === null ? 'Add leading silence' : 'Add a bar'}
               variant="outline"
             />
+            {leadInBars !== null && (
+              <CardAction
+                // A recompute can leave the count under the two-second floor,
+                // so this asks for one less and the planner raises it back to
+                // the minimum if that is illegal.
+                disabledReason={audioBusyReason}
+                onClick={() => setBars(Math.max(1, leadInBars - 1))}
+                icon={Minus}
+                label="Remove a bar"
+                variant="outline"
+              />
+            )}
           </>
         )
       }>

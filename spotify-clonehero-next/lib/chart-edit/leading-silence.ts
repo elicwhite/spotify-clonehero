@@ -192,6 +192,21 @@ export function carryDocSidecars(
 }
 
 /**
+ * Move a synctrack from the original-audio frame into a padded chart's frame.
+ *
+ * Assist tasks measure on the original audio (`loadOriginalBytes`), so a map
+ * installed on a padded chart has to move by the pad first. Installing it
+ * unshifted puts every tempo change one pad early.
+ */
+export function shiftSynctrackMs(sync: Synctrack, deltaMs: number): Synctrack {
+  return {
+    origin_ms: sync.origin_ms + deltaMs,
+    tempos: sync.tempos.map(t => ({...t, ms: t.ms + deltaMs})),
+    timeSignatures: sync.timeSignatures.map(t => ({...t, ms: t.ms + deltaMs})),
+  };
+}
+
+/**
  * Record the opening from the synctrack being installed. Call it at every
  * site where a synctrack becomes a chart: that is the one moment the real
  * tempo and meter are in hand, before `buildSyncLayout` wraps a lead-in
@@ -353,6 +368,31 @@ export function planLeadIn(
 }
 
 /**
+ * The bar count that best describes a pad this feature did not create (plan
+ * 0124 step 8).
+ *
+ * A project padded by the old model has an anchor and no bar count. Rounding
+ * its pad onto the bar grid moves it — by up to half a bar when the bounds
+ * already hold, and by more when they do not, because a small pad rounds to
+ * zero bars and the bounds then raise it. That is the price of putting an
+ * arbitrary pad onto the grid, and the caller announces it rather than
+ * pretending the pad is unchanged.
+ */
+export function barsForExistingPad(doc: ChartDocument): number | null {
+  const songStart = getSongStart(doc);
+  if (!songStart) return null;
+  const padMs = getAudioAnchor(doc)?.ms ?? 0;
+  if (padMs <= 0) return null;
+  const {bpm, meter} = resolveOpening(doc);
+  const barMs = ((meter.numerator * 4) / meter.denominator) * (60000 / bpm);
+  if (!(barMs > 0)) return null;
+  return Math.max(
+    1,
+    Math.round((padMs + Math.max(0, songStart.audioMs)) / barMs),
+  );
+}
+
+/**
  * Re-plan the existing lead-in after something changed underneath it: the
  * opening tempo or meter, the song start, a new tempo map.
  *
@@ -363,6 +403,9 @@ export function planLeadIn(
  * to clear 2000 ms would move the song a second against its audio.
  */
 export function replanLeadIn(doc: ChartDocument): LeadingSilencePlan | null {
+  // No lead-in yet means there is nothing to re-plan. A recompute must never
+  // create silence the user did not ask for.
+  if (getLeadIn(doc) === null) return null;
   return planPad(doc, undefined, false);
 }
 
@@ -405,6 +448,7 @@ function planPad(
   }
   const minBars = Math.max(1, ...lower.map(v => Math.ceil(v / barMs - 1e-9)));
   const requested = bars ?? getLeadIn(doc)?.bars ?? minBars;
+
   const barCount = Math.max(minBars, requested);
 
   const padMs = barCount * barMs - X;

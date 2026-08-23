@@ -71,9 +71,12 @@ import {
   setSongStart,
   planLeadIn,
   replanLeadIn,
+  barsForExistingPad,
+  setLeadIn,
   getOpening,
   setOpening,
   openingFromSync,
+  shiftSynctrackMs,
   carryDocSidecars,
   refreshAnchorKeepMs,
   refreshAnchorKeepTick,
@@ -1310,9 +1313,17 @@ export class ReplaceTempoMapCommand implements EditCommand {
 
   execute(doc: ChartDocument): ChartDocument {
     const anchor = getAudioAnchor(doc);
-    const result = repredictTempo(doc, this.synctrack, null);
+    // The task measured this map on the ORIGINAL audio, and the chart lives
+    // in the padded frame, so the map moves before it is installed. Without
+    // the shift every tempo change lands one pad early — the defect plan
+    // 0124 opens by describing.
+    const installed = anchor?.ms
+      ? shiftSynctrackMs(this.synctrack, anchor.ms)
+      : this.synctrack;
+    const result = repredictTempo(doc, installed, null);
     // The incoming sync is the real opening; what lands at tick 0 is the
-    // writer's construct (plan 0124 step 1b).
+    // writer's construct (plan 0124 step 1b). Record it from the UNSHIFTED
+    // map: the opening is a tempo and a meter, not a position.
     const recorded = openingFromSync(
       carryDocSidecars(doc, result.doc),
       this.synctrack,
@@ -1321,11 +1332,17 @@ export class ReplaceTempoMapCommand implements EditCommand {
       ? refreshAnchorKeepMs(setAudioAnchor(recorded, anchor))
       : recorded;
 
+    // With a song start, the new map has a new bar length, so the pad is
+    // re-derived and the opening re-emitted at it. `replanLeadIn` keeps the
+    // user's bar count: a regeneration is not a request for a longer lead-in.
+    const replanned = replanLeadIn(retimed);
+    const padded = replanned ? applyLeadIn(retimed, replanned) : retimed;
+
     // A standalone regeneration leaves any recorded transcription stamp
     // behind, so the drums snapped to the OLD grid are flagged stale.
     return this.options.fromSameRunAsDrumTranscription
-      ? restampTempoDerived(retimed, 'drum-transcription')
-      : retimed;
+      ? restampTempoDerived(padded, 'drum-transcription')
+      : padded;
   }
 }
 
@@ -1893,7 +1910,18 @@ export class SetSongStartCommand implements EditCommand {
   execute(doc: ChartDocument): ChartDocument {
     const audioMs = Math.max(0, this.audioMs);
     const next = setSongStart(doc, {audioMs});
-    if (getLeadIn(next) === null) return next;
+
+    // A project padded before this feature has an anchor and no bar count.
+    // Back-derive the count from the pad it already has, so setting the song
+    // start does not resize a lead-in the user is happy with (plan 0124 step
+    // 8). The rounding still moves the pad, which the caller announces.
+    if (getLeadIn(next) === null) {
+      const bars = barsForExistingPad(next);
+      if (bars === null) return next;
+      const migrated = planLeadIn(next, bars);
+      return migrated ? applyLeadIn(next, migrated) : setLeadIn(next, {bars});
+    }
+
     // `planLeadIn` rather than `replanLeadIn`: a moved song start re-chooses
     // the bar count, so a corrected start cannot leave an oversized lead-in.
     const plan = planLeadIn(next);

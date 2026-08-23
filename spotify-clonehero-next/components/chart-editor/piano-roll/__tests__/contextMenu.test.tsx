@@ -428,6 +428,24 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     ).toBe(false);
   });
 
+  it('offers "Music starts here" on the tempo lane', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    const item = screen.getByRole('button', {name: 'Music starts here'});
+    expect(item).toBeEnabled();
+    act(() => {
+      item.click();
+    });
+    // The song start is stored in ORIGINAL-audio ms. With no pad yet, that is
+    // the beat's own chart time.
+    const songStart = (
+      latest!.state.chartDoc as {songStart?: {audioMs: number} | null}
+    ).songStart;
+    expect(songStart!.audioMs).toBeGreaterThan(0);
+  });
+
   // The opening meter is editable now (plan 0124 step 6): it is the recovery
   // path for the 4/4 the first pad writes, and no other control sets a meter.
   it('offers to edit the opening meter at tick 0, but not to remove it', async () => {
