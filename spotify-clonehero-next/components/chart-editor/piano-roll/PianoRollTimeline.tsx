@@ -88,7 +88,7 @@ import {
   phraseTranslationBounds,
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
-  getLeadIn,
+  getSongStart,
   openingFromSync,
   schemaForTrack,
   fullLaneRange,
@@ -148,6 +148,8 @@ import {
   SetTimeSignatureCommand,
   SetOpeningMeterCommand,
   SetSongStartCommand,
+  PromoteOpeningTempoCommand,
+  PromoteOpeningMeterCommand,
   AddLyricCommand,
   DeleteLyricCommand,
   SetLyricTextCommand,
@@ -3594,7 +3596,7 @@ export default function PianoRollTimeline({
    *  toggle; Round 2 §6's ×2/÷2 structural correction) at screen x. Returns
    *  [] when nothing actionable is under x. */
   const buildTempoMenu = useCallback(
-    (x: number, scene: ChartScene): MenuItem[] => {
+    (x: number, y: number, scene: ChartScene): MenuItem[] => {
       const view = viewRef.current;
       const st = editStateRef.current;
       // ×2/÷2 need the same gating the old floating buttons had: a chart
@@ -3681,13 +3683,23 @@ export default function PianoRollTimeline({
       // painted, so it can never offer to remove a marker that isn't there.
       // Tick 0 answers here, because its meter is editable (plan 0124 step
       // 6) — the remove item below excludes it on its own.
-      const tsIndex = hitTsChip(
-        scene.timeSignatures,
-        view,
-        x,
-        tsChipWidthsRef.current,
-        true,
-      );
+      //
+      // The chip answers only inside its own strip, the way the drag path
+      // already requires. Without the y gate a chip swallows the menu of a
+      // tempo marker at the same x for the whole height of the lane, and at
+      // tick 0 the two always share an x.
+      const inChipStrip =
+        y >= panelGeometry().tempoTop &&
+        y < panelGeometry().tempoTop + TS_CHIP_TOP + TS_CHIP_H;
+      const tsIndex = inChipStrip
+        ? hitTsChip(
+            scene.timeSignatures,
+            view,
+            x,
+            tsChipWidthsRef.current,
+            true,
+          )
+        : -1;
       if (tsIndex >= 0) {
         const chip = scene.timeSignatures[tsIndex];
         return [
@@ -3719,6 +3731,19 @@ export default function PianoRollTimeline({
               );
             },
           },
+          ...(chip.tick === 0 && scene.timeSignatures.length > 1
+            ? [
+                {
+                  // The same shape as the tempo promotion, and the same
+                  // reason: tick 0 always holds a signature. Bars after the
+                  // promoted event are renumbered, which the label says.
+                  label: `Use ${scene.timeSignatures[1].label} from the start (renumbers later bars)`,
+                  disabled: !capabilities.showEditingControls,
+                  onSelect: () =>
+                    executeCommand(new PromoteOpeningMeterCommand()),
+                },
+              ]
+            : []),
           // The opening meter cannot be removed — a chart always has one at
           // tick 0 — so only a later signature offers it.
           ...(chip.tick === 0
@@ -3742,6 +3767,20 @@ export default function PianoRollTimeline({
           ...octaveItems,
           tapItem(marker.tick),
           bpmItem(marker.tick, marker.bpm),
+          ...(k === 0 && scene.tempos.length > 1
+            ? [
+                {
+                  // "Delete the first marker" means the next one governs from
+                  // the start: a chart always has a tempo at tick 0. Beats
+                  // are kept and the lead-in absorbs the time change (plan
+                  // 0124 step 6).
+                  label: `Use ${scene.tempos[1].bpm.toFixed(1)} BPM from the start`,
+                  disabled: !capabilities.showEditingControls,
+                  onSelect: () =>
+                    executeCommand(new PromoteOpeningTempoCommand()),
+                },
+              ]
+            : []),
           {
             label: `Delete tempo marker (${marker.bpm.toFixed(1)} BPM)`,
             disabled: k === 0, // marker 0 is the immovable song-start anchor
@@ -3759,6 +3798,9 @@ export default function PianoRollTimeline({
       // Empty lane. The beat items (rephase, tap) speak in beats, so they
       // resolve to the nearest one.
       const beatTick = nearestBeatTick(scene.beats, view, x);
+      const hasSongStart =
+        editStateRef.current.chartDoc !== null &&
+        getSongStart(editStateRef.current.chartDoc) !== null;
       // The tick under the pointer, per the current grid setting: where every
       // "…here" item on this lane places, and the fallback for a lane with no
       // beat grid to resolve against.
@@ -3785,23 +3827,26 @@ export default function PianoRollTimeline({
       return [
         ...octaveItems,
         tapItem(beatTick),
-        {
-          // A rotation writes a short measure at tick 0, and the next
-          // recompute reads the opening meter from there — so with a lead-in
-          // in place it would take the song off its bar line, and no pad
-          // recompute can put it back (plan 0124 step 6b). Slice 3 replaces
-          // this item with "Move the song start here"; until then it stands
-          // down where it would do harm.
-          label: 'Make this beat 1 (rephase song)',
-          disabled:
-            isDownbeat ||
-            (editStateRef.current.chartDoc !== null &&
-              getLeadIn(editStateRef.current.chartDoc) !== null),
-          onSelect: () =>
-            executeCommand(
-              new RephaseDownbeatsCommand(beatTick, scene.endTick),
-            ),
-        },
+        // The rotation writes a short measure at tick 0, and the next
+        // recompute would read the opening meter from there, taking the song
+        // off its bar line with no pad recompute able to put it back. With a
+        // song start, "Move the song start here" above says the same thing
+        // without the short measure, so the rotation stands down entirely
+        // (plan 0124 step 6b). It is not a superset of the rotation: that
+        // re-phases every region against its own numerator, while moving the
+        // song start rotates only regions inheriting phase from tick 0.
+        ...(hasSongStart
+          ? []
+          : [
+              {
+                label: 'Make this beat 1 (rephase song)',
+                disabled: isDownbeat,
+                onSelect: () =>
+                  executeCommand(
+                    new RephaseDownbeatsCommand(beatTick, scene.endTick),
+                  ),
+              },
+            ]),
         {
           // The pad is measured from here (plan 0124 step 4), and only the
           // user can say where it is: the tempo map's origin is grid phase,
@@ -3809,7 +3854,14 @@ export default function PianoRollTimeline({
           // file carries. A tap inside the lead-in is refused rather than
           // clamped to zero, which would move the song start somewhere the
           // user did not point at.
-          label: 'Music starts here',
+          //
+          // Once a song start exists this item IS the rephase gesture, so it
+          // is always enabled: "the song actually starts one bar later" is a
+          // tap on a beat that is already a downbeat, which the rotation's
+          // own gate refuses (plan 0124 step 6b).
+          label: hasSongStart
+            ? 'Move the song start here'
+            : 'Music starts here',
           disabled: !capabilities.showEditingControls,
           onSelect: () => {
             const doc = editStateRef.current.chartDoc;
@@ -4338,7 +4390,7 @@ export default function PianoRollTimeline({
       // Tempo lane (§7/§8; Round 2 §6's ×2/÷2 structural correction):
       // add/delete markers, mark/unmark downbeats.
       if (y < g.laneTop) {
-        const items = buildTempoMenu(x, scene);
+        const items = buildTempoMenu(x, y, scene);
         openItemsMenu(menuX, menuY, items);
         return;
       }

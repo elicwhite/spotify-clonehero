@@ -668,8 +668,30 @@ Slice 2 is implemented and green too (427 suites, 4466 tests):
   card. `replanLeadIn` now returns null when there is no lead-in: a recompute
   must never create silence the user did not ask for.
 
+Slice 3 is implemented and green (429 suites, 4477 tests):
+
+- **The two promotions.** `PromoteOpeningTempoCommand` keeps every tick and
+  hands the time change to the pad; `PromoteOpeningMeterCommand` honors the
+  meter at tick 0 and renumbers the tail, writing no short measure and never
+  touching `planDownbeatAt`. Both are offered from the tick-0 marker's own
+  menu, labelled for what they do, and the five tick-0 guards stay where they
+  are.
+- **Step 6b.** With a song start, the rotation item is gone rather than
+  disabled: "Move the song start here" says the same thing without writing a
+  short measure, and it is always enabled.
+
+Two defects the tests caught before the code was right:
+
+- The tempo promotion double-counted. `retimeChart` had already moved every
+  event's ms into the new grid, and `applyLeadIn` then shifted them again by
+  the pad's own change — 1333 ms off the audio in the worked case. A
+  tick-preserving edit needs `adoptLeadInPad`, which moves the anchor and the
+  bar count and leaves the chart alone.
+- Making the tick-0 chip hittable in slice 1 let it swallow the tick-0 tempo
+  marker's menu, because the two always share an x. The chip now answers only
+  inside its own strip, which the drag path already required.
+
 ## What is left
-- **Slice 3:** the two promotions and step 6b's "Move the song start here".
 - **Not yet verified in a browser.** The jsdom tests drive the real card,
   the real `TrackEditPage` and the real piano-roll menu, but nothing has run
   against real audio. The tick tolerance on the audio-position invariant is

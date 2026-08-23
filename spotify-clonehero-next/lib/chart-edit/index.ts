@@ -127,6 +127,7 @@ export {
   barsForExistingPad,
   replanLeadIn,
   applyLeadIn,
+  adoptLeadInPad,
   LEAD_MIN_MS,
   COLLAPSE_BPM_MIN,
   getSongStart,

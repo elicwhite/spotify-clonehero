@@ -94,6 +94,7 @@ import {
   clearTrackContents,
   emptyTrack,
   applyLeadIn,
+  adoptLeadInPad,
   type LeadingSilencePlan,
   type DownbeatFlags,
   type DerivedTimeSignature,
@@ -1976,6 +1977,94 @@ export class SetOpeningMeterCommand implements EditCommand {
 
     // No lead-in yet means nothing to resize.
     if (getLeadIn(recorded) === null) return recorded;
+    const plan = replanLeadIn(recorded);
+    return plan ? applyLeadIn(recorded, plan) : recorded;
+  }
+}
+
+/**
+ * Make the second tempo marker govern from the start (plan 0124 step 6).
+ *
+ * This is what "delete the first tempo marker" means: a chart always has a
+ * tempo at tick 0, so the successor's value moves back rather than the event
+ * disappearing. Note the direction — every other marker delete extends the
+ * PRECEDING segment forward.
+ *
+ * Every tick is kept, whatever the user's glue mode, because "the beats do
+ * not move" is the requirement. That means each event at or after the old
+ * second marker shifts in time by one constant:
+ *
+ *     delta = (t1 / resolution) * (60000/B - 60000/A)
+ *
+ * The lead-in absorbs it. When the promoted marker is the song start's own,
+ * `t1 = N * barTicks`, so `delta = N * (barMs_new - barMs_old)`, which is
+ * exactly the pad recompute — the music keeps both its beats and its audio
+ * position. When it is a later marker, or when a bound raises the bar count,
+ * the body moves by the difference; the menu says so before acting.
+ */
+export class PromoteOpeningTempoCommand implements EditCommand {
+  readonly description = 'Use the next tempo from the start';
+  readonly entityKinds = KIND.tempo;
+  readonly operations = OP.update;
+
+  execute(doc: ChartDocument): ChartDocument {
+    const sorted = [...doc.parsedChart.tempos].sort((a, b) => a.tick - b.tick);
+    const successor = sorted[1];
+    if (!successor) return doc;
+
+    const cloned = cloneDocForRetime(doc);
+    cloned.parsedChart.tempos = [
+      {tick: 0, beatsPerMinute: successor.beatsPerMinute, msTime: 0},
+      ...sorted.slice(2).map(t => ({...t})),
+    ];
+    retimeChart(cloned.parsedChart);
+
+    const opening = getOpening(cloned);
+    const recorded = opening
+      ? setOpening(cloned, {...opening, bpm: successor.beatsPerMinute})
+      : cloned;
+    // `adoptLeadInPad`, not `applyLeadIn`: `retimeChart` above already moved
+    // every event's ms into the new grid, so shifting them by the pad's own
+    // change would count the same difference twice.
+    const plan = replanLeadIn(recorded);
+    return plan ? adoptLeadInPad(recorded, plan) : recorded;
+  }
+}
+
+/**
+ * Make the second time signature govern from the start (plan 0124 step 6).
+ *
+ * No time moves — a meter carries none — but the bars after the old event are
+ * renumbered, because tick 0 holds exactly one signature and the format
+ * cannot express "same meter, new phase". Keeping the tail's phase would mean
+ * writing a short measure, which is the construct this plan exists to remove,
+ * so the promotion honors the meter and the menu warns about the renumbering.
+ */
+export class PromoteOpeningMeterCommand implements EditCommand {
+  readonly description = 'Use the next time signature from the start';
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
+
+  execute(doc: ChartDocument): ChartDocument {
+    const sorted = [...doc.parsedChart.timeSignatures].sort(
+      (a, b) => a.tick - b.tick,
+    );
+    const successor = sorted[1];
+    if (!successor) return doc;
+
+    const cloned = cloneDocWithTimeSignatures(doc);
+    cloned.parsedChart.timeSignatures = [
+      {...successor, tick: 0, msTime: 0},
+      ...sorted.slice(2).map(ts => ({...ts})),
+    ];
+    retimeChart(cloned.parsedChart);
+
+    const meter = {
+      numerator: successor.numerator,
+      denominator: successor.denominator,
+    };
+    const opening = getOpening(cloned);
+    const recorded = opening ? setOpening(cloned, {...opening, meter}) : cloned;
     const plan = replanLeadIn(recorded);
     return plan ? applyLeadIn(recorded, plan) : recorded;
   }

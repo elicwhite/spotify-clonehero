@@ -581,6 +581,32 @@ function cloneDocForLeadingSilence(doc: ChartDocument): ChartDocument {
 }
 
 /**
+ * Take a re-planned pad WITHOUT shifting the chart (plan 0124 step 6).
+ *
+ * For an edit that kept every tick — promoting the opening tempo — the events
+ * have already moved into the new grid: `retimeChart` recomputed their ms
+ * from ticks the edit did not touch, which changes each one by exactly the
+ * lead-in's own change in duration. Shifting them again by `P_new - P_old`
+ * would count that twice and take the music off its audio by that amount.
+ *
+ * So the pad is adopted, not applied: the anchor and the bar count move, the
+ * chart does not.
+ */
+export function adoptLeadInPad(
+  doc: ChartDocument,
+  plan: LeadingSilencePlan,
+): ChartDocument {
+  const timed = buildTimedTempos(
+    doc.parsedChart.tempos,
+    doc.parsedChart.resolution,
+  );
+  const tick = msToTick(plan.padMs, timed, doc.parsedChart.resolution);
+  return setLeadIn(setAudioAnchor(doc, {ms: plan.padMs, tick}), {
+    bars: plan.bars,
+  });
+}
+
+/**
  * Apply a lead-in plan: shift every event by the difference between the new
  * pad and the doc's current one, install the emitted synctrack, and re-tick
  * (plan 0124 steps 2 and 3).

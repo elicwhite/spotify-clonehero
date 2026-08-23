@@ -428,6 +428,86 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     ).toBe(false);
   });
 
+  it('replaces the rephase item once a song start exists', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    // Before: the rotation is offered and the song start is not set.
+    expect(
+      screen.getByRole('button', {name: /Make this beat 1/}),
+    ).toBeInTheDocument();
+    act(() => {
+      screen.getByRole('button', {name: 'Music starts here'}).click();
+    });
+
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    // After: one item says it, and the rotation is gone rather than disabled.
+    expect(
+      screen.queryByRole('button', {name: /Make this beat 1/}),
+    ).not.toBeInTheDocument();
+    const move = screen.getByRole('button', {name: 'Move the song start here'});
+    // Always enabled: "the song starts one bar later" is a tap on a beat that
+    // is already a downbeat, which the rotation's own gate refuses.
+    expect(move).toBeEnabled();
+  });
+
+  it('promotes the second tempo marker from the first marker\u2019s menu', async () => {
+    const canvas = await mountPanel();
+    const before = latest!.state.chartDoc!.parsedChart.tempos;
+    expect(before.length).toBeGreaterThan(1);
+    const second = before[1].beatsPerMinute;
+
+    // The tick-0 marker sits at the very left of the lane, under the
+    // signature chip's x. Right-click BELOW the chip strip, where the marker
+    // answers rather than the chip.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 0, y: TEMPO_LANE.y + 10, button: 2});
+    });
+    const promote = screen.getByRole('button', {
+      name: new RegExp(`Use ${second.toFixed(1)} BPM from the start`),
+    });
+    act(() => {
+      promote.click();
+    });
+
+    const after = latest!.state.chartDoc!.parsedChart.tempos;
+    expect(after[0].beatsPerMinute).toBeCloseTo(second, 3);
+    expect(after.length).toBe(before.length - 1);
+  });
+
+  it('promotes the second meter, and says that later bars are renumbered', async () => {
+    const canvas = await mountPanel();
+    // Place a signature change, so there is a second meter to promote.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
+    });
+
+    // The tick-0 chip's own menu carries the promotion.
+    let found: HTMLElement | null = null;
+    for (let x = 0; x <= 40 && !found; x += 1) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      found = screen.queryByRole('button', {
+        name: /from the start \(renumbers/,
+      });
+    }
+    expect(found).not.toBeNull();
+    act(() => {
+      found!.click();
+    });
+    // One signature left, at tick 0.
+    expect(
+      latest!.state.chartDoc!.parsedChart.timeSignatures.map(ts => ts.tick),
+    ).toEqual([0]);
+  });
+
   it('offers "Music starts here" on the tempo lane', async () => {
     const canvas = await mountPanel();
     act(() => {
