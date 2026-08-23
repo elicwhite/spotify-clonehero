@@ -119,7 +119,9 @@ async function recoverStoredHandle({
  * for. The button the user pressed says which folder the picker wants.
  */
 export async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
-  return (await getCachedSongsDirectoryHandle()) ?? (await pickSongsDirectory());
+  return (
+    (await getCachedSongsDirectoryHandle()) ?? (await pickSongsDirectory())
+  );
 }
 
 type InstalledChartsResponse = {
@@ -375,6 +377,29 @@ async function fileExists(
   }
 }
 
+/**
+ * Clears whatever a previous attempt left staged, so this one writes into an
+ * empty name. Two attempts sharing a staged file corrupt both.
+ *
+ * A staged entry that will not go away is the real reason the download cannot
+ * start, so it is reported as itself. It says nothing about the destination:
+ * `moveToFolder` replaces a chart that is already installed.
+ */
+async function clearStagedDownload(
+  stagingDirHandle: FileSystemDirectoryHandle,
+  filename: string,
+) {
+  try {
+    await stagingDirHandle.removeEntry(filename, {recursive: true});
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'NotFoundError') {
+      // Nothing staged, which is what every download but a retry finds.
+      return;
+    }
+    throw error;
+  }
+}
+
 export async function downloadSong(
   artist: string,
   song: string,
@@ -428,10 +453,7 @@ export async function downloadSong(
 
   const backupRootDirHandle = await getBackupDirectory();
 
-  try {
-    // Remove any existing backups
-    await backupRootDirHandle.removeEntry(filename, {recursive: true});
-  } catch {}
+  await clearStagedDownload(backupRootDirHandle, filename);
 
   // Download into backups, and only on success copy it over to destination
   if (options?.asSng) {
@@ -473,29 +495,14 @@ async function downloadAsFolder(
   filename: string,
   stream: ReadableStream,
 ) {
-  // // Error if something matches the filename already
-  let songDirHandle: FileSystemDirectoryHandle | undefined;
   try {
-    songDirHandle = await folderHandle.getDirectoryHandle(filename, {
-      create: false,
-    });
-  } catch {
-    // This is what we hope for, that the file doesn't exist
-  }
-  if (songDirHandle != null) {
-    // The caller renders a state, not this string, so naming the chart here
-    // only puts it in an error report.
-    throw new Error('Chart already installed');
-  }
-
-  try {
-    songDirHandle = await folderHandle.getDirectoryHandle(filename, {
+    const songDirHandle = await folderHandle.getDirectoryHandle(filename, {
       create: true,
     });
     await new Promise((resolve, reject) => {
       const sngStream = new SngStream(stream, {generateSongIni: true});
       sngStream.on('file', async (file, stream, nextFile) => {
-        const fileHandle = await songDirHandle!.getFileHandle(file, {
+        const fileHandle = await songDirHandle.getFileHandle(file, {
           create: true,
         });
         const writableStream = await fileHandle.createWritable();
@@ -526,23 +533,8 @@ async function downloadAsSng(
   filename: string,
   stream: ReadableStream,
 ) {
-  const fileWithExtension = filename;
-
-  // // Error if something matches the filename already
-  let songFileHandle: FileSystemFileHandle | undefined;
   try {
-    songFileHandle = await folderHandle.getFileHandle(fileWithExtension, {
-      create: false,
-    });
-  } catch {
-    // This is what we hope for, that the file doesn't exist
-  }
-  if (songFileHandle != null) {
-    throw new Error('Chart already installed');
-  }
-
-  try {
-    songFileHandle = await folderHandle.getFileHandle(fileWithExtension, {
+    const songFileHandle = await folderHandle.getFileHandle(filename, {
       create: true,
     });
     const writableStream = await songFileHandle.createWritable();
@@ -550,7 +542,7 @@ async function downloadAsSng(
     await stream.pipeTo(writableStream);
   } catch (error) {
     console.error(error);
-    await folderHandle.removeEntry(fileWithExtension, {recursive: true});
+    await folderHandle.removeEntry(filename, {recursive: true});
     throw error;
   }
 }

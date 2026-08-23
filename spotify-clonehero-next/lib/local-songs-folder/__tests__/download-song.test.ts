@@ -33,7 +33,6 @@ function setupSuccessfulDownload(options?: {cleanupError?: Error}) {
       stream: () => ({pipeTo: copyPipeTo}),
     })),
   };
-  let backupLookupCount = 0;
   const removeBackup = jest.fn().mockResolvedValueOnce(undefined);
   if (options?.cleanupError) {
     removeBackup.mockRejectedValueOnce(options.cleanupError);
@@ -42,14 +41,7 @@ function setupSuccessfulDownload(options?: {cleanupError?: Error}) {
   }
   const backupDirectory = {
     removeEntry: removeBackup,
-    getFileHandle: jest.fn(
-      async (_name: string, handleOptions: {create: boolean}) => {
-        if (handleOptions.create) return backupFile;
-        backupLookupCount += 1;
-        if (backupLookupCount === 1) throw new Error('Not found');
-        return backupFile;
-      },
-    ),
+    getFileHandle: jest.fn(async () => backupFile),
     getDirectoryHandle: jest.fn(async () => {
       throw new Error('Not a directory');
     }),
@@ -78,6 +70,7 @@ function setupSuccessfulDownload(options?: {cleanupError?: Error}) {
   });
 
   return {
+    backupDirectory,
     backupWritable,
     copyPipeTo,
     destinationDirectory,
@@ -227,5 +220,58 @@ describe('downloadSong outcomes', () => {
       cleanupError,
     );
     expect(mockTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloads over a chart that is already installed', async () => {
+    // Nothing staged is the usual state, and the browser says so by refusing
+    // to remove the name. The chart in the destination is replaced, not
+    // refused: the user asked for this download.
+    const {backupDirectory, destinationDirectory} = setupSuccessfulDownload();
+    backupDirectory.removeEntry.mockReset();
+    backupDirectory.removeEntry.mockRejectedValueOnce(
+      new DOMException('A requested file could not be found', 'NotFoundError'),
+    );
+    backupDirectory.removeEntry.mockResolvedValue(undefined);
+
+    await expect(
+      downloadSong(
+        'Artist',
+        'Song',
+        'Charter',
+        'https://example.com/chart.sng',
+        successfulDownloadOptions(
+          destinationDirectory as unknown as FileSystemDirectoryHandle,
+        ),
+      ),
+    ).resolves.toEqual({
+      status: 'downloaded',
+      newParentDirectoryHandle: destinationDirectory,
+      fileName: filename,
+    });
+  });
+
+  it('reports why a staged download could not be cleared', async () => {
+    // The reason itself, rather than a guess at what it means. An unremovable
+    // staging copy is the one state that must stop a download, because two
+    // attempts writing one staged file corrupt both.
+    const {backupDirectory, destinationDirectory} = setupSuccessfulDownload();
+    backupDirectory.removeEntry.mockReset();
+    backupDirectory.removeEntry.mockRejectedValue(
+      new DOMException('The file is locked', 'NoModificationAllowedError'),
+    );
+
+    await expect(
+      downloadSong(
+        'Artist',
+        'Song',
+        'Charter',
+        'https://example.com/chart.sng',
+        successfulDownloadOptions(
+          destinationDirectory as unknown as FileSystemDirectoryHandle,
+        ),
+      ),
+    ).rejects.toThrow('The file is locked');
+
+    expect(mockTrack).not.toHaveBeenCalled();
   });
 });
