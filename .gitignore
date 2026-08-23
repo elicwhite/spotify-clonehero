@@ -10,3 +10,6 @@ spotify-clonehero-next/public/data/metadata.json
 /.tmpx
 spotify-clonehero-next/ga-service-account.json
 /spotify-clonehero-next/.pnpm-store
+
+# The Vercel CLI runs from here and writes its project link.
+.vercel

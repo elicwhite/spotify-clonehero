@@ -149,18 +149,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Enable pnpm
-        run: corepack enable
-
-      # The Vercel CLI is run from the repository root, not from
-      # spotify-clonehero-next: the project's Root Directory setting is part of
-      # what `vercel pull` fetches, and the CLI applies it itself. Running from
-      # inside the app directory would apply it twice.
-      # --scope is not redundant with VERCEL_ORG_ID. A local `vercel login`
-      # carries a current team that the CLI falls back on; a token carries no
-      # such context, so on a team-owned project the same env vars that
-      # resolve fine on a laptop return "Could not retrieve Project Settings"
-      # here. Naming the scope explicitly is what makes token auth resolve it.
       # The published catalog and this build must agree on a generation, or
       # clients get an app that refuses the manifest it is pointed at.
       #
@@ -215,18 +203,34 @@ jobs:
           echo "::error::Gave up waiting for generation $expected after 5 hours."
           exit 1
 
-      - name: Pull Vercel project settings
-        working-directory: .
-        run: npx vercel@58 pull --yes --environment=production --scope "$VERCEL_ORG_ID"
-
-      - name: Build
-        working-directory: .
-        run: npx vercel@58 build --prod --scope "$VERCEL_ORG_ID"
-
+      # This uploads the source and Vercel builds it. Do not add --prebuilt:
+      # Vercel's System Environment Variables -- VERCEL_ENV,
+      # NEXT_PUBLIC_VERCEL_ENV, VERCEL_DEPLOYMENT_ID -- are injected by
+      # Vercel's build infrastructure, so a build on this runner sees none of
+      # them and both Sentry environments silently fall back to development.
+      # Project environment variables are a separate matter; the CLI can
+      # supply those. A build here has 45 minutes; this job's own timeout
+      # governs only the catalog wait above.
+      #
+      # The deploy waits for the build, so a broken build still fails this job.
+      #
+      # The CLI is run from the repository root, not from
+      # spotify-clonehero-next: the project's Root Directory setting comes from
+      # the project itself and the CLI applies it. Running from inside the app
+      # directory would apply it twice.
+      #
+      # --scope is not redundant with VERCEL_ORG_ID. A local `vercel login`
+      # carries a current team that the CLI falls back on; a token carries no
+      # such context, so on a team-owned project the same env vars that
+      # resolve fine on a laptop return "Could not retrieve Project Settings"
+      # here. Naming the scope explicitly is what makes token auth resolve it.
+      #
+      # stdout is the deployment URL. Build logs stay in Vercel, one click from
+      # the inspect URL the CLI prints when a build fails.
       - name: Deploy
         id: deploy
         working-directory: .
         run: |
-          url="$(npx vercel@58 deploy --prebuilt --prod --scope "$VERCEL_ORG_ID")"
+          url="$(npx vercel@58 deploy --prod --scope "$VERCEL_ORG_ID")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $url" >> "$GITHUB_STEP_SUMMARY"
