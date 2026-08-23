@@ -1,6 +1,30 @@
 # 0125 — Build production on Vercel again, keep the CI gate
 
-Status: in-progress
+Status: completed
+
+Shipped in `ef9fd372` and verified on the deploy it produced, CI run
+32625386938 (2026-08-23). All four jobs green; the deploy step took 2m17s.
+
+- The build ran on Vercel: `Running build in Washington, D.C. (iad1)`, build
+  cache restored from the previous deployment, `corepack pnpm install`, 1,867
+  files and 62.9 MB uploaded. Well inside both upload limits.
+- `og:image` and `twitter:image` on `/add-lyrics` are
+  `https://musiccharts.tools/...`.
+- The client Sentry SDK on production reports
+  `{environment: "production", enabled: true}`, against
+  `{environment: "development", enabled: false}` before the deploy, and the
+  page issues four `POST /monitoring` requests that all return 200 — the
+  transport works, established without putting a synthetic error in Sentry.
+- `stdout` was the deployment URL alone. The job's environment URL resolved
+  cleanly, so `--logs` can be added whenever build output is wanted in the job
+  log (see below).
+
+One check from the original list turned out to be worthless and was replaced.
+"Confirm the variable is inlined in the client bundle" assumed a surviving
+`process.env.NEXT_PUBLIC_VERCEL_ENV` lookup proves the value was absent at
+build. It does not: Next populates a client-side `process.env` shim rather than
+always inlining at the use site, and the bundle carries the same lookup today,
+resolving to `production`. The initialised SDK is the only reliable witness.
 
 Production stopped being built on Vercel in 7468e6c4 (2026-08-12, "Gate
 production on jest, eslint and the typechecker"). Every value the build read
@@ -137,6 +161,19 @@ runs where it is set.
 costs nothing and removes the one value whose silent wrong answer stayed
 invisible for a month; reverting to `VERCEL_PROJECT_PRODUCTION_URL` is
 defensible now that it resolves. Not urgent either way.
+
+## Left open after the deploy
+
+Measured on the deployed site, both still true, neither a regression from this
+change:
+
+- No `_sentryDebugIds` and no `sourceMappingURL` in the bundle, so production
+  stack traces are still not symbolicated. Moving the build did not fix it,
+  which rules out the missing-auth-token theory and points at the `webpack:`
+  key under a Turbopack build.
+- Assets still carry no `?dpl=`, so Skew Protection is still off. Now that the
+  build runs on Vercel the deployment ID is available, so this is a project
+  setting rather than a build-environment problem.
 
 ## Also found, not yet diagnosed
 
