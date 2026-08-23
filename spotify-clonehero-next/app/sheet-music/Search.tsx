@@ -108,6 +108,10 @@ export default function Search({
     useState<EncoreResponse>(defaultResults);
   const [page, setPage] = useState<number>(1);
   const [, setIsLoadingMore] = useState<boolean>(false);
+  // Encore answers 503 often enough to matter. Without this the rejection
+  // escaped, the results below stayed on screen as if nothing had happened,
+  // and the next page never arrived.
+  const [searchFailed, setSearchFailed] = useState<boolean>(false);
   // In-flight gate for the infinite-scroll fetch. We deliberately hold
   // this in a ref instead of reading isLoadingMore: putting
   // isLoadingMore in the effect deps creates a self-cancelling loop
@@ -126,9 +130,15 @@ export default function Search({
   const debouncedFilterSongs = useMemo(
     () =>
       debounce(async (query: string, instrument: undefined | null | string) => {
-        const results = await searchEncore(query, instrument, 1);
-        setFilteredSongs(results);
-        setPage(1);
+        try {
+          const results = await searchEncore(query, instrument, 1);
+          setFilteredSongs(results);
+          setPage(1);
+          setSearchFailed(false);
+        } catch (error) {
+          console.error('Chart search failed', error);
+          setSearchFailed(true);
+        }
       }, 500),
     [],
   );
@@ -194,6 +204,11 @@ export default function Search({
           };
         });
         setPage(nextPage);
+        setSearchFailed(false);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Chart search failed', error);
+        setSearchFailed(true);
       } finally {
         fetchInFlightRef.current = false;
         if (!cancelled) setIsLoadingMore(false);
@@ -278,6 +293,24 @@ export default function Search({
             {searchQuery ? 'Search Results' : 'Recently Added Sheet Music'}{' '}
             {filteredSongs != null ? `(${filteredSongs?.found} charts)` : ''}
           </h2>
+
+          {searchFailed ? (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">
+                The chart search did not answer. The results below can be older
+                than the search you typed.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchFailed(false);
+                  searchSongs(searchQuery);
+                }}>
+                Try again
+              </Button>
+            </div>
+          ) : null}
 
           {filteredSongs?.data.length === 0 ? (
             <div className="text-center py-12">
