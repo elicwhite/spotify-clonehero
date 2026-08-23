@@ -26,9 +26,10 @@ import type {LoadedFiles} from '@/lib/chart-files/chart-package';
 import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
 import {
   chartDocToFolderFiles,
+  applyDocSidecars,
   getAudioAnchor,
   readChartForEditing,
-  setAudioAnchor,
+  readDocSidecars,
   hasAnyLyrics,
 } from '@/lib/chart-edit';
 import {
@@ -717,7 +718,10 @@ function TrackEditEditor({
     // shifted by the leading silence against unpadded audio. Cheap and
     // idempotent — runs on every autosave.
     await store.updateProject(projectId, {
-      audioAnchor: getAudioAnchor(state.chartDoc) ?? null,
+      // The anchor, the song start, the lead-in bars and the opening. The pad
+      // is recomputed from them on every change, so a reload without them
+      // would compute a different lead-in (plan 0124 step 1).
+      ...readDocSidecars(state.chartDoc),
       // Assist provenance can't ride the chart file either, so it is mirrored
       // the same way — a reload keeps any staleness prompt, "Keep as-is"
       // dismissal, or chosen drum intensity's provenance the user left.
@@ -773,9 +777,7 @@ function TrackEditEditor({
         // 3a. Re-attach the persisted audio anchor (0064 addendum §1)
         // before this doc is ever dispatched, so the padding the chart was
         // saved with is the padding playback and export rebuild from.
-        if (meta.audioAnchor) {
-          chartDoc = setAudioAnchor(chartDoc, meta.audioAnchor);
-        }
+        chartDoc = applyDocSidecars(chartDoc, meta);
         if (meta.assistProvenance) {
           chartDoc = withAssistProvenance(chartDoc, meta.assistProvenance);
         }

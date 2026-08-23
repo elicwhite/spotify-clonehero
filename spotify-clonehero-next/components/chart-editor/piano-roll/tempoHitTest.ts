@@ -129,22 +129,24 @@ export function tsChipRect(
  * signature event actually exists: a plain bar line carries no chip and is
  * never a hit.
  *
- * The tick-0 signature is the chart's initial meter, which is neither movable
- * nor removable, so it is excluded here rather than at each call site. That
- * keeps "which chip can the pointer act on" a single definition, and it stays
- * right for a chart whose first authored event is not at tick 0.
+ * The tick-0 signature is the chart's opening meter. It is neither movable
+ * nor removable, but it IS editable (plan 0124 step 6), so `includeTick0`
+ * decides whether it answers: the drag and the remove item pass false, the
+ * context menu passes true. Keeping the choice here keeps "which chip can the
+ * pointer act on" a single definition.
  */
 export function hitTsChip(
   chips: readonly TsChipPos[],
   view: PianoRollView,
   x: number,
   widths: ReadonlyMap<number, number>,
+  includeTick0 = false,
 ): number {
   let best = -1;
   let bestDx = Infinity;
   for (let i = 0; i < chips.length; i++) {
     const chip = chips[i];
-    if (chip.tick === 0) continue;
+    if (chip.tick === 0 && !includeTick0) continue;
     const width = widths.get(chip.tick) ?? DEFAULT_TS_CHIP_WIDTH;
     const rect = tsChipRect(chip.ms, view, width);
     if (x < rect.left - TS_CHIP_HIT_SLOP || x > rect.right) continue;

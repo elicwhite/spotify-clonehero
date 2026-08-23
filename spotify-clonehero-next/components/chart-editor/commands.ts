@@ -67,6 +67,14 @@ import {
   movePhrases,
   getAudioAnchor,
   setAudioAnchor,
+  getLeadIn,
+  setSongStart,
+  planLeadIn,
+  replanLeadIn,
+  getOpening,
+  setOpening,
+  openingFromSync,
+  carryDocSidecars,
   refreshAnchorKeepMs,
   refreshAnchorKeepTick,
   schemaNoteId,
@@ -82,7 +90,7 @@ import {
   setNoteLength,
   clearTrackContents,
   emptyTrack,
-  applyLeadingSilence,
+  applyLeadIn,
   type LeadingSilencePlan,
   type DownbeatFlags,
   type DerivedTimeSignature,
@@ -1303,9 +1311,15 @@ export class ReplaceTempoMapCommand implements EditCommand {
   execute(doc: ChartDocument): ChartDocument {
     const anchor = getAudioAnchor(doc);
     const result = repredictTempo(doc, this.synctrack, null);
+    // The incoming sync is the real opening; what lands at tick 0 is the
+    // writer's construct (plan 0124 step 1b).
+    const recorded = openingFromSync(
+      carryDocSidecars(doc, result.doc),
+      this.synctrack,
+    );
     const retimed = anchor
-      ? refreshAnchorKeepMs(setAudioAnchor(result.doc, anchor))
-      : result.doc;
+      ? refreshAnchorKeepMs(setAudioAnchor(recorded, anchor))
+      : recorded;
 
     // A standalone regeneration leaves any recorded transcription stamp
     // behind, so the drums snapped to the OLD grid are flagged stale.
@@ -1855,6 +1869,90 @@ export class ReplaceDrumTrackCommand implements EditCommand {
  * `selectTempoDerivedStale` on an action that changed no musical
  * relationship.
  */
+/**
+ * Record where the song starts, in ORIGINAL-audio milliseconds (plan 0124
+ * step 4).
+ *
+ * This is the one value the tempo map cannot supply: `Synctrack.origin_ms` is
+ * grid phase and always lands within one bar of audio sample 0, so a file
+ * with eight seconds of silence still reports an origin near zero.
+ *
+ * When a lead-in already exists the pad is recomputed, at the smallest legal
+ * bar count for the new song start — a corrected song start must not leave an
+ * oversized lead-in behind.
+ */
+export class SetSongStartCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = new Set<CommandEntityKind>(['tempo', 'timesig']);
+  readonly operations = OP.update;
+
+  constructor(private audioMs: number) {
+    this.description = `Set song start to ${Math.round(audioMs)}ms`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const audioMs = Math.max(0, this.audioMs);
+    const next = setSongStart(doc, {audioMs});
+    if (getLeadIn(next) === null) return next;
+    // `planLeadIn` rather than `replanLeadIn`: a moved song start re-chooses
+    // the bar count, so a corrected start cannot leave an oversized lead-in.
+    const plan = planLeadIn(next);
+    return plan ? applyLeadIn(next, plan) : next;
+  }
+}
+
+/**
+ * Set the chart's opening meter — the signature at tick 0 (plan 0124 step 6).
+ *
+ * The pad is recomputed in the same command, and that is not optional. A
+ * meter change changes the bar length, so with the pad untouched the song
+ * start stops being a whole number of bars from tick 0: at `X = 100`,
+ * `N = 2`, 4/4 at 146.98 the song start is at tick 1536, and retyping 3/4
+ * makes bars 576 ticks, so 1536 / 576 = 2.667.
+ *
+ * The write goes through `addTimeSignature`, which replaces the event at the
+ * tick and works at tick 0. `SetTimeSignatureCommand` cannot: it routes
+ * through `planDownbeatAt`, which rejects a target at or before tick 0.
+ */
+export class SetOpeningMeterCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
+
+  constructor(private meter: Meter) {
+    this.description = `Set opening time signature to ${meter.numerator}/${meter.denominator}`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const current = doc.parsedChart.timeSignatures.find(ts => ts.tick === 0);
+    if (
+      current?.numerator === this.meter.numerator &&
+      current.denominator === this.meter.denominator
+    ) {
+      return doc;
+    }
+
+    const withMeter = cloneDocWithTimeSignatures(doc);
+    addTimeSignature(
+      withMeter,
+      0,
+      this.meter.numerator,
+      this.meter.denominator,
+    );
+    const recorded = getOpening(withMeter)
+      ? setOpening(withMeter, {
+          bpm: getOpening(withMeter)!.bpm,
+          meter: this.meter,
+        })
+      : withMeter;
+
+    // No lead-in yet means nothing to resize.
+    if (getLeadIn(recorded) === null) return recorded;
+    const plan = replanLeadIn(recorded);
+    return plan ? applyLeadIn(recorded, plan) : recorded;
+  }
+}
+
 export class AddLeadingSilenceCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = new Set<CommandEntityKind>(['tempo', 'timesig']);
@@ -1868,7 +1966,7 @@ export class AddLeadingSilenceCommand implements EditCommand {
     // Everything shifts together, so nothing moved relative to the grid:
     // both the transcription and the section markers are still as correct as
     // they were, and neither should be flagged stale.
-    return restampTempoDerived(applyLeadingSilence(doc, this.plan));
+    return restampTempoDerived(applyLeadIn(doc, this.plan));
   }
 }
 

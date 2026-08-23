@@ -30,6 +30,7 @@ import {
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from './types';
 import type {AssistTaskKey} from '@/lib/assist/tasks/types';
+import type {DocSidecars} from '@/lib/chart-edit';
 
 const METADATA_FILE = 'metadata.json';
 
@@ -40,7 +41,24 @@ function formatOfMetadata(metadata: ProjectMetadata): ChartFileFormat {
 const AUDIO_DIR = 'audio';
 const ORIGINAL_FILES_MANIFEST = 'original-files.json';
 
-export interface ProjectMetadata {
+/**
+ * `DocSidecars` carries the records a `.chart` file cannot: the audio anchor,
+ * the song start, the lead-in bar count and the recorded opening (plan 0124).
+ * The list lives in `lib/chart-edit` so this store and the drum-transcription
+ * store cannot drift apart, and so adding a record is one line.
+ */
+export interface ProjectMetadata extends DocSidecars {
+  /**
+   * Which format the project's chart file is stored in. The chart belongs to
+   * the user, so the store keeps the format it arrived in rather than
+   * converting: a `.chart` file carries vocals as bare lyric text events, so
+   * converting a `.mid` chart would drop vocal note pitches, phrase lengths
+   * and harmony parts.
+   *
+   * Absent on a project that predates the field. Those projects are all
+   * `.chart`.
+   */
+  chartFileFormat?: ChartFileFormat | undefined;
   id: string;
   name: string;
   artist: string;
@@ -53,25 +71,6 @@ export interface ProjectMetadata {
   sourceFormat: SourceFormat;
   originalName: string;
   sngMetadata?: Record<string, string> | undefined;
-  /**
-   * Which format the project's chart file is stored in. The chart belongs to
-   * the user, so the store keeps the format it arrived in rather than
-   * converting: a `.chart` file carries vocals as bare lyric text events, so
-   * converting a `.mid` chart would drop vocal note pitches, phrase lengths
-   * and harmony parts.
-   *
-   * Absent on a project that predates the field. Those projects are all
-   * `.chart`.
-   */
-  chartFileFormat?: ChartFileFormat | undefined;
-  /**
-   * Chart-time position of the audio's true start when leading silence has
-   * been added (plan 0064 addendum §1) — mirrors the in-memory
-   * `ChartDocument`'s `audioAnchor`, which a `.chart` file has nowhere to
-   * carry. A host re-attaches it on load and pads the audio it plays and
-   * exports by `audioAnchor.ms`. Absent/null means no padding.
-   */
-  audioAnchor?: {tick: number; ms: number} | null | undefined;
   /**
    * The key this project's audio is cached under in the fingerprint-keyed
    * stem cache — a hash of the audio bytes plus the separator's identity.
@@ -233,35 +232,34 @@ export function createOpfsProjectStore(
    * Creates a new project in OPFS and stores all files from the loaded
    * chart package. Returns the project metadata.
    */
-  async function createProject(opts: {
-    name: string;
-    artist: string;
-    charter: string;
-    /** Omitted by a caller that hasn't decoded the audio; whoever does
-     *  decodes it writes the real figure back. */
-    durationSeconds?: number | undefined;
-    sourceFormat: SourceFormat;
-    originalName: string;
-    sngMetadata?: Record<string, string> | undefined;
-    /** The chart file `writeChartFolder` produced — `notes.chart` or
-     *  `notes.mid`. Stored under that name, in that format. */
-    chartFile: {fileName: string; data: Uint8Array};
-    /** Audio files to store (fileName + raw bytes). */
-    audioFiles: {fileName: string; data: Uint8Array}[];
-    /** All original files from the package (for re-export manifest). */
-    allFiles: {fileName: string; data: Uint8Array}[];
-    /** Which entrypoint is creating this project. Defaults to the editor's own. */
-    origin?: ProjectOrigin | undefined;
-    /** Existing separated-stem cache entry to attach to the new project. */
-    stemFingerprint?: string | undefined;
-    /** Chart-time position of the audio's true start, when the document
-     *  being stored already has leading silence applied. */
-    audioAnchor?: {tick: number; ms: number} | null | undefined;
-    /** Assist provenance the document already carries. A tool page that
-     *  generates content before it creates the project has to pass this, or
-     *  the editor opens reading its own fresh work as never generated. */
-    assistProvenance?: AssistProvenance | undefined;
-  }): Promise<ProjectMetadata> {
+  async function createProject(
+    opts: {
+      name: string;
+      artist: string;
+      charter: string;
+      /** Omitted by a caller that hasn't decoded the audio; whoever does
+       *  decodes it writes the real figure back. */
+      durationSeconds?: number | undefined;
+      sourceFormat: SourceFormat;
+      originalName: string;
+      sngMetadata?: Record<string, string> | undefined;
+      /** The chart file `writeChartFolder` produced — `notes.chart` or
+       *  `notes.mid`. Stored under that name, in that format. */
+      chartFile: {fileName: string; data: Uint8Array};
+      /** Audio files to store (fileName + raw bytes). */
+      audioFiles: {fileName: string; data: Uint8Array}[];
+      /** All original files from the package (for re-export manifest). */
+      allFiles: {fileName: string; data: Uint8Array}[];
+      /** Which entrypoint is creating this project. Defaults to the editor's own. */
+      origin?: ProjectOrigin | undefined;
+      /** Existing separated-stem cache entry to attach to the new project. */
+      stemFingerprint?: string | undefined;
+      /** Assist provenance the document already carries. A tool page that
+       *  generates content before it creates the project has to pass this, or
+       *  the editor opens reading its own fresh work as never generated. */
+      assistProvenance?: AssistProvenance | undefined;
+    } & DocSidecars,
+  ): Promise<ProjectMetadata> {
     const id = generateId();
     const now = new Date().toISOString();
     const chartFileFormat = chartFileFormatOf(opts.chartFile.fileName);
@@ -286,6 +284,9 @@ export function createOpfsProjectStore(
       hasAudio: opts.audioFiles.length > 0,
       stemFingerprint: opts.stemFingerprint,
       audioAnchor: opts.audioAnchor,
+      songStart: opts.songStart,
+      leadIn: opts.leadIn,
+      opening: opts.opening,
       assistProvenance: opts.assistProvenance,
     };
 

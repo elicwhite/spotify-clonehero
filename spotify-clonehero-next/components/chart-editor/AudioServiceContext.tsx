@@ -191,6 +191,23 @@ export function useAudioManager(): AudioManager | null {
 }
 
 /**
+ * The current AudioManager, or null when this surface renders outside an
+ * `AudioServiceProvider` — a capability-gate test, or a sidebar mounted
+ * without a page's audio. Same bargain as {@link usePadAudioAheadReader}: a
+ * card that can live in both worlds asks instead of requiring.
+ */
+export function useOptionalAudioManager(): AudioManager | null {
+  const service = useContext(AudioServiceContext);
+  const noManager = useCallback(() => null, []);
+  const subscribe = useCallback(() => () => {}, []);
+  return useSyncExternalStore(
+    service ? service.subscribe : subscribe,
+    service ? service.getAudioManager : noManager,
+    service ? service.getAudioManager : noManager,
+  );
+}
+
+/**
  * Whether a tool is currently holding the click silent. The mixer reads this
  * so there is one writer of the click's gain: suppression changes what the
  * mixer resolves rather than reaching past it to the AudioManager, which is

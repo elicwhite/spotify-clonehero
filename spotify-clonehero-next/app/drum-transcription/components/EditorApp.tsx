@@ -49,6 +49,7 @@ import {
   readChart,
   writeChartFileAs,
   getAudioAnchor,
+  readDocSidecars,
   setAudioAnchor,
 } from '@/lib/chart-edit';
 import {
@@ -231,7 +232,7 @@ export default function EditorApp({
     // §1) so a reload re-derives the same padded audio. Cheap and
     // idempotent — runs on every autosave.
     await updateProject(projectId, {
-      audioAnchor: getAudioAnchor(state.chartDoc) ?? null,
+      ...readDocSidecars(state.chartDoc),
       // Assist provenance can't ride the chart file (`.chart`/`.mid` have no
       // slot for it), so the project metadata is where it persists — same
       // mirroring as the anchor above, so a reload keeps any staleness

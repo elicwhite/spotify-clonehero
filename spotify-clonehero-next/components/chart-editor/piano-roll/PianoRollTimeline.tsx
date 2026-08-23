@@ -88,6 +88,8 @@ import {
   phraseTranslationBounds,
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
+  getLeadIn,
+  openingFromSync,
   schemaForTrack,
   fullLaneRange,
   laneToType as schemaLaneToType,
@@ -144,6 +146,7 @@ import {
   MoveTimeSignatureCommand,
   RemoveTimeSignatureCommand,
   SetTimeSignatureCommand,
+  SetOpeningMeterCommand,
   AddLyricCommand,
   DeleteLyricCommand,
   SetLyricTextCommand,
@@ -3675,11 +3678,14 @@ export default function PianoRollTimeline({
       // An authored signature chip under the pointer is the only place the
       // remove item appears: the hit test reads the very chips the lane
       // painted, so it can never offer to remove a marker that isn't there.
+      // Tick 0 answers here, because its meter is editable (plan 0124 step
+      // 6) — the remove item below excludes it on its own.
       const tsIndex = hitTsChip(
         scene.timeSignatures,
         view,
         x,
         tsChipWidthsRef.current,
+        true,
       );
       if (tsIndex >= 0) {
         const chip = scene.timeSignatures[tsIndex];
@@ -3712,12 +3718,19 @@ export default function PianoRollTimeline({
               );
             },
           },
-          {
-            label: `Remove time signature change (${chip.label})`,
-            danger: true,
-            onSelect: () =>
-              executeCommand(new RemoveTimeSignatureCommand(chip.tick)),
-          },
+          // The opening meter cannot be removed — a chart always has one at
+          // tick 0 — so only a later signature offers it.
+          ...(chip.tick === 0
+            ? []
+            : [
+                {
+                  label: `Remove time signature change (${chip.label})`,
+                  danger: true,
+                  disabled: !capabilities.showEditingControls,
+                  onSelect: () =>
+                    executeCommand(new RemoveTimeSignatureCommand(chip.tick)),
+                },
+              ]),
         ];
       }
 
@@ -3772,8 +3785,17 @@ export default function PianoRollTimeline({
         ...octaveItems,
         tapItem(beatTick),
         {
+          // A rotation writes a short measure at tick 0, and the next
+          // recompute reads the opening meter from there — so with a lead-in
+          // in place it would take the song off its bar line, and no pad
+          // recompute can put it back (plan 0124 step 6b). Slice 3 replaces
+          // this item with "Move the song start here"; until then it stands
+          // down where it would do harm.
           label: 'Make this beat 1 (rephase song)',
-          disabled: isDownbeat,
+          disabled:
+            isDownbeat ||
+            (editStateRef.current.chartDoc !== null &&
+              getLeadIn(editStateRef.current.chartDoc) !== null),
           onSelect: () =>
             executeCommand(
               new RephaseDownbeatsCommand(beatTick, scene.endTick),
@@ -4485,9 +4507,15 @@ export default function PianoRollTimeline({
           ? shiftOnsets(decodedOnsets, anchor.ms)
           : (decodedOnsets ?? null);
       const result = repredictTempo(base, correctedSync, onsets);
+      // The sync going in carries the real opening; the chart coming out
+      // carries the writer's construct over tick 0. Record it here, while
+      // both are in hand (plan 0124 step 1b).
       dispatch({
         type: 'SET_PENDING_TEMPO_CANDIDATE',
-        candidate: {op: result.op, doc: result.doc},
+        candidate: {
+          op: result.op,
+          doc: openingFromSync(result.doc, correctedSync),
+        },
       });
     },
     [dispatch, decodedOnsets],
@@ -4714,11 +4742,18 @@ export default function PianoRollTimeline({
                   initialDenominator={timeSigMenu.initialDenominator}
                   anchorLabel={timeSigMenu.anchorLabel}
                   onCommit={(numerator, denominator) => {
+                    // Tick 0 is the opening meter: it writes through
+                    // `addTimeSignature` and resizes the lead-in in the same
+                    // undo step, which `SetTimeSignatureCommand` cannot do —
+                    // it routes through `planDownbeatAt`, which rejects a
+                    // target at or before tick 0.
                     executeCommand(
-                      new SetTimeSignatureCommand(timeSigMenu.anchorTick, {
-                        numerator,
-                        denominator,
-                      }),
+                      timeSigMenu.anchorTick === 0
+                        ? new SetOpeningMeterCommand({numerator, denominator})
+                        : new SetTimeSignatureCommand(timeSigMenu.anchorTick, {
+                            numerator,
+                            denominator,
+                          }),
                     );
                     setMenu(null);
                   }}

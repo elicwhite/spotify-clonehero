@@ -1,6 +1,6 @@
 # 0124 — Own the opening: song start, lead-in bars, editable tick 0
 
-Status: todo
+Status: in-progress
 
 Revision 9. Eight contrarian review passes came before it. Revisions 1 to 6
 answered each finding with a new rule, and the document reached 810 lines of
@@ -608,6 +608,61 @@ announced: "Lead-in set to 2 bars (3.2 s)".
 - Migration: the announced back-derivation, including the `N = 0` case that
   clamps and moves the pad 2.7 s.
 - Notes before `X` survive the opening rebuild with their audio time intact.
+
+## What is built
+
+Slice 1 is implemented and green: `pnpm typecheck`, `pnpm test` (425 suites,
+4456 tests) and ESLint/Prettier are clean.
+
+- `SongStart`, `LeadIn` and `Opening` records, their accessors,
+  `carryDocSidecars`, and both metadata stores.
+- `resolveOpening`: the record before the first emit, the chart after it, and
+  the collapse-marker refusal when there is no record.
+- `planLeadingSilence` with an absolute `P`, the three bounds, and bound 1
+  applied only to a user choice (`{userChoice: true}`).
+- `applyLeadingSilence` shifting by `deltaMs` and emitting the opening.
+- `SetSongStartCommand`, `SetOpeningMeterCommand`, and the card: a "Set song
+  start" action at the playhead, the disabled gate, and the bar count in the
+  note.
+- The opening recorded at `ReplaceTempoMapCommand`, `chart-builder.ts` and
+  the structural preview.
+- The tick-0 chip is editable in the tempo-lane menu; the remove item stays
+  off it; rephase stands down while a lead-in exists.
+- `leading-silence-detector.ts` and its dead onset parameter are deleted.
+
+The API the review pass settled on: `planLeadIn(doc, bars?)` for a user
+choice, `replanLeadIn(doc)` for a recompute, `applyLeadIn(doc, plan)` to
+install. The two-second floor is the difference between the first two, which
+is a function name rather than a boolean. Nothing takes a sample rate: the
+pad is milliseconds and `anchorPadSamples` rounds when the audio is padded.
+`DocSidecars` is the one list of records, extended by both project metadata
+stores and applied by `readDocSidecars` / `applyDocSidecars`.
+
+Two findings from the review passes were confirmed by the tests as written,
+before the code was fixed:
+
+- `resolveOpening` returned a hard 4/4 even after the user set a meter, so
+  the pad did not resize and the song start landed at 2.667 bars — exactly
+  the arithmetic step 6 predicts. The predicate is now "has the opening been
+  emitted", and after the emit the chart is the truth.
+- The plan's 164 ms / 3165.8 ms figures were right, and revision 8's
+  "correction" to 166 / 3166.4 was wrong. The values are computed in the
+  tests now, not asserted in prose.
+
+## What is left
+
+- **Slice 2:** the tempo-lane "Music starts here" item, migration (step 8),
+  the `[-] [+]` control, and the regeneration order (step 7). Until step 7
+  lands, regenerating a tempo map on a padded doc still installs the map in
+  the unpadded frame.
+- **Slice 3:** the two promotions and step 6b's "Move the song start here".
+- **Not yet verified in a browser.** The jsdom tests drive the real card,
+  the real `TrackEditPage` and the real piano-roll menu, but nothing has run
+  against real audio. The tick tolerance on the audio-position invariant is
+  asserted, not measured on the okgo fixture.
+- The discard is reported in the success message, not in a confirmation
+  dialog. A song start set deep into a song can drop many markers with only
+  an undo to recover.
 
 ## Risks
 

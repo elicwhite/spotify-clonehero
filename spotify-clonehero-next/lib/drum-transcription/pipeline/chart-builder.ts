@@ -36,6 +36,7 @@ import {
 } from '@/lib/tempo-map/swap-synctrack';
 import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
 import {finalizeSynctrack} from '@/lib/tempo-map/finalize-synctrack';
+import {openingFromSync} from '@/lib/chart-edit';
 import type {SnapMode} from '../ml/class-mapping';
 import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
@@ -200,6 +201,7 @@ export function buildChartDocument(
     timeSignature: {numerator: 4, denominator: 4},
   });
 
+  let installedSynctrack: Synctrack | null = null;
   if (synctrack && synctrack.tempos.length > 0) {
     // KS-WARP (kick+snare onset-anchored drift warp, #104) / REACH-EXTENSION
     // (#112, SHIPPED — Eli GO "ship guard alone", 2026-07-17, supersedes the
@@ -216,6 +218,7 @@ export function buildChartDocument(
     // freshly-predicted synctrack, never to an existing chart's own tempo
     // list (buildChartDocumentFromExistingChart below does not call this).
     const effectiveSynctrack = finalizeSynctrack(synctrack, events);
+    installedSynctrack = effectiveSynctrack;
     // The empty chart has no events to re-tick, so swapSynctrack just
     // installs the predicted tempos/time signatures with correct ticks
     // (including lead-in / origin handling — see synctrack-ticks.ts).
@@ -279,7 +282,13 @@ export function buildChartDocument(
   // Add end event
   parsedChart.endEvents = [{tick: endTick, msTime: 0, msLength: 0}];
 
-  const doc: ChartDocument = {parsedChart, assets: []};
+  // Record the real opening from the synctrack that was installed, before
+  // the writer's lead-in construct at tick 0 becomes the only answer the
+  // chart can give (plan 0124 step 1b). This flow reaches the editor without
+  // passing through any editor command, so it must record its own.
+  const doc: ChartDocument = installedSynctrack
+    ? openingFromSync({parsedChart, assets: []}, installedSynctrack)
+    : {parsedChart, assets: []};
 
   const timeSigs = parsedChart.timeSignatures.map(ts => ({
     tick: ts.tick,

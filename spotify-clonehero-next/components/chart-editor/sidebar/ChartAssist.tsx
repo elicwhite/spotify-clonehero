@@ -4,7 +4,7 @@
  * Chart Assist sidebar section (plan 0074 Phase 2, Design C).
  *
  * Cards: Tempo map, Sections (its own LinkSeg run, staleness + Keep-as-is),
- * Add leading silence (detector-driven call-to-action), Drum transcription
+ * Add leading silence, Drum transcription
  * (staleness + Run/Keep-as-is), Lyrics, and a per-instrument difficulty
  * generation card (one per stale instrument) — one module each, beside this
  * one.
@@ -65,8 +65,9 @@ export interface ChartAssistProps {
    *  `generate-tempo-map` task, the Lyrics card's `add-lyrics` task, and the
    *  Drum transcription card. Without it none of those cards renders. */
   loadAudio?: LoadAssistAudio | undefined;
-  /** Sample rate of the loaded audio, for the leading-silence pad's sample
-   *  quantization. Without it the Add leading silence card doesn't render. */
+  /** Sample rate of the loaded audio. The cards do not use the value: it is
+   *  the host's signal that the audio is decoded, which is what the Add
+   *  leading silence card needs before it renders. */
   audioSampleRate?: number | undefined;
   /** Why this host can't run drum transcription at all. It applies only to a
    *  host that offers no `loadAudio` — with it the run has everything it
@@ -76,9 +77,6 @@ export interface ChartAssistProps {
   /** Set while the host is rebuilding its padded audio: audio-dependent
    *  actions disable and explain themselves with this reason. */
   audioBusyReason?: string | undefined;
-  /** A detected audio onset in chart-ms domain (tick 0 == ms 0), for the
-   *  leading-silence detector's second trigger. Omit when not computed. */
-  detectedAudioOnsetMs?: number | undefined;
   /** Forwarded to `AddLyricsDialog` — called after a run that aligned
    *  against cached roformer vocals. */
   onLyricsAlignedFromCachedVocals?: (() => void) | undefined;
@@ -90,7 +88,6 @@ export default function ChartAssist({
   audioSampleRate,
   drumRerunDisabledReason,
   audioBusyReason,
-  detectedAudioOnsetMs,
   onLyricsAlignedFromCachedVocals,
 }: ChartAssistProps) {
   const {state, capabilities} = useChartEditorContext();
@@ -115,6 +112,9 @@ export default function ChartAssist({
     loadAudio != null;
   // Leading silence pads the audio in a worker under a progress card, so it
   // needs a runner too — same as the other cards that do real work.
+  // `audioSampleRate` is the host's "the audio is decoded" signal here, not
+  // an input to the card: the pad is milliseconds, and the audio layer rounds
+  // it to samples when it pads.
   const showSilence =
     (variant === 'all' || variant === 'tempo-and-silence') &&
     runner != null &&
@@ -191,9 +191,7 @@ export default function ChartAssist({
           <LeadingSilenceCard
             doc={doc}
             runner={runner}
-            audioSampleRate={audioSampleRate}
             audioBusyReason={audioBusyReason}
-            detectedAudioOnsetMs={detectedAudioOnsetMs}
             executeCommand={executeCommand}
             onLearnMore={setLearnOpen}
           />

@@ -13,13 +13,17 @@
  * own error handling and cancel path already live.
  */
 
-import {pickFolderFiles, writeChartFolder} from '@/lib/chart-edit';
+import {
+  pickFolderFiles,
+  readDocSidecars,
+  writeChartFolder,
+} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {
   documentIdentityFields,
   getAssistProvenance,
 } from '@/lib/chart-editor-core';
-import {getAudioAnchor} from '@/lib/chart-edit';
+
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
 
 import {chartPackageStore} from './projects';
@@ -74,7 +78,7 @@ export async function createProjectFromDoc(
     origin,
     durationSeconds: opts.durationSeconds,
     stemFingerprint: opts.stemFingerprint,
-    audioAnchor: getAudioAnchor(chartDoc),
+    ...readDocSidecars(chartDoc),
     assistProvenance: getAssistProvenance(chartDoc),
   });
 

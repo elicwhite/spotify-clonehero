@@ -429,14 +429,18 @@ describe('ChartAssist leading-silence recommendation', () => {
     return doc;
   }
 
-  it('calls out a song with no lead-in on the Add leading silence card', () => {
+  it('asks for the song start before it will pad anything', () => {
+    // The pad is measured from the song start, and only the user can supply
+    // it: the tempo map's origin is grid phase, not the musical start (plan
+    // 0124 step 4). So the card says what it needs and holds the action.
     renderChartAssist(makeCollapsedLeadInDoc());
     const card = screen.getByRole('group', {name: 'Add leading silence'});
-    // The copy explains the situation in terms of the audio rather than the
-    // BPM threshold that detects it.
     expect(
-      within(card).getByText(/no silence before the first beat/i),
+      within(card).getByText(/first downbeat, then set the song start/i),
     ).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', {name: /add leading silence/i}),
+    ).toHaveAccessibleDescription(/set where the song starts/i);
   });
 
   it('says nothing on a chart that already has its lead-in', () => {
@@ -447,11 +451,27 @@ describe('ChartAssist leading-silence recommendation', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('pads once the song start is set, and reports the lead-in it made', async () => {
+    renderChartAssist(makeDoc());
+    const card = screen.getByRole('group', {name: 'Add leading silence'});
+    fireEvent.click(
+      within(card).getByRole('button', {name: /set song start/i}),
+    );
+    await settle();
+    fireEvent.click(
+      within(card).getByRole('button', {name: /add leading silence/i}),
+    );
+    await settle();
+    expect(within(card).getByText(/Lead-in: \d+ bars?\./)).toBeInTheDocument();
+  });
+
   it('adding leading silence does not flag the drum transcription stale', async () => {
     // The whole grid shifts by one fixed pad and the drums shift with it, so
     // nothing landed on a different beat — flagging staleness here would be
     // a false alarm on a routine action.
     renderChartAssist(makeDocWithFreshProvenance());
+    fireEvent.click(screen.getByRole('button', {name: /set song start/i}));
+    await settle();
     fireEvent.click(screen.getByRole('button', {name: /add leading silence/i}));
     await settle();
     expect(

@@ -20,7 +20,7 @@
  * changed.
  */
 
-import {getAudioAnchor, planLeadingSilence} from '@/lib/chart-edit';
+import {planLeadIn} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {LeadingSilencePlan} from '@/lib/chart-edit/leading-silence';
 import {makeAbortError} from '@/lib/workers/abortable-worker';
@@ -58,11 +58,12 @@ const PAD_AUDIO_STEP: Omit<PlannedStep, 'cached'> = {
 };
 
 export interface AddLeadingSilenceInput {
+  /** The bar count the user asked for — the `[+]`/`[-]` value, or absent on
+   *  a first press, where the minimum is computed. */
+  bars?: number | undefined;
   /** Reads the LIVE chart doc. Called by `run`, not captured at click time,
    *  so the pad is measured against the chart as it stands. */
   readDoc: () => ChartDocument;
-  /** Sample rate the pad quantizes to — the rate the host decoded at. */
-  sampleRate: number;
   /** The host's audio pre-pad. Absent on a host with no audio to pad, in
    *  which case the run is the measuring step alone. */
   padAudioAhead?: PadAudioAheadFn | undefined;
@@ -87,23 +88,22 @@ export const addLeadingSilenceTask: AssistTaskDef<
       : [{...MEASURE_STEP}];
   },
 
-  async run({readDoc, sampleRate, padAudioAhead}, signal, progress) {
+  async run({readDoc, padAudioAhead, bars}, signal, progress) {
     if (signal.aborted) throw makeAbortError();
 
     progress({activeKey: 'measure-lead-in', progress: 0});
-    const sizing = planLeadingSilence(readDoc(), sampleRate);
+    const sizing = planLeadIn(readDoc(), bars);
     if (!sizing) {
       progress({activeKey: null, terminal: 'done'});
       return {plan: null};
     }
 
     if (padAudioAhead) {
-      // The pad ACCUMULATES: a second press pads on top of the first, so
-      // what the rebuild needs is where sample 0 ends up, not this press's
-      // increment. Mirrors `applyLeadingSilence`'s own anchor arithmetic.
-      const anchorMs = (getAudioAnchor(readDoc())?.ms ?? 0) + sizing.padMs;
+      // `padMs` is the WHOLE silence in front of the audio, not this press's
+      // increment, and `padAudioAhead` wants exactly that: it re-pads from
+      // the original PCM rather than adding to a padded copy.
       progress({activeKey: 'pad-audio', progress: 0});
-      await padAudioAhead(anchorMs, {
+      await padAudioAhead(sizing.padMs, {
         signal,
         onProgress: (fraction, detail) =>
           progress({activeKey: 'pad-audio', progress: fraction, detail}),
@@ -111,7 +111,12 @@ export const addLeadingSilenceTask: AssistTaskDef<
     }
     if (signal.aborted) throw makeAbortError();
 
+    // The doc is read again, so the applied plan describes the chart as it
+    // stands now. The bar count is pinned to the one the audio was padded
+    // for: measuring it afresh could pick a different count if the chart
+    // changed during the run, and the audio would then match no plan.
+    const applied = planLeadIn(readDoc(), sizing.bars);
     progress({activeKey: null, terminal: 'done'});
-    return {plan: planLeadingSilence(readDoc(), sampleRate)};
+    return {plan: applied ?? sizing};
   },
 };

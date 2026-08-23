@@ -15,20 +15,24 @@ import {
   getAssistProvenance,
   withAssistProvenance,
 } from '@/lib/chart-editor-core/content-stamps';
-import {planLeadingSilence, type ChartDocument} from '@/lib/chart-edit';
+import {planLeadIn, setSongStart, type ChartDocument} from '@/lib/chart-edit';
 import {makeFixtureDoc} from './fixtures';
 
-const SAMPLE_RATE = 44100;
+/** The fixture with a song start, which the pad is measured from and which
+ *  the planner declines without (plan 0124 step 4). */
+function readyDoc(): ChartDocument {
+  return setSongStart(makeFixtureDoc(), {audioMs: 0});
+}
 
 function planFor(doc: ChartDocument) {
-  const plan = planLeadingSilence(doc, SAMPLE_RATE);
+  const plan = planLeadIn(doc);
   if (!plan) throw new Error('fixture should need leading silence');
   return plan;
 }
 
 describe('AddLeadingSilenceCommand', () => {
   it('shifts the chart into the padded ms domain', () => {
-    const before = makeFixtureDoc();
+    const before = readyDoc();
     const plan = planFor(before);
     const after = new AddLeadingSilenceCommand(plan).execute(before);
 
@@ -43,7 +47,7 @@ describe('AddLeadingSilenceCommand', () => {
   });
 
   it('is a grid edit: allowed on /tempo, which grants no note edits', () => {
-    const cmd = new AddLeadingSilenceCommand(planFor(makeFixtureDoc()));
+    const cmd = new AddLeadingSilenceCommand(planFor(readyDoc()));
     // The pad moves the SYNC TRACK; notes keep their ticks and follow. That
     // makes it the same shape of edit as a tempo-marker move, so the surface
     // whose whole purpose is the grid must be able to run it.
@@ -54,7 +58,7 @@ describe('AddLeadingSilenceCommand', () => {
   });
 
   it('re-stamps drum-transcription provenance instead of flagging it stale', () => {
-    const base = makeFixtureDoc();
+    const base = readyDoc();
     const before = withAssistProvenance(base, {
       tempoDerived: {
         'drum-transcription': {tempoStamp: computeTempoStamp(base)},
@@ -71,7 +75,7 @@ describe('AddLeadingSilenceCommand', () => {
   });
 
   it('leaves a doc with no transcription provenance alone', () => {
-    const before = makeFixtureDoc();
+    const before = readyDoc();
     const after = new AddLeadingSilenceCommand(planFor(before)).execute(before);
     expect(getAssistProvenance(after)).toBeUndefined();
   });

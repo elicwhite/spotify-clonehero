@@ -13,7 +13,7 @@
 
 import {createEmptyChart, addDrumNote, makeChartTiming} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {retimeChart, setAudioAnchor} from '@/lib/chart-edit';
+import {retimeChart, setAudioAnchor, setSongStart} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {noteTypes} from '@eliwhite/scan-chart';
 import type {StepProgressEvent} from '../run-to-steps';
@@ -21,8 +21,6 @@ import {
   addLeadingSilenceTask,
   type AddLeadingSilenceInput,
 } from '../tasks/add-leading-silence';
-
-const SAMPLE_RATE = 44100;
 
 /** A chart at `bpm` with a single note two beats in — early enough that the
  *  lead-in is always short of `LEAD_MIN_MS` and a pad is always planned. */
@@ -37,7 +35,9 @@ function makeDoc(bpm: number): ChartDocument {
     makeChartTiming(parsedChart),
   );
   retimeChart(parsedChart);
-  return {parsedChart, assets: []};
+  // The song start is what the pad is measured from, and the task declines
+  // without one (plan 0124 step 4).
+  return setSongStart({parsedChart, assets: []}, {audioMs: 0});
 }
 
 /** A doc with no sync track at all, which `planLeadingSilence` declines:
@@ -60,8 +60,9 @@ function collect(): {
 function inputFor(
   doc: ChartDocument,
   padAudioAhead?: AddLeadingSilenceInput['padAudioAhead'],
+  bars?: number,
 ): AddLeadingSilenceInput {
-  return {readDoc: () => doc, sampleRate: SAMPLE_RATE, padAudioAhead};
+  return {readDoc: () => doc, padAudioAhead, bars};
 }
 
 describe('addLeadingSilenceTask.planSteps', () => {
@@ -125,19 +126,25 @@ describe('addLeadingSilenceTask.run', () => {
     expect(padded).toEqual([result.plan!.padMs]);
   });
 
-  it('pads for the ACCUMULATED anchor when the chart already has silence', async () => {
-    // A second press pads on top of the first, so the audio the rebuild
-    // wants carries both pads, not just this one.
+  it('pads for the WHOLE pad, not the increment, when silence exists', async () => {
+    // A bar is 2000 ms at 120 BPM, so two bars is the whole silence the
+    // rebuild needs — not 2000 added to what is already there. The audio is
+    // re-padded from the original PCM, so it wants the absolute value.
     const doc = setAudioAnchor(makeDoc(120), {ms: 2000, tick: 0});
     const padded: number[] = [];
     const result = await addLeadingSilenceTask.run(
-      inputFor(doc, async anchorMs => {
-        padded.push(anchorMs);
-      }),
+      inputFor(
+        doc,
+        async anchorMs => {
+          padded.push(anchorMs);
+        },
+        2,
+      ),
       new AbortController().signal,
       () => {},
     );
-    expect(padded).toEqual([2000 + result.plan!.padMs]);
+    expect(padded).toEqual([4000]);
+    expect(result.plan!.padMs).toBe(4000);
   });
 
   it('stops after measuring, with no plan, when nothing needs padding', async () => {
@@ -162,7 +169,6 @@ describe('addLeadingSilenceTask.run', () => {
     const result = await addLeadingSilenceTask.run(
       {
         readDoc: () => doc,
-        sampleRate: SAMPLE_RATE,
         padAudioAhead: async () => {
           doc = makeDoc(60);
         },
@@ -171,15 +177,13 @@ describe('addLeadingSilenceTask.run', () => {
       () => {},
     );
 
-    const {planLeadingSilence} = await import('@/lib/chart-edit');
-    expect(result.plan!.padMs).toBeCloseTo(
-      planLeadingSilence(doc, SAMPLE_RATE)!.padMs,
-      6,
-    );
-    expect(result.plan!.padMs).not.toBeCloseTo(
-      planLeadingSilence(before, SAMPLE_RATE)!.padMs,
-      6,
-    );
+    // The applied plan describes the doc as it stands now, at the bar count
+    // the audio was padded for. Pinning the count is what keeps the audio and
+    // the chart describing the same lead-in when the doc moves mid-run.
+    const {planLeadIn} = await import('@/lib/chart-edit');
+    const live = planLeadIn(doc, result.plan!.bars)!;
+    expect(result.plan!.padMs).toBeCloseTo(live.padMs, 6);
+    expect(result.plan!.padMs).not.toBeCloseTo(planLeadIn(before)!.padMs, 6);
   });
 
   it('rejects an already-aborted run before measuring anything', async () => {
@@ -187,11 +191,7 @@ describe('addLeadingSilenceTask.run', () => {
     controller.abort();
     const readDoc = jest.fn(() => makeDoc(120));
     await expect(
-      addLeadingSilenceTask.run(
-        {readDoc, sampleRate: SAMPLE_RATE},
-        controller.signal,
-        () => {},
-      ),
+      addLeadingSilenceTask.run({readDoc}, controller.signal, () => {}),
     ).rejects.toThrow('Aborted');
     expect(readDoc).not.toHaveBeenCalled();
   });

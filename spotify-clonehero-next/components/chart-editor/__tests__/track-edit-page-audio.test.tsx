@@ -570,10 +570,18 @@ describe('/chart-editor Add leading silence', () => {
     // the node the first query returned is not the node that ends up live.
     const silenceAction = () =>
       screen.getByRole('button', {name: 'Add leading silence'});
-    await waitFor(() => expect(silenceAction()).toBeEnabled());
+    // Until the song start is set the action is held, and says so.
+    await waitFor(() =>
+      expect(silenceAction()).toHaveAccessibleDescription(
+        /set where the song starts/i,
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Set song start'}));
     // A disabled action carries its reason as the button's accessible
     // description; an offered one has nothing to explain away.
-    expect(silenceAction()).not.toHaveAccessibleDescription();
+    await waitFor(() =>
+      expect(silenceAction()).not.toHaveAccessibleDescription(),
+    );
   });
 
   it('persists the audio anchor it applies, so a reload pads the same audio', async () => {
@@ -587,6 +595,12 @@ describe('/chart-editor Add leading silence', () => {
     const silenceAction = () =>
       screen.getByRole('button', {name: 'Add leading silence'});
     await screen.findByRole('button', {name: 'Add leading silence'});
+    // The pad is measured from the song start, so the action is held until
+    // one is set (plan 0124 step 4). Both wait on the audio decode.
+    const songStartAction = () =>
+      screen.getByRole('button', {name: 'Set song start'});
+    await waitFor(() => expect(songStartAction()).toBeEnabled());
+    fireEvent.click(songStartAction());
     await waitFor(() => expect(silenceAction()).toBeEnabled());
     fireEvent.click(silenceAction());
 
@@ -601,8 +615,16 @@ describe('/chart-editor Add leading silence', () => {
     await waitFor(() => expect(mockUpdateProject).toHaveBeenCalled());
     const [, patch] = mockUpdateProject.mock.calls.at(-1) as unknown as [
       string,
-      {audioAnchor: {ms: number} | null},
+      {
+        audioAnchor: {ms: number} | null;
+        songStart: {audioMs: number} | null;
+        leadIn: {bars: number} | null;
+      },
     ];
     expect(patch.audioAnchor?.ms).toBeGreaterThan(0);
+    // The pad is derived, so the reload needs the two numbers it comes from,
+    // not only the pad itself.
+    expect(patch.songStart).toEqual({audioMs: 0});
+    expect(patch.leadIn?.bars).toBeGreaterThan(0);
   });
 });

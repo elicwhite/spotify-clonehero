@@ -50,6 +50,7 @@ import {
 } from '@/lib/drum-transcription/audio/decoder';
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
+import type {DocSidecars} from '@/lib/chart-edit';
 import {
   CHART_FILE_BASENAMES,
   editedVariant,
@@ -87,7 +88,13 @@ function extensionOf(fileName: string): string {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ProjectMetadata {
+/**
+ * Extends {@link DocSidecars} (plan 0124): the audio anchor, the song start,
+ * the lead-in bar count and the recorded opening. Those live in
+ * `lib/chart-edit` so this store and the chart-editor store cannot drift, and
+ * so a new record is one line rather than seven sites.
+ */
+export interface ProjectMetadata extends DocSidecars {
   id: string;
   name: string;
   /** Song artist, for the unified project list. Absent on projects created
@@ -126,16 +133,7 @@ export interface ProjectMetadata {
    * field existed; treat as `'predicted'`.
    */
   gridSource?: GridSource | undefined;
-  /**
-   * Chart-time position of original (unpadded) audio sample 0 (0064 addendum
-   * §1) — mirrors the in-memory `ChartDocument`'s `audioAnchor`
-   * (`lib/chart-edit/leading-silence.ts`). Presence (non-null) means
-   * leading-silence padding is active: the stored audio (`song.opus`) is
-   * still the original, un-padded file, and the chart's notes were shifted
-   * forward by `audioAnchor.ms`. `undefined`/`null` ⇒ no padding, current
-   * behavior. Settable back to `null` for a chart that has no anchor.
-   */
-  audioAnchor?: {tick: number; ms: number} | null | undefined;
+
   /**
    * Assist-generation provenance mirrored out of the in-memory
    * `ChartDocument` (plan 0074 Design C). A `.chart`/`.mid` file has nowhere
@@ -321,10 +319,10 @@ export async function updateProject(
       | 'stage'
       | 'gridSource'
       | 'stemFingerprint'
-      | 'audioAnchor'
       | 'assistProvenance'
       | 'toolsApplied'
-    >
+    > &
+      DocSidecars
   >,
 ): Promise<ProjectMetadata> {
   const dir = await getProjectDir(projectId);

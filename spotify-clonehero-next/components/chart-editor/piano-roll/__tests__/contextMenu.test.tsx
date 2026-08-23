@@ -428,6 +428,24 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     ).toBe(false);
   });
 
+  // The opening meter is editable now (plan 0124 step 6): it is the recovery
+  // path for the 4/4 the first pad writes, and no other control sets a meter.
+  it('offers to edit the opening meter at tick 0, but not to remove it', async () => {
+    const canvas = await mountPanel();
+    // The tick-0 chip sits at the very left of the tempo lane.
+    let found = false;
+    for (let x = 0; x <= 40 && !found; x += 1) {
+      act(() => {
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      if (screen.queryByText(/Edit time signature \(4\/4\)/)) found = true;
+    }
+    expect(found).toBe(true);
+    expect(
+      screen.queryByText(/Remove time signature change/),
+    ).not.toBeInTheDocument();
+  });
+
   // A chip carries its own meter, so the menu offers to retype it in place.
   it('edits the meter of the signature chip that was right-clicked', async () => {
     const canvas = await mountPanel();
