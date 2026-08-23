@@ -7,13 +7,13 @@
  * derived scene and view — no React, no store access, no state of its own.
  */
 
-import {msToTick, tickToMs} from '@/lib/drum-transcription/timing';
+import {tickToMs} from '@/lib/drum-transcription/timing';
 import {drums4LaneSchema, padLaneRange} from '@/lib/chart-edit';
 import type {LoopRegion} from '@/lib/preview/loopRegion';
 import type {ProspectiveNote} from '../editing/prospectiveNote';
 import {
-  glyphWidth,
   msToX,
+  noteGlyphSize,
   visibleMsRange,
   xToMs,
   type PianoRollView,
@@ -26,7 +26,11 @@ import {
   type PianoRollLane,
   type PianoRollNote,
 } from './notes';
-import {LYRIC_CHIP_PAD_LEFT, LYRIC_CHIP_PAD_RIGHT} from './hitTest';
+import {
+  LYRIC_CHIP_PAD_LEFT,
+  LYRIC_CHIP_PAD_RIGHT,
+  viewportMsPerTick,
+} from './hitTest';
 import {TS_CHIP_H, TS_CHIP_TOP, tsChipRect} from './tempoHitTest';
 import {
   lyricChipPreviewTick,
@@ -139,23 +143,11 @@ export function drawNotes(
   ghost: ProspectiveNote | null,
 ): void {
   const [msA, msB] = visibleMsRange(view, w);
-  const nh = Math.min(laneH - 6, 13);
-  // Local ms-per-tick near the viewport center for glyph sizing.
-  const centerMs = (msA + msB) / 2;
-  const centerTick = msToTick(centerMs, scene.timedTempos, scene.resolution);
-  const msPerTick =
-    (tickToMs(
-      centerTick + scene.resolution,
-      scene.timedTempos,
-      scene.resolution,
-    ) -
-      tickToMs(centerTick, scene.timedTempos, scene.resolution)) /
-    scene.resolution;
-  const nw = glyphWidth({
+  const {width: nw, height: nh} = noteGlyphSize({
+    laneH,
     gridStepTicks: scene.resolution / 4,
-    msPerTick,
+    msPerTick: viewportMsPerTick(view, w, scene.timedTempos, scene.resolution),
     pxPerMs: view.pxPerMs,
-    glyphHeight: nh,
   });
   const guitarBass = isGuitarBassSchema(scene.schema);
 

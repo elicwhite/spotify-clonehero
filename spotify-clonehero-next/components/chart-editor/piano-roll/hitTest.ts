@@ -14,7 +14,14 @@
 
 import {tickToMs, msToTick} from '@/lib/drum-transcription/timing';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {msToX, xToMs, type PianoRollView} from './viewMath';
+import {
+  msToX,
+  noteGlyphSize,
+  visibleMsRange,
+  xToMs,
+  type PianoRollView,
+} from './viewMath';
+import type {NoteGlyphExtent} from '../editing/marquee';
 import type {PianoRollNote} from './notes';
 import type {LyricBand, LyricChip} from './lyricsScene';
 
@@ -154,33 +161,89 @@ export interface MarqueeBounds {
   msMax: number;
   laneMin: number;
   laneMax: number;
+  /** Set when the lane range is continuous and the selection must intersect
+   *  the drawn glyph (see `marqueeBounds`). */
+  glyph?: NoteGlyphExtent;
+}
+
+/**
+ * Local ms-per-tick near the middle of the viewport — the scale `drawNotes`
+ * sizes its glyphs at. Shared with the marquee so the box tests against the
+ * glyph width that is actually on screen.
+ */
+export function viewportMsPerTick(
+  view: PianoRollView,
+  viewportWidth: number,
+  timedTempos: TimedTempo[],
+  resolution: number,
+): number {
+  const [msA, msB] = visibleMsRange(view, viewportWidth);
+  const centerTick = msToTick((msA + msB) / 2, timedTempos, resolution);
+  return (
+    (tickToMs(centerTick + resolution, timedTempos, resolution) -
+      tickToMs(centerTick, timedTempos, resolution)) /
+    resolution
+  );
+}
+
+/**
+ * Half the drawn note glyph, in the units the marquee compares against:
+ * milliseconds across, lane rows down. `selectNotesInRange` needs this to
+ * select a note only when the rectangle reaches the glyph itself.
+ */
+export function noteGlyphExtent(
+  view: PianoRollView,
+  geo: LaneGeometry,
+  viewportWidth: number,
+  timedTempos: TimedTempo[],
+  resolution: number,
+): NoteGlyphExtent {
+  const size = noteGlyphSize({
+    laneH: geo.laneH,
+    gridStepTicks: resolution / 4,
+    msPerTick: viewportMsPerTick(view, viewportWidth, timedTempos, resolution),
+    pxPerMs: view.pxPerMs,
+  });
+  return {
+    msHalfWidth: size.width / 2 / view.pxPerMs,
+    laneHalfHeight: geo.laneH > 0 ? size.height / 2 / geo.laneH : 0,
+  };
 }
 
 /**
  * Convert a screen-space marquee rectangle to (ms × lane) bounds for
- * `selectNotesInRange`. The lane range is inclusive and clamped to the lane
- * count; the ms range comes from the view's x-axis. The display row is the
- * data lane (see `laneAtY`), so a top-to-bottom drag yields
- * `laneMin <= laneMax` directly.
+ * `selectNotesInRange`. The ms range comes from the view's x-axis; the
+ * display row is the data lane (see `laneAtY`), so a top-to-bottom drag
+ * yields `laneMin <= laneMax` directly.
+ *
+ * With `glyph`, the lane range is continuous (lane row L spans `[L, L + 1]`)
+ * and unclamped, because the selection test is then a glyph-versus-rectangle
+ * intersection: a rectangle that only clips the empty top of a row must not
+ * grow to cover the whole row. Without it the lane range is inclusive lane
+ * indices clamped to the lane count, which selects everything in a lane the
+ * rectangle entered.
  */
 export function marqueeBounds(
   rect: MarqueeRect,
   view: PianoRollView,
   geo: LaneGeometry,
+  glyph?: NoteGlyphExtent,
 ): MarqueeBounds {
   const xMin = Math.min(rect.x0, rect.x1);
   const xMax = Math.max(rect.x0, rect.x1);
   const yMin = Math.min(rect.y0, rect.y1);
   const yMax = Math.max(rect.y0, rect.y1);
   const laneFor = (y: number): number => {
-    const raw = Math.floor((y - geo.laneTop) / geo.laneH);
-    return Math.max(0, Math.min(geo.laneCount - 1, raw));
+    const raw = (y - geo.laneTop) / geo.laneH;
+    if (glyph) return raw;
+    return Math.max(0, Math.min(geo.laneCount - 1, Math.floor(raw)));
   };
   return {
     msMin: xToMs(xMin, view),
     msMax: xToMs(xMax, view),
     laneMin: laneFor(yMin),
     laneMax: laneFor(yMax),
+    ...(glyph ? {glyph} : {}),
   };
 }
 

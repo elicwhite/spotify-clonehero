@@ -75,6 +75,55 @@ describe('selectNotesInRange', () => {
     expect(result.size).toBe(0);
   });
 
+  it('with glyph extents, only a box that reaches the glyph selects', () => {
+    // Continuous lane coordinates: red is row 0, so its glyph is centered on
+    // 0.5 and covers 0.25..0.75 with a half-height of a quarter row.
+    const glyph = {msHalfWidth: 10, laneHalfHeight: 0.25};
+    const notes = [note(480, noteTypes.redDrum)]; // 500ms
+    const inside = selectNotesInRange(
+      notes,
+      {msMin: 495, msMax: 505, laneMin: 0.4, laneMax: 0.6, glyph},
+      TIMED_TEMPOS,
+      RESOLUTION,
+    );
+    expect(inside).toEqual(
+      new Set([noteId({tick: 480, type: noteTypes.redDrum})]),
+    );
+
+    // The box entered row 0 but stopped above the glyph.
+    const aboveGlyph = selectNotesInRange(
+      notes,
+      {msMin: 495, msMax: 505, laneMin: 0.02, laneMax: 0.2, glyph},
+      TIMED_TEMPOS,
+      RESOLUTION,
+    );
+    expect(aboveGlyph.size).toBe(0);
+
+    // The box is on the glyph's row but 100ms past its right edge.
+    const pastGlyph = selectNotesInRange(
+      notes,
+      {msMin: 600, msMax: 700, laneMin: 0.4, laneMax: 0.6, glyph},
+      TIMED_TEMPOS,
+      RESOLUTION,
+    );
+    expect(pastGlyph.size).toBe(0);
+  });
+
+  it('with glyph extents, a box that only grazes the glyph selects', () => {
+    const glyph = {msHalfWidth: 10, laneHalfHeight: 0.25};
+    const notes = [note(480, noteTypes.redDrum)]; // 500ms
+    // A zero-size box on the glyph's left edge and top edge.
+    const result = selectNotesInRange(
+      notes,
+      {msMin: 490, msMax: 490, laneMin: 0.25, laneMax: 0.25, glyph},
+      TIMED_TEMPOS,
+      RESOLUTION,
+    );
+    expect(result).toEqual(
+      new Set([noteId({tick: 480, type: noteTypes.redDrum})]),
+    );
+  });
+
   it('handles tempo changes — uses the active tempo for each tick', () => {
     // Tempo doubles at tick 960. Notes after 960 advance twice as fast in ms.
     const tempos: TimedTempo[] = [

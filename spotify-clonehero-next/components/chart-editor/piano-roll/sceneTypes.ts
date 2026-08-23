@@ -194,6 +194,9 @@ export interface TempoMarker {
 export interface TsChip {
   tick: number;
   ms: number;
+  numerator: number;
+  denominator: number;
+  /** `numerator/denominator`, the text the lane paints in the pill. */
   label: string;
 }
 

@@ -143,6 +143,7 @@ import {
   PlaceDownbeatCommand,
   MoveTimeSignatureCommand,
   RemoveTimeSignatureCommand,
+  SetTimeSignatureCommand,
   AddLyricCommand,
   DeleteLyricCommand,
   SetLyricTextCommand,
@@ -190,11 +191,13 @@ import {
 import {buildBeatGrid, barBeatAtTick} from './scene';
 import {measureTextWidth} from './textWidth';
 import BpmValuePopover from './BpmValuePopover';
+import TimeSignaturePopover from './TimeSignaturePopover';
 import TapTempoPopover from './TapTempoPopover';
 import {useSetClickSuppressed} from '../AudioServiceContext';
 import {
   laneAtY,
   marqueeBounds,
+  noteGlyphExtent,
   pickNoteAt,
   pickNotePartAt,
   pickLyricChipAt,
@@ -408,6 +411,17 @@ type MenuContent =
       anchorLabel: string;
       /** The marker's current BPM, which the field starts at. */
       initialBpm: number;
+      clientX: number;
+      clientY: number;
+    }
+  | {
+      kind: 'timesig';
+      /** Tick of the existing signature chip being retyped. */
+      anchorTick: number;
+      anchorLabel: string;
+      /** The chip's current meter, which the fields start at. */
+      initialNumerator: number;
+      initialDenominator: number;
       clientX: number;
       clientY: number;
     };
@@ -647,8 +661,9 @@ export default function PianoRollTimeline({
   );
   const tapMenu = menu?.content.kind === 'tap' ? menu.content : null;
   const bpmMenu = menu?.content.kind === 'bpm' ? menu.content : null;
+  const timeSigMenu = menu?.content.kind === 'timesig' ? menu.content : null;
   /** Whichever entry tool is up, for the popover's shared viewport anchoring. */
-  const entryMenu = tapMenu ?? bpmMenu;
+  const entryMenu = tapMenu ?? bpmMenu ?? timeSigMenu;
 
   // -- Inline text editor: the lyrics row's "Edit lyric…"/"Add lyric…" and
   // the section strip's rename/add all open a small positioned <input> over
@@ -904,6 +919,8 @@ export default function PianoRollTimeline({
     const timeSignatures: TsChip[] = parsedTimeSignatures.map(ts => ({
       tick: ts.tick,
       ms: tickToMs(ts.tick, timedTempos, resolution),
+      numerator: ts.numerator,
+      denominator: ts.denominator,
       label: `${ts.numerator}/${ts.denominator}`,
     }));
     return {
@@ -2880,16 +2897,28 @@ export default function PianoRollTimeline({
               laneCount: row.row.lanes.length,
             }
           : laneGeometry();
-        const bounds = marqueeBounds(marqueeRect, viewRef.current, marqueeGeo);
+        // Glyph extents make the sweep test the glyph the user sees, not the
+        // whole lane row a rectangle happens to clip.
+        const bounds = marqueeBounds(
+          marqueeRect,
+          viewRef.current,
+          marqueeGeo,
+          noteGlyphExtent(
+            viewRef.current,
+            marqueeGeo,
+            viewportWidth(),
+            scene.timedTempos,
+            scene.resolution,
+          ),
+        );
         const my0 = Math.min(marqueeRect.y0, marqueeRect.y1);
         const my1 = Math.max(marqueeRect.y0, marqueeRect.y1);
 
-        // Band membership is what narrows a selection: `marqueeBounds`' lane
-        // math always clamps to a valid lane index (0..laneCount-1) even when
-        // the rectangle never gets near the note lanes, so a drag confined to
-        // the tempo lane would otherwise resolve to lane 0 and sweep up red
-        // notes whose ms range happens to overlap. `bandsTouched` gates each
-        // band on the rectangle's actual vertical span.
+        // Band membership is what narrows a selection to the bands the
+        // rectangle actually reaches: the note sweep only runs when
+        // `touched.lanes` says the drag entered the note-lane band, so a drag
+        // confined to the tempo lane or the lyrics row never sweeps notes
+        // whose ms range happens to overlap.
         const touched = row
           ? {
               ruler: false,
@@ -3141,6 +3170,7 @@ export default function PianoRollTimeline({
       setGhost,
       snappedTickAt,
       pointFromEvent,
+      viewportWidth,
     ],
   );
 
@@ -3657,6 +3687,32 @@ export default function PianoRollTimeline({
           ...octaveItems,
           tapItem(chip.tick),
           {
+            // Same in-place swap as the tap and BPM tools: the fields open
+            // where the right-click was, seeded with the chip's own meter.
+            label: `Edit time signature (${chip.label})…`,
+            disabled: !capabilities.showEditingControls,
+            onSelect: () => {
+              const {bar, beat} = barBeatAtTick(chip.tick, scene.beats);
+              const rect = containerRef.current?.getBoundingClientRect();
+              setMenu(open =>
+                open === null
+                  ? open
+                  : {
+                      ...open,
+                      content: {
+                        kind: 'timesig',
+                        anchorTick: chip.tick,
+                        anchorLabel: `${bar}.${beat}`,
+                        initialNumerator: chip.numerator,
+                        initialDenominator: chip.denominator,
+                        clientX: (rect?.left ?? 0) + open.x,
+                        clientY: (rect?.top ?? 0) + open.y,
+                      },
+                    },
+              );
+            },
+          },
+          {
             label: `Remove time signature change (${chip.label})`,
             danger: true,
             onSelect: () =>
@@ -3743,7 +3799,7 @@ export default function PianoRollTimeline({
           // before it is rewritten to end here, and every later bar line
           // counts from here. On 1/16 snap a bar line can land on a
           // sixteenth — the pointer's tick, not the nearest quarter.
-          label: 'Make this a downbeat',
+          label: 'Insert Time Signature',
           // Tick 0 always starts a bar, and a target already on a bar line
           // with its own signature has nothing to place.
           disabled: downbeatPlan === null || downbeatPlan.status === 'noop',
@@ -4652,7 +4708,23 @@ export default function PianoRollTimeline({
               // instead of running an action, so they are the items that must
               // not close the popover.
               onAfterSelect={closeUnlessEntering}>
-              {bpmMenu ? (
+              {timeSigMenu ? (
+                <TimeSignaturePopover
+                  initialNumerator={timeSigMenu.initialNumerator}
+                  initialDenominator={timeSigMenu.initialDenominator}
+                  anchorLabel={timeSigMenu.anchorLabel}
+                  onCommit={(numerator, denominator) => {
+                    executeCommand(
+                      new SetTimeSignatureCommand(timeSigMenu.anchorTick, {
+                        numerator,
+                        denominator,
+                      }),
+                    );
+                    setMenu(null);
+                  }}
+                  onCancel={closeMenu}
+                />
+              ) : bpmMenu ? (
                 <BpmValuePopover
                   initialBpm={bpmMenu.initialBpm}
                   anchorLabel={bpmMenu.anchorLabel}

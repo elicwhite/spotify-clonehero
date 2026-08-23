@@ -13,6 +13,7 @@ import {
   PlaceDownbeatCommand,
   MoveTimeSignatureCommand,
   RemoveTimeSignatureCommand,
+  SetTimeSignatureCommand,
 } from '../commands';
 import {expectDocsEqual} from './fixtures';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
@@ -158,6 +159,92 @@ describe('MoveTimeSignatureCommand', () => {
       before,
     );
     expect(noteMsTimes(after)).toEqual(beforeMs);
+  });
+});
+
+describe('SetTimeSignatureCommand', () => {
+  function docWithMarker(): ChartDocument {
+    const doc = barsDoc(24);
+    addTimeSignature(doc, BAR * 3, 7, 8);
+    return doc;
+  }
+
+  it('retypes the meter of the event, leaving it where it is', () => {
+    const before = docWithMarker();
+    const after = new SetTimeSignatureCommand(BAR * 3, {
+      numerator: 3,
+      denominator: 4,
+    }).execute(before);
+    expect(
+      after.parsedChart.timeSignatures.map(ts => [
+        ts.tick,
+        ts.numerator,
+        ts.denominator,
+      ]),
+    ).toEqual([
+      [0, 4, 4],
+      [BAR * 3, 3, 4],
+    ]);
+  });
+
+  it('makes every later bar line count in the new meter', () => {
+    const before = docWithMarker();
+    const after = new SetTimeSignatureCommand(BAR * 3, {
+      numerator: 3,
+      denominator: 4,
+    }).execute(before);
+    const endTick = BAR * 6;
+    expect(barLineTicks(after, endTick)).toEqual([
+      0,
+      BAR,
+      BAR * 2,
+      BAR * 3,
+      BAR * 3 + RES * 3,
+      BAR * 3 + RES * 6,
+      BAR * 3 + RES * 9,
+      BAR * 3 + RES * 12,
+    ]);
+  });
+
+  it('retimes no note', () => {
+    const before = docWithMarker();
+    const beforeMs = noteMsTimes(before);
+    const after = new SetTimeSignatureCommand(BAR * 3, {
+      numerator: 3,
+      denominator: 4,
+    }).execute(before);
+    expect(noteMsTimes(after)).toEqual(beforeMs);
+  });
+
+  it('is a no-op at tick 0, where no event exists, and on the same meter', () => {
+    const before = docWithMarker();
+    expect(
+      new SetTimeSignatureCommand(0, {numerator: 3, denominator: 4}).execute(
+        before,
+      ),
+    ).toBe(before);
+    expect(
+      new SetTimeSignatureCommand(BAR, {numerator: 3, denominator: 4}).execute(
+        before,
+      ),
+    ).toBe(before);
+    expect(
+      new SetTimeSignatureCommand(BAR * 3, {
+        numerator: 7,
+        denominator: 8,
+      }).execute(before),
+    ).toBe(before);
+  });
+
+  it('execute leaves the input doc untouched (valid undo snapshot)', () => {
+    const before = docWithMarker();
+    const pristine = docWithMarker();
+    const after = new SetTimeSignatureCommand(BAR * 3, {
+      numerator: 5,
+      denominator: 8,
+    }).execute(before);
+    expect(after).not.toBe(before);
+    expectDocsEqual(before, pristine);
   });
 });
 

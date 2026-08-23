@@ -11,6 +11,8 @@
 import {
   laneAtY,
   marqueeBounds,
+  noteGlyphExtent,
+  viewportMsPerTick,
   pickNoteAt,
   pickNotePartAt,
   pickLyricChipAt,
@@ -21,7 +23,7 @@ import {
 } from '../hitTest';
 import type {PianoRollNote} from '../notes';
 import type {LyricBand, LyricChip} from '../lyricsScene';
-import type {PianoRollView} from '../viewMath';
+import {noteGlyphSize, type PianoRollView} from '../viewMath';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 
 const VIEW: PianoRollView = {leftMs: 0, pxPerMs: 0.1}; // 1000ms → 100px
@@ -135,6 +137,47 @@ describe('marqueeBounds', () => {
     const bounds = marqueeBounds({x0: 0, y0: 0, x1: 10, y1: 500}, VIEW, GEO);
     expect(bounds.laneMin).toBe(0);
     expect(bounds.laneMax).toBe(4);
+  });
+
+  it('reports continuous, unclamped lanes when given glyph extents', () => {
+    const glyph = {msHalfWidth: 5, laneHalfHeight: 0.25};
+    // y 65..115 with laneTop 50 and laneH 20 is lane 0.75 .. 3.25.
+    const bounds = marqueeBounds(
+      {x0: 30, y0: 65, x1: 120, y1: 115},
+      VIEW,
+      GEO,
+      glyph,
+    );
+    expect(bounds.laneMin).toBeCloseTo(0.75, 5);
+    expect(bounds.laneMax).toBeCloseTo(3.25, 5);
+    expect(bounds.glyph).toBe(glyph);
+
+    // A rect entirely above the note band stays negative instead of
+    // collapsing onto lane 0.
+    const above = marqueeBounds(
+      {x0: 0, y0: 0, x1: 10, y1: 20},
+      VIEW,
+      GEO,
+      glyph,
+    );
+    expect(above.laneMax).toBeLessThan(0);
+  });
+});
+
+describe('noteGlyphExtent', () => {
+  it('measures half the drawn glyph in ms and lane rows', () => {
+    const extent = noteGlyphExtent(VIEW, GEO, 800, TIMED_TEMPOS, RES);
+    const size = noteGlyphSize({
+      laneH: GEO.laneH,
+      gridStepTicks: RES / 4,
+      msPerTick: viewportMsPerTick(VIEW, 800, TIMED_TEMPOS, RES),
+      pxPerMs: VIEW.pxPerMs,
+    });
+    expect(extent.msHalfWidth).toBeCloseTo(size.width / 2 / VIEW.pxPerMs, 5);
+    expect(extent.laneHalfHeight).toBeCloseTo(size.height / 2 / GEO.laneH, 5);
+    // The glyph is much shorter than its lane row, so a marquee has to reach
+    // it rather than merely enter the row.
+    expect(extent.laneHalfHeight).toBeLessThan(0.5);
   });
 });
 

@@ -320,11 +320,11 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       name: /Make this beat 1 \(rephase song\)/,
     });
     expect(rephase).toBeEnabled();
-    expect(screen.getByText('Make this a downbeat')).toBeInTheDocument();
+    expect(screen.getByText('Insert Time Signature')).toBeInTheDocument();
     expect(screen.queryByText('Mark as downbeat')).not.toBeInTheDocument();
   });
 
-  it('disables "Make this a downbeat" once the bar line is already there', async () => {
+  it('disables "Insert Time Signature" once the bar line is already there', async () => {
     const canvas = await mountPanel();
     // This test needs a coarse grid: it re-clicks a few px off a chip and
     // relies on landing back on the same grid tick. State the division it
@@ -337,7 +337,7 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     const after = latest!.state.chartDoc!.parsedChart.timeSignatures.length;
 
@@ -359,7 +359,7 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       });
     });
     expect(
-      screen.getByRole('button', {name: 'Make this a downbeat'}),
+      screen.getByRole('button', {name: 'Insert Time Signature'}),
     ).toBeDisabled();
     expect(latest!.state.chartDoc!.parsedChart.timeSignatures).toHaveLength(
       after,
@@ -390,7 +390,7 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     const added = latest!.state.chartDoc!.parsedChart.timeSignatures;
     expect(added.length).toBeGreaterThan(1);
@@ -428,6 +428,80 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     ).toBe(false);
   });
 
+  // A chip carries its own meter, so the menu offers to retype it in place.
+  it('edits the meter of the signature chip that was right-clicked', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
+    });
+    const placed =
+      latest!.state.chartDoc!.parsedChart.timeSignatures.at(-1)!.tick;
+
+    const chipHitX = findTsChipHitX(canvas);
+    expect(chipHitX).toBeGreaterThan(0);
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: chipHitX, y: TEMPO_LANE.y, button: 2});
+    });
+    // The item names the meter it starts from, so the target is legible.
+    act(() => {
+      screen.getByRole('button', {name: 'Edit time signature (4/4)…'}).click();
+    });
+
+    const popover = screen.getByTestId('time-signature-popover');
+    expect(popover).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Beats per bar'), {
+      target: {value: '7'},
+    });
+    fireEvent.change(screen.getByLabelText('Beat unit'), {
+      target: {value: '8'},
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Set'}).click();
+    });
+
+    expect(
+      latest!.state.chartDoc!.parsedChart.timeSignatures.find(
+        ts => ts.tick === placed,
+      ),
+    ).toMatchObject({numerator: 7, denominator: 8});
+    expect(
+      screen.queryByTestId('time-signature-popover'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('refuses a denominator the chart format cannot write', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
+    });
+    const signatures = latest!.state.chartDoc!.parsedChart.timeSignatures;
+    const placed = signatures.at(-1)!.tick;
+    const chipHitX = findTsChipHitX(canvas);
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: chipHitX, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Edit time signature (4/4)…'}).click();
+    });
+    fireEvent.change(screen.getByLabelText('Beat unit'), {
+      target: {value: '3'},
+    });
+    expect(screen.getByRole('button', {name: 'Set'})).toBeDisabled();
+    // The chart is untouched and the field stays open to be corrected.
+    expect(
+      latest!.state.chartDoc!.parsedChart.timeSignatures.find(
+        ts => ts.tick === placed,
+      ),
+    ).toMatchObject({numerator: 4, denominator: 4});
+    expect(screen.getByTestId('time-signature-popover')).toBeInTheDocument();
+  });
+
   // The bar line lands on the editor's grid, not on the nearest quarter.
   it('places the downbeat on the current grid division', async () => {
     const canvas = await mountPanel();
@@ -439,7 +513,7 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       fireAt(canvas, 'contextmenu', {x: 123, y: TEMPO_LANE.y, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     const signatures = latest!.state.chartDoc!.parsedChart.timeSignatures;
     expect(signatures.length).toBeGreaterThan(before);
@@ -515,7 +589,7 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     const placedTick =
       latest!.state.chartDoc!.parsedChart.timeSignatures.at(-1)!.tick;
@@ -548,7 +622,7 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     const before = latest!.state.chartDoc!.parsedChart.timeSignatures.map(
       ts => ts.tick,
@@ -726,7 +800,7 @@ describe('Tap tempo (tempo-lane menu → in-place tap tool)', () => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     const chipX = findTsChipHitX(canvas);
     expect(chipX).toBeGreaterThan(0);
@@ -753,7 +827,7 @@ describe('Tap tempo (tempo-lane menu → in-place tap tool)', () => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
     act(() => {
-      screen.getByRole('button', {name: 'Make this a downbeat'}).click();
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
     });
     expect(screen.queryByText('Tap tempo…')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tap-tempo-popover')).not.toBeInTheDocument();

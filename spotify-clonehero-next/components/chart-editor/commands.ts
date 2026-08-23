@@ -1466,6 +1466,41 @@ export class PlaceDownbeatCommand implements EditCommand {
 }
 
 /**
+ * Retype the meter of the authored time signature at `tick`. The event keeps
+ * its position; only its numerator/denominator change, and every later bar
+ * line counts from it in the new meter. Runs the same bar-line plan as a
+ * placement, so a signature that no longer starts a bar is impossible.
+ *
+ * The tick-0 signature is the chart's initial meter and is not editable here
+ * (the lane's hit test never offers it), so a tick-0 target is a no-op.
+ */
+export class SetTimeSignatureCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.timesig;
+  readonly operations = OP.update;
+
+  constructor(
+    private tick: number,
+    private meter: Meter,
+  ) {
+    this.description = `Set time signature ${meter.numerator}/${meter.denominator} at tick ${tick}`;
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    const chart = doc.parsedChart;
+    if (!chart.timeSignatures.some(ts => ts.tick === this.tick)) return doc;
+    const plan = planDownbeatAt(
+      chart.timeSignatures,
+      chart.resolution,
+      this.tick,
+      this.meter,
+    );
+    if (plan.status !== 'ok') return doc;
+    return applyTimeSignatureList(doc, plan.timeSignatures);
+  }
+}
+
+/**
  * Move the authored time signature at `fromTick` to `toTick`, keeping its own
  * meter. The drop has the same preceding-measure consequence as any other
  * bar-line placement. The tick-0 signature never moves.

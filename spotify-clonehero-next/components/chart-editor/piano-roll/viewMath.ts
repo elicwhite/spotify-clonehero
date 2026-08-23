@@ -260,3 +260,41 @@ export function glyphWidth(input: GlyphWidthInput): number {
   const raw = gridStepTicks * msPerTick * pxPerMs * 0.72;
   return clamp(raw, MIN_GLYPH_WIDTH, glyphHeight);
 }
+
+/** Vertical padding (px) between a note glyph and its lane row edges. */
+const GLYPH_LANE_PADDING = 6;
+/** Largest glyph height (px), whatever the lane row height is. */
+const MAX_GLYPH_HEIGHT = 13;
+
+/** Full glyph height for a lane row of `laneH` px. */
+export function glyphHeight(laneH: number): number {
+  return Math.min(laneH - GLYPH_LANE_PADDING, MAX_GLYPH_HEIGHT);
+}
+
+/** The drawn size of a note glyph in px. */
+export interface GlyphSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * The glyph size `drawNotes` paints a note head at. The marquee shares it,
+ * so "the box touched the glyph" means the glyph the user can see.
+ */
+export function noteGlyphSize(input: {
+  laneH: number;
+  gridStepTicks: number;
+  msPerTick: number;
+  pxPerMs: number;
+}): GlyphSize {
+  const height = glyphHeight(input.laneH);
+  return {
+    width: glyphWidth({
+      gridStepTicks: input.gridStepTicks,
+      msPerTick: input.msPerTick,
+      pxPerMs: input.pxPerMs,
+      glyphHeight: height,
+    }),
+    height,
+  };
+}

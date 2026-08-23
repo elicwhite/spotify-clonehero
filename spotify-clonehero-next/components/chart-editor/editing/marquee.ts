@@ -25,11 +25,29 @@ import {phraseEndId, phraseStartId} from '@/lib/chart-edit/helpers/phrases';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {noteId} from '../commands';
 
+/**
+ * Half the drawn size of a note glyph: milliseconds across, lane rows down
+ * (a 13px glyph in a 26px lane row is 0.25). Supplying it to
+ * `selectNotesInRange` turns the lane test from "the box entered this lane"
+ * into "the box touched this glyph".
+ */
+export interface NoteGlyphExtent {
+  msHalfWidth: number;
+  laneHalfHeight: number;
+}
+
 export interface BoxSelectBounds {
   msMin: number;
   msMax: number;
   laneMin: number;
   laneMax: number;
+  /**
+   * When set, `laneMin`/`laneMax` are continuous lane coordinates — lane row
+   * L spans `[L, L + 1]` — and a note is selected only where its glyph
+   * rectangle intersects the box. Without it they are inclusive lane
+   * indices, and every note of a touched lane inside the ms range counts.
+   */
+  glyph?: NoteGlyphExtent;
 }
 
 /**
@@ -55,11 +73,14 @@ function tickToMsLinear(
 }
 
 /**
- * Return the note ids whose (lane, msTime) fall inside the drag region.
- * Order is unspecified — caller should treat the result as a set.
+ * Return the note ids the drag region picks up. Order is unspecified —
+ * caller should treat the result as a set.
  *
- * The lane comparison is inclusive on both ends, matching the mouse
- * lasso "if the box brushes the lane, the note is in" feel.
+ * Without `bounds.glyph` the lane comparison is inclusive lane indices —
+ * "if the box brushes the lane, the note is in", which is what the highway's
+ * 3D box-select wants. With `bounds.glyph` the note's drawn glyph must
+ * intersect the box, so a piano-roll drag through the gap between two rows
+ * selects nothing.
  */
 export function selectNotesInRange(
   notes: readonly DrumNote[],
@@ -69,11 +90,23 @@ export function selectNotesInRange(
   schema: InstrumentSchema = drums4LaneSchema,
 ): Set<string> {
   const selected = new Set<string>();
+  const glyph = bounds.glyph;
   for (const note of notes) {
     const lane = typeToLane(schema, note.type);
-    if (lane < bounds.laneMin || lane > bounds.laneMax) continue;
-
     const noteMs = tickToMsLinear(note.tick, timedTempos, resolution);
+
+    if (glyph) {
+      // The glyph is drawn centered on the lane row and on the note's ms.
+      const laneCenter = lane + 0.5;
+      if (laneCenter + glyph.laneHalfHeight < bounds.laneMin) continue;
+      if (laneCenter - glyph.laneHalfHeight > bounds.laneMax) continue;
+      if (noteMs + glyph.msHalfWidth < bounds.msMin) continue;
+      if (noteMs - glyph.msHalfWidth > bounds.msMax) continue;
+      selected.add(noteId(note));
+      continue;
+    }
+
+    if (lane < bounds.laneMin || lane > bounds.laneMax) continue;
     if (noteMs >= bounds.msMin && noteMs <= bounds.msMax) {
       selected.add(noteId(note));
     }
