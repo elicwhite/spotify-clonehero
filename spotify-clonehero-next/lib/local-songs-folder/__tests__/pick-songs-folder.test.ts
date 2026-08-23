@@ -67,12 +67,16 @@ describe('picking a different Songs folder', () => {
     await expect(getCachedSongsDirectoryHandle()).resolves.toBe(picked);
   });
 
-  it('shows no alert: this picker is one the user chose', async () => {
-    const {pickSongsDirectory} = await loadSongsFolder();
-    pickerReturning(grantedHandle('Songs'));
+  it('reaches the picker with no dialog in between', async () => {
+    // A dialog before the picker ends the transient user activation, and
+    // Chrome then refuses `showDirectoryPicker` with a SecurityError.
+    const {tryGetSongsDirectoryHandle} = await loadSongsFolder();
+    const picked = grantedHandle('Songs');
+    const picker = pickerReturning(picked);
 
-    await pickSongsDirectory();
+    await expect(tryGetSongsDirectoryHandle()).resolves.toBe(picked);
 
+    expect(picker).toHaveBeenCalledTimes(1);
     expect(window.alert).not.toHaveBeenCalled();
   });
 

@@ -43,16 +43,6 @@ export async function pickSongsDirectory(): Promise<FileSystemDirectoryHandle | 
   return handle;
 }
 
-async function promptForSongsDirectory(): Promise<FileSystemDirectoryHandle | null> {
-  // This picker is not one the user asked for: it interrupts a download or a
-  // scan that needs a folder it does not have. The picker itself names no
-  // folder, so the alert says which one to select. A picker the user chose
-  // from a menu needs no such warning.
-  alert('Select your Songs directory');
-
-  return await pickSongsDirectory();
-}
-
 /**
  * Try to recover a previously-picked Songs directory handle from idb-keyval
  * without showing the picker. Returns the handle only if read/write permission
@@ -122,11 +112,14 @@ async function recoverStoredHandle({
  * The Songs folder, from wherever it can be had: the stored handle if there is
  * one, otherwise whatever the user picks. Both paths cache the handle
  * themselves, so this is only the choice between them.
+ *
+ * Nothing may show a modal dialog on the way to the picker. Chrome ends the
+ * transient user activation when a dialog closes, and `showDirectoryPicker`
+ * then refuses with a SecurityError, which fails the download the click asked
+ * for. The button the user pressed says which folder the picker wants.
  */
 export async function tryGetSongsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
-  return (
-    (await getCachedSongsDirectoryHandle()) ?? (await promptForSongsDirectory())
-  );
+  return (await getCachedSongsDirectoryHandle()) ?? (await pickSongsDirectory());
 }
 
 type InstalledChartsResponse = {
