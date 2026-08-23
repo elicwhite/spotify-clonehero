@@ -2,37 +2,28 @@
  * Resolved canonical URL for the deployed site.
  *
  * Used by Next's `metadataBase` so relative `og:image` / `twitter:image`
- * paths get upgraded to absolute URLs. Without this, link-unfurl
- * services (Discord, Slack, Bluesky) refuse to load the preview image
- * and the card shows text only.
+ * paths get upgraded to absolute URLs. Link-unfurl services (Discord, Slack,
+ * Bluesky) refuse a preview image they cannot fetch, so a wrong value here
+ * costs every social card its image.
  *
- * Resolution order:
- *   1. `NEXT_PUBLIC_SITE_URL` — explicit canonical (e.g.
- *      `https://musiccharts.tools`). Always preferred when set.
- *   2. `VERCEL_PROJECT_PRODUCTION_URL` (production builds only) — the
- *      canonical project domain Vercel assigns (e.g. `my-app.vercel.app`).
- *      Public; not behind deployment protection.
- *   3. `VERCEL_URL` — deployment-specific subdomain (e.g.
- *      `my-app-abc123-team.vercel.app`). On most projects this URL sits
- *      behind Vercel's deployment-protection auth wall, which means
- *      Discord can fetch the page (via the canonical) but not the
- *      og:image (against the deployment subdomain). Used as a last-resort
- *      fallback for preview deployments where nothing else is set.
- *   4. localhost:3000 — dev fallback. Discord doesn't unfurl localhost
- *      anyway; this exists so `metadataBase` is always a valid URL.
+ * The domain is a constant because it is a fact about this project, and
+ * because metadata is baked in at build time, where a value read from the
+ * environment can go missing without anything failing.
+ *
+ * `NEXT_PUBLIC_SITE_URL` overrides it, for a preview deployment that must
+ * unfurl against its own domain. Development answers localhost, which no
+ * unfurl service will fetch either, but which keeps `metadataBase` valid.
  */
+const CANONICAL_SITE_URL = 'https://musiccharts.tools';
+
 export function getSiteUrl(): URL {
-  if (process.env['NEXT_PUBLIC_SITE_URL']) {
-    return new URL(process.env['NEXT_PUBLIC_SITE_URL']);
+  const override = process.env['NEXT_PUBLIC_SITE_URL'];
+  if (override) {
+    return new URL(override);
   }
-  if (
-    process.env['VERCEL_ENV'] === 'production' &&
-    process.env['VERCEL_PROJECT_PRODUCTION_URL']
-  ) {
-    return new URL(`https://${process.env['VERCEL_PROJECT_PRODUCTION_URL']}`);
-  }
-  if (process.env['VERCEL_URL']) {
-    return new URL(`https://${process.env['VERCEL_URL']}`);
-  }
-  return new URL('http://localhost:3000');
+  return new URL(
+    process.env.NODE_ENV === 'production'
+      ? CANONICAL_SITE_URL
+      : 'http://localhost:3000',
+  );
 }
