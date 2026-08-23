@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import {getSentryEnvironment, isSentryEnabled} from '@/lib/sentry/environment';
 import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
 import {markReplayRegistered} from '@/lib/sentry/replay';
+import {identifySession} from '@/lib/sentry/session-id';
 import {attachStorageContext} from '@/lib/sentry/storage-context';
 import {
   filterTasteBreadcrumb,
@@ -72,6 +73,9 @@ Sentry.init({
   beforeBreadcrumb: breadcrumb =>
     filterTasteBreadcrumb(breadcrumb, currentPathname()),
 });
+
+// How many browsers an issue reached, which the event count alone cannot say.
+identifySession();
 
 // A Chrome eviction destroys the user's chart projects and is reported as
 // "my songs are gone", never as a quota figure. Reading the quota here puts
