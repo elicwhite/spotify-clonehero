@@ -111,18 +111,22 @@ import {
 } from '@/lib/drum-transcription/pipeline/repredict';
 import type {DecodedOnsetsFile} from '@/lib/drum-transcription/ml/types';
 import {useChartEditorContext} from '../ChartEditorContext';
+import {noteMenuActions} from './noteMenuActions';
 import ContextMenuPopover, {
   useDismissOnOutsidePointerDown,
   type ContextMenuItem,
 } from '../ContextMenuPopover';
+import {usesFretEditing} from '@/lib/chart-edit';
 import {getSelectedIds, selectRenderDoc} from '@/lib/chart-editor-core';
 import {
   entityContextFromScope,
   isTrackScope,
   localNoteIdsForTrack,
+  scopePaneKey,
   trackKeyId,
   trackQualifiedNoteId,
   trackKeyFromScope,
+  trackScope,
 } from '../scope';
 import {availableTrackKeys} from '@/lib/chart-editor-core/trackInventory';
 import {toast} from 'sonner';
@@ -139,8 +143,6 @@ import {
   MoveTempoMarkerCommand,
   CommitTempoCandidateCommand,
   RephaseDownbeatsCommand,
-  ToggleFlagCommand,
-  SetNoteTechniqueCommand,
   ResizeNotesCommand,
   PlaceDownbeatCommand,
   MoveTimeSignatureCommand,
@@ -188,10 +190,7 @@ import {
 } from './tempoHitTest';
 import {
   extractPianoRollNotes,
-  isGuitarBassSchema,
-  techniqueForFlags,
   lanesForSchema,
-  type FretTechnique,
   type PianoRollNote,
 } from './notes';
 import {buildBeatGrid, barBeatAtTick} from './scene';
@@ -1004,7 +1003,7 @@ export default function PianoRollTimeline({
             Math.max(
               rowMax,
               note.tick +
-                (isGuitarBassSchema(row.schema) ? (note.length ?? 0) : 0),
+                (usesFretEditing(row.schema) ? (note.length ?? 0) : 0),
             ),
           max,
         ),
@@ -1866,6 +1865,61 @@ export default function PianoRollTimeline({
     [panelGeometry],
   );
 
+  /**
+   * The row under `y` and the track an interaction there targets.
+   *
+   * Every note-lane gesture needs the same pair, and each one used to derive
+   * it inline with its own copy of `row?.row.key ?? trackKeyFromScope(...)`.
+   * Four copies is how the scope-claim below came to be missing from the
+   * right-click path, so they resolve through here instead.
+   *
+   * `row` is null outside the stacked layout (where the panel is one track
+   * and the active scope names it) and also for a y between rows in it —
+   * callers that must not act on "no row" check `row` themselves, since a
+   * pointerdown bails there while a context menu still has markers to offer.
+   */
+  const resolveInteractionTrack = useCallback(
+    (
+      y: number,
+    ): {row: TrackRowGeometry | null; trackKey: TrackKey | undefined} => {
+      const row = stackedRowAtY(y);
+      return {
+        row,
+        trackKey:
+          row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope),
+      };
+    },
+    [stackedRowAtY],
+  );
+
+  /**
+   * Last-interacted semantics, matching `HighwayLane.handleMouseDown`: a
+   * committing gesture in a stacked row makes that row's track the active
+   * scope.
+   *
+   * Selection ids are stored track-qualified, and everything downstream of
+   * the selection — the Delete/Backspace hotkey, the Note Inspector,
+   * keyboard note entry — resolves them through `activeScope`. A gesture
+   * that files ids under one track while the scope names another leaves
+   * them unreachable: `activeNoteIds` returns nothing and Delete silently
+   * does nothing.
+   *
+   * Only gestures that change the selection claim. Hover must not, or
+   * moving the pointer across rows would retarget the keyboard.
+   */
+  const claimRow = useCallback(
+    (row: TrackRowGeometry | null): void => {
+      if (!row) return;
+      const scope = editStateRef.current.activeScope;
+      if (scopePaneKey(scope) === trackKeyId(row.row.key)) return;
+      dispatch({
+        type: 'SET_ACTIVE_SCOPE',
+        scope: trackScope(row.row.key.instrument, row.row.key.difficulty),
+      });
+    },
+    [dispatch],
+  );
+
   const stackedRowForKey = useCallback(
     (trackKey: TrackKey): TrackRowGeometry | null => {
       const g = panelGeometry();
@@ -1888,7 +1942,7 @@ export default function PianoRollTimeline({
         laneH: row.laneH,
         laneCount: row.row.lanes.length,
       };
-      const part = isGuitarBassSchema(rowScene.schema)
+      const part = usesFretEditing(rowScene.schema)
         ? pickNotePartAt(
             rowScene.notes,
             {
@@ -1928,7 +1982,7 @@ export default function PianoRollTimeline({
       if (stackedPianoRollRef.current && scene.rows.length > 1) {
         return pickStackedAt(x, y)?.note ?? null;
       }
-      if (isGuitarBassSchema(scene.schema)) {
+      if (usesFretEditing(scene.schema)) {
         return (
           pickNotePartAt(
             scene.notes,
@@ -1967,7 +2021,7 @@ export default function PianoRollTimeline({
       if (stackedPianoRollRef.current && scene.rows.length > 1) {
         return pickStackedAt(x, y)?.part ?? null;
       }
-      if (!isGuitarBassSchema(scene.schema)) return null;
+      if (!usesFretEditing(scene.schema)) return null;
       return pickNotePartAt(
         scene.notes,
         {
@@ -2466,11 +2520,10 @@ export default function PianoRollTimeline({
 
       const st = editStateRef.current;
       const tool = st.activeTool;
-      const row = stacked ? stackedRowAtY(y) : null;
+      const {row, trackKey: interactionTrackKey} = resolveInteractionTrack(y);
       if (stacked && !row) return;
+      claimRow(row);
       const interactionScene = row ? sceneForTrackRow(scene, row.row) : scene;
-      const interactionTrackKey =
-        row?.row.key ?? trackKeyFromScope(st.activeScope);
       const interactionLaneGeometry = row
         ? {
             laneTop: row.laneTop,
@@ -2600,7 +2653,8 @@ export default function PianoRollTimeline({
       panelGeometry,
       pickAt,
       pickPartAt,
-      stackedRowAtY,
+      claimRow,
+      resolveInteractionTrack,
       seekTo,
       seekZone,
       selectLyric,
@@ -2985,9 +3039,9 @@ export default function PianoRollTimeline({
       // Paint-erase while dragging with the erase tool.
       if (mode === 'erase') {
         const hit = pickAt(x, y);
-        const row = stacked ? stackedRowAtY(y) : null;
-        const trackKey =
-          row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope);
+        // No claim: this runs mid-drag, and the pointerdown that started the
+        // erase already claimed the row it began in.
+        const {row, trackKey} = resolveInteractionTrack(y);
         const eraseScene = row ? sceneForTrackRow(scene, row.row) : scene;
         if (hit && trackKey) {
           executeCommand(
@@ -3171,6 +3225,7 @@ export default function PianoRollTimeline({
       pickPartAt,
       stackedRowForKey,
       stackedRowAtY,
+      resolveInteractionTrack,
       seekTo,
       seekZone,
       setGhost,
@@ -3919,8 +3974,10 @@ export default function PianoRollTimeline({
     [executeCommand, capabilities, commitBarLinePlan, snappedTickAt],
   );
 
-  /** Build the note context menu (§10): cymbal switch + delete, selection-
-   *  aware. Selecting the clicked note first when it isn't already selected. */
+  /** Build the note context menu (§10). This owns only the selection
+   *  question — the clicked note becomes the selection when it wasn't
+   *  already part of it — and hands the rest to `noteMenuActions`, which
+   *  decides which items a selection earns. */
   const buildNoteMenu = useCallback(
     (
       scene: ChartScene,
@@ -3951,77 +4008,22 @@ export default function PianoRollTimeline({
       const targets = targetIds
         .map(id => byId.get(id))
         .filter((n): n is PianoRollNote => n !== undefined);
-      const legalTargets = targets.filter(n => scene.lanes[n.lane]?.cymbalOk);
-      const cymbalApplicable = legalTargets.length > 0;
-      const commonCymbal =
-        cymbalApplicable && legalTargets.every(n => n.cymbal);
 
-      const items: MenuItem[] = [];
-      if (isGuitarBassSchema(scene.schema)) {
-        const techniques: FretTechnique[] = ['natural', 'strum', 'hopo', 'tap'];
-        for (const technique of techniques) {
-          const allMatch = targets.every(
-            n => techniqueForFlags(n.flags ?? 0) === technique,
-          );
-          items.push({
-            label:
-              technique === 'natural'
-                ? 'Natural (auto)'
-                : technique === 'hopo'
-                  ? 'HOPO'
-                  : technique[0].toUpperCase() + technique.slice(1),
-            checked: allMatch,
-            onSelect: () => {
-              if (commandTrackKey && scene.schema) {
-                executeCommand(
-                  new SetNoteTechniqueCommand(
-                    targetIds,
-                    technique,
-                    commandTrackKey,
-                    scene.schema,
-                  ),
-                );
-              }
-            },
-          });
-        }
-      }
-      if (cymbalApplicable) {
-        items.push({
-          label: commonCymbal ? 'Switch to tom' : 'Switch to cymbal',
-          onSelect: () => {
-            if (commandTrackKey) {
-              executeCommand(
-                new ToggleFlagCommand(
-                  targetIds,
-                  'cymbal',
-                  commandTrackKey,
-                  scene.schema ?? drums4LaneSchema,
-                ),
-              );
-            }
-          },
-        });
-      }
-      items.push({
-        label:
-          targetIds.length > 1
-            ? `Delete ${targetIds.length} notes`
-            : 'Delete note',
-        danger: true,
-        onSelect: () => {
-          if (commandTrackKey) {
-            executeCommand(
-              new DeleteNotesCommand(
-                new Set(targetIds),
-                commandTrackKey,
-                scene.schema ?? undefined,
-              ),
-            );
-          }
-        },
-      });
-      return items;
+      // Which items exist, which notes each one covers, and what command each
+      // one runs are all decided in `noteMenuActions`. This only turns them
+      // into menu entries.
+      if (!scene.schema || !commandTrackKey) return [];
+      const target = commandTrackKey;
+      return noteMenuActions({
+        schema: scene.schema,
+        targets,
+        resolution: scene.resolution,
+      }).map(action => ({
+        label: action.label,
+        ...(action.checked === undefined ? {} : {checked: action.checked}),
+        ...(action.danger === undefined ? {} : {danger: action.danger}),
+        onSelect: () => executeCommand(action.makeCommand(target)),
+      }));
     },
     [dispatch, executeCommand],
   );
@@ -4408,15 +4410,18 @@ export default function PianoRollTimeline({
       // Note lane (§10). Suppressed while a class-(b) structural preview is up —
       // its items (delete / cymbal toggle) execute against the committed doc,
       // which the read-only preview contract forbids editing.
-      const row = stacked ? stackedRowAtY(y) : null;
+      const {row, trackKey: noteTrackKey} = resolveInteractionTrack(y);
       const hit = pickAt(x, y);
       if (isStructuralPreview(editStateRef.current)) {
         setMenu(null);
         return;
       }
+      // `buildNoteMenu` selects the clicked note, so this claims for the same
+      // reason a left-click does — a right-click reaches here without ever
+      // passing through `handlePointerDown`, which returns early on any
+      // non-left button.
+      claimRow(row);
       const noteScene = row ? sceneForTrackRow(scene, row.row) : scene;
-      const noteTrackKey =
-        row?.row.key ?? trackKeyFromScope(editStateRef.current.activeScope);
       const items: MenuItem[] = [];
       if (hit && capabilities.selectable.has('note')) {
         items.push(...buildNoteMenu(noteScene, hit, noteTrackKey));
@@ -4459,7 +4464,8 @@ export default function PianoRollTimeline({
       openStackedViewMenu,
       panelGeometry,
       pickAt,
-      stackedRowAtY,
+      claimRow,
+      resolveInteractionTrack,
       pointFromEvent,
     ],
   );

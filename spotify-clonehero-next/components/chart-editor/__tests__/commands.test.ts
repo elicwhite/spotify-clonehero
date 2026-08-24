@@ -25,6 +25,8 @@ import {
   MoveEntitiesCommand,
   RenameSectionCommand,
   ToggleFlagCommand,
+  SetFlagCommand,
+  SetNoteLengthCommand,
   SetNoteTechniqueCommand,
   ResizeNotesCommand,
   noteId,
@@ -143,6 +145,179 @@ describe('command execute + snapshot-restore', () => {
     });
   });
 
+  describe('SetNoteLengthCommand', () => {
+    const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+
+    /** Guitar track with three green notes at ragged tail lengths. */
+    function guitarDoc(): ChartDocument {
+      const doc = makeFixtureDoc();
+      doc.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = doc.parsedChart.trackData[1];
+      addNote(guitar, {tick: 0, type: noteTypes.green}, guitarSchema);
+      addNote(
+        guitar,
+        {tick: 480, type: noteTypes.red, length: 50},
+        guitarSchema,
+      );
+      addNote(
+        guitar,
+        {tick: 960, type: noteTypes.yellow, length: 9999},
+        guitarSchema,
+      );
+      return doc;
+    }
+
+    const IDS = [
+      noteId({tick: 0, type: noteTypes.green}),
+      noteId({tick: 480, type: noteTypes.red}),
+      noteId({tick: 960, type: noteTypes.yellow}),
+    ];
+
+    function lengths(doc: ChartDocument): number[] {
+      return listNotes(doc.parsedChart.trackData[1], guitarSchema)
+        .sort((a, b) => a.tick - b.tick)
+        .map(n => n.length);
+    }
+
+    it('drives a ragged selection to one absolute length', () => {
+      const res = guitarDoc().parsedChart.resolution;
+      const after = new SetNoteLengthCommand(
+        IDS,
+        res * 2,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(guitarDoc());
+      expect(lengths(after)).toEqual([res * 2, res * 2, res * 2]);
+    });
+
+    it('removes every tail when the length is zero', () => {
+      const after = new SetNoteLengthCommand(
+        IDS,
+        0,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(guitarDoc());
+      expect(lengths(after)).toEqual([0, 0, 0]);
+    });
+
+    it('leaves notes outside the selection alone', () => {
+      const after = new SetNoteLengthCommand(
+        [IDS[0]],
+        240,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(guitarDoc());
+      expect(lengths(after)).toEqual([240, 50, 9999]);
+    });
+
+    it('is a no-op on a schema with no sustain', () => {
+      // Drum hits have no tail; the guard keeps a stray call from writing one.
+      const before = makeFixtureDoc();
+      const after = new SetNoteLengthCommand(
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        480,
+        DRUMS_KEY,
+        drums4LaneSchema,
+      ).execute(before);
+      expectDocsEqual(after, before);
+    });
+
+    it('leaves the input doc untouched', () => {
+      const before = guitarDoc();
+      const pristine = guitarDoc();
+      new SetNoteLengthCommand(IDS, 480, GUITAR_KEY, guitarSchema).execute(
+        before,
+      );
+      expect(lengths(before)).toEqual(lengths(pristine));
+    });
+  });
+
+  describe('SetFlagCommand', () => {
+    /** Red at 480 already accented, blue at 1440 not — the mixed selection a
+     *  toggle gets wrong. */
+    function mixedAccentDoc(): ChartDocument {
+      const doc = makeFixtureDoc();
+      return new ToggleFlagCommand(
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        'accent',
+        DRUMS_KEY,
+      ).execute(doc);
+    }
+
+    const MIXED = [
+      noteId({tick: 480, type: noteTypes.redDrum}),
+      noteId({tick: 1440, type: noteTypes.blueDrum}),
+    ];
+
+    it('adds the flag to every target without inverting the ones that had it', () => {
+      const after = new SetFlagCommand(
+        MIXED,
+        'accent',
+        true,
+        DRUMS_KEY,
+      ).execute(mixedAccentDoc());
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      for (const tick of [480, 1440]) {
+        const note = notes.find(n => n.tick === tick)!;
+        expect(!!(note.flags & noteFlags.accent)).toBe(true);
+      }
+    });
+
+    it('removes the flag from every target, including ones that lacked it', () => {
+      const after = new SetFlagCommand(
+        MIXED,
+        'accent',
+        false,
+        DRUMS_KEY,
+      ).execute(mixedAccentDoc());
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      for (const tick of [480, 1440]) {
+        const note = notes.find(n => n.tick === tick)!;
+        expect(!!(note.flags & noteFlags.accent)).toBe(false);
+      }
+    });
+
+    it('adding a dynamic clears the other one across a mixed selection', () => {
+      const after = new SetFlagCommand(MIXED, 'ghost', true, DRUMS_KEY).execute(
+        mixedAccentDoc(),
+      );
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      for (const tick of [480, 1440]) {
+        const note = notes.find(n => n.tick === tick)!;
+        expect(!!(note.flags & noteFlags.ghost)).toBe(true);
+        expect(!!(note.flags & noteFlags.accent)).toBe(false);
+      }
+    });
+
+    it('keeps the cymbal flag when ghosting a cymbal', () => {
+      // The fixture's yellow at 960 is a cymbal. Ghost-on-cymbal is 7.7% of
+      // drum charts in the corpus, so it must survive intact.
+      const after = new SetFlagCommand(
+        [noteId({tick: 960, type: noteTypes.yellowDrum})],
+        'ghost',
+        true,
+        DRUMS_KEY,
+      ).execute(makeFixtureDoc());
+      const yellow = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 960,
+      )!;
+      expect(!!(yellow.flags & noteFlags.cymbal)).toBe(true);
+      expect(!!(yellow.flags & noteFlags.ghost)).toBe(true);
+    });
+
+    it('leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      new SetFlagCommand(
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        'ghost',
+        true,
+        DRUMS_KEY,
+      ).execute(before);
+      expectInputUntouched(before, pristine);
+    });
+  });
+
   describe('ToggleFlagCommand', () => {
     it('toggles cymbal on and leaves the input doc untouched', () => {
       const pristine = makeFixtureDoc();
@@ -166,6 +341,24 @@ describe('command execute + snapshot-restore', () => {
         n => n.tick === 480,
       )!;
       expect(!!(red.flags & noteFlags.accent)).toBe(true);
+    });
+
+    it('toggling accent on a ghosted note clears the ghost', () => {
+      const before = makeFixtureDoc();
+      const redId = noteId({tick: 480, type: noteTypes.redDrum});
+      const ghosted = new ToggleFlagCommand(
+        [redId],
+        'ghost',
+        DRUMS_KEY,
+      ).execute(before);
+      const after = new ToggleFlagCommand([redId], 'accent', DRUMS_KEY).execute(
+        ghosted,
+      );
+      const red = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 480,
+      )!;
+      expect(!!(red.flags & noteFlags.accent)).toBe(true);
+      expect(!!(red.flags & noteFlags.ghost)).toBe(false);
     });
 
     // Plan 0067 §5: ToggleFlagCommand takes the schema explicitly, so

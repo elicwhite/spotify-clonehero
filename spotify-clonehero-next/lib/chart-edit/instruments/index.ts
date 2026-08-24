@@ -48,6 +48,25 @@ export {bassSchema, guitarSchema, keysSchema, rhythmSchema};
  * instrument). Drum tracks pick the 4-lane schema; use
  * `schemaForTrack(track)` if 5-lane needs to be honored.
  */
+/**
+ * Whether the editor gives `schema` the full fret treatment: sustain tails
+ * with a resize handle, articulation glyphs, and the menu items for both.
+ *
+ * Deliberately narrower than `supportsSustain`, which every five-fret schema
+ * sets — rhythm and keys share that schema but keep the generic piano-roll
+ * behavior. This is the one predicate for that decision, so the renderer,
+ * the context menu and the note-length commands cannot drift into
+ * disagreeing about which tracks have sustains. They had: the menu asked
+ * `supportsSustain` while the renderer and the resize command asked for
+ * guitar-or-bass, so a rhythm track would have been offered a tail that
+ * neither could draw nor adjust.
+ */
+export function usesFretEditing(
+  schema: InstrumentSchema | null | undefined,
+): boolean {
+  return schema?.instrument === 'guitar' || schema?.instrument === 'bass';
+}
+
 export function schemaForInstrument(
   instrument: Instrument,
 ): InstrumentSchema | null {

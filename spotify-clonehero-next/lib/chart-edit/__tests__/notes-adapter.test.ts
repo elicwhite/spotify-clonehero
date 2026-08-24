@@ -108,7 +108,7 @@ describe.each([
 
   it('toggleFlagBits on a binding with no appliesTo is a plain XOR', () => {
     const binding = schema.flagBindings.find(
-      b => !b.appliesTo && !b.complementFlag,
+      b => !b.appliesTo && !b.complementFlag && !b.exclusiveGroup,
     );
     if (!binding) return; // schema has no unrestricted plain-toggle flag
     const bit = noteFlags[binding.flag];

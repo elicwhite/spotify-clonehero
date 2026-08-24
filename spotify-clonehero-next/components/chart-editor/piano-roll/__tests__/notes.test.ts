@@ -4,6 +4,8 @@ import {
   addNote,
   drums4LaneSchema,
   guitarSchema,
+  flagAppliesTo,
+  laneToType,
 } from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {
@@ -64,11 +66,12 @@ describe('extractPianoRollNotes (drums)', () => {
 describe('lanesForSchema (drums)', () => {
   const lanes = lanesForSchema(drums4LaneSchema);
 
-  test('kick and red lanes are not cymbal-legal', () => {
-    expect(lanes[0].cymbalOk).toBe(false); // red
-    expect(lanes[1].cymbalOk).toBe(true); // yellow
-    expect(lanes[4].cymbalOk).toBe(false); // kick
-    expect(lanes).toHaveLength(5);
+  test('carries only what the row draws — legality comes from the schema', () => {
+    // Flag legality is deliberately not cached here. Everything that needs
+    // it calls `flagAppliesTo(schema, flag, laneToType(schema, lane))`, the
+    // same pair the mutators enforce, so a lane can never disagree with the
+    // schema it came from.
+    expect(Object.keys(lanes[0]).sort()).toEqual(['color', 'name']);
   });
 
   test('names and colors match the drum palette, unchanged from before', () => {
@@ -128,9 +131,12 @@ describe('extractPianoRollNotes (guitar)', () => {
     ]);
   });
 
-  test('no lane has cymbal legality on a five-fret schema', () => {
-    const lanes = lanesForSchema(guitarSchema);
-    expect(lanes.every(l => l.cymbalOk === false)).toBe(true);
+  test('no five-fret lane can carry a cymbal or a dynamics flag', () => {
+    for (let lane = 0; lane < guitarSchema.lanes.length; lane++) {
+      const type = laneToType(guitarSchema, lane);
+      expect(flagAppliesTo(guitarSchema, 'cymbal', type)).toBe(false);
+      expect(flagAppliesTo(guitarSchema, 'ghost', type)).toBe(false);
+    }
   });
 
   test('retains fret articulation flags and sustain length', () => {

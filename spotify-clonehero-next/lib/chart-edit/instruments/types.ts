@@ -100,6 +100,25 @@ export interface FlagBinding {
    *  when a caller supplies neither, so "not a cymbal" is stored as `tom`
    *  and never as an empty flag set. */
   complementFlag?: NoteFlagName;
+  /**
+   * Name of the mutually-exclusive set this flag belongs to (e.g. drums'
+   * `'dynamics'` over accent/ghost, five-fret's `'technique'` over
+   * strum/hopo/tap). At most one flag in a group is ever set on a note:
+   * setting a second clears the first, and clearing the active one leaves
+   * the group empty.
+   *
+   * Distinct from {@link complementFlag}, which is a two-state pair where
+   * exactly one side is always set. A group can be empty; a complement
+   * pair cannot.
+   *
+   * Nothing here resolves a malformed chart that sets two members at once.
+   * The readers already do: `interpretDrumNote` takes ghost over accent and
+   * `techniqueForFlags` takes tap over HOPO over strum, so such a note
+   * displays consistently, and the first deliberate edit to it goes through
+   * the mutators below and leaves exactly one member set. Collapsing it any
+   * earlier would rewrite bits the user never touched.
+   */
+  exclusiveGroup?: string;
   /** When true, this flag is shared across every note in the same tick's
    *  group rather than per-note (e.g. drums' `flam`, which marks a whole
    *  chord). The note adapter syncs the bit across the group on add/

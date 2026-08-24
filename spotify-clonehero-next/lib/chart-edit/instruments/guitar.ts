@@ -90,9 +90,25 @@ function fiveFretSchema(instrument: Instrument): InstrumentSchema {
     instrument,
     lanes: [OPEN, GREEN, RED, YELLOW, BLUE, ORANGE],
     flagBindings: [
-      {flag: 'strum', label: 'Strum', defaultKey: 's'},
-      {flag: 'hopo', label: 'HOPO', defaultKey: 'h'},
-      {flag: 'tap', label: 'Tap', defaultKey: 't'},
+      // One articulation at a time.
+      {
+        flag: 'strum',
+        label: 'Strum',
+        defaultKey: 's',
+        exclusiveGroup: 'technique',
+      },
+      {
+        flag: 'hopo',
+        label: 'HOPO',
+        defaultKey: 'h',
+        exclusiveGroup: 'technique',
+      },
+      {
+        flag: 'tap',
+        label: 'Tap',
+        defaultKey: 't',
+        exclusiveGroup: 'technique',
+      },
     ],
     laneShiftExcludes: [noteTypes.open],
     supportsSustain: true,

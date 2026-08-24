@@ -15,7 +15,8 @@
  *
  * Flag bindings cover the drum-specific `cymbal` / `accent` / `ghost` /
  * `flam` / `doubleKick` flags. Only flags with a `defaultKey` get a
- * keyboard shortcut and a button in `NoteInspector`.
+ * keyboard shortcut and a button in `NoteInspector`, in this array's
+ * order.
  */
 
 import type {DrumType, NoteType} from '@eliwhite/scan-chart';
@@ -171,6 +172,19 @@ function applyDiscoFlip(track: SchemaTrack): SchemaTrack {
 }
 
 /**
+ * Every drum pad that is struck by hand, i.e. every lane but the kick. This
+ * is the `appliesTo` set for the `accent` / `ghost` dynamics below, and it
+ * covers both the 4- and 5-lane schemas: the extra 5-lane pad reuses
+ * `greenDrum`, so no NoteType is missing here.
+ */
+const DYNAMICS_LEGAL_NOTE_TYPES: NoteType[] = [
+  noteTypes.redDrum,
+  noteTypes.yellowDrum,
+  noteTypes.blueDrum,
+  noteTypes.greenDrum,
+];
+
+/**
  * Schema for 4-lane drums (red/yellow/blue/green + kick last).
  */
 const DRUM_FLAG_BINDINGS: InstrumentSchema['flagBindings'] = [
@@ -182,8 +196,29 @@ const DRUM_FLAG_BINDINGS: InstrumentSchema['flagBindings'] = [
     defaultOn: true,
     complementFlag: 'tom',
   },
-  {flag: 'accent', label: 'Accent', defaultKey: 'a'},
-  {flag: 'ghost', label: 'Ghost', defaultKey: 's'},
+  // Dynamics. A drum note is neutral, ghosted, or accented -- never both,
+  // which is how the reference implementation models it
+  // (`YARG.Core/Chart/Notes/DrumNote.cs`'s `DrumNoteType` enum) and how
+  // `interpretDrumNote` reads the bits when picking a highway sprite.
+  // `appliesTo` excludes the kick: a kick pedal has no ghosted or accented
+  // articulation to play, and the corpus agrees it is not a real charting
+  // choice -- 150 ghosted kicks across 78,453 charts, against 96,905 ghosts
+  // on cymbals alone. `legalizeFlagBits` strips the bit from a kick, so
+  // those few notes normalize the first time they are edited.
+  {
+    flag: 'accent',
+    label: 'Accent',
+    defaultKey: 'a',
+    appliesTo: DYNAMICS_LEGAL_NOTE_TYPES,
+    exclusiveGroup: 'dynamics',
+  },
+  {
+    flag: 'ghost',
+    label: 'Ghost',
+    defaultKey: 's',
+    appliesTo: DYNAMICS_LEGAL_NOTE_TYPES,
+    exclusiveGroup: 'dynamics',
+  },
   {flag: 'flam', label: 'Flam', groupShared: true},
   {flag: 'doubleKick', label: 'Double Kick', appliesTo: [noteTypes.kick]},
 ];

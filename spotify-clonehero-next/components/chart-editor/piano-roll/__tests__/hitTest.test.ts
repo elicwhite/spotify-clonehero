@@ -39,7 +39,7 @@ function note(
   id: string,
   length = 0,
 ): PianoRollNote {
-  return {tick, lane, cymbal: false, id, length};
+  return {tick, lane, cymbal: false, dynamic: 'none', id, length};
 }
 
 describe('laneAtY', () => {

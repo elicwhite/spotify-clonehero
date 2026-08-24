@@ -20,6 +20,7 @@ import {noteFlags, noteTypes} from '@eliwhite/scan-chart';
 import type {
   ChartDocument,
   ParsedChart,
+  NoteEvent,
   ParsedTrackData,
   DrumNote,
   EntityContext,
@@ -86,11 +87,13 @@ import {
   typeToLane as schemaTypeToLane,
   laneToType as schemaLaneToType,
   toggleFlagBits,
+  setFlagBits,
   listNotes,
   addNote as addSchemaNote,
   removeNote as removeSchemaNote,
   setNoteFlags,
   setNoteLength,
+  usesFretEditing,
   clearTrackContents,
   emptyTrack,
   applyLeadIn,
@@ -210,6 +213,45 @@ function cloneDocWithSections(doc: ChartDocument): ChartDocument {
  *  if the chart doesn't contain that track. */
 function findTargetIndex(doc: ChartDocument, key: TrackKey): number {
   return findTrack(doc, key)?.index ?? -1;
+}
+
+/**
+ * Clone `doc` and run `mutate` on every note of `trackKey`'s track whose
+ * schema id is in `noteIds`.
+ *
+ * Five per-note commands each open with the same eight lines — resolve the
+ * track, bail if it is gone, clone, list the schema's notes, skip the ones
+ * that are not selected — and differ only in the mutation. That skeleton
+ * lives here instead, so a command is its mutation and nothing else.
+ *
+ * `mutate` receives the note as it currently reads plus the track to write
+ * through and the doc's timing, since a length change has to re-derive
+ * `msLength`. Returns `doc` untouched when the track is absent, which is
+ * what makes an edit against a deleted track a no-op rather than a throw.
+ */
+function mutateSelectedNotes(
+  doc: ChartDocument,
+  trackKey: TrackKey,
+  schema: InstrumentSchema,
+  noteIds: Iterable<string>,
+  mutate: (
+    note: NoteEvent,
+    track: ParsedTrackData,
+    timing: ChartTiming,
+  ) => void,
+): ChartDocument {
+  const idx = findTargetIndex(doc, trackKey);
+  if (idx === -1) return doc;
+
+  const newDoc = cloneDocWithTracks(doc, trackKey);
+  const track = newDoc.parsedChart.trackData[idx];
+  const timing = makeChartTiming(newDoc.parsedChart);
+  const idSet = new Set(noteIds);
+  for (const note of listNotes(track, schema)) {
+    if (!idSet.has(schemaNoteId(note.tick, note.type))) continue;
+    mutate(note, track, timing);
+  }
+  return newDoc;
 }
 
 // ---------------------------------------------------------------------------
@@ -577,54 +619,116 @@ export class ToggleFlagCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
+    // Chord-level articulation is a five-fret property, not a property of
+    // every exclusive group: drums' accent/ghost are per-note, so they take
+    // the per-note path below even though they are equally exclusive.
+    if (
+      usesFretEditing(this.schema) &&
+      (this.flag === 'strum' || this.flag === 'hopo' || this.flag === 'tap')
+    ) {
+      return this.executeChordLevel(doc);
+    }
+    return mutateSelectedNotes(
+      doc,
+      this.trackKey,
+      this.schema,
+      this.noteIds,
+      (note, track) => {
+        const bits = toggleFlagBits(
+          this.schema,
+          note.type,
+          note.flags,
+          this.flag,
+        );
+        setNoteFlags(track, note.tick, note.type, bits, this.schema);
+      },
+    );
+  }
+
+  /**
+   * Articulation is a chord-level choice. Selecting one gem and applying
+   * H/T/S updates every gem at that tick, and never leaves contradictory
+   * technique bits behind — so this widens the selection to whole chords
+   * rather than acting note-by-note, which is why it cannot use
+   * `mutateSelectedNotes`.
+   */
+  private executeChordLevel(doc: ChartDocument): ChartDocument {
     const idx = findTargetIndex(doc, this.trackKey);
     if (idx === -1) return doc;
 
     const newDoc = cloneDocWithTracks(doc, this.trackKey);
     const track = newDoc.parsedChart.trackData[idx];
-
     const idSet = new Set(this.noteIds);
     const notes = listNotes(track, this.schema);
-    const isTechnique =
-      this.schema.instrument === 'guitar' || this.schema.instrument === 'bass';
     const techniqueMask = noteFlags.strum | noteFlags.hopo | noteFlags.tap;
-    if (
-      isTechnique &&
-      (this.flag === 'strum' || this.flag === 'hopo' || this.flag === 'tap')
-    ) {
-      // Articulation is a chord-level choice. Selecting one gem and applying
-      // H/T/S updates every gem at that tick, and never leaves contradictory
-      // technique bits behind.
-      const selectedTicks = new Set(
-        notes
-          .filter(n => idSet.has(schemaNoteId(n.tick, n.type)))
-          .map(n => n.tick),
-      );
-      const flagBit = noteFlags[this.flag];
-      for (const tick of selectedTicks) {
-        const chord = notes.filter(n => n.tick === tick);
-        const clear = chord.every(n => (n.flags & flagBit) !== 0);
-        for (const note of chord) {
-          const bits = clear
-            ? note.flags & ~techniqueMask
-            : (note.flags & ~techniqueMask) | flagBit;
-          setNoteFlags(track, note.tick, note.type, bits, this.schema);
-        }
+    const selectedTicks = new Set(
+      notes
+        .filter(n => idSet.has(schemaNoteId(n.tick, n.type)))
+        .map(n => n.tick),
+    );
+    const flagBit = noteFlags[this.flag];
+    for (const tick of selectedTicks) {
+      const chord = notes.filter(n => n.tick === tick);
+      const clear = chord.every(n => (n.flags & flagBit) !== 0);
+      for (const note of chord) {
+        const bits = clear
+          ? note.flags & ~techniqueMask
+          : (note.flags & ~techniqueMask) | flagBit;
+        setNoteFlags(track, note.tick, note.type, bits, this.schema);
       }
-      return newDoc;
     }
-    for (const note of notes) {
-      if (!idSet.has(schemaNoteId(note.tick, note.type))) continue;
-      const bits = toggleFlagBits(
-        this.schema,
-        note.type,
-        note.flags,
-        this.flag,
-      );
-      setNoteFlags(track, note.tick, note.type, bits, this.schema);
-    }
-
     return newDoc;
+  }
+}
+
+/**
+ * Set or clear one flag across a selection, as an explicit end state.
+ *
+ * {@link ToggleFlagCommand} is the wrong tool for a menu item that reads
+ * "Add accent": over a mixed selection a toggle inverts each note
+ * independently, so the notes that already carried the flag lose it. This
+ * command drives every target to the same state instead.
+ *
+ * The bits come from `setFlagBits`, which shares its rules with
+ * `toggleFlagBits` -- including clearing the rest of an exclusive group --
+ * so setting a flag and toggling into the same state write the same mask.
+ */
+export class SetFlagCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.update;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
+
+  constructor(
+    private noteIds: string[],
+    private flag: NoteFlagName,
+    private on: boolean,
+    private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema = drums4LaneSchema,
+  ) {
+    this.description = `${on ? 'Add' : 'Remove'} ${flag} on ${
+      noteIds.length
+    } note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    return mutateSelectedNotes(
+      doc,
+      this.trackKey,
+      this.schema,
+      this.noteIds,
+      (note, track) => {
+        const bits = setFlagBits(
+          this.schema,
+          note.type,
+          note.flags,
+          this.flag,
+          this.on,
+        );
+        setNoteFlags(track, note.tick, note.type, bits, this.schema);
+      },
+    );
   }
 }
 
@@ -697,30 +801,62 @@ export class ResizeNotesCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    if (
-      (this.schema.instrument !== 'guitar' &&
-        this.schema.instrument !== 'bass') ||
-      this.lengthDelta === 0
-    ) {
-      return doc;
-    }
-    const idx = findTargetIndex(doc, this.trackKey);
-    if (idx === -1) return doc;
-    const newDoc = cloneDocWithTracks(doc, this.trackKey);
-    const track = newDoc.parsedChart.trackData[idx];
-    const ids = new Set(this.noteIds);
-    const timing = makeChartTiming(newDoc.parsedChart);
-    for (const note of listNotes(track, this.schema)) {
-      if (!ids.has(schemaNoteId(note.tick, note.type))) continue;
-      setNoteLength(
-        track,
-        note.tick,
-        note.type,
-        note.length + this.lengthDelta,
-        timing,
-      );
-    }
-    return newDoc;
+    if (!usesFretEditing(this.schema) || this.lengthDelta === 0) return doc;
+    return mutateSelectedNotes(
+      doc,
+      this.trackKey,
+      this.schema,
+      this.noteIds,
+      (note, track, timing) =>
+        setNoteLength(
+          track,
+          note.tick,
+          note.type,
+          note.length + this.lengthDelta,
+          timing,
+        ),
+    );
+  }
+}
+
+/**
+ * Set every target note's sustain to one absolute length.
+ *
+ * {@link ResizeNotesCommand} applies a *delta*, which is right for a drag
+ * (every note grows by how far the pointer moved) and wrong for a menu item
+ * that promises a specific tail: over a selection of ragged lengths a delta
+ * leaves them just as ragged. This drives them all to the same length.
+ *
+ * Five-fret only, matching `ResizeNotesCommand` -- drum hits have no sustain.
+ */
+export class SetNoteLengthCommand implements EditCommand {
+  readonly description: string;
+  readonly entityKinds = KIND.note;
+  readonly operations = OP.update;
+  readonly affectedTracks: ReadonlySet<TrackKeyId>;
+
+  constructor(
+    private noteIds: string[],
+    private length: number,
+    private readonly trackKey: TrackKey,
+    private readonly schema: InstrumentSchema,
+  ) {
+    this.description = `${length > 0 ? 'Add' : 'Remove'} sustain on ${
+      noteIds.length
+    } note(s)`;
+    this.affectedTracks = singleTrack(trackKey);
+  }
+
+  execute(doc: ChartDocument): ChartDocument {
+    if (!usesFretEditing(this.schema)) return doc;
+    return mutateSelectedNotes(
+      doc,
+      this.trackKey,
+      this.schema,
+      this.noteIds,
+      (note, track, timing) =>
+        setNoteLength(track, note.tick, note.type, this.length, timing),
+    );
   }
 }
 

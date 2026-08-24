@@ -11,6 +11,7 @@
  */
 
 import {
+  usesFretEditing,
   listNotes,
   schemaNoteId,
   typeToLane,
@@ -22,12 +23,9 @@ import {noteFlags} from '@eliwhite/scan-chart';
 /** The guitar/bass-only articulation state shown by the piano roll. */
 export type FretTechnique = 'natural' | 'strum' | 'hopo' | 'tap';
 
-/** The sustain/articulation rendering branch is intentionally limited to
- * guitar and bass. Rhythm/keys may share the five-fret schema, but their
- * piano-roll behavior remains the existing generic path. */
-export function isGuitarBassSchema(schema: InstrumentSchema | null): boolean {
-  return schema?.instrument === 'guitar' || schema?.instrument === 'bass';
-}
+/** The drum-only dynamics state shown by the piano roll. A note is neutral,
+ *  ghosted, or accented -- never two at once. */
+export type DrumDynamic = 'none' | 'ghost' | 'accent';
 
 /** True while any visible part of a note span overlaps the piano-roll view.
  * Guitar/bass sustains use the note end, not just the head, so a long tail
@@ -54,6 +52,15 @@ export function techniqueForFlags(flags: number): FretTechnique {
   return 'natural';
 }
 
+/** Resolve the persisted flag mask to one dynamics state. The ghost > accent
+ * precedence for a malformed both-bits note matches `interpretDrumNote`, so a
+ * piano-roll glyph and its highway sprite never disagree. */
+export function dynamicForFlags(flags: number): DrumDynamic {
+  if (flags & noteFlags.ghost) return 'ghost';
+  if (flags & noteFlags.accent) return 'accent';
+  return 'none';
+}
+
 /** A note projected onto the piano roll's note lanes. */
 export interface PianoRollNote {
   /** Tick position (for tempo-map → ms conversion at render time). */
@@ -66,6 +73,9 @@ export interface PianoRollNote {
   lane: number;
   /** True when this hit is a cymbal (triangle glyph); false for tom/kick. */
   cymbal: boolean;
+  /** Drum dynamics state driving the glyph's size and outline. Always
+   *  `'none'` on a five-fret projection, which has no dynamics. */
+  dynamic: DrumDynamic;
   /** Shared selection id (`tick:type`) — matches `state.selection`. */
   id: string;
   /** Guitar/bass flag mask. Omitted for drum notes to preserve the drum
@@ -81,8 +91,6 @@ export interface PianoRollLane {
   name: string;
   /** Fill color for this lane's note glyphs and header chip. */
   color: string;
-  /** True when a note in this lane may legally carry the cymbal flag. */
-  cymbalOk: boolean;
 }
 
 /**
@@ -91,16 +99,11 @@ export interface PianoRollLane {
  * `PianoRollNote.lane` indexes directly into this array.
  */
 export function lanesForSchema(schema: InstrumentSchema): PianoRollLane[] {
-  const cymbalBinding = schema.flagBindings.find(b => b.flag === 'cymbal');
   return [...schema.lanes]
     .sort((a, b) => a.index - b.index)
     .map(lane => ({
       name: lane.label,
       color: lane.pianoRollColor ?? lane.color,
-      cymbalOk:
-        !!cymbalBinding &&
-        (!cymbalBinding.appliesTo ||
-          cymbalBinding.appliesTo.includes(lane.noteType)),
     }));
 }
 
@@ -115,6 +118,7 @@ export function extractPianoRollNotes(
 ): PianoRollNote[] {
   if (!track || !schema) return [];
   const laneCount = schema.lanes.length;
+  const drumSchema = schema.instrument === 'drums';
   const out: PianoRollNote[] = [];
   for (const note of listNotes(track, schema)) {
     const lane = typeToLane(schema, note.type);
@@ -128,8 +132,9 @@ export function extractPianoRollNotes(
       tick: note.tick,
       lane,
       cymbal: !!(note.flags & noteFlags.cymbal) && legalCymbal,
+      dynamic: drumSchema ? dynamicForFlags(note.flags) : 'none',
       id: schemaNoteId(note.tick, note.type),
-      ...(isGuitarBassSchema(schema)
+      ...(usesFretEditing(schema)
         ? {flags: note.flags, length: note.length}
         : {}),
     });

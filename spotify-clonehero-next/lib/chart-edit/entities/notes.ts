@@ -17,7 +17,11 @@ import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
 import type {NoteType} from '@eliwhite/scan-chart';
 import type {NoteEvent, ParsedChart, ParsedTrackData} from '../types';
 import {applyEventTiming, makeChartTiming, type ChartTiming} from '../retime';
-import type {InstrumentSchema, NoteFlagName} from '../instruments/types';
+import type {
+  FlagBinding,
+  InstrumentSchema,
+  NoteFlagName,
+} from '../instruments/types';
 
 /** Reverse map of scan-chart's `noteTypes` (value → key name), built once.
  *  Note ids encode this name (e.g. `"480:redDrum"`) — scan-chart's own key
@@ -166,6 +170,74 @@ export function legalizeFlagBits(
   return result;
 }
 
+/**
+ * Whether `flag` may legally be set on a note of `type` under `schema` --
+ * the `appliesTo` rule, and the one place it is spelled. A flag with no
+ * `appliesTo` applies to every lane; an unknown flag applies to none.
+ *
+ * Exported because the views need the same answer the mutators enforce:
+ * the piano roll greys a cymbal glyph and withholds the accent/ghost menu
+ * items on exactly the lanes `setFlagBits` would refuse.
+ */
+export function flagAppliesTo(
+  schema: InstrumentSchema,
+  flag: NoteFlagName,
+  type: NoteType,
+): boolean {
+  const binding = schema.flagBindings.find(b => b.flag === flag);
+  return !!binding && (!binding.appliesTo || binding.appliesTo.includes(type));
+}
+
+/** Bitmask of every flag sharing `binding`'s exclusive group, or 0 when it
+ *  has none. */
+function exclusiveGroupMask(
+  schema: InstrumentSchema,
+  binding: FlagBinding,
+): number {
+  if (!binding.exclusiveGroup) return 0;
+  let mask = 0;
+  for (const b of schema.flagBindings) {
+    if (b.exclusiveGroup === binding.exclusiveGroup) mask |= noteFlags[b.flag];
+  }
+  return mask;
+}
+
+/**
+ * The bits `currentBits` becomes when `flag` is explicitly set or cleared on
+ * a note of `type`. Every flag rule lives here, and {@link toggleFlagBits}
+ * is defined in terms of it.
+ *
+ *  - A flag whose `appliesTo` excludes `type` is cleared and never set.
+ *  - A `complementFlag` pair always ends with exactly one side set.
+ *  - Setting a flag in an `exclusiveGroup` clears the rest of that group, so
+ *    accenting a ghosted note un-ghosts it rather than producing a note that
+ *    is both. Clearing one touches only that flag -- it is not a licence to
+ *    scrub sibling bits the caller did not name.
+ */
+export function setFlagBits(
+  schema: InstrumentSchema,
+  type: NoteType,
+  currentBits: number,
+  flag: NoteFlagName,
+  on: boolean,
+): number {
+  const binding = schema.flagBindings.find(b => b.flag === flag);
+  if (!binding) return currentBits;
+  const legal = flagAppliesTo(schema, flag, type);
+  const bit = noteFlags[flag];
+
+  if (binding.complementFlag) {
+    const complementBit = noteFlags[binding.complementFlag];
+    const cleared = currentBits & ~bit & ~complementBit;
+    if (!legal) return cleared;
+    return on ? cleared | bit : cleared | complementBit;
+  }
+
+  if (!legal) return currentBits & ~bit;
+  const mask = exclusiveGroupMask(schema, binding) | bit;
+  return on ? (currentBits & ~mask) | bit : currentBits & ~bit;
+}
+
 /** Flag bindings of `schema` marked to sync across every note sharing a
  *  tick (e.g. drums' `flam`), as their `noteFlags` bits. */
 function groupSharedBits(schema: InstrumentSchema): number[] {
@@ -190,15 +262,11 @@ export function defaultFlagBits(
 }
 
 /**
- * Toggle `flag` on `currentBits` for a note of `type`, per `schema`'s
- * binding. A no-op (bits stay clear) when `flag`'s `appliesTo` excludes
- * `type` (lane legality, e.g. kick/red can never be a cymbal). Bindings
- * with `complementFlag` toggle between the two states of the pair (flag →
- * complement → flag → …, matching drums' cymbal/tom). Guitar/bass technique
- * flags
- * are mutually exclusive: toggling the active technique clears it to natural;
- * toggling another technique replaces the current one. Other flags toggle as
- * a plain bit.
+ * Toggle `flag` on `currentBits` for a note of `type` — the same rules as
+ * {@link setFlagBits}, driven to whichever state the flag is not currently
+ * in. A toggle is a set to the opposite of what is there, so this is that
+ * and nothing more: every legality, complement and exclusive-group rule
+ * lives in one place rather than being restated here.
  */
 export function toggleFlagBits(
   schema: InstrumentSchema,
@@ -206,31 +274,8 @@ export function toggleFlagBits(
   currentBits: number,
   flag: NoteFlagName,
 ): number {
-  const binding = schema.flagBindings.find(b => b.flag === flag);
-  if (!binding) return currentBits;
-  const legal = !binding.appliesTo || binding.appliesTo.includes(type);
-  const bit = noteFlags[flag];
-
-  if (
-    (schema.instrument === 'guitar' || schema.instrument === 'bass') &&
-    (flag === 'strum' || flag === 'hopo' || flag === 'tap')
-  ) {
-    const techniqueMask = noteFlags.strum | noteFlags.hopo | noteFlags.tap;
-    return (currentBits & bit) !== 0
-      ? currentBits & ~techniqueMask
-      : (currentBits & ~techniqueMask) | bit;
-  }
-
-  if (binding.complementFlag) {
-    const complementBit = noteFlags[binding.complementFlag];
-    const cleared = currentBits & ~bit & ~complementBit;
-    if (!legal) return cleared;
-    const wasSet = (currentBits & bit) !== 0;
-    return wasSet ? cleared | complementBit : cleared | bit;
-  }
-
-  if (!legal) return currentBits & ~bit;
-  return currentBits ^ bit;
+  const on = (currentBits & noteFlags[flag]) === 0;
+  return setFlagBits(schema, type, currentBits, flag, on);
 }
 
 // ---------------------------------------------------------------------------

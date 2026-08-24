@@ -335,6 +335,57 @@ describe('parity harness — drum notes', () => {
     setDrumNoteFlags(track, 960, noteTypes.blueDrum, noteFlags.accent);
     assertParity(doc);
   });
+
+  // Plan 0126: a ghost and a cymbal on the same hit. In the .chart format
+  // these are two separate modifier events on one tick (41/42/43 for the
+  // ghost, 66/67/68 for the cymbal), so nothing guarantees a priori that
+  // both survive one round trip. They must: 96,905 notes across 1,870 real
+  // drum charts carry this combination, and it is ordinary hi-hat notation,
+  // not a charting mistake.
+  it.each([
+    ['yellow', noteTypes.yellowDrum],
+    ['blue', noteTypes.blueDrum],
+    ['green', noteTypes.greenDrum],
+  ])('a ghosted %s cymbal survives the round trip', (_name, type) => {
+    const doc = baselineDoc();
+    const track = drumTrack(doc);
+    addDrumNote(
+      track,
+      {tick: 2400, type, flags: noteFlags.cymbal | noteFlags.ghost},
+      makeChartTiming(doc.parsedChart),
+    );
+    assertParity(doc);
+
+    const reparsed = parseDoc(doc);
+    const note = drumTrack(reparsed)
+      .noteEventGroups.flat()
+      .find(n => n.tick === 2400 && n.type === type)!;
+    expect(note.flags & noteFlags.cymbal).not.toBe(0);
+    expect(note.flags & noteFlags.ghost).not.toBe(0);
+  });
+
+  it('an accented cymbal survives the round trip', () => {
+    const doc = baselineDoc();
+    const track = drumTrack(doc);
+    addDrumNote(
+      track,
+      {
+        tick: 2400,
+        type: noteTypes.yellowDrum,
+        flags: noteFlags.cymbal | noteFlags.accent,
+      },
+      makeChartTiming(doc.parsedChart),
+    );
+    assertParity(doc);
+
+    const note = parseDoc(doc)
+      .parsedChart.trackData.flatMap(t =>
+        t.instrument === 'drums' ? t.noteEventGroups.flat() : [],
+      )
+      .find(n => n.tick === 2400)!;
+    expect(note.flags & noteFlags.cymbal).not.toBe(0);
+    expect(note.flags & noteFlags.accent).not.toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

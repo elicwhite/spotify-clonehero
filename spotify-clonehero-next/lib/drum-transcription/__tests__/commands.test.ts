@@ -381,7 +381,10 @@ describe('ToggleFlagCommand', () => {
 // ---------------------------------------------------------------------------
 
 describe('ToggleKickCommand', () => {
-  it('converts a pad note to kick, dropping the cymbal flag', () => {
+  // Both flags are dropped for the same reason: neither is legal on a kick,
+  // so `legalizeFlagBits` clears them as the note changes lane. A kick pedal
+  // has no cymbal to hit and no accented articulation to play.
+  it('converts a pad note to kick, dropping the cymbal and accent flags', () => {
     const doc = makeDoc([
       {
         tick: 480,
@@ -396,7 +399,7 @@ describe('ToggleKickCommand', () => {
     expect(notes).toHaveLength(1);
     expect(notes[0].type).toBe(noteTypes.kick);
     expect(!!(notes[0].flags & noteFlags.cymbal)).toBeFalsy();
-    expect(!!(notes[0].flags & noteFlags.accent)).toBe(true);
+    expect(!!(notes[0].flags & noteFlags.accent)).toBeFalsy();
   });
 
   it('converts an all-kick selection back to snare', () => {

@@ -19,13 +19,15 @@ import {
   type PianoRollView,
 } from './viewMath';
 import {
-  isGuitarBassSchema,
+  dynamicForFlags,
   noteIntersectsPianoRollWindow,
   techniqueForFlags,
+  type DrumDynamic,
   type FretTechnique,
   type PianoRollLane,
   type PianoRollNote,
 } from './notes';
+import {flagAppliesTo, usesFretEditing, laneToType} from '@/lib/chart-edit';
 import {
   LYRIC_CHIP_PAD_LEFT,
   LYRIC_CHIP_PAD_RIGHT,
@@ -68,6 +70,15 @@ const FONT_LYRIC_CHIP = '600 9.5px system-ui, sans-serif';
 const FONT_RULER_BAR = '500 10px ui-monospace, Menlo, monospace';
 const FONT_SECTION = '600 10px system-ui, sans-serif';
 const FONT_LANE_LABEL = '700 8px system-ui, sans-serif';
+
+// Drum dynamics glyph treatment. A ghost shrinks and dims rather than
+// changing shape, so the lane color and the cymbal/tom distinction stay
+// readable at the same glance; an accent keeps full size and gains a white
+// ring, which is the only note treatment that grows outward.
+const GHOST_GLYPH_SCALE = 0.7;
+const GHOST_GLYPH_ALPHA = 0.55;
+const ACCENT_RING_COLOR = 'rgba(255,255,255,0.92)';
+const ACCENT_RING_WIDTH = 1.5;
 
 export function drawGrid(
   ctx: CanvasRenderingContext2D,
@@ -149,22 +160,53 @@ export function drawNotes(
     msPerTick: viewportMsPerTick(view, w, scene.timedTempos, scene.resolution),
     pxPerMs: view.pxPerMs,
   });
-  const guitarBass = isGuitarBassSchema(scene.schema);
+  const guitarBass = usesFretEditing(scene.schema);
 
   // One glyph painter (triangle for cymbals, rounded rect for kick/tom) so the
-  // ghost preview is pixel-identical to a real note at the same size.
-  const paintGlyph = (gx: number, gcy: number, isCymbal: boolean): void => {
+  // add-mode preview is pixel-identical to a real note at the same size.
+  //
+  // `dynamic` is the drum accent/ghost state, and it reads the way the two
+  // sound: a ghost is a smaller, dimmer version of the same shape, an accent
+  // is the full shape ringed in white. A neutral note paints exactly as it
+  // did before dynamics existed. (Note the name clash: the `ghost` parameter
+  // of this function's caller is the add-mode *preview* note, unrelated to a
+  // ghosted hit.)
+  const paintGlyph = (
+    gx: number,
+    gcy: number,
+    isCymbal: boolean,
+    dynamic: DrumDynamic = 'none',
+  ): void => {
+    const scale = dynamic === 'ghost' ? GHOST_GLYPH_SCALE : 1;
+    const gw = nw * scale;
+    const gh = nh * scale;
+    const priorAlpha = ctx.globalAlpha;
+    if (dynamic === 'ghost') ctx.globalAlpha = priorAlpha * GHOST_GLYPH_ALPHA;
+
     if (isCymbal) {
       ctx.beginPath();
-      ctx.moveTo(gx, gcy - nh * 0.62);
-      ctx.lineTo(gx + nw * 0.6, gcy + nh * 0.5);
-      ctx.lineTo(gx - nw * 0.6, gcy + nh * 0.5);
+      ctx.moveTo(gx, gcy - gh * 0.62);
+      ctx.lineTo(gx + gw * 0.6, gcy + gh * 0.5);
+      ctx.lineTo(gx - gw * 0.6, gcy + gh * 0.5);
       ctx.closePath();
       ctx.fill();
     } else {
-      roundRect(ctx, gx - nw / 2, gcy - nh / 2, nw, nh, Math.min(2.5, nw / 3));
+      roundRect(ctx, gx - gw / 2, gcy - gh / 2, gw, gh, Math.min(2.5, gw / 3));
       ctx.fill();
     }
+
+    // The accent ring traces the path the fill just laid down, so it follows
+    // the triangle and the rounded rect without a second shape description.
+    if (dynamic === 'accent') {
+      const priorStroke = ctx.strokeStyle;
+      const priorWidth = ctx.lineWidth;
+      ctx.strokeStyle = ACCENT_RING_COLOR;
+      ctx.lineWidth = ACCENT_RING_WIDTH;
+      ctx.stroke();
+      ctx.strokeStyle = priorStroke;
+      ctx.lineWidth = priorWidth;
+    }
+    ctx.globalAlpha = priorAlpha;
   };
 
   const paintFretGlyph = (
@@ -278,7 +320,10 @@ export function drawNotes(
         );
       }
       // Would-be drop on an illegal lane renders as a tom.
-      cymbal = cymbal && !!scene.lanes[lane]?.cymbalOk;
+      cymbal =
+        cymbal &&
+        !!scene.schema &&
+        flagAppliesTo(scene.schema, 'cymbal', laneToType(scene.schema, lane));
     }
     const ms = tickToMs(tick, scene.timedTempos, scene.resolution);
     if (resize?.active) {
@@ -360,7 +405,7 @@ export function drawNotes(
         scene.lanes[lane]?.color ?? COLORS.laneLabel,
       );
     } else {
-      paintGlyph(x, cy, cymbal);
+      paintGlyph(x, cy, cymbal, rendered.note.dynamic);
     }
 
     if (
@@ -414,7 +459,7 @@ export function drawNotes(
           scene.lanes[ghost.lane]?.color ?? COLORS.laneLabel,
         );
       } else {
-        paintGlyph(gx, gcy, ghost.cymbal);
+        paintGlyph(gx, gcy, ghost.cymbal, dynamicForFlags(ghost.flags));
       }
       ctx.globalAlpha = 1;
     }
