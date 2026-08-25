@@ -41,7 +41,7 @@ Concretely, one of these two, whichever you prefer:
 for the audio before it.
 
 **Option B — keep a separate field, but make it mean the musical start.**
-`origin_ms` stays, and is defined as *the first downbeat of the music* — the
+`origin_ms` stays, and is defined as _the first downbeat of the music_ — the
 point a listener would call the start of the song.
 
 We slightly prefer **A**, because it leaves one fewer thing to keep in sync,
@@ -64,7 +64,7 @@ with eight seconds of silence in front still reports an origin near zero.
 
 So a consumer that reads `origin_ms` as "where the music starts" is wrong by
 however much silence the file carries, and a consumer that reads
-`tempos[0].ms` gets the first *fitted beat*, which is a different quantity
+`tempos[0].ms` gets the first _fitted beat_, which is a different quantity
 again.
 
 Downstream of that, our writer (`lib/tempo-map/synctrack-ticks.ts`
@@ -155,19 +155,19 @@ Measured over the raw bytes of 78,453 chart folders (62,697 `.chart`,
 15,814 `.mid`) in `~/Desktop/chart-sources/enchor-songs` and
 `~/Desktop/remaining-charts`, parsed independently of scan-chart:
 
-| | `.chart` | `.mid` |
-| --- | --- | --- |
-| Tempo event at tick 0 | 100% | 100% |
-| Time signature at tick 0 | 99.997% (2 missing) | **93.4%** (1,044 missing) |
-| Exactly one signature, at tick 0, whole song | 46% | 54% |
-| Constant tempo (one event, tick 0) | 9.3% | 17.0% |
-| Tempo event exactly at the first note (sparse maps, ≤8 events) | 60% | 40% |
+|                                                                | `.chart`            | `.mid`                    |
+| -------------------------------------------------------------- | ------------------- | ------------------------- |
+| Tempo event at tick 0                                          | 100%                | 100%                      |
+| Time signature at tick 0                                       | 99.997% (2 missing) | **93.4%** (1,044 missing) |
+| Exactly one signature, at tick 0, whole song                   | 46%                 | 54%                       |
+| Constant tempo (one event, tick 0)                             | 9.3%                | 17.0%                     |
+| Tempo event exactly at the first note (sparse maps, ≤8 events) | 60%                 | 40%                       |
 
 The first row is the format requirement, confirmed: a raw chart with no
 tick-0 tempo is a spec violation, and there are none. The `.mid` signature
 row is the 4/4 default in use — those 1,044 files rely on it.
 
-But a *marker where the song starts* is not universal at all. 9–17% of
+But a _marker where the song starts_ is not universal at all. 9–17% of
 charts are constant-tempo with no second event anywhere, and roughly half
 carry a single signature for the whole song. "The song starts at a marker"
 is a convention we would be inventing, not one we would be following.
