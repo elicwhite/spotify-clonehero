@@ -150,7 +150,6 @@ async function readSongIniData(
     // The ini parser returns loose string maps; the [Song] section is assumed
     // to carry the fields SongIniData names.
     const songIniData = (values.iniObject['song'] ??
-      values.iniObject['Song'] ??
       null) as unknown as SongIniData | null;
     return {songIniData, songIniMTime: file.lastModified};
   } catch (error) {

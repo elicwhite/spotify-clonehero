@@ -2,6 +2,13 @@
 // https://github.com/Geomitron/scan-chart
 
 export const $NoSection: unique symbol = Symbol('Lines before any sections');
+
+/**
+ * A parsed ini file. Section names and keys are both lower-cased, so a lookup
+ * is spelled one way whatever the file says. Charts in the wild write the same
+ * section as `[Song]`, `[song]` and `[SONG]`, and a lookup that knows only some
+ * of those spellings drops the whole chart without a word.
+ */
 export interface IniObject {
   [$NoSection]?: {[key: string]: string};
   [section: string]: {[key: string]: string};
@@ -52,7 +59,7 @@ export function parse(file: Uint8Array) {
       if (match === null) {
         iniErrors.push(createParseError(line));
       } else {
-        currentSection = match[1].trim();
+        currentSection = match[1].trim().toLowerCase();
       }
     } else if (line.includes('=')) {
       const delimeterPos = line.indexOf('=');

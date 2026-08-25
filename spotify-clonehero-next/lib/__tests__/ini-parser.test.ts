@@ -23,7 +23,7 @@ function utf16be(text: string) {
 describe('ini-parser encodings', () => {
   it('parses UTF-8', () => {
     const {iniObject} = parse(new TextEncoder().encode(INI));
-    expect(iniObject['Song']).toEqual({name: 'Test Song', artist: 'Test Band'});
+    expect(iniObject['song']).toEqual({name: 'Test Song', artist: 'Test Band'});
   });
 
   // A UTF-8 byte-order mark is dropped by TextDecoder itself. Without that,
@@ -31,21 +31,35 @@ describe('ini-parser encodings', () => {
   it('parses UTF-8 with a byte-order mark', () => {
     const bytes = new TextEncoder().encode(INI);
     const {iniObject} = parse(new Uint8Array([0xef, 0xbb, 0xbf, ...bytes]));
-    expect(iniObject['Song']).toEqual({name: 'Test Song', artist: 'Test Band'});
+    expect(iniObject['song']).toEqual({name: 'Test Song', artist: 'Test Band'});
   });
 
   // Windows chart tools write song.ini as UTF-16. Decoded as UTF-8 these
   // files parse to no sections at all, which loses the chart silently.
   it('parses UTF-16 LE', () => {
     const {iniObject} = parse(utf16le(INI));
-    expect(iniObject['Song']).toEqual({name: 'Test Song', artist: 'Test Band'});
+    expect(iniObject['song']).toEqual({name: 'Test Song', artist: 'Test Band'});
     expect(iniObject[$NoSection]).toBeUndefined();
   });
 
   it('parses UTF-16 BE', () => {
     const {iniObject} = parse(utf16be(INI));
-    expect(iniObject['Song']).toEqual({name: 'Test Song', artist: 'Test Band'});
+    expect(iniObject['song']).toEqual({name: 'Test Song', artist: 'Test Band'});
   });
+
+  // Charts write this section every way; a lookup that knows only some of the
+  // spellings drops the chart with nothing thrown and nothing logged.
+  it.each(['[Song]', '[song]', '[SONG]', '[ Song ]'])(
+    'finds the song section written as %s',
+    header => {
+      const text = INI.replace('[Song]', header);
+      const {iniObject} = parse(new TextEncoder().encode(text));
+      expect(iniObject['song']).toEqual({
+        name: 'Test Song',
+        artist: 'Test Band',
+      });
+    },
+  );
 
   it('handles a file too short to hold a byte-order mark', () => {
     expect(parse(new Uint8Array([]))).toEqual({iniObject: {}, iniErrors: []});
