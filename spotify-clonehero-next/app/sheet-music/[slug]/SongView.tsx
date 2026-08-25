@@ -59,6 +59,8 @@ import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import {useAutoScroll} from '@/lib/sheet-follow/useAutoScroll';
+import {AUTO_SCROLL_ENABLED, AutoScrollSetting} from './AutoScrollSetting';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
 import {unfavoriteSongByHash} from '../../account/actions';
@@ -108,6 +110,7 @@ export default function Renderer({
     enableColors?: boolean;
     showLyrics?: boolean;
     viewCloneHero?: boolean;
+    autoScroll?: boolean;
     tempo?: number;
     zoom?: number;
   };
@@ -150,6 +153,9 @@ export default function Renderer({
   );
   const [viewCloneHero, setViewCloneHero] = useState(
     persistedSettings.viewCloneHero ?? false,
+  );
+  const [autoScroll, setAutoScroll] = useState(
+    persistedSettings.autoScroll ?? false,
   );
   const [isPlaying, setIsPlaying] = useState(false);
   const [volumeControls, setVolumeControls] = useState<VolumeControl[]>([]);
@@ -300,6 +306,11 @@ export default function Renderer({
     trackEvent({event: 'sheet_music_clone_hero_toggled', enabled: value});
   };
 
+  const updateAutoScroll = (value: boolean) => {
+    setAutoScroll(value);
+    trackEvent({event: 'sheet_music_auto_scroll_toggled', enabled: value});
+  };
+
   const updateShowBarNumbers = (value: boolean) => {
     setShowBarNumbers(value);
     trackEvent({event: 'sheet_music_show_bar_numbers_toggled', enabled: value});
@@ -411,6 +422,19 @@ export default function Renderer({
   // Compute chart delay once from metadata (must be before consumers)
   const chartDelayMs = useMemo(() => getChartDelayMs(chart.metadata), [chart]);
 
+  // Listens to the room and reports where the band is in the song. Off unless
+  // the sidebar switch is on, so no microphone is opened without asking.
+  const follow = useAutoScroll({
+    enabled: AUTO_SCROLL_ENABLED && autoScroll,
+    audioFiles,
+    chartDelaySec: chartDelayMs / 1000,
+    songKey: metadata.md5,
+  });
+
+  // A persisted `autoScroll` must not hide the playhead or hand the page over
+  // to the microphone in production, where the follower never runs.
+  const followingLive = AUTO_SCROLL_ENABLED && autoScroll;
+
   // Flatten lyrics from the chart's vocal phrases. Older chart formats
   // exposed lyrics as a top-level `chart.lyrics` array, but the
   // current parser puts them on vocalTracks.parts.vocals.notePhrases
@@ -513,6 +537,7 @@ export default function Renderer({
       enableColors,
       showLyrics,
       viewCloneHero,
+      autoScroll,
       tempo,
       zoom,
     };
@@ -530,6 +555,7 @@ export default function Renderer({
     enableColors,
     showLyrics,
     viewCloneHero,
+    autoScroll,
     tempo,
     zoom,
   ]);
@@ -1229,6 +1255,11 @@ export default function Renderer({
                 View as Clone Hero
               </label>
             </div>
+            <AutoScrollSetting
+              checked={autoScroll}
+              onCheckedChange={updateAutoScroll}
+              state={follow}
+            />
             {process.env.NODE_ENV === 'development' && (
               <div className="flex items-center space-x-2">
                 <Switch
@@ -1375,7 +1406,12 @@ export default function Renderer({
               practiceModeConfig={practiceMode}
               onPracticeMeasureSelect={handlePracticeMeasureSelect}
               selectionIndex={selectionIndex}
-              getChartTimeSec={() => audioManagerRef.current?.chartTime}
+              fromLiveEstimate={followingLive}
+              getChartTimeSec={
+                followingLive
+                  ? follow.getChartTimeSec
+                  : () => audioManagerRef.current?.chartTime
+              }
             />
           </div>
           {viewCloneHero && (

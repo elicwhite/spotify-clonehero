@@ -78,6 +78,7 @@ export type AnalyticsEvent =
   | {event: 'sheet_music_zoom_changed'; zoom: number}
   | {event: 'sheet_music_difficulty_changed'; difficulty: string}
   | {event: 'sheet_music_clone_hero_toggled'; enabled: boolean}
+  | {event: 'sheet_music_auto_scroll_toggled'; enabled: boolean}
   | {event: 'sheet_music_click_track_toggled'; enabled: boolean}
   | {event: 'sheet_music_show_lyrics_toggled'; enabled: boolean}
   | {event: 'sheet_music_show_bar_numbers_toggled'; enabled: boolean}

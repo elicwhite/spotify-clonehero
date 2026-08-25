@@ -30,6 +30,7 @@ export default function SheetMusic({
   onPracticeMeasureSelect,
   selectionIndex,
   getChartTimeSec,
+  fromLiveEstimate = false,
   noteFeedback,
   measureWindowMs,
 }: {
@@ -51,6 +52,9 @@ export default function SheetMusic({
    * Playhead for why handing React the manager object is harmful.
    */
   getChartTimeSec: () => number | null | undefined;
+  /** The playhead position comes from listening to the room rather than from
+   *  the audio clock. See {@link Playhead}. */
+  fromLiveEstimate?: boolean;
   /**
    * Drum-fills only: per-note hit/miss feedback keyed by fill-note id. When
    * provided, an overlay marks each rendered notehead with its judgment. Absent
@@ -218,6 +222,7 @@ export default function SheetMusic({
             timePositionMap={consolidatedTimeMap}
             getChartTimeSec={getChartTimeSec}
             zoom={zoom}
+            fromLiveEstimate={fromLiveEstimate}
           />
         )}
         {measureHighlights}
