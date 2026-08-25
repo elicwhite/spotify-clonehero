@@ -12,7 +12,7 @@ jest.mock('@eliwhite/parse-sng', () => ({
   readSongIni: (stream: ReadableStream) => mockReadSongIni(stream),
 }));
 
-import scanLocalCharts from '../scanLocalCharts';
+import scanLocalCharts, {type SongAccumulator} from '../scanLocalCharts';
 
 function entries(
   values: Array<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>,
@@ -116,6 +116,39 @@ describe('scanLocalCharts issues', () => {
           message: 'Could not read SNG metadata from Songs/Broken.sng',
         },
       ],
+    });
+  });
+
+  // A user may pick one chart's own folder rather than a folder of charts.
+  // That folder has no parent handle, so the chart carries its own.
+  it('scans the picked folder when it is itself a chart', async () => {
+    mockParse.mockReturnValue({
+      iniObject: {song: {name: 'Root Song', artist: 'Root Band'}},
+      iniErrors: [],
+    });
+    const songIni = {
+      kind: 'file',
+      name: 'song.ini',
+      getFile: jest.fn(async () => ({
+        arrayBuffer: jest.fn(async () => new ArrayBuffer(0)),
+        lastModified: 1,
+      })),
+    } as unknown as FileSystemFileHandle;
+    const picked = {
+      kind: 'directory',
+      name: 'Artist - Song (Charter)',
+      entries: jest.fn(() => entries([['song.ini', songIni]])),
+    } as unknown as FileSystemDirectoryHandle;
+
+    const accumulator: SongAccumulator[] = [];
+    await expect(
+      scanLocalCharts(picked, accumulator, jest.fn()),
+    ).resolves.toEqual({issues: []});
+    expect(accumulator).toHaveLength(1);
+    expect(accumulator[0].song).toBe('Root Song');
+    expect(accumulator[0].handleInfo).toEqual({
+      dirHandle: picked,
+      fileName: 'Artist - Song (Charter)',
     });
   });
 

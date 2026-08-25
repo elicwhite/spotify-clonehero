@@ -145,6 +145,35 @@ export function readChartDirectory(
 }
 
 /**
+ * Where a scanned chart lives, and how its files are opened again.
+ *
+ * A chart found inside the scanned library is addressed by its parent folder
+ * and its own name, so it can also be written back beside its siblings. The
+ * folder the user picks has no parent handle the File System Access API can
+ * supply, so a chart that *is* that folder carries the folder handle instead
+ * and cannot be written next to anything.
+ */
+export type ChartHandleInfo =
+  | {parentDir: FileSystemDirectoryHandle; fileName: string}
+  | {dirHandle: FileSystemDirectoryHandle; fileName: string};
+
+/** Read every file of a chart the scanner found, folder or `.sng`. */
+export async function readChartHandle(
+  info: ChartHandleInfo,
+): Promise<LoadedFiles> {
+  if ('dirHandle' in info) {
+    return await readChartDirectory(info.dirHandle);
+  }
+  if (info.fileName.toLowerCase().endsWith('.sng')) {
+    const fileHandle = await info.parentDir.getFileHandle(info.fileName);
+    return await readSngFile(await fileHandle.getFile());
+  }
+  return await readChartDirectory(
+    await info.parentDir.getDirectoryHandle(info.fileName),
+  );
+}
+
+/**
  * A `webkitdirectory` selection as a folder source. That input hands back
  * every file in the tree at once, each carrying its path below the chosen
  * folder in `webkitRelativePath`, so the tree is regrouped from those paths.

@@ -2,6 +2,7 @@ import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
+import type {ChartHandleInfo} from '@/lib/chart-files/chart-package';
 
 // Caps concurrent FS ops across the whole recursive scan. Without a shared
 // limit, Promise.all at every level would multiply with depth and exhaust
@@ -37,11 +38,7 @@ export type SongAccumulator = {
   genre: string;
   data: SongIniData;
   file: string; // This will throw if you access it
-  // fileHandle: FileSystemFileHandle | FileSystemDirectoryHandle;
-  handleInfo: {
-    parentDir: FileSystemDirectoryHandle;
-    fileName: string;
-  };
+  handleInfo: ChartHandleInfo;
 };
 
 export type LocalChartScanIssue = {
@@ -59,44 +56,149 @@ export default async function scanLocalCharts(
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
 ): Promise<LocalChartScanResult> {
-  // Every entry in this directory handle should be a song, or folder of songs
-
   const limit = pLimit(SCAN_CONCURRENCY);
+  // A root that cannot be listed is a failed scan, not a skipped chart, so
+  // this listing is the one that is allowed to reject.
   const entries = await listEntries(directoryHandle);
   const issues: LocalChartScanIssue[] = [];
+  const {subdirs, sngFiles, songIniHandle} = partitionEntries(entries);
+  const path = directoryHandle.name;
 
-  await Promise.all(
-    entries.map(([, subHandle]) => {
-      if (subHandle.kind === 'directory') {
-        return scanLocalChartsDirectory(
-          directoryHandle,
-          subHandle,
-          accumulator,
-          callbackPerSong,
-          limit,
-          `${directoryHandle.name}/${subHandle.name}`,
-          issues,
-        );
-      }
-      if (
-        subHandle.kind === 'file' &&
-        subHandle.name.toLowerCase().endsWith('.sng')
-      ) {
-        return scanLocalSngFile(
-          directoryHandle,
-          subHandle,
-          accumulator,
-          callbackPerSong,
-          limit,
-          `${directoryHandle.name}/${subHandle.name}`,
-          issues,
-        );
-      }
-      return undefined;
-    }),
-  );
+  // The user may pick one chart's own folder rather than a folder of charts.
+  // Such a chart has no parent handle, so it addresses its own files.
+  if (songIniHandle) {
+    const {songIniData, songIniMTime} = await readSongIniData(
+      songIniHandle,
+      path,
+      issues,
+    );
+    pushChart(accumulator, callbackPerSong, songIniData, songIniMTime, {
+      dirHandle: directoryHandle,
+      fileName: directoryHandle.name,
+    });
+  }
+
+  await Promise.all([
+    ...subdirs.map(sub =>
+      scanLocalChartsDirectory(
+        directoryHandle,
+        sub,
+        accumulator,
+        callbackPerSong,
+        limit,
+        `${path}/${sub.name}`,
+        issues,
+      ),
+    ),
+    ...sngFiles.map(sng =>
+      scanLocalSngFile(
+        directoryHandle,
+        sng,
+        accumulator,
+        callbackPerSong,
+        limit,
+        `${path}/${sng.name}`,
+        issues,
+      ),
+    ),
+  ]);
 
   return {issues};
+}
+
+/** The three things a scan cares about among a directory's entries. */
+function partitionEntries(entries: Array<[string, EntryHandle]>) {
+  const subdirs: FileSystemDirectoryHandle[] = [];
+  const sngFiles: FileSystemFileHandle[] = [];
+  let songIniHandle: FileSystemFileHandle | null = null;
+
+  for (const [, subHandle] of entries) {
+    if (subHandle.kind === 'directory') {
+      subdirs.push(subHandle);
+    } else if (subHandle.name.toLowerCase().endsWith('.sng')) {
+      sngFiles.push(subHandle);
+    } else if (subHandle.name === 'song.ini') {
+      songIniHandle = subHandle;
+    }
+  }
+
+  return {subdirs, sngFiles, songIniHandle};
+}
+
+/** A chart folder's metadata, or nulls when the `song.ini` cannot be used. */
+async function readSongIniData(
+  songIniHandle: FileSystemFileHandle,
+  path: string,
+  issues: LocalChartScanIssue[],
+): Promise<{songIniData: SongIniData | null; songIniMTime: number}> {
+  let file: File;
+  try {
+    file = await songIniHandle.getFile();
+  } catch (error) {
+    reportScanIssue(
+      issues,
+      'song-ini',
+      `${path}/song.ini`,
+      `Could not read ${path}/song.ini`,
+      error,
+    );
+    return {songIniData: null, songIniMTime: 0};
+  }
+
+  try {
+    const values = parse(new Uint8Array(await file.arrayBuffer()));
+    // The ini parser returns loose string maps; the [Song] section is assumed
+    // to carry the fields SongIniData names.
+    const songIniData = (values.iniObject['song'] ??
+      values.iniObject['Song'] ??
+      null) as unknown as SongIniData | null;
+    return {songIniData, songIniMTime: file.lastModified};
+  } catch (error) {
+    reportScanIssue(
+      issues,
+      'song-ini',
+      `${path}/song.ini`,
+      `Could not parse ${path}/song.ini`,
+      error,
+    );
+    return {songIniData: null, songIniMTime: 0};
+  }
+}
+
+/**
+ * Record one scanned chart. Metadata with neither a name nor an artist says
+ * the folder is not a chart, so nothing is recorded for it.
+ */
+function pushChart(
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+  songIniData: SongIniData | null,
+  modifiedTime: number,
+  handleInfo: ChartHandleInfo,
+) {
+  if (songIniData == null || (!songIniData.name && !songIniData.artist)) {
+    return;
+  }
+
+  const chart = {
+    artist: removeStyleTags(songIniData.artist ?? ''),
+    song: removeStyleTags(songIniData.name ?? ''),
+    modifiedTime: new Date(modifiedTime).toISOString(),
+    charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
+    genre: removeStyleTags(songIniData.genre ?? ''),
+    data: convertValues(songIniData),
+    handleInfo,
+    file: '',
+  };
+  Object.defineProperty(chart, 'file', {
+    get() {
+      throw new Error('Charts from disk do not have a download URL');
+    },
+    enumerable: false, // Can't serialize to JSON
+  });
+
+  accumulator.push(chart);
+  callbackPerSong();
 }
 
 async function scanLocalChartsDirectory(
@@ -138,50 +240,10 @@ async function scanLocalChartsDirectory(
       return null;
     }
 
-    const subdirs: FileSystemDirectoryHandle[] = [];
-    const sngFiles: FileSystemFileHandle[] = [];
-    let songIniHandle: FileSystemFileHandle | null = null;
-    for (const [, subHandle] of entries) {
-      if (subHandle.kind === 'directory') {
-        subdirs.push(subHandle);
-      } else if (subHandle.kind === 'file') {
-        if (subHandle.name.toLowerCase().endsWith('.sng')) {
-          sngFiles.push(subHandle);
-        } else if (subHandle.name === 'song.ini') {
-          songIniHandle = subHandle;
-        }
-      }
-    }
-
-    let songIniData: SongIniData | null = null;
-    let songIniMTime = 0;
-    if (songIniHandle) {
-      try {
-        const file = await songIniHandle.getFile();
-        try {
-          const values = parse(new Uint8Array(await file.arrayBuffer()));
-          // @ts-ignore Assuming JSON matches TypeScript
-          songIniData = values.iniObject?.song || values.iniObject?.Song;
-          songIniMTime = file.lastModified;
-        } catch (error) {
-          reportScanIssue(
-            issues,
-            'song-ini',
-            `${path}/song.ini`,
-            `Could not parse ${path}/song.ini`,
-            error,
-          );
-        }
-      } catch (error) {
-        reportScanIssue(
-          issues,
-          'song-ini',
-          `${path}/song.ini`,
-          `Could not read ${path}/song.ini`,
-          error,
-        );
-      }
-    }
+    const {subdirs, sngFiles, songIniHandle} = partitionEntries(entries);
+    const {songIniData, songIniMTime} = songIniHandle
+      ? await readSongIniData(songIniHandle, path, issues)
+      : {songIniData: null, songIniMTime: 0};
 
     return {subdirs, sngFiles, songIniData, songIniMTime};
   });
@@ -190,36 +252,13 @@ async function scanLocalChartsDirectory(
 
   // Push chart immediately on slot release so the counter starts ticking
   // before any children have been processed.
-  if (
-    result.songIniData != null &&
-    (result.songIniData.name || result.songIniData.artist)
-  ) {
-    const convertedSongIniData = convertValues(result.songIniData);
-    const chart = {
-      artist: removeStyleTags(result.songIniData.artist ?? ''),
-      song: removeStyleTags(result.songIniData.name ?? ''),
-      modifiedTime: new Date(result.songIniMTime).toISOString(),
-      charter: removeStyleTags(
-        result.songIniData.charter || result.songIniData.frets || '',
-      ),
-      genre: removeStyleTags(result.songIniData.genre ?? ''),
-      data: convertedSongIniData,
-      handleInfo: {
-        parentDir: parentDirectoryHandle,
-        fileName: currentDirectoryHandle.name,
-      },
-      file: '',
-    };
-    Object.defineProperty(chart, 'file', {
-      get() {
-        throw new Error('Charts from disk do not have a download URL');
-      },
-      enumerable: false, // Can't serialize to JSON
-    });
-
-    accumulator.push(chart);
-    callbackPerSong();
-  }
+  pushChart(
+    accumulator,
+    callbackPerSong,
+    result.songIniData,
+    result.songIniMTime,
+    {parentDir: parentDirectoryHandle, fileName: currentDirectoryHandle.name},
+  );
 
   // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
   await Promise.all([
@@ -295,32 +334,13 @@ async function scanLocalSngFileInner(
 
   // The SNG header's metadata mirrors the [Song] section of song.ini — same
   // key/value shape. convertValues() coerces numeric/boolean strings below.
-  if (!metadata['name'] && !metadata['artist']) return;
-  const songIniData = metadata as unknown as SongIniData;
-
-  const convertedSongIniData = convertValues(songIniData);
-  const chart = {
-    artist: removeStyleTags(songIniData.artist ?? ''),
-    song: removeStyleTags(songIniData.name ?? ''),
-    modifiedTime: new Date(file.lastModified).toISOString(),
-    charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
-    genre: removeStyleTags(songIniData.genre ?? ''),
-    data: convertedSongIniData,
-    handleInfo: {
-      parentDir: parentDirectoryHandle,
-      fileName: fileHandle.name,
-    },
-    file: '',
-  };
-  Object.defineProperty(chart, 'file', {
-    get() {
-      throw new Error('Charts from disk do not have a download URL');
-    },
-    enumerable: false, // Can't serialize to JSON
-  });
-
-  accumulator.push(chart);
-  callbackPerSong();
+  pushChart(
+    accumulator,
+    callbackPerSong,
+    metadata as unknown as SongIniData,
+    file.lastModified,
+    {parentDir: parentDirectoryHandle, fileName: fileHandle.name},
+  );
 }
 
 function reportScanIssue(

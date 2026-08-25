@@ -3,11 +3,12 @@ import {
   convertChartFolders,
   selectChartFoldersToConvert,
   sngFileNameForFolder,
+  type ConvertibleChart,
 } from '../convert-folder-to-sng';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 
 /** Build a minimal SongAccumulator-shaped entry for selection tests. */
-function chart(fileName: string): SongAccumulator {
+function chart(fileName: string): ConvertibleChart {
   return {
     artist: 'Artist',
     song: 'Song',
@@ -21,7 +22,7 @@ function chart(fileName: string): SongAccumulator {
       parentDir: {} as FileSystemDirectoryHandle,
       fileName,
     },
-  } as SongAccumulator;
+  } as ConvertibleChart;
 }
 
 describe('selectChartFoldersToConvert', () => {

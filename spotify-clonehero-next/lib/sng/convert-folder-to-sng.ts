@@ -18,16 +18,27 @@ import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 const CONVERT_CONCURRENCY = 12;
 
 /**
+ * A chart the converter can write a `.sng` for: a folder that has a parent
+ * directory to write the new file into.
+ */
+export type ConvertibleChart = SongAccumulator & {
+  handleInfo: {parentDir: FileSystemDirectoryHandle; fileName: string};
+};
+
+/**
  * Filter a scan result down to the charts that can be converted to `.sng`.
  *
  * Charts already stored as `.sng` (surfaced by the scan with a `.sng` file
- * name) are skipped — they are already packaged. Only folder charts remain.
+ * name) are skipped — they are already packaged. The scanned folder itself is
+ * skipped too: it has no parent directory to write the `.sng` into.
  */
 export function selectChartFoldersToConvert(
   charts: SongAccumulator[],
-): SongAccumulator[] {
+): ConvertibleChart[] {
   return charts.filter(
-    chart => !chart.handleInfo.fileName.toLowerCase().endsWith('.sng'),
+    (chart): chart is ConvertibleChart =>
+      'parentDir' in chart.handleInfo &&
+      !chart.handleInfo.fileName.toLowerCase().endsWith('.sng'),
   );
 }
 
@@ -45,7 +56,7 @@ export function sngFileNameForFolder(folderName: string): string {
  * `readwrite` permission.
  */
 export async function convertChartFolderToSng(
-  chart: SongAccumulator,
+  chart: ConvertibleChart,
 ): Promise<void> {
   const {parentDir, fileName} = chart.handleInfo;
 
@@ -76,12 +87,12 @@ export interface ConvertFoldersProgress {
  * chart settles (in completion order, not input order).
  */
 export async function convertChartFolders(
-  charts: SongAccumulator[],
+  charts: ConvertibleChart[],
   options: {
     concurrency?: number;
     onProgress?: (progress: ConvertFoldersProgress) => void;
     // Seam for tests to drive the orchestration without touching the file system.
-    convert?: (chart: SongAccumulator) => Promise<void>;
+    convert?: (chart: ConvertibleChart) => Promise<void>;
   } = {},
 ): Promise<{written: number; failed: number}> {
   const {

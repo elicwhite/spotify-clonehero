@@ -7,7 +7,7 @@ import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
 import {Slider} from '@/components/ui/slider';
-import {readChartDirectory, readSngFile} from '@/lib/chart-files/chart-package';
+import {readChartHandle} from '@/lib/chart-files/chart-package';
 import {
   findAudioFiles,
   findChartData,
@@ -240,20 +240,7 @@ async function writeTsvFile(handle: FileSystemFileHandle, ratings: Rating[]) {
 // ---------------------------------------------------------------------------
 
 async function prepareChart(song: SongAccumulator): Promise<PreparedChart> {
-  const {parentDir, fileName} = song.handleInfo;
-  let loaded;
-
-  // Determine if the entry is a directory or .sng file
-  if (fileName.toLowerCase().endsWith('.sng')) {
-    const fileHandle = await parentDir.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    loaded = await readSngFile(file);
-  } else {
-    const dirHandle = await parentDir.getDirectoryHandle(fileName);
-    loaded = await readChartDirectory(dirHandle);
-  }
-
-  const {files} = loaded;
+  const {files} = await readChartHandle(song.handleInfo);
 
   // Parse chart
   const {chartData, format} = findChartData(files);
