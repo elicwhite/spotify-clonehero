@@ -45,7 +45,7 @@ import {
 } from '@/lib/drum-transcription/audio/decoder';
 import {pickFiles} from '@/lib/chart-files/entries';
 import {cn} from '@/lib/utils';
-import type {AudioStem} from '../hooks/usePaddedAudio';
+import type {AudioStem} from '../hooks/useShiftedAudio';
 import InstrumentIcon, {type IconableInstrument} from '../InstrumentIcon';
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import {
@@ -68,7 +68,7 @@ import {
  *  track name it applies to. Any track absent from this list (typically the
  *  full mix) is treated as `'chart-file'` — nothing in this app plays audio
  *  that didn't ultimately come from the chart package. Hosts pass their
- *  `usePaddedAudio` stem list straight through. */
+ *  `useShiftedAudio` stem list straight through. */
 export type StemOriginEntry = Pick<AudioStem, 'name' | 'origin'>;
 
 /** The origin entries for a set of live stems — name and origin ONLY. Taking
@@ -89,15 +89,15 @@ export interface StemsMixerHostProps {
   stemOrigins?: ReadonlyArray<StemOriginEntry> | undefined;
   /**
    * Adds a new stem at runtime. Present only on hosts that can rebuild their
-   * padded AudioManager from a stem list (5a's `usePaddedAudio` rebuild
+   * padded AudioManager from a stem list (5a's `useShiftedAudio` rebuild
    * path) — omitted, the drop-a-file row doesn't render, since there is no
    * way to add a track to a construct-once `AudioManager` otherwise.
    *
    * `pcm` is always interleaved 44.1 kHz stereo (what `decodeAudio` +
    * `interleaveAudioBuffer` produce, whatever the dropped file was). A host
-   * whose `PaddedAudioMeta` says otherwise must reject the stem rather than
+   * whose `ShiftedAudioMeta` says otherwise must reject the stem rather than
    * play these samples at a rate that isn't theirs. A host with no
-   * `PaddedAudioMeta` at all has nothing to conflict with: the file it
+   * `ShiftedAudioMeta` at all has nothing to conflict with: the file it
    * accepts is what establishes the project's audio format.
    *
    * `file` carries the dropped bytes verbatim, for a host that persists them

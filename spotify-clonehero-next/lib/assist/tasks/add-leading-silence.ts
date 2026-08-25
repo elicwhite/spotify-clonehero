@@ -1,15 +1,15 @@
 /**
  * The `add-leading-silence` assist task: work out how many whole bars of
- * silence the chart needs in front (plan 0064), and pad the host's audio for
+ * silence the chart needs in front (plan 0064), and shift the host's audio for
  * that amount off the main thread before anything is applied.
  *
  * Measuring is chart math and costs under a millisecond. The audio is what
- * costs the time: every track has to be re-padded, which is a fresh buffer
+ * costs the time: every track has to be rebuilt, which is a fresh buffer
  * the length of the whole song per track, so that half runs in
- * `pad-tracks-worker.ts` under a progress card rather than inside the click
+ * `shift-tracks-worker.ts` under a progress card rather than inside the click
  * handler.
  *
- * The doc is read TWICE — once to size the pad, and once after the pad to
+ * The doc is read TWICE — once to size the shift, and once after it to
  * produce the plan that actually gets applied. The gap between them is a
  * second of worker time in which the user can still edit the chart, and a
  * plan measured before a tempo change would pad against a chart that no
@@ -30,12 +30,12 @@ import type {AssistTaskDef} from './types';
 /**
  * Pads the host's audio for the `audioAnchor` position the chart is about to
  * have, ahead of the edit that needs it. Matches
- * `PadAudioAhead` in
+ * `ShiftAudioAhead` in
  * `components/chart-editor/AudioServiceContext.tsx`; declared structurally
  * here so this module stays free of React and of the editor's component
  * tree.
  */
-export type PadAudioAheadFn = (
+export type ShiftAudioAheadFn = (
   anchorMs: number,
   options: {
     signal?: AbortSignal | undefined;
@@ -50,11 +50,11 @@ const MEASURE_STEP: Omit<PlannedStep, 'cached'> = {
     'Counts the whole bars of silence needed for the chart to start on a full measure.',
 };
 
-const PAD_AUDIO_STEP: Omit<PlannedStep, 'cached'> = {
-  key: 'pad-audio',
-  label: 'Padding the audio',
+const SHIFT_AUDIO_STEP: Omit<PlannedStep, 'cached'> = {
+  key: 'shift-audio',
+  label: 'Moving the audio',
   description:
-    'Re-encodes every track with the silence in front, so playback still lines up with the chart.',
+    'Rebuilds every track’s samples so playback still lines up with the chart.',
 };
 
 export interface AddLeadingSilenceInput {
@@ -66,7 +66,7 @@ export interface AddLeadingSilenceInput {
   readDoc: () => ChartDocument;
   /** The host's audio pre-pad. Absent on a host with no audio to pad, in
    *  which case the run is the measuring step alone. */
-  padAudioAhead?: PadAudioAheadFn | undefined;
+  shiftAudioAhead?: ShiftAudioAheadFn | undefined;
 }
 
 export interface AddLeadingSilenceResult {
@@ -82,13 +82,13 @@ export const addLeadingSilenceTask: AssistTaskDef<
   key: 'add-leading-silence',
   title: 'Leading silence',
 
-  async planSteps({padAudioAhead}) {
-    return padAudioAhead
-      ? [{...MEASURE_STEP}, {...PAD_AUDIO_STEP}]
+  async planSteps({shiftAudioAhead}) {
+    return shiftAudioAhead
+      ? [{...MEASURE_STEP}, {...SHIFT_AUDIO_STEP}]
       : [{...MEASURE_STEP}];
   },
 
-  async run({readDoc, padAudioAhead, bars}, signal, progress) {
+  async run({readDoc, shiftAudioAhead, bars}, signal, progress) {
     if (signal.aborted) throw makeAbortError();
 
     progress({activeKey: 'measure-lead-in', progress: 0});
@@ -98,15 +98,15 @@ export const addLeadingSilenceTask: AssistTaskDef<
       return {plan: null};
     }
 
-    if (padAudioAhead) {
+    if (shiftAudioAhead) {
       // `padMs` is the WHOLE silence in front of the audio, not this press's
-      // increment, and `padAudioAhead` wants exactly that: it re-pads from
+      // increment, and `shiftAudioAhead` wants exactly that: it re-pads from
       // the original PCM rather than adding to a padded copy.
-      progress({activeKey: 'pad-audio', progress: 0});
-      await padAudioAhead(sizing.padMs, {
+      progress({activeKey: 'shift-audio', progress: 0});
+      await shiftAudioAhead(sizing.padMs, {
         signal,
         onProgress: (fraction, detail) =>
-          progress({activeKey: 'pad-audio', progress: fraction, detail}),
+          progress({activeKey: 'shift-audio', progress: fraction, detail}),
       });
     }
     if (signal.aborted) throw makeAbortError();

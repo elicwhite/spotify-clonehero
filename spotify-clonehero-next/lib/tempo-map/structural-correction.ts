@@ -16,6 +16,7 @@
  */
 
 import type {Synctrack} from './types';
+import {withGrid} from './types';
 
 /**
  * Scale every tempo segment's BPM by `factor`, preserving each segment's audio
@@ -31,9 +32,9 @@ export function octaveRescaleSync(sync: Synctrack, factor: number): Synctrack {
       `octaveRescaleSync: factor must be positive, got ${factor}`,
     );
   }
-  return {
+  return withGrid(sync, {
     origin_ms: sync.origin_ms,
     tempos: sync.tempos.map(t => ({ms: t.ms, bpm: t.bpm * factor})),
     timeSignatures: sync.timeSignatures.map(ts => ({...ts})),
-  };
+  });
 }

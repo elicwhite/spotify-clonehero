@@ -9,7 +9,7 @@
  * for real). Only the highway/audio boundary is stubbed
  * (`ChartEditor` -> a note-count + `leftPanelChildren` + real `ChartAssist`
  * shim, so the run is driven through the card the user actually clicks,
- * `usePaddedAudio` -> a static fake `AudioManager`) and the OPFS/GPU
+ * `useShiftedAudio` -> a static fake `AudioManager`) and the OPFS/GPU
  * boundary is faked (`storage/opfs`, `audio-pipeline/separate-stems`,
  * `ml/transcriber`, `ml/roformer-separation`) — `lib/chart-edit`'s real
  * `readChart`/`writeChartFolder` build and re-parse actual chart bytes, and
@@ -139,11 +139,11 @@ jest.mock('../ChartEditor', () => {
   };
 });
 
-jest.mock('../hooks/usePaddedAudio', () => {
-  const actual = jest.requireActual('../hooks/usePaddedAudio');
+jest.mock('../hooks/useShiftedAudio', () => {
+  const actual = jest.requireActual('../hooks/useShiftedAudio');
   return {
     ...actual,
-    usePaddedAudio: () => ({
+    useShiftedAudio: () => ({
       audioManager: {trackNames: ['drums'], setVolume: jest.fn()},
       fullMixPcm: null,
       stems: [],

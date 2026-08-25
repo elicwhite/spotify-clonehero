@@ -1,9 +1,9 @@
 /**
  * A chart package's own audio files, decoded into the ORIGINAL (unpadded)
- * PCM `usePaddedAudio` plays from — and padded back out again for export.
+ * PCM `useShiftedAudio` plays from — and padded back out again for export.
  *
  * This is the pure half of an OPFS-project-backed editor's audio: no React,
- * no page state. `usePaddedAudio` (beside this file) owns the live
+ * no page state. `useShiftedAudio` (beside this file) owns the live
  * AudioManager built from it, and `useSeparatedStems` owns the extra stems an
  * assist run produced.
  */
@@ -14,15 +14,15 @@ import {
   nativeDecodeRate,
 } from '@/lib/audio-pipeline/decode-audio';
 import {interleaveAudioBufferYielding} from '@/lib/drum-transcription/audio/decoder';
-import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
+import {shiftPcmStart} from '@/lib/drum-transcription/audio/shift-pcm';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {DRUMS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AudioSource} from '../ExportDialog';
-import {anchorPadSamples} from './usePaddedAudio';
-import type {AudioStemInput, PaddedAudioMeta} from './usePaddedAudio';
+import {anchorShiftSamples} from './useShiftedAudio';
+import type {AudioStemInput, ShiftedAudioMeta} from './useShiftedAudio';
 
 /** `interleaveAudioBuffer` produces stereo for every file, whatever the
  *  package shipped (a mono source has its one channel duplicated), so the
@@ -34,7 +34,7 @@ export const PACKAGE_AUDIO_CHANNELS = 2;
  *  something. */
 const PACKAGE_FALLBACK_SAMPLE_RATE = 44100;
 
-/** The project's audio as `usePaddedAudio` takes it. */
+/** The project's audio as `useShiftedAudio` takes it. */
 export interface DecodedPackageAudio {
   /** Base name of the file the full mix came from (`song` for `song.ogg`),
    *  so a padded export can name it what the package named it. */
@@ -45,12 +45,12 @@ export interface DecodedPackageAudio {
    *  {@link decodeChartPackageAudio}), so it has to travel with the PCM
    *  rather than being assumed: the padding, the transport's duration and the
    *  padded export all measure against it. */
-  meta: PaddedAudioMeta;
+  meta: ShiftedAudioMeta;
 }
 
 /**
  * Decodes every audio file in the project into the ORIGINAL (unpadded) PCM
- * `usePaddedAudio` pads and plays.
+ * `useShiftedAudio` pads and plays.
  *
  * A chart package is not one mixed file plus separated stems: it is several
  * stems (song/guitar/rhythm/drums/...) that are ALL meant to play together,
@@ -144,7 +144,7 @@ export function packageHasDrumsAudio(pkg: DecodedPackageAudio): boolean {
  * that is actually in memory.
  *
  * `raw` — no silence to account for, so the package's files ship verbatim.
- * `padded` — the chart has moved and the decoded PCM is here to move the
+ * `shifted` — the chart has moved and the decoded PCM is here to move the
  * audio with it.
  * `blocked` — the chart has moved and the PCM is NOT here, because the editor
  * opens before the song finishes decoding and a decode can fail outright.
@@ -154,21 +154,49 @@ export function packageHasDrumsAudio(pkg: DecodedPackageAudio): boolean {
  */
 export type ExportAudioPlan =
   | {kind: 'raw'}
-  | {kind: 'padded'; padSamples: number}
+  | {kind: 'shifted'; shiftSamples: number}
   | {kind: 'blocked'};
 
+/**
+ * What an export should do with the audio, given the anchor and the format of
+ * the audio that is actually in hand.
+ *
+ * `audio` is null when nothing has decoded. That is the whole reason the
+ * `blocked` case exists — with no audio there is no rate, and with no rate
+ * there is no shift to quantize. An earlier version took the whole decoded
+ * package and invented a 48 kHz rate to feed the quantizer when the package
+ * was missing, then threw the answer away; the fabricated constant was the
+ * signal that the parameter was wider than the question.
+ *
+ * Both hosts ask through here, so `blocked` is a case the compiler makes each
+ * of them answer rather than a guard one of them remembers to write.
+ */
 export function planExportAudio(
-  pkg: DecodedPackageAudio | null,
+  audio: {sampleRate: number} | null,
   anchor: {ms: number} | null,
 ): ExportAudioPlan {
-  const shifted = anchor != null && anchor.ms > 0;
-  if (!pkg) return shifted ? {kind: 'blocked'} : {kind: 'raw'};
-  const padSamples = anchorPadSamples(anchor, pkg.meta.sampleRate);
-  return padSamples > 0 ? {kind: 'padded', padSamples} : {kind: 'raw'};
+  if (!audio) {
+    // One predicate, in one unit — on the other path too, so the two cannot
+    // disagree below half a sample the way `anchor.ms !== 0` versus
+    // `shiftSamples === 0` did.
+    return anchor != null && anchor.ms !== 0
+      ? {kind: 'blocked'}
+      : {kind: 'raw'};
+  }
+  const shiftSamples = anchorShiftSamples(anchor, audio.sampleRate);
+  return shiftSamples === 0 ? {kind: 'raw'} : {kind: 'shifted', shiftSamples};
 }
 
+/** What both hosts say when a shifted chart's audio cannot be produced.
+ *  Shipping the files unshifted would pair a chart moved by whole bars with
+ *  audio that never moved, and nothing downstream could tell. */
+export const EXPORT_BLOCKED_MESSAGE =
+  'This chart has leading silence, and its audio is not available — an ' +
+  'export would not line up. Wait for the audio to load, or reload the ' +
+  'project.';
+
 /**
- * The package's own audio files, each padded by `padSamples` and re-encoded,
+ * The package's own audio files, each padded by `shiftSamples` and re-encoded,
  * for an export of a chart that had leading silence added: every note moved
  * by that much, so the audio has to move with it. Opus when the browser has
  * a WebCodecs encoder for it, WAV otherwise — bigger, but a padded export
@@ -178,9 +206,9 @@ export function planExportAudio(
  * aid, not part of the chart. The stored audio at rest is never modified —
  * padding happens on the decoded copy.
  */
-export async function padPackageAudio(
+export async function shiftPackageAudio(
   pkg: DecodedPackageAudio,
-  padSamples: number,
+  shiftSamples: number,
 ): Promise<AudioSource[]> {
   const {sampleRate, channels} = pkg.meta;
   const sources: AudioSource[] = [];
@@ -188,7 +216,7 @@ export async function padPackageAudio(
     {name: pkg.fullMixName, pcm: pkg.fullMixPcm},
     ...pkg.stems,
   ]) {
-    const padded = padPcmStart(pcm, padSamples, channels);
+    const padded = shiftPcmStart(pcm, shiftSamples, channels);
     try {
       const opus = await encodePcmToOpus(padded, sampleRate, channels);
       sources.push({

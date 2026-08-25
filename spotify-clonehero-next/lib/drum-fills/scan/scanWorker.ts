@@ -21,7 +21,8 @@ import type {File as ChartFile} from '@eliwhite/scan-chart';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {readChartDirectory, readSngFile} from '@/lib/chart-files/chart-package';
+import {readChartHandle} from '@/lib/chart-files/chart-package';
+import {libraryPathOf} from '../practice/songMatch';
 
 import {detectFillsForChart} from './detectForChart';
 import type {
@@ -137,7 +138,7 @@ async function processSong(song: SongAccumulator): Promise<ScannedFill[]> {
   const parsed = parseChartAndIni(files).parsedChart;
   if (!parsed) return [];
 
-  const libraryPath = `${song.handleInfo.parentDir.name}/${song.handleInfo.fileName}`;
+  const libraryPath = libraryPathOf(song);
   return detectFillsForChart(parsed, {
     libraryPath,
     song: song.song,
@@ -147,21 +148,10 @@ async function processSong(song: SongAccumulator): Promise<ScannedFill[]> {
 }
 
 /**
- * Resolve a song's handle from its `handleInfo` and read only the chart/ini
- * files needed for detection. Folder charts and .sng files are handled by the
- * shared `lib/chart-files` helpers.
+ * Read only the chart/ini files a song needs for detection. Folder charts and
+ * .sng files are handled by the shared `lib/chart-files` helpers.
  */
 async function readSongChartFiles(song: SongAccumulator): Promise<ChartFile[]> {
-  const {parentDir, fileName} = song.handleInfo;
-
-  if (fileName.toLowerCase().endsWith('.sng')) {
-    const fileHandle = await parentDir.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const loaded = await readSngFile(file);
-    return loaded.files.filter(f => WANTED_FILES.has(f.fileName.toLowerCase()));
-  }
-
-  const dirHandle = await parentDir.getDirectoryHandle(fileName);
-  const loaded = await readChartDirectory(dirHandle);
+  const loaded = await readChartHandle(song.handleInfo);
   return loaded.files.filter(f => WANTED_FILES.has(f.fileName.toLowerCase()));
 }

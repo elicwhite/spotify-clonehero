@@ -195,7 +195,7 @@ export interface ChartPackageEditorProps {
  *   never separated here takes the Demucs branch, which is exactly what
  *   `/add-lyrics` does with the same input.
  * - Add leading silence: RUNS. `TrackEditPage` pads both its playback
- *   (`usePaddedAudio`) and its exported audio, so a shifted chart stays with
+ *   (`useShiftedAudio`) and its exported audio, so a shifted chart stays with
  *   its audio.
  * - Drum transcription: RUNS, on charts that have Expert Drums.
  *   `transcribe-drums-from-audio` separates its own drum stem out of the same

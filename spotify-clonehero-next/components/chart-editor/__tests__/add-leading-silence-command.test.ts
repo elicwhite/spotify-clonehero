@@ -15,13 +15,16 @@ import {
   getAssistProvenance,
   withAssistProvenance,
 } from '@/lib/chart-editor-core/content-stamps';
-import {planLeadIn, setSongStart, type ChartDocument} from '@/lib/chart-edit';
+import {planLeadIn, type ChartDocument} from '@/lib/chart-edit';
+// The raw setter is module-private on purpose: production code must go
+// through `recordSongStart`, which snaps. Tests want the unsnapped value.
+import {setSongStartTick} from '@/lib/chart-edit/leading-silence';
 import {makeFixtureDoc} from './fixtures';
 
 /** The fixture with a song start, which the pad is measured from and which
  *  the planner declines without (plan 0124 step 4). */
 function readyDoc(): ChartDocument {
-  return setSongStart(makeFixtureDoc(), {audioMs: 0});
+  return setSongStartTick(makeFixtureDoc(), 0);
 }
 
 function planFor(doc: ChartDocument) {

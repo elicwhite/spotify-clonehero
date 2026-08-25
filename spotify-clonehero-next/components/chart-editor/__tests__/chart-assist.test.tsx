@@ -28,6 +28,7 @@ import {
 } from '@testing-library/react';
 import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
+import {applyDocSidecars} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {addDrumNote, addSection} from '@/lib/chart-edit';
 import {
@@ -109,6 +110,13 @@ jest.mock('../../../lib/assist/tasks/generate-sections', () => ({
 
 import ChartAssist from '../sidebar/ChartAssist';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
+
+/** A doc whose song start is already planted, the way a user plants it: on a
+ *  tempo marker, from the tempo lane. The card only gates on it and counts
+ *  bars — it cannot set it (plan 0124 step 4). */
+function withSongStart(doc: ChartDocument): ChartDocument {
+  return applyDocSidecars(doc, {songStart: {audioMs: 0}});
+}
 
 function makeDoc(noteCount = 1): ChartDocument {
   const parsed = createEmptyChart({bpm: 120, resolution: 480});
@@ -429,18 +437,29 @@ describe('ChartAssist leading-silence recommendation', () => {
     return doc;
   }
 
-  it('asks for the song start before it will pad anything', () => {
-    // The pad is measured from the song start, and only the user can supply
-    // it: the tempo map's origin is grid phase, not the musical start (plan
-    // 0124 step 4). So the card says what it needs and holds the action.
+  it('states the opening it will use when no song start is set', () => {
+    // A generated chart opens on the writer's construct — a partial bar in a
+    // meter the song never plays. The card names the values it is about to
+    // build the lead-in from, so the user can see the wrong ones before the
+    // click rather than after it.
     renderChartAssist(makeCollapsedLeadInDoc());
     const card = screen.getByRole('group', {name: 'Add leading silence'});
     expect(
-      within(card).getByText(/first downbeat, then set the song start/i),
+      within(card).getByText(/the values at the start of the chart/i),
     ).toBeInTheDocument();
+    expect(within(card).getByText(/right-click there/i)).toBeInTheDocument();
+  });
+
+  it('pads without waiting to be told where the song starts', () => {
+    // With no song start recorded the pad is taken from tick 0, so the
+    // action is offered rather than held: it adds whole bars in front of
+    // everything, which is what a chart from somewhere else needs (plan 0124
+    // §4). Only trimming needs a song start, and nothing here trims.
+    renderChartAssist(makeCollapsedLeadInDoc());
+    const card = screen.getByRole('group', {name: 'Add leading silence'});
     expect(
       within(card).getByRole('button', {name: /add leading silence/i}),
-    ).toHaveAccessibleDescription(/set where the song starts/i);
+    ).toBeEnabled();
   });
 
   it('says nothing on a chart that already has its lead-in', () => {
@@ -452,12 +471,8 @@ describe('ChartAssist leading-silence recommendation', () => {
   });
 
   it('pads once the song start is set, and reports the lead-in it made', async () => {
-    renderChartAssist(makeDoc());
+    renderChartAssist(withSongStart(makeDoc()));
     const card = screen.getByRole('group', {name: 'Add leading silence'});
-    fireEvent.click(
-      within(card).getByRole('button', {name: /set song start/i}),
-    );
-    await settle();
     fireEvent.click(
       within(card).getByRole('button', {name: /add leading silence/i}),
     );
@@ -466,15 +481,11 @@ describe('ChartAssist leading-silence recommendation', () => {
   });
 
   it('adds a bar, then removes one, without stacking pads', async () => {
-    renderChartAssist(makeDoc());
+    renderChartAssist(withSongStart(makeDoc()));
     const card = screen.getByRole('group', {name: 'Add leading silence'});
     const note = () =>
       within(card).getByText(/Lead-in: \d+ bars?\./).textContent;
 
-    fireEvent.click(
-      within(card).getByRole('button', {name: /set song start/i}),
-    );
-    await settle();
     fireEvent.click(
       within(card).getByRole('button', {name: /add leading silence/i}),
     );
@@ -494,9 +505,7 @@ describe('ChartAssist leading-silence recommendation', () => {
     // The whole grid shifts by one fixed pad and the drums shift with it, so
     // nothing landed on a different beat — flagging staleness here would be
     // a false alarm on a routine action.
-    renderChartAssist(makeDocWithFreshProvenance());
-    fireEvent.click(screen.getByRole('button', {name: /set song start/i}));
-    await settle();
+    renderChartAssist(withSongStart(makeDocWithFreshProvenance()));
     fireEvent.click(screen.getByRole('button', {name: /add leading silence/i}));
     await settle();
     expect(

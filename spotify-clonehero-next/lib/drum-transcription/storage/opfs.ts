@@ -50,7 +50,7 @@ import {
 } from '@/lib/drum-transcription/audio/decoder';
 import type {AudioMetadata} from '@/lib/drum-transcription/audio/types';
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
-import type {DocSidecars} from '@/lib/chart-edit';
+import type {StoredDocSidecars} from '@/lib/chart-edit';
 import {
   CHART_FILE_BASENAMES,
   editedVariant,
@@ -89,12 +89,13 @@ function extensionOf(fileName: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Extends {@link DocSidecars} (plan 0124): the audio anchor, the song start,
- * the lead-in bar count and the recorded opening. Those live in
- * `lib/chart-edit` so this store and the chart-editor store cannot drift, and
- * so a new record is one line rather than seven sites.
+ * Extends {@link StoredDocSidecars} (plan 0124 §3): the audio anchor and the
+ * song-start tick, plus the fields older versions wrote, which
+ * `applyDocSidecars` migrates on load. Those live in `lib/chart-edit` so this
+ * store and the chart-editor store cannot drift, and so a new record is one
+ * line rather than several sites.
  */
-export interface ProjectMetadata extends DocSidecars {
+export interface ProjectMetadata extends StoredDocSidecars {
   id: string;
   name: string;
   /** Song artist, for the unified project list. Absent on projects created
@@ -322,7 +323,7 @@ export async function updateProject(
       | 'assistProvenance'
       | 'toolsApplied'
     > &
-      DocSidecars
+      StoredDocSidecars
   >,
 ): Promise<ProjectMetadata> {
   const dir = await getProjectDir(projectId);

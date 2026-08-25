@@ -68,15 +68,8 @@ import {
   movePhrases,
   getAudioAnchor,
   setAudioAnchor,
-  getLeadIn,
-  setSongStart,
-  planLeadIn,
-  replanLeadIn,
-  barsForExistingPad,
-  setLeadIn,
-  getOpening,
-  setOpening,
-  openingFromSync,
+  recordSongStart,
+  recordSongStartFromMs,
   shiftSynctrackMs,
   carryDocSidecars,
   refreshAnchorKeepMs,
@@ -97,7 +90,7 @@ import {
   clearTrackContents,
   emptyTrack,
   applyLeadIn,
-  adoptLeadInPad,
+  keepSongOnItsAudio,
   type LeadingSilencePlan,
   type DownbeatFlags,
   type DerivedTimeSignature,
@@ -1458,28 +1451,23 @@ export class ReplaceTempoMapCommand implements EditCommand {
       ? shiftSynctrackMs(this.synctrack, anchor.ms)
       : this.synctrack;
     const result = repredictTempo(doc, installed, null);
-    // The incoming sync is the real opening; what lands at tick 0 is the
-    // writer's construct (plan 0124 step 1b). Record it from the UNSHIFTED
-    // map: the opening is a tempo and a meter, not a position.
-    const recorded = openingFromSync(
-      carryDocSidecars(doc, result.doc),
-      this.synctrack,
-    );
+    const carried = carryDocSidecars(doc, result.doc);
     const retimed = anchor
-      ? refreshAnchorKeepMs(setAudioAnchor(recorded, anchor))
-      : recorded;
+      ? refreshAnchorKeepMs(setAudioAnchor(carried, anchor))
+      : carried;
 
-    // With a song start, the new map has a new bar length, so the pad is
-    // re-derived and the opening re-emitted at it. `replanLeadIn` keeps the
-    // user's bar count: a regeneration is not a request for a longer lead-in.
-    const replanned = replanLeadIn(retimed);
-    const padded = replanned ? applyLeadIn(retimed, replanned) : retimed;
+    // Where the music starts, read off the map that was installed (plan 0124
+    // §3). `installed` is already in the chart's frame, so its `musicStartMs`
+    // is too. Nothing else moves: a new map changes the bar length, so the
+    // lead-in may stop being a whole number of bars, and the card reports
+    // that rather than the editor silently re-padding underneath the user.
+    const marked = recordSongStartFromMs(retimed, installed.musicStartMs);
 
     // A standalone regeneration leaves any recorded transcription stamp
     // behind, so the drums snapped to the OLD grid are flagged stale.
     return this.options.fromSameRunAsDrumTranscription
-      ? restampTempoDerived(padded, 'drum-transcription')
-      : padded;
+      ? restampTempoDerived(marked, 'drum-transcription')
+      : marked;
   }
 }
 
@@ -2024,97 +2012,32 @@ export class ReplaceDrumTrackCommand implements EditCommand {
  * relationship.
  */
 /**
- * Record where the song starts, in ORIGINAL-audio milliseconds (plan 0124
- * step 4).
+ * Record where the music starts, as a chart tick (plan 0124 §3).
  *
- * This is the one value the tempo map cannot supply: `Synctrack.origin_ms` is
- * grid phase and always lands within one bar of audio sample 0, so a file
- * with eight seconds of silence still reports an origin near zero.
+ * A tick, not a time: it does not move when the tempo or the meter changes,
+ * so the one record this feature keeps cannot go stale against the chart it
+ * describes. Everything else — the position in the audio, the lead-in bar
+ * count, the opening tempo and meter — is derived from it.
  *
- * When a lead-in already exists the pad is recomputed, at the smallest legal
- * bar count for the new song start — a corrected song start must not leave an
- * oversized lead-in behind.
+ * Recording moves NOTHING. No tick, no time, no marker: bar lines count from
+ * tick 0 and do not depend on where the song starts. An earlier version
+ * recomputed the pad and applied it right here, which shifted every event and
+ * dropped every marker before the new position, so saying where the song
+ * started made the whole chart jump and took the grid out from under the
+ * notes. Re-fitting the lead-in is the user's own next action, on the card,
+ * where the cost is visible before they commit.
  */
 export class SetSongStartCommand implements EditCommand {
   readonly description: string;
   readonly entityKinds = new Set<CommandEntityKind>(['tempo', 'timesig']);
   readonly operations = OP.update;
 
-  constructor(private audioMs: number) {
-    this.description = `Set song start to ${Math.round(audioMs)}ms`;
+  constructor(private tick: number) {
+    this.description = `Set song start to tick ${Math.round(tick)}`;
   }
 
   execute(doc: ChartDocument): ChartDocument {
-    const audioMs = Math.max(0, this.audioMs);
-    const next = setSongStart(doc, {audioMs});
-
-    // A project padded before this feature has an anchor and no bar count.
-    // Back-derive the count from the pad it already has, so setting the song
-    // start does not resize a lead-in the user is happy with (plan 0124 step
-    // 8). The rounding still moves the pad, which the caller announces.
-    if (getLeadIn(next) === null) {
-      const bars = barsForExistingPad(next);
-      if (bars === null) return next;
-      const migrated = planLeadIn(next, bars);
-      return migrated ? applyLeadIn(next, migrated) : setLeadIn(next, {bars});
-    }
-
-    // `planLeadIn` rather than `replanLeadIn`: a moved song start re-chooses
-    // the bar count, so a corrected start cannot leave an oversized lead-in.
-    const plan = planLeadIn(next);
-    return plan ? applyLeadIn(next, plan) : next;
-  }
-}
-
-/**
- * Set the chart's opening meter — the signature at tick 0 (plan 0124 step 6).
- *
- * The pad is recomputed in the same command, and that is not optional. A
- * meter change changes the bar length, so with the pad untouched the song
- * start stops being a whole number of bars from tick 0: at `X = 100`,
- * `N = 2`, 4/4 at 146.98 the song start is at tick 1536, and retyping 3/4
- * makes bars 576 ticks, so 1536 / 576 = 2.667.
- *
- * The write goes through `addTimeSignature`, which replaces the event at the
- * tick and works at tick 0. `SetTimeSignatureCommand` cannot: it routes
- * through `planDownbeatAt`, which rejects a target at or before tick 0.
- */
-export class SetOpeningMeterCommand implements EditCommand {
-  readonly description: string;
-  readonly entityKinds = KIND.timesig;
-  readonly operations = OP.update;
-
-  constructor(private meter: Meter) {
-    this.description = `Set opening time signature to ${meter.numerator}/${meter.denominator}`;
-  }
-
-  execute(doc: ChartDocument): ChartDocument {
-    const current = doc.parsedChart.timeSignatures.find(ts => ts.tick === 0);
-    if (
-      current?.numerator === this.meter.numerator &&
-      current.denominator === this.meter.denominator
-    ) {
-      return doc;
-    }
-
-    const withMeter = cloneDocWithTimeSignatures(doc);
-    addTimeSignature(
-      withMeter,
-      0,
-      this.meter.numerator,
-      this.meter.denominator,
-    );
-    const recorded = getOpening(withMeter)
-      ? setOpening(withMeter, {
-          bpm: getOpening(withMeter)!.bpm,
-          meter: this.meter,
-        })
-      : withMeter;
-
-    // No lead-in yet means nothing to resize.
-    if (getLeadIn(recorded) === null) return recorded;
-    const plan = replanLeadIn(recorded);
-    return plan ? applyLeadIn(recorded, plan) : recorded;
+    return recordSongStart(doc, this.tick);
   }
 }
 
@@ -2155,15 +2078,15 @@ export class PromoteOpeningTempoCommand implements EditCommand {
     ];
     retimeChart(cloned.parsedChart);
 
-    const opening = getOpening(cloned);
-    const recorded = opening
-      ? setOpening(cloned, {...opening, bpm: successor.beatsPerMinute})
-      : cloned;
-    // `adoptLeadInPad`, not `applyLeadIn`: `retimeChart` above already moved
-    // every event's ms into the new grid, so shifting them by the pad's own
-    // change would count the same difference twice.
-    const plan = replanLeadIn(recorded);
-    return plan ? adoptLeadInPad(recorded, plan) : recorded;
+    // The lead-in takes up the change. Promoting a tempo makes the bars
+    // before the song longer or shorter, and the silence in front has to
+    // absorb exactly that, or the whole song slides against its recording.
+    //
+    // Derived from the song start's audio position, not from a stored bar
+    // count: a chart can have bars of lead-in and no pad at all, which is how
+    // this arrived as a bug report. `retimeChart` above already moved every
+    // event's ms into the new grid, so nothing here shifts the chart again.
+    return keepSongOnItsAudio(doc, cloned);
   }
 }
 
@@ -2195,14 +2118,10 @@ export class PromoteOpeningMeterCommand implements EditCommand {
     ];
     retimeChart(cloned.parsedChart);
 
-    const meter = {
-      numerator: successor.numerator,
-      denominator: successor.denominator,
-    };
-    const opening = getOpening(cloned);
-    const recorded = opening ? setOpening(cloned, {...opening, meter}) : cloned;
-    const plan = replanLeadIn(recorded);
-    return plan ? applyLeadIn(recorded, plan) : recorded;
+    // No recompute and no re-emit: a meter carries no time, so nothing has
+    // moved. The lead-in may now be a fraction of a bar, which the card
+    // reports and the user re-fits.
+    return cloned;
   }
 }
 

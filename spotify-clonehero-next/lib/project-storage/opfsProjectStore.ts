@@ -30,7 +30,7 @@ import {
 import type {AssistProvenance} from '@/lib/chart-editor-core/content-stamps';
 import type {ProjectOrigin} from './types';
 import type {AssistTaskKey} from '@/lib/assist/tasks/types';
-import type {DocSidecars} from '@/lib/chart-edit';
+import type {StoredDocSidecars} from '@/lib/chart-edit';
 
 const METADATA_FILE = 'metadata.json';
 
@@ -42,12 +42,18 @@ const AUDIO_DIR = 'audio';
 const ORIGINAL_FILES_MANIFEST = 'original-files.json';
 
 /**
- * `DocSidecars` carries the records a `.chart` file cannot: the audio anchor,
- * the song start, the lead-in bar count and the recorded opening (plan 0124).
- * The list lives in `lib/chart-edit` so this store and the drum-transcription
- * store cannot drift apart, and so adding a record is one line.
+ * `StoredDocSidecars` carries the records a `.chart` file cannot: the audio
+ * anchor and the song-start tick, plus the fields older versions wrote that
+ * are migrated on load (plan 0124 §3). The list lives in `lib/chart-edit` so
+ * this store and the drum-transcription store cannot drift apart, and so
+ * adding a record is one line.
+ *
+ * The STORED shape, not the live one: the migration in `applyDocSidecars`
+ * reads fields this type must therefore admit. Narrowing it to `DocSidecars`
+ * would leave that branch reachable only because `JSON.parse` keeps keys the
+ * type does not mention, which is not a guarantee worth resting on.
  */
-export interface ProjectMetadata extends DocSidecars {
+export interface ProjectMetadata extends StoredDocSidecars {
   /**
    * Which format the project's chart file is stored in. The chart belongs to
    * the user, so the store keeps the format it arrived in rather than
@@ -258,7 +264,7 @@ export function createOpfsProjectStore(
        *  generates content before it creates the project has to pass this, or
        *  the editor opens reading its own fresh work as never generated. */
       assistProvenance?: AssistProvenance | undefined;
-    } & DocSidecars,
+    } & StoredDocSidecars,
   ): Promise<ProjectMetadata> {
     const id = generateId();
     const now = new Date().toISOString();
@@ -284,9 +290,7 @@ export function createOpfsProjectStore(
       hasAudio: opts.audioFiles.length > 0,
       stemFingerprint: opts.stemFingerprint,
       audioAnchor: opts.audioAnchor,
-      songStart: opts.songStart,
-      leadIn: opts.leadIn,
-      opening: opts.opening,
+      songStartTick: opts.songStartTick,
       assistProvenance: opts.assistProvenance,
     };
 

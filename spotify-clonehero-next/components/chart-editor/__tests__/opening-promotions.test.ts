@@ -21,8 +21,7 @@ import {
   makeChartTiming,
   applyDocSidecars,
   getAudioAnchor,
-  getLeadIn,
-  getOpening,
+  leadInBars,
   planLeadIn,
   retimeChart,
   type ChartDocument,
@@ -72,10 +71,7 @@ function withSyntheticOpening(A: number, B: number, bars: number) {
   }
   retimeChart(parsedChart);
 
-  const base = applyDocSidecars(doc, {
-    songStart: {audioMs: 0},
-    opening: {bpm: A, meter: {numerator: 4, denominator: 4}},
-  });
+  const base = applyDocSidecars(doc, {songStartTick: 0});
   const padded = new AddLeadingSilenceCommand(planLeadIn(base, bars)!).execute(
     base,
   );
@@ -111,14 +107,7 @@ describe('PromoteOpeningTempoCommand', () => {
     audioPositions(after).forEach((ms, i) =>
       expect(Math.abs(ms - beforePositions[i])).toBeLessThan(2),
     );
-    expect(getLeadIn(after)).toEqual({bars: 2});
-  });
-
-  it('records the promoted tempo as the opening', () => {
-    const after = new PromoteOpeningTempoCommand().execute(
-      withSyntheticOpening(90, 120, 2),
-    );
-    expect(getOpening(after)!.bpm).toBeCloseTo(120, 3);
+    expect(leadInBars(after)).toBeCloseTo(2, 6);
   });
 
   it('does nothing when there is no later marker to promote', () => {
@@ -130,10 +119,7 @@ describe('PromoteOpeningTempoCommand', () => {
 
 describe('PromoteOpeningMeterCommand', () => {
   function withLaterMeter(numerator: number) {
-    const doc = applyDocSidecars(makeFixtureDoc(), {
-      songStart: {audioMs: 0},
-      opening: {bpm: 120, meter: {numerator: 4, denominator: 4}},
-    });
+    const doc = applyDocSidecars(makeFixtureDoc(), {songStartTick: 0});
     addTimeSignature(doc, doc.parsedChart.resolution * 8, numerator, 4);
     retimeChart(doc.parsedChart);
     return doc;
@@ -146,11 +132,6 @@ describe('PromoteOpeningMeterCommand', () => {
       numerator: 5,
       denominator: 4,
     });
-  });
-
-  it('records the promoted meter as the opening', () => {
-    const after = new PromoteOpeningMeterCommand().execute(withLaterMeter(3));
-    expect(getOpening(after)!.meter).toEqual({numerator: 3, denominator: 4});
   });
 
   it('retimes no note: a meter carries no timing', () => {

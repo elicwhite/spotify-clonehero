@@ -16,7 +16,7 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 // AudioService
 //
 // Owns the current page's AudioManager instance. Pages create/destroy the
-// AudioManager themselves (see usePaddedAudio) and publish it here via
+// AudioManager themselves (see useShiftedAudio) and publish it here via
 // `setAudioManager`. Two read paths are exposed:
 //
 // - `audioManagerRef` — a stable ref for synchronous, non-reactive reads
@@ -31,7 +31,7 @@ import type {AudioManager} from '@/lib/preview/audioManager';
 /**
  * Pads the host's audio for the `audioAnchor` position the chart is ABOUT to
  * have, off the main thread, and holds the result for the rebuild that edit
- * triggers. Published by `usePaddedAudio` (the only owner of the original
+ * triggers. Published by `useShiftedAudio` (the only owner of the original
  * PCM) and called by the Chart Assist leading-silence run, so the padding
  * happens under a progress card instead of inside the silent rebuild that
  * follows the command.
@@ -41,10 +41,10 @@ import type {AudioManager} from '@/lib/preview/audioManager';
  * held result that no longer matches what the rebuild needs is discarded and
  * the rebuild pads for itself.
  */
-export type PadAudioAhead = (
+export type ShiftAudioAhead = (
   /** Chart ms that original audio sample 0 will sit at after the edit — the
    *  `audioAnchor.ms` the rebuild will read. Given in ms, not samples, so
-   *  the quantization is done once, by the same `anchorPadSamples` the
+   *  the quantization is done once, by the same `anchorShiftSamples` the
    *  rebuild uses; a caller quantizing separately could round to a different
    *  sample and silently miss the result it just paid for. */
   anchorMs: number,
@@ -57,7 +57,7 @@ export type PadAudioAhead = (
 class AudioService {
   #current: AudioManager | null = null;
   #listeners = new Set<() => void>();
-  #padAudioAhead: PadAudioAhead | null = null;
+  #shiftAudioAhead: ShiftAudioAhead | null = null;
   #clickSuppressed = false;
   readonly ref: RefObject<AudioManager | null>;
 
@@ -76,13 +76,13 @@ class AudioService {
 
   getAudioManager = (): AudioManager | null => this.#current;
 
-  setPadAudioAhead = (padAudioAhead: PadAudioAhead | null): void => {
-    this.#padAudioAhead = padAudioAhead;
+  setShiftAudioAhead = (shiftAudioAhead: ShiftAudioAhead | null): void => {
+    this.#shiftAudioAhead = shiftAudioAhead;
   };
 
   /** The current pre-pad function, or null on a host with no audio to pad.
    *  Deliberately not a subscription: callers read it when a run starts. */
-  getPadAudioAhead = (): PadAudioAhead | null => this.#padAudioAhead;
+  getShiftAudioAhead = (): ShiftAudioAhead | null => this.#shiftAudioAhead;
 
   setClickSuppressed = (suppressed: boolean): void => {
     if (this.#clickSuppressed === suppressed) return;
@@ -103,10 +103,10 @@ export interface AudioServiceContextValue {
   audioManagerRef: RefObject<AudioManager | null>;
   /** Publishes a new (or null) AudioManager to all subscribers. */
   setAudioManager: (manager: AudioManager | null) => void;
-  /** Publishes the host's {@link PadAudioAhead}, or null when it has none. */
-  setPadAudioAhead: (padAudioAhead: PadAudioAhead | null) => void;
-  /** Reads the host's current {@link PadAudioAhead}. */
-  getPadAudioAhead: () => PadAudioAhead | null;
+  /** Publishes the host's {@link ShiftAudioAhead}, or null when it has none. */
+  setShiftAudioAhead: (shiftAudioAhead: ShiftAudioAhead | null) => void;
+  /** Reads the host's current {@link ShiftAudioAhead}. */
+  getShiftAudioAhead: () => ShiftAudioAhead | null;
   /**
    * Silences the click while a tool needs the song alone. Tap tempo is the
    * one caller: the user taps along to the music, so a click playing the
@@ -152,8 +152,8 @@ export function useAudioServiceContext(): AudioServiceContextValue {
     () => ({
       audioManagerRef: service.ref,
       setAudioManager: service.setAudioManager,
-      setPadAudioAhead: service.setPadAudioAhead,
-      getPadAudioAhead: service.getPadAudioAhead,
+      setShiftAudioAhead: service.setShiftAudioAhead,
+      getShiftAudioAhead: service.getShiftAudioAhead,
       setClickSuppressed: service.setClickSuppressed,
     }),
     [service],
@@ -161,17 +161,17 @@ export function useAudioServiceContext(): AudioServiceContextValue {
 }
 
 /**
- * The host's {@link PadAudioAhead}, read at call time, or null when there
+ * The host's {@link ShiftAudioAhead}, read at call time, or null when there
  * isn't one — either because no host has published one yet or because this
  * surface renders outside an `AudioServiceProvider` at all (capability-gate
  * tests, sidebars mounted without a page's audio). Mirrors
  * `useOptionalAssistRunnerContext`: a card that can live in both worlds asks
  * for the capability rather than requiring the provider.
  */
-export function usePadAudioAheadReader(): () => PadAudioAhead | null {
+export function useShiftAudioAheadReader(): () => ShiftAudioAhead | null {
   const service = useContext(AudioServiceContext);
   return useMemo(
-    () => (service ? service.getPadAudioAhead : () => null),
+    () => (service ? service.getShiftAudioAhead : () => null),
     [service],
   );
 }
@@ -193,7 +193,7 @@ export function useAudioManager(): AudioManager | null {
 /**
  * The current AudioManager, or null when this surface renders outside an
  * `AudioServiceProvider` — a capability-gate test, or a sidebar mounted
- * without a page's audio. Same bargain as {@link usePadAudioAheadReader}: a
+ * without a page's audio. Same bargain as {@link useShiftAudioAheadReader}: a
  * card that can live in both worlds asks instead of requiring.
  */
 export function useOptionalAudioManager(): AudioManager | null {
@@ -231,7 +231,7 @@ export function useClickSuppressed(): boolean {
 /**
  * Setter for {@link useClickSuppressed}, or a no-op outside an
  * `AudioServiceProvider`. Optional for the same reason
- * `usePadAudioAheadReader` is: the piano roll mounts in capability-gate and
+ * `useShiftAudioAheadReader` is: the piano roll mounts in capability-gate and
  * unit tests that have no page audio, and holding the click silent is a
  * courtesy rather than something those surfaces need to provide.
  */

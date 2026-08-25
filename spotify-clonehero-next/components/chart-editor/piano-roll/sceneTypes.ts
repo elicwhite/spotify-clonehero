@@ -58,6 +58,11 @@ export const COLORS = {
   phraseStart: '#c58cff',
   phraseEnd: '#8f6bd0',
   loopFlag: '#4f9dff',
+  // The song-start flag. Green reads as "the music begins here" against the
+  // lane's blue tempo markers and the ruler's amber section flags, so the
+  // three markers in this region stay distinguishable at a glance.
+  songStart: '#4ad991',
+  songStartActive: '#8ff0c0',
   loopShade: 'rgba(79,157,255,0.16)',
 } as const;
 
@@ -212,6 +217,9 @@ export interface ChartScene {
   beats: GridBeat[];
   tempos: TempoMarker[];
   timeSignatures: TsChip[];
+  /** Where the song starts, in chart ms — the flag drawn in the tempo lane.
+   *  Null until the user plants one (plan 0124 step 4). */
+  songStartMs: number | null;
   sections: SectionFlag[];
   notes: PianoRollNote[];
   rows: TrackRowScene[];

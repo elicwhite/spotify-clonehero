@@ -31,6 +31,7 @@
  */
 
 import type {Synctrack, TempoEvent} from './types';
+import {withGrid} from './types';
 import {
   buildTimedTempos,
   msToTick,
@@ -555,11 +556,11 @@ export function warpGrid(
     };
   }
 
-  const grid: Synctrack = {
+  const grid = withGrid(synctrack, {
     origin_ms: warped[0],
     tempos,
     timeSignatures,
-  };
+  });
   return {grid, diag: {...diag, admitted: true}};
 }
 
@@ -614,7 +615,8 @@ function beatsBpmTs(
  * same tempo-segment construction `warpGrid` uses. */
 function gridFromWarped(
   warpedIn: number[],
-  timeSignatures: Synctrack['timeSignatures'],
+  source: Synctrack,
+  timeSignatures: Synctrack['timeSignatures'] = source.timeSignatures,
 ): Synctrack | null {
   const warped = warpedIn.slice();
   for (let k = 1; k < warped.length; k++) {
@@ -632,7 +634,7 @@ function gridFromWarped(
     }
   }
   if (tempos.length < 2) return null;
-  return {origin_ms: warped[0], tempos, timeSignatures: ts};
+  return withGrid(source, {origin_ms: warped[0], tempos, timeSignatures: ts});
 }
 
 /**
@@ -744,7 +746,7 @@ export function warpGridWindowed(
     };
   }
   const mixed = beats.map((b, i) => (warpMask[i] ? warpedAll[i] : b));
-  const grid = gridFromWarped(mixed, ts);
+  const grid = gridFromWarped(mixed, synctrack, ts);
   if (grid === null) {
     return {
       grid: null,
@@ -872,7 +874,7 @@ export function partialOriginRevert(
   }
   const pr = wb.slice();
   for (let i = 0; i < k; i++) pr[i] = ib[i];
-  const g = gridFromWarped(pr, fullGrid.timeSignatures);
+  const g = gridFromWarped(pr, fullGrid);
   return {grid: g ?? fullGrid, nReverted: k};
 }
 

@@ -73,12 +73,13 @@ import {audioSamples} from './audioSamples';
 import {stemOriginsOf} from './sidebar/StemsMixer';
 import {useEditorKeyboard} from './hooks/useEditorKeyboard';
 import {useAutoSave} from './hooks/useAutoSave';
-import {stemPcm, usePaddedAudio} from './hooks/usePaddedAudio';
+import {stemPcm, useShiftedAudio} from './hooks/useShiftedAudio';
 import {VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {
   decodeChartPackageAudio,
-  padPackageAudio,
+  shiftPackageAudio,
   planExportAudio,
+  EXPORT_BLOCKED_MESSAGE,
   PACKAGE_AUDIO_CHANNELS,
   type DecodedPackageAudio,
 } from './hooks/projectAudio';
@@ -683,7 +684,7 @@ function TrackEditEditor({
   });
 
   // ORIGINAL (unpadded) PCM for the project's own audio files, retained
-  // across the session: `usePaddedAudio` re-pads from these on every
+  // across the session: `useShiftedAudio` re-pads from these on every
   // `audioAnchor` change rather than compounding padding onto an
   // already-padded buffer, and the export path below pads from them too.
   const [packageAudio, setPackageAudio] = useState<DecodedPackageAudio | null>(
@@ -834,7 +835,7 @@ function TrackEditEditor({
         // every edit command work from here on. Decoding the song is seconds
         // of work on an album-length package and none of that needs it, so it
         // runs beside the open editor (step 6) instead of in front of it.
-        // Until it lands, `usePaddedAudio` gives the transport a click-only
+        // Until it lands, `useShiftedAudio` gives the transport a click-only
         // manager spanning the chart's own `song_length`.
         const projectHasAudio = meta.hasAudio ?? true;
         setHasAudio(projectHasAudio);
@@ -851,7 +852,7 @@ function TrackEditEditor({
         onReady();
 
         // 6. Decode the package's audio into ORIGINAL (unpadded) PCM.
-        // `usePaddedAudio` rebuilds the AudioManager around it when it
+        // `useShiftedAudio` rebuilds the AudioManager around it when it
         // arrives (full mix + stems + the synthesized click, chart delay
         // applied), carrying the playhead and play state across, and rebuilds
         // again whenever the chart's `audioAnchor` or the stem list changes.
@@ -940,7 +941,7 @@ function TrackEditEditor({
   const storedStemFingerprint =
     projectMeta?.id === projectId ? projectMeta.stemFingerprint : undefined;
 
-  // Playback and the waveform come from `usePaddedAudio` below; what this
+  // Playback and the waveform come from `useShiftedAudio` below; what this
   // host wants from the chart-package boundary is the chart text, the raw
   // export sources, and the assist audio loader.
   const chartPackage = useChartPackageEditor({
@@ -1032,11 +1033,11 @@ function TrackEditEditor({
       : DEFAULT_BLANK_SONG_LENGTH_MS / 1000;
   const {
     audioManager,
-    fullMixPcm: paddedFullMixPcm,
-    stems: paddedStems,
+    fullMixPcm: shiftedFullMixPcm,
+    stems: shiftedStems,
     durationSeconds: audioDurationSeconds,
     rebuilding: audioRebuilding,
-  } = usePaddedAudio({
+  } = useShiftedAudio({
     chartDoc: state.chartDoc,
     audioMeta: packageAudio?.meta ?? null,
     fullMixPcm: packageAudio?.fullMixPcm ?? null,
@@ -1053,21 +1054,24 @@ function TrackEditEditor({
     onSongEnded,
   });
 
-  const stemOrigins = useMemo(() => stemOriginsOf(paddedStems), [paddedStems]);
+  const stemOrigins = useMemo(
+    () => stemOriginsOf(shiftedStems),
+    [shiftedStems],
+  );
 
   // Wrapped once per buffer: consumers depend on this value, and a fresh
   // wrapper per render would rebuild every waveform (see `audioSamples.ts`).
   const audioData = useMemo(
-    () => audioSamples(paddedFullMixPcm),
-    [paddedFullMixPcm],
+    () => audioSamples(shiftedFullMixPcm),
+    [shiftedFullMixPcm],
   );
 
   // The waveform the piano roll draws behind the lyrics line. Read from the
   // padded stem rather than the cache entry, so the leading silence playback
   // already applies is in it with no second pad path to keep in sync.
   const lyricsWaveData = useMemo(
-    () => audioSamples(stemPcm(paddedStems, VOCALS_STEM)),
-    [paddedStems],
+    () => audioSamples(stemPcm(shiftedStems, VOCALS_STEM)),
+    [shiftedStems],
   );
 
   /**
@@ -1088,16 +1092,13 @@ function TrackEditEditor({
   const rawAudioSources = chartPackage.getAudioSources;
   const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
     const anchor = state.chartDoc ? getAudioAnchor(state.chartDoc) : null;
-    const plan = planExportAudio(packageAudio, anchor);
+    const plan = planExportAudio(packageAudio?.meta ?? null, anchor);
     if (plan.kind === 'blocked') {
-      const message =
-        'This chart has leading silence, and its audio is not loaded — an ' +
-        'export would not line up. Wait for the audio, or reload the project.';
-      toast.error(message);
-      throw new Error(message);
+      toast.error(EXPORT_BLOCKED_MESSAGE);
+      throw new Error(EXPORT_BLOCKED_MESSAGE);
     }
     if (plan.kind === 'raw') return rawAudioSources();
-    return padPackageAudio(packageAudio!, plan.padSamples);
+    return shiftPackageAudio(packageAudio!, plan.shiftSamples);
   }, [state.chartDoc, packageAudio, rawAudioSources]);
 
   /**
@@ -1105,7 +1106,7 @@ function TrackEditEditor({
    * the sample rate of the decoded audio (the leading-silence pad quantizes
    * to it) and a busy reason while the song is still being read or the padded
    * AudioManager is rebuilding. No leading-silence disabled reason is
-   * declared — this editor pads playback through `usePaddedAudio` and pads
+   * declared — this editor pads playback through `useShiftedAudio` and pads
    * its exported audio to match, so the action is honest here.
    */
   const audioSampleRate = packageAudio?.meta.sampleRate;

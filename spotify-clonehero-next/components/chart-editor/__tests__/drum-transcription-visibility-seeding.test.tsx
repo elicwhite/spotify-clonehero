@@ -64,11 +64,11 @@ jest.mock('../ChartEditor', () => {
   return {__esModule: true, default: MockChartEditor};
 });
 
-jest.mock('../hooks/usePaddedAudio', () => {
-  const actual = jest.requireActual('../hooks/usePaddedAudio');
+jest.mock('../hooks/useShiftedAudio', () => {
+  const actual = jest.requireActual('../hooks/useShiftedAudio');
   return {
     ...actual,
-    usePaddedAudio: () => ({
+    useShiftedAudio: () => ({
       audioManager: {trackNames: ['drums'], setVolume: jest.fn()},
       fullMixPcm: null,
       stems: [],

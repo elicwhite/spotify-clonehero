@@ -767,9 +767,16 @@ export function beatsToSynctrack({
     origin = anchored.originMs;
   }
 
+  // The first downbeat, in the post-lag ms frame the events use. This is the
+  // only place in the pipeline where the musical start is in hand: the
+  // origin is about to become grid phase, and after `buildSyncLayout` writes
+  // a chart there is no way to ask where the music began.
+  const musicStartMs = downbeatsMs.length > 0 ? downbeatsMs[0] : undefined;
+
   return {
     origin_ms: origin,
     tempos,
     timeSignatures: [{ms: origin, numerator: num, denominator: 4}],
+    ...(musicStartMs === undefined ? {} : {musicStartMs}),
   };
 }

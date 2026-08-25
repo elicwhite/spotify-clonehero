@@ -12,8 +12,11 @@
  */
 
 import {createEmptyChart, addDrumNote, makeChartTiming} from '@/lib/chart-edit';
+// The raw setter is module-private on purpose: production code must go
+// through `recordSongStart`, which snaps. Tests want the unsnapped value.
+import {setSongStartTick} from '@/lib/chart-edit/leading-silence';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {retimeChart, setAudioAnchor, setSongStart} from '@/lib/chart-edit';
+import {applyDocSidecars, retimeChart} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {noteTypes} from '@eliwhite/scan-chart';
 import type {StepProgressEvent} from '../run-to-steps';
@@ -37,7 +40,7 @@ function makeDoc(bpm: number): ChartDocument {
   retimeChart(parsedChart);
   // The song start is what the pad is measured from, and the task declines
   // without one (plan 0124 step 4).
-  return setSongStart({parsedChart, assets: []}, {audioMs: 0});
+  return setSongStartTick({parsedChart, assets: []}, 0);
 }
 
 /** A doc with no sync track at all, which `planLeadingSilence` declines:
@@ -59,10 +62,10 @@ function collect(): {
 
 function inputFor(
   doc: ChartDocument,
-  padAudioAhead?: AddLeadingSilenceInput['padAudioAhead'],
+  shiftAudioAhead?: AddLeadingSilenceInput['shiftAudioAhead'],
   bars?: number,
 ): AddLeadingSilenceInput {
-  return {readDoc: () => doc, padAudioAhead, bars};
+  return {readDoc: () => doc, shiftAudioAhead, bars};
 }
 
 describe('addLeadingSilenceTask.planSteps', () => {
@@ -70,7 +73,7 @@ describe('addLeadingSilenceTask.planSteps', () => {
     const steps = await addLeadingSilenceTask.planSteps(
       inputFor(makeDoc(120), async () => {}),
     );
-    expect(steps.map(s => s.key)).toEqual(['measure-lead-in', 'pad-audio']);
+    expect(steps.map(s => s.key)).toEqual(['measure-lead-in', 'shift-audio']);
   });
 
   it('plans measuring alone on a host with no audio to pad', async () => {
@@ -90,7 +93,7 @@ describe('addLeadingSilenceTask.run', () => {
 
     expect(events.map(e => e.activeKey)).toEqual([
       'measure-lead-in',
-      'pad-audio',
+      'shift-audio',
       null,
     ]);
     expect(events.at(-1)?.terminal).toBe('done');
@@ -101,7 +104,7 @@ describe('addLeadingSilenceTask.run', () => {
   it('forwards the pad fraction and detail as step progress', async () => {
     const {progress, events} = collect();
     await addLeadingSilenceTask.run(
-      inputFor(makeDoc(120), async (_padSamples, {onProgress}) => {
+      inputFor(makeDoc(120), async (_shiftSamples, {onProgress}) => {
         onProgress?.(0.5, '1 of 2');
         onProgress?.(1, '2 of 2');
       }),
@@ -109,9 +112,9 @@ describe('addLeadingSilenceTask.run', () => {
       progress,
     );
 
-    const padEvents = events.filter(e => e.activeKey === 'pad-audio');
-    expect(padEvents.map(e => e.progress)).toEqual([0, 0.5, 1]);
-    expect(padEvents.at(-1)?.detail).toBe('2 of 2');
+    const shiftEvents = events.filter(e => e.activeKey === 'shift-audio');
+    expect(shiftEvents.map(e => e.progress)).toEqual([0, 0.5, 1]);
+    expect(shiftEvents.at(-1)?.detail).toBe('2 of 2');
   });
 
   it('pads the audio for the anchor position the edit will produce', async () => {
@@ -130,7 +133,12 @@ describe('addLeadingSilenceTask.run', () => {
     // A bar is 2000 ms at 120 BPM, so two bars is the whole silence the
     // rebuild needs — not 2000 added to what is already there. The audio is
     // re-padded from the original PCM, so it wants the absolute value.
-    const doc = setAudioAnchor(makeDoc(120), {ms: 2000, tick: 0});
+    // The song start stays where it is in the STORED audio (0 ms), so the
+    // pad the rebuild wants is the whole two bars, not two bars on top.
+    const doc = applyDocSidecars(makeDoc(120), {
+      audioAnchor: {ms: 2000, tick: 0},
+      songStart: {audioMs: 0},
+    });
     const padded: number[] = [];
     const result = await addLeadingSilenceTask.run(
       inputFor(
@@ -148,15 +156,15 @@ describe('addLeadingSilenceTask.run', () => {
   });
 
   it('stops after measuring, with no plan, when nothing needs padding', async () => {
-    const padAudioAhead = jest.fn(async () => {});
+    const shiftAudioAhead = jest.fn(async () => {});
     const {progress, events} = collect();
     const result = await addLeadingSilenceTask.run(
-      inputFor(makeUnplannableDoc(), padAudioAhead),
+      inputFor(makeUnplannableDoc(), shiftAudioAhead),
       new AbortController().signal,
       progress,
     );
     expect(result.plan).toBeNull();
-    expect(padAudioAhead).not.toHaveBeenCalled();
+    expect(shiftAudioAhead).not.toHaveBeenCalled();
     expect(events.map(e => e.activeKey)).toEqual(['measure-lead-in', null]);
   });
 
@@ -169,7 +177,7 @@ describe('addLeadingSilenceTask.run', () => {
     const result = await addLeadingSilenceTask.run(
       {
         readDoc: () => doc,
-        padAudioAhead: async () => {
+        shiftAudioAhead: async () => {
           doc = makeDoc(60);
         },
       },

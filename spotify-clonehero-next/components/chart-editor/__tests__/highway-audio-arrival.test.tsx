@@ -9,7 +9,7 @@
  * Two things have to hold, and neither is visible from the outside until
  * someone opens an album-length chart:
  *
- *   - The stage SURVIVES the swap. `usePaddedAudio` replaces its
+ *   - The stage SURVIVES the swap. `useShiftedAudio` replaces its
  *     `AudioManager` when the real audio replaces the interim click track,
  *     and the stage only ever reads that manager as a clock. Rebuilding the
  *     stage for it would tear down the WebGL context and every highway on it

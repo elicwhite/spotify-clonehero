@@ -3,7 +3,7 @@
  */
 /**
  * `/chart-editor`'s audio, once `TrackEditPage` builds it through
- * `usePaddedAudio` (plan 0076 item 18).
+ * `useShiftedAudio` (plan 0076 item 18).
  *
  * Under test: what the Stems mixer shows for a project opened through the
  * real `TrackEditPage` load path — the package's own audio files at load,
@@ -234,6 +234,9 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       durationSeconds: 180,
       sourceFormat: 'chart',
       originalName: 'Test Song',
+      // A song start recorded in an earlier session, in the shape older
+      // projects stored — it is migrated to a tick on load (plan 0124 §3).
+      songStart: {audioMs: 0},
     })),
     readChartFile: jest.fn(async () => ({
       fileName: 'notes.chart',
@@ -570,15 +573,9 @@ describe('/chart-editor Add leading silence', () => {
     // the node the first query returned is not the node that ends up live.
     const silenceAction = () =>
       screen.getByRole('button', {name: 'Add leading silence'});
-    // Until the song start is set the action is held, and says so.
-    await waitFor(() =>
-      expect(silenceAction()).toHaveAccessibleDescription(
-        /set where the song starts/i,
-      ),
-    );
-    fireEvent.click(screen.getByRole('button', {name: 'Set song start'}));
     // A disabled action carries its reason as the button's accessible
-    // description; an offered one has nothing to explain away.
+    // description; an offered one has nothing to explain away. This project
+    // carries a song start, so the only wait is the audio decode.
     await waitFor(() =>
       expect(silenceAction()).not.toHaveAccessibleDescription(),
     );
@@ -595,12 +592,8 @@ describe('/chart-editor Add leading silence', () => {
     const silenceAction = () =>
       screen.getByRole('button', {name: 'Add leading silence'});
     await screen.findByRole('button', {name: 'Add leading silence'});
-    // The pad is measured from the song start, so the action is held until
-    // one is set (plan 0124 step 4). Both wait on the audio decode.
-    const songStartAction = () =>
-      screen.getByRole('button', {name: 'Set song start'});
-    await waitFor(() => expect(songStartAction()).toBeEnabled());
-    fireEvent.click(songStartAction());
+    // The stored project carries a song start, so the action is offered as
+    // soon as the audio it pads has decoded.
     await waitFor(() => expect(silenceAction()).toBeEnabled());
     fireEvent.click(silenceAction());
 
@@ -617,14 +610,12 @@ describe('/chart-editor Add leading silence', () => {
       string,
       {
         audioAnchor: {ms: number} | null;
-        songStart: {audioMs: number} | null;
-        leadIn: {bars: number} | null;
+        songStartTick: number | null;
       },
     ];
     expect(patch.audioAnchor?.ms).toBeGreaterThan(0);
-    // The pad is derived, so the reload needs the two numbers it comes from,
-    // not only the pad itself.
-    expect(patch.songStart).toEqual({audioMs: 0});
-    expect(patch.leadIn?.bars).toBeGreaterThan(0);
+    // The pad is derived, so the reload needs the song start too — and it is
+    // stored as a tick, which the lead-in bar count is read back from.
+    expect(patch.songStartTick).toBeGreaterThan(0);
   });
 });

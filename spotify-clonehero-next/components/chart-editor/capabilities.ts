@@ -143,7 +143,7 @@ export interface EditorCapabilities {
    * one place any of these pages offers a click-volume control, so it stays
    * on for any surface that plays a synthesized click
    * track at all — including `TEMPO_CAPABILITIES`: `/tempo` builds its
-   * AudioManager through the same `usePaddedAudio` click-track machinery as
+   * AudioManager through the same `useShiftedAudio` click-track machinery as
    * DRUM_EDIT, and today has NO UI for that click stem or for its
    * highway-waveform drum stem, so the mixer is a net-new control there,
    * not a redundant one.

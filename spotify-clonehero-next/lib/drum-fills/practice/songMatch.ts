@@ -23,11 +23,21 @@ export interface EnumeratedSong {
   song: string;
   artist: string;
   charter: string;
-  handleInfo: {parentDir: {name: string}; fileName: string};
+  handleInfo:
+    | {parentDir: {name: string}; fileName: string}
+    | {dirHandle: {name: string}; fileName: string};
 }
 
+/**
+ * A song that is the scanned folder itself has no parent to name, so its path
+ * is its own name. Every other song keeps the `parentDir/fileName` form the
+ * stored fill rows were written with.
+ */
 export function libraryPathOf(s: EnumeratedSong): string {
-  return `${s.handleInfo.parentDir.name}/${s.handleInfo.fileName}`;
+  const info = s.handleInfo;
+  return 'dirHandle' in info
+    ? info.fileName
+    : `${info.parentDir.name}/${info.fileName}`;
 }
 
 /**

@@ -26,10 +26,16 @@ import {
   useChartEditorContext,
 } from '../../ChartEditorContext';
 import {createEmptyChart, noteTypes} from '@eliwhite/scan-chart';
-import {addDrumNote, addSection, retimeChart} from '@/lib/chart-edit';
+import {
+  addDrumNote,
+  addSection,
+  getSongStartTick,
+  retimeChart,
+} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {makeFixtureDoc} from '../../__tests__/fixtures';
+import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
 /** A 1/4-time doc (every beat is a downbeat) with a single tempo marker at
@@ -271,6 +277,10 @@ function fireAt(
 // y=46, not y=24.
 const TEMPO_LANE = {x: 120, y: 52};
 
+/** The scale the panel fits this fixture at, for turning a chart ms into the
+ *  x a pointer has to hit. */
+const PX_PER_MS = 0.07;
+
 /** Lowest tempo-lane x that hits an authored time-signature chip's pill, or
  *  -1 when none is drawn. A pointer finds a chip exactly the way a user does:
  *  the only lane positions that hit it are the ones offering its removal. */
@@ -438,20 +448,17 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
       screen.getByRole('button', {name: /Make this beat 1/}),
     ).toBeInTheDocument();
     act(() => {
-      screen.getByRole('button', {name: 'Music starts here'}).click();
+      screen.getByRole('button', {name: 'The song starts here'}).click();
     });
 
     act(() => {
       fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
     });
-    // After: one item says it, and the rotation is gone rather than disabled.
+    // After: the rotation is gone rather than disabled, and the marker item
+    // is what moves the song start.
     expect(
       screen.queryByRole('button', {name: /Make this beat 1/}),
     ).not.toBeInTheDocument();
-    const move = screen.getByRole('button', {name: 'Move the song start here'});
-    // Always enabled: "the song starts one bar later" is a tap on a beat that
-    // is already a downbeat, which the rotation's own gate refuses.
-    expect(move).toBeEnabled();
   });
 
   it('promotes the second tempo marker from the first marker\u2019s menu', async () => {
@@ -508,22 +515,161 @@ describe('PianoRollTimeline right-click context menu (real DOM path)', () => {
     ).toEqual([0]);
   });
 
-  it('offers "Music starts here" on the tempo lane', async () => {
+  // The song start and a tempo marker describe the same moment, so the flag
+  // always lands on one: it snaps to a marker within a beat, and where there
+  // is none a marker is added with it. A flag a few ticks off a marker would
+  // leave a sliver of the old tempo and meter right where the song begins.
+  // One lane, one menu: the same sections in the same order, each showing
+  // edit-or-add for what is actually there.
+  it('always offers both a tempo action and a meter action', async () => {
+    const canvas = await mountPanel();
+
+    const labels = () =>
+      screen.getAllByRole('button').map(b => b.textContent ?? '');
+    const hasTempoAction = () =>
+      labels().some(l => /Set tempo value|Add tempo marker here/.test(l));
+    const hasMeterAction = () =>
+      labels().some(l => /Edit time signature|Insert Time Signature/.test(l));
+
+    // Empty lane.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 600, y: TEMPO_LANE.y, button: 2});
+    });
+    expect(hasTempoAction()).toBe(true);
+    expect(hasMeterAction()).toBe(true);
+
+    // On the tick-0 marker, where a chip sits too.
+    act(() => {
+      fireEvent.keyDown(document, {key: 'Escape'});
+      fireAt(canvas, 'contextmenu', {x: 0, y: TEMPO_LANE.y, button: 2});
+    });
+    expect(hasTempoAction()).toBe(true);
+    expect(hasMeterAction()).toBe(true);
+    expect(labels().some(l => /The song starts here/.test(l))).toBe(true);
+  });
+
+  // Reported 2026-08-24: at a bar line the item was disabled, so a meter
+  // change could not be started at the one place it is most often wanted.
+  it('inserts a time signature on an existing bar line', async () => {
     const canvas = await mountPanel();
     act(() => {
-      fireAt(canvas, 'contextmenu', {...TEMPO_LANE, button: 2});
+      latest!.dispatch({type: 'SET_GRID_DIVISION', division: 4});
     });
-    const item = screen.getByRole('button', {name: 'Music starts here'});
+    const before = latest!.state.chartDoc!.parsedChart.timeSignatures.length;
+
+    // Find a bar line: the placement item reports a no-op there, which is
+    // exactly where it used to be disabled.
+    let placed = false;
+    for (let x = 40; x <= 400 && !placed; x += 1) {
+      act(() => {
+        fireEvent.keyDown(document, {key: 'Escape'});
+        fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+      });
+      const item = screen.queryByRole('button', {
+        name: 'Insert Time Signature',
+      });
+      if (!item || (item as HTMLButtonElement).disabled) continue;
+      const ticksBefore = latest!.state
+        .chartDoc!.parsedChart.timeSignatures.map(ts => ts.tick)
+        .join(',');
+      act(() => {
+        item.click();
+      });
+      const after = latest!.state.chartDoc!.parsedChart.timeSignatures;
+      if (after.map(ts => ts.tick).join(',') !== ticksBefore) placed = true;
+    }
+    expect(placed).toBe(true);
+    expect(
+      latest!.state.chartDoc!.parsedChart.timeSignatures.length,
+    ).toBeGreaterThan(before);
+  });
+
+  it('offers no second signature where one already sits', async () => {
+    const canvas = await mountPanel();
+    // The tick-0 chip's own position already has a signature.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 0, y: TEMPO_LANE.y, button: 2});
+    });
+    const item = screen.queryByRole('button', {name: 'Insert Time Signature'});
+    if (item) expect(item).toBeDisabled();
+  });
+
+  it('offers a tempo marker on a signature chip that has none', async () => {
+    const canvas = await mountPanel();
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 600, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
+    });
+    const chipX = findTsChipHitX(canvas);
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: chipX, y: TEMPO_LANE.y, button: 2});
+    });
+    // The chip's own item, AND the tempo action the old menu withheld here.
+    expect(
+      screen.getByRole('button', {name: /Edit time signature/}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Add tempo marker here'}),
+    ).toBeInTheDocument();
+  });
+
+  it('offers the song start on a signature chip with no marker under it', async () => {
+    const canvas = await mountPanel();
+    // Place a signature away from any tempo marker, then open its chip menu.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 600, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Insert Time Signature'}).click();
+    });
+    const chipX = findTsChipHitX(canvas);
+    expect(chipX).toBeGreaterThan(0);
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: chipX, y: TEMPO_LANE.y, button: 2});
+    });
+
+    // The chip's own items are there, and so is the song start: it belongs
+    // to the position, not to whichever hit test answered.
+    expect(
+      screen.getByRole('button', {name: /Edit time signature/}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'The song starts here'}),
+    ).toBeEnabled();
+  });
+
+  it('records the tick under the pointer, and adds no marker', async () => {
+    const canvas = await mountPanel();
+    const before = latest!.state.chartDoc!.parsedChart.tempos.length;
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 600, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'The song starts here'}).click();
+    });
+
+    const doc = latest!.state.chartDoc!;
+    // The tick under the pointer, not the nearest beat — a beat can be half
+    // a beat away from the click. A statement about the chart, not an edit
+    // to it: no marker is added, and none moves.
+    expect(getSongStartTick(doc)).toBeGreaterThan(0);
+    expect(doc.parsedChart.tempos.length).toBe(before);
+  });
+
+  it('plants the song start from a tempo marker\u2019s own menu', async () => {
+    const canvas = await mountPanel();
+    // The tick-0 marker, below the chip strip where the marker answers.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 0, y: TEMPO_LANE.y + 10, button: 2});
+    });
+    const item = screen.getByRole('button', {name: 'The song starts here'});
     expect(item).toBeEnabled();
     act(() => {
       item.click();
     });
-    // The song start is stored in ORIGINAL-audio ms. With no pad yet, that is
-    // the beat's own chart time.
-    const songStart = (
-      latest!.state.chartDoc as {songStart?: {audioMs: number} | null}
-    ).songStart;
-    expect(songStart!.audioMs).toBeGreaterThan(0);
+    expect(getSongStartTick(latest!.state.chartDoc!)).toBe(0);
   });
 
   // The opening meter is editable now (plan 0124 step 6): it is the recovery
@@ -1259,5 +1405,92 @@ describe('Set tempo value (tempo-lane marker menu → in-place field)', () => {
 
     expect(screen.getByTestId('bpm-value-popover')).toBeInTheDocument();
     expect(field()).toHaveValue('96.5');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The song-start flag (plan 0124 step 4)
+// ---------------------------------------------------------------------------
+
+describe('the song-start flag', () => {
+  /** Plant the song start at `x` and return the tick it recorded. */
+  async function plantAt(canvas: HTMLCanvasElement, x: number) {
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'The song starts here'}).click();
+    });
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: 400, y: 100}); // dismiss the menu
+      fireAt(canvas, 'pointerup', {x: 400, y: 100});
+    });
+    return getSongStartTick(latest!.state.chartDoc!)!;
+  }
+
+  /** Where the flag is drawn for a recorded tick. The panel fits the fixture
+   *  at this scale, the same way this file hard-codes the lane's y. */
+  function flagXFor(tick: number) {
+    const chart = latest!.state.chartDoc!.parsedChart;
+    const timed = buildTimedTempos(chart.tempos, chart.resolution);
+    return Math.round(tickToMs(tick, timed, chart.resolution) * PX_PER_MS);
+  }
+
+  it('does not snap to a tempo marker INSIDE the hit radius', async () => {
+    const canvas = await mountPanel();
+    // Add a marker at x=60 — tick 840, drawn at x≈61.25 — then right-click
+    // at x=52. That is 9.25 px away, inside TEMPO_MARKER_HIT_RADIUS (10), so
+    // the menu's `anchorTick` resolves to the marker. The item that PLACES
+    // must not: it takes the pointer's own snapped tick, 720.
+    //
+    // Both numbers were measured against this fixture, not derived. An
+    // earlier version of this test asserted 480 from a click at x=51 — 10.25
+    // px out, so no marker was hit at all and the value it pinned was the
+    // NEAREST-BEAT fallback. It passed against code that snapped.
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 60, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: /Add tempo marker here/}).click();
+    });
+    expect(
+      latest!.state.chartDoc!.parsedChart.tempos.some(t => t.tick === 840),
+    ).toBe(true);
+
+    act(() => {
+      fireAt(canvas, 'contextmenu', {x: 52, y: TEMPO_LANE.y, button: 2});
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'The song starts here'}).click();
+    });
+    expect(getSongStartTick(latest!.state.chartDoc!)).toBe(720);
+  });
+
+  it('drags to the tick under the pointer', async () => {
+    const canvas = await mountPanel();
+    const planted = await plantAt(canvas, 600);
+    expect(planted).toBeGreaterThan(0);
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {
+        x: flagXFor(planted),
+        y: TEMPO_LANE.y,
+        button: 0,
+      });
+      fireAt(canvas, 'pointermove', {x: 4, y: TEMPO_LANE.y, button: 0});
+      fireAt(canvas, 'pointerup', {x: 4, y: TEMPO_LANE.y, button: 0});
+    });
+    expect(getSongStartTick(latest!.state.chartDoc!)).toBeLessThan(planted);
+  });
+
+  it('a click that never moves leaves the song start alone', async () => {
+    const canvas = await mountPanel();
+    const before = await plantAt(canvas, 600);
+    const flagX = flagXFor(before);
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: flagX, y: TEMPO_LANE.y, button: 0});
+      fireAt(canvas, 'pointerup', {x: flagX, y: TEMPO_LANE.y, button: 0});
+    });
+    expect(getSongStartTick(latest!.state.chartDoc!)).toBe(before);
   });
 });

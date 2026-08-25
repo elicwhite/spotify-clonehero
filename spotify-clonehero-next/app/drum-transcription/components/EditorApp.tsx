@@ -5,6 +5,11 @@ import {Loader2, AlertCircle} from 'lucide-react';
 import {toast} from 'sonner';
 
 import {
+  planExportAudio,
+  EXPORT_BLOCKED_MESSAGE,
+} from '@/components/chart-editor/hooks/projectAudio';
+
+import {
   isAlbumArtFileName,
   withAlbumArt,
   type AlbumArtFile,
@@ -42,15 +47,15 @@ import {
   decodeAudio,
   interleaveAudioBuffer,
 } from '@/lib/drum-transcription/audio/decoder';
-import {padPcmStart} from '@/lib/drum-transcription/audio/pad-pcm';
+import {shiftPcmStart} from '@/lib/drum-transcription/audio/shift-pcm';
 import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {
   chartDocToFolderFiles,
   readChart,
   writeChartFileAs,
   getAudioAnchor,
+  applyDocSidecars,
   readDocSidecars,
-  setAudioAnchor,
 } from '@/lib/chart-edit';
 import {
   documentIdentityFields,
@@ -64,11 +69,11 @@ import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContex
 import {useEditorKeyboard} from '@/components/chart-editor/hooks/useEditorKeyboard';
 import {useAutoSave} from '@/components/chart-editor/hooks/useAutoSave';
 import {
-  usePaddedAudio,
-  anchorPadSamples,
+  useShiftedAudio,
+  anchorShiftSamples,
   stemPcm,
   type AudioStemInput,
-} from '@/components/chart-editor/hooks/usePaddedAudio';
+} from '@/components/chart-editor/hooks/useShiftedAudio';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {
   editedVariant,
@@ -182,9 +187,9 @@ export default function EditorApp({
   );
 
   // ORIGINAL (unpadded) full-mix + drum-stem PCM, retained across the
-  // session — passed to `usePaddedAudio`, which re-pads from source on
+  // session — passed to `useShiftedAudio`, which re-pads from source on
   // every `audioAnchor` change rather than compounding padding on top of a
-  // previously-padded buffer. State (not refs): `usePaddedAudio` reads
+  // previously-padded buffer. State (not refs): `useShiftedAudio` reads
   // these during render, and refs can't be read there.
   const [originalFullMixPcm, setOriginalFullMixPcm] =
     useState<Float32Array | null>(null);
@@ -196,7 +201,7 @@ export default function EditorApp({
 
   // Stems dropped onto the Stems mixer's drop-zone row at runtime (plan 0074
   // Phase 5). Merged into `paddedAudioStems` below, so adding one triggers
-  // `usePaddedAudio`'s stem-list rebuild the same way an anchor change does.
+  // `useShiftedAudio`'s stem-list rebuild the same way an anchor change does.
   const [userAddedStems, setUserAddedStems] = useState<AudioStemInput[]>([]);
 
   // The chart's album art, read from (and written back into) the project's
@@ -259,11 +264,11 @@ export default function EditorApp({
   // aligned against the cached roformer vocals, so the waveform appears for
   // a stem this session hasn't picked up yet. No-op when no vocals stem is
   // cached (legacy projects, or ones whose lyrics came from the Demucs
-  // fallback, which caches nothing). `padSamples` defaults to the chart's
+  // fallback, which caches nothing). `shiftSamples` defaults to the chart's
   // current `audioAnchor` pad amount so a mid-session refresh stays
   // consistent with the live AudioManager.
   const refreshVocalsStem = useCallback(
-    async (padSamples?: number) => {
+    async (shiftSamples?: number) => {
       try {
         if (!(await hasVocalsStem(projectId))) return;
         const vocalsOpus = await loadVocalsStem(projectId);
@@ -278,14 +283,14 @@ export default function EditorApp({
         const pcm = interleaveAudioBuffer(decoded);
         originalVocalsStemPcmRef.current = pcm;
         const pad =
-          padSamples ??
+          shiftSamples ??
           (state.chartDoc && audioMeta
-            ? anchorPadSamples(
+            ? anchorShiftSamples(
                 getAudioAnchor(state.chartDoc),
                 audioMeta.sampleRate,
               )
             : 0);
-        setVocalsStemPcm(padPcmStart(pcm, pad, 2));
+        setVocalsStemPcm(shiftPcmStart(pcm, pad, 2));
       } catch (err) {
         console.warn('Failed to load vocals stem for waveform:', err);
       }
@@ -295,21 +300,21 @@ export default function EditorApp({
 
   // Re-pad the vocals-stem waveform whenever the chart's `audioAnchor`
   // changes (leading-silence apply/undo/redo, or a grid-glue tempo edit near
-  // the start) — mirrors `usePaddedAudio`'s rebuild trigger, gated on the
+  // the start) — mirrors `useShiftedAudio`'s rebuild trigger, gated on the
   // numeric pad amount so a note-only edit never re-copies the PCM.
   const vocalsPadSamplesRef = useRef(0);
   useEffect(() => {
     if (!state.chartDoc || !audioMeta || !originalVocalsStemPcmRef.current) {
       return;
     }
-    const nextPadSamples = anchorPadSamples(
+    const nextPadSamples = anchorShiftSamples(
       getAudioAnchor(state.chartDoc),
       audioMeta.sampleRate,
     );
     if (nextPadSamples === vocalsPadSamplesRef.current) return;
     vocalsPadSamplesRef.current = nextPadSamples;
     setVocalsStemPcm(
-      padPcmStart(originalVocalsStemPcmRef.current, nextPadSamples, 2),
+      shiftPcmStart(originalVocalsStemPcmRef.current, nextPadSamples, 2),
     );
   }, [state.chartDoc, audioMeta]);
 
@@ -371,13 +376,14 @@ export default function EditorApp({
           });
         }
 
-        // 3a. Re-attach the persisted audio anchor (0064 addendum §1), if
-        // any, before this doc is ever dispatched. Absent/undefined ⇒ no
-        // padding, current behavior.
-        const persistedAnchor = meta.audioAnchor ?? null;
-        if (persistedAnchor) {
-          chartDoc = setAudioAnchor(chartDoc, persistedAnchor);
-        }
+        // 3a. Re-attach every persisted sidecar (0064 addendum §1, plan
+        // 0124 §3) before this doc is ever dispatched. Through the canonical
+        // reader, not by hand: the autosave at the bottom of this file
+        // mirrors `readDocSidecars`, so anything restored by a shorter list
+        // here is written on every save and dropped on every reload. That is
+        // what happened to `songStartTick`, and it is also the only place
+        // the older-project migration runs.
+        chartDoc = applyDocSidecars(chartDoc, meta);
 
         // 3b. Re-attach assist provenance (plan 0074 Design C). `.chart`/
         // `.mid` have nowhere to carry it, so the project's OPFS metadata is
@@ -434,14 +440,17 @@ export default function EditorApp({
         if (cancelled) return;
         setAudioMeta(aMeta);
 
-        const padSamples = anchorPadSamples(persistedAnchor, aMeta.sampleRate);
-        vocalsPadSamplesRef.current = padSamples;
+        const shiftSamples = anchorShiftSamples(
+          getAudioAnchor(chartDoc),
+          aMeta.sampleRate,
+        );
+        vocalsPadSamplesRef.current = shiftSamples;
 
         // 9. Load the full mix as PCM for waveform visualization (decodes
         // song.opus in memory for current projects; reads full.pcm directly
         // for legacy ones). This is the ORIGINAL (unpadded) audio — the
         // stored audio at rest is never touched (0064 addendum §5).
-        // `usePaddedAudio` (below) builds the padded AudioManager from this
+        // `useShiftedAudio` (below) builds the padded AudioManager from this
         // once the chart doc is dispatched.
         const pcmData = await loadFullMixPcm(projectId);
         if (cancelled) return;
@@ -464,12 +473,12 @@ export default function EditorApp({
         // lyrics row's background waveform only — not registered with
         // AudioManager (it's not a playback source). Opportunistic: absent
         // on legacy projects, or ones that haven't run separation/Add Lyrics.
-        await refreshVocalsStem(padSamples);
+        await refreshVocalsStem(shiftSamples);
         if (cancelled) return;
 
         // 10. Update editor state. ChartDoc carries the parsed chart;
         // consumers derive the active track via selectActiveTrack().
-        // `usePaddedAudio` builds the AudioManager once this lands.
+        // `useShiftedAudio` builds the AudioManager once this lands.
         // Visibility comes with it: `SET_CHART_DOC` seeds the doc's
         // preferred track, which is Expert Drums for transcription output —
         // the one visible track the route model gives this editor.
@@ -515,7 +524,7 @@ export default function EditorApp({
 
   // Adds a dropped stem (StemsMixer's drop-zone row) to the padded-audio
   // stem list, which rebuilds the AudioManager to include it. The mixer
-  // always hands over 44.1 kHz stereo PCM, while `buildPaddedAudioManager`
+  // always hands over 44.1 kHz stereo PCM, while `buildShiftedAudioManager`
   // describes every track it builds with this project's `audioMeta` — a
   // mismatch would hand these samples to Web Audio under the wrong rate and
   // play the stem at the wrong speed, so reject it instead.
@@ -540,7 +549,7 @@ export default function EditorApp({
     stems: audioStems,
     durationSeconds,
     rebuilding: audioRebuilding,
-  } = usePaddedAudio({
+  } = useShiftedAudio({
     chartDoc: state.chartDoc,
     audioMeta,
     fullMixPcm: originalFullMixPcm,
@@ -640,16 +649,30 @@ export default function EditorApp({
       if (!aMeta) return sources;
 
       const anchor = state.chartDoc ? getAudioAnchor(state.chartDoc) : null;
-      const padSamples = anchorPadSamples(anchor, aMeta.sampleRate);
+      // The same decision the chart-editor host makes, from the same
+      // function. It was re-derived inline here, and the copy is how one
+      // branch got a refusal and the other did not.
+      const plan = planExportAudio(aMeta, anchor);
+      const shiftSamples = plan.kind === 'shifted' ? plan.shiftSamples : 0;
+
+      /** Refuse rather than ship a shifted chart with audio that did not
+       *  move — or, worse, with no audio at all. */
+      const refuse = (): never => {
+        toast.error(EXPORT_BLOCKED_MESSAGE);
+        throw new Error(EXPORT_BLOCKED_MESSAGE);
+      };
+      if (plan.kind === 'blocked') return refuse();
 
       const toOpus = (pcm: Float32Array): Promise<Uint8Array> =>
         encodePcmToOpus(pcm, aMeta.sampleRate, aMeta.channels);
 
       // Current projects store the full mix pre-encoded as Opus — reuse it
-      // verbatim rather than decoding + re-encoding. Only valid when there's
-      // no anchor (verbatim bytes can't reflect a pad). Used by the
-      // includeStems accompaniment branch below.
-      const songOpus = padSamples > 0 ? null : await readSongOpus(projectId);
+      // verbatim rather than decoding + re-encoding. Only valid at a zero
+      // anchor: verbatim bytes cannot reflect a shift in EITHER direction,
+      // and the anchor is signed (plan 0124 §2). Used by the includeStems
+      // accompaniment branch below.
+      const songOpus =
+        plan.kind === 'shifted' ? null : await readSongOpus(projectId);
 
       const readFullMixPcm = async (): Promise<Float32Array | null> => {
         try {
@@ -660,11 +683,11 @@ export default function EditorApp({
       };
 
       // Original audio: the uploaded file, unmodified, named song.<ext> — or,
-      // when padded, the decoded+padded mix re-encoded as song.opus (the
+      // when shifted, the decoded+shifted mix re-encoded as song.opus (the
       // bytes are no longer the original file, so the verbatim name doesn't
       // apply).
       if (!includeStems) {
-        if (padSamples > 0) {
+        if (plan.kind === 'shifted') {
           let pcm = await readFullMixPcm();
           if (!pcm) {
             const original = await readOriginalAudio(projectId);
@@ -673,14 +696,13 @@ export default function EditorApp({
               pcm = interleaveAudioBuffer(decoded);
             }
           }
-          if (pcm) {
-            const padded = padPcmStart(pcm, padSamples, aMeta.channels);
-            const opus = await toOpus(padded);
-            sources.push({
-              fileName: 'song.opus',
-              data: opus.buffer as ArrayBuffer,
-            });
-          }
+          if (!pcm) return refuse();
+          const shifted = shiftPcmStart(pcm, shiftSamples, aMeta.channels);
+          const opus = await toOpus(shifted);
+          sources.push({
+            fileName: 'song.opus',
+            data: opus.buffer as ArrayBuffer,
+          });
           return sources;
         }
         // Current (original-at-rest) projects: emit the verbatim upload
@@ -709,7 +731,7 @@ export default function EditorApp({
         return sources;
       }
 
-      // Drum stem → drums.opus (fingerprint cache, legacy fallback), padded
+      // Drum stem → drums.opus (fingerprint cache, legacy fallback), shifted
       // to match the anchor.
       let drumsPcm: Float32Array | null = null;
       try {
@@ -718,9 +740,11 @@ export default function EditorApp({
         drumsPcm = null;
       }
       if (drumsPcm) {
-        if (padSamples > 0) {
-          drumsPcm = padPcmStart(drumsPcm, padSamples, aMeta.channels);
-        }
+        // Unguarded: `shiftPcmStart` returns the same buffer by reference at
+        // zero. A guard here would be one more copy of the sign decision to
+        // get wrong, which is how this one was `> 0` and silently skipped a
+        // trim.
+        drumsPcm = shiftPcmStart(drumsPcm, shiftSamples, aMeta.channels);
         const opus = await toOpus(drumsPcm);
         sources.push({
           fileName: 'drums.opus',
@@ -735,14 +759,16 @@ export default function EditorApp({
         return sources;
       }
       let accompaniment = await readFullMixPcm();
+      // The same refusal as the no-stems branch. Without it a shifted export
+      // whose full mix cannot be read returns having pushed nothing at all:
+      // a chart moved by whole bars, paired with no audio.
+      if (!accompaniment && shiftSamples !== 0) return refuse();
       if (accompaniment) {
-        if (padSamples > 0) {
-          accompaniment = padPcmStart(
-            accompaniment,
-            padSamples,
-            aMeta.channels,
-          );
-        }
+        accompaniment = shiftPcmStart(
+          accompaniment,
+          shiftSamples,
+          aMeta.channels,
+        );
         const opus = await toOpus(accompaniment);
         sources.push({
           fileName: 'song.opus',

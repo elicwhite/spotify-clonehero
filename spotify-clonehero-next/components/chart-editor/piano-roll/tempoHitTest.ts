@@ -159,6 +159,51 @@ export function hitTsChip(
   return best;
 }
 
+// ---------------------------------------------------------------------------
+// The song-start flag
+// ---------------------------------------------------------------------------
+
+/** Half-width of the flag's hit box, in px — the same generous radius the
+ *  tempo marker uses, since the two sit in the same short lane. */
+export const SONG_START_HIT_RADIUS = TEMPO_MARKER_HIT_RADIUS;
+
+/** Top of the pennant within the tempo lane, and its height — the band the
+ *  flag answers in. Mirrors what `drawSongStartFlag` paints. */
+export const SONG_START_PENNANT_TOP = 1;
+export const SONG_START_PENNANT_H = 8;
+
+/**
+ * Whether the pointer is on the song-start flag drawn at `songStartMs`.
+ *
+ * `yInLane` is measured from the top of the tempo lane, and the flag answers
+ * only inside its pennant — the same idea as the signature chips, which take
+ * the pointer in the lane's top strip and nowhere else.
+ *
+ * The flag used to answer anywhere in the lane's full height, on the
+ * reasoning that a taller target is easier to grab. That was written before
+ * `recordSongStart` snapped the song start ONTO a marker: with the flag and
+ * the marker sharing a tick as the normal case, a full-height flag takes the
+ * pointerdown first and the marker underneath can never be dragged again.
+ * The pole is still drawn full height — it is a sight line, not a target.
+ */
+export function hitSongStartFlag(
+  songStartMs: number | null,
+  view: PianoRollView,
+  x: number,
+  yInLane: number,
+): boolean {
+  if (songStartMs === null) return false;
+  if (
+    yInLane < SONG_START_PENNANT_TOP ||
+    yInLane >= SONG_START_PENNANT_TOP + SONG_START_PENNANT_H
+  ) {
+    return false;
+  }
+  // `<` to match `hitTempoMarker`, so the boundary pixel does not belong to
+  // two things at once.
+  return Math.abs(msToX(songStartMs, view) - x) < SONG_START_HIT_RADIUS;
+}
+
 /** A beat as far as nearest-beat resolution cares: its tick and real-time ms. */
 export interface BeatPos {
   tick: number;

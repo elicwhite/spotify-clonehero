@@ -52,7 +52,7 @@ if (!('arrayBuffer' in File.prototype)) {
 
 // The drop-zone decodes real audio via the browser's AudioContext, which
 // jsdom doesn't implement. Stubbed at the same boundary
-// `usePaddedAudio.test.tsx` uses for the click track. A relative path
+// `useShiftedAudio.test.tsx` uses for the click track. A relative path
 // (not the `@/` alias) — jest.mock can't resolve the alias at hoist time.
 const mockInterleaved = new Float32Array([0.1, 0.2, 0.3, 0.4]);
 jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({

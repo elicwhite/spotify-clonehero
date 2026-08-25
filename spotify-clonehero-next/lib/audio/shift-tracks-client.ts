@@ -1,19 +1,19 @@
 /**
- * Main-thread client for `pad-tracks-worker.ts`, under the shared worker
+ * Main-thread client for `shift-tracks-worker.ts`, under the shared worker
  * cancellation contract (`lib/workers/abortable-worker.ts`): one job, one
  * worker, terminated when the run settles or is aborted.
  *
  * The request's PCM is structured-CLONED into the worker rather than
- * transferred: the caller (`usePaddedAudio`) keeps the ORIGINAL unpadded
+ * transferred: the caller (`useShiftedAudio`) keeps the ORIGINAL unpadded
  * buffers by reference and re-pads from them on every later anchor change,
  * so detaching them here would destroy the source of every future rebuild.
  * The results come back transferred, so only the copy in is paid for.
  *
- * A zero pad is not sent here at all — `padPcmStart` would hand back the same
+ * A zero shift is not sent here at all — `shiftPcmStart` would hand back the same
  * samples, so the caller uses its own buffers and skips the round trip.
  *
  * Environments with no `Worker` (jsdom under Jest) fall back to running the
- * same `padTracks` inline. That is a compatibility path, not a product path:
+ * same `shiftTracks` inline. That is a compatibility path, not a product path:
  * in the browser this always runs off the main thread.
  */
 
@@ -22,23 +22,23 @@ import {
   runAbortableWorker,
 } from '@/lib/workers/abortable-worker';
 import {
-  padTracks,
-  type PadParams,
-  type PadProgress,
-  type PadRequest,
-  type PadTrack,
-  type PaddedTrack,
-  type PadWorkerMessage,
-} from './pad-tracks';
+  shiftTracks,
+  type ShiftParams,
+  type ShiftProgress,
+  type ShiftRequest,
+  type ShiftTrack,
+  type ShiftedTrack,
+  type ShiftWorkerMessage,
+} from './shift-tracks';
 
 export function defaultCreateWorker(): Worker {
-  return new Worker(new URL('./pad-tracks-worker.ts', import.meta.url), {
+  return new Worker(new URL('./shift-tracks-worker.ts', import.meta.url), {
     type: 'module',
   });
 }
 
-export interface PadTracksOptions extends PadParams {
-  onProgress?: ((progress: PadProgress) => void) | undefined;
+export interface ShiftTracksOptions extends ShiftParams {
+  onProgress?: ((progress: ShiftProgress) => void) | undefined;
   signal?: AbortSignal | undefined;
   /** Injectable worker factory, for tests without a module-URL environment.
    *  Null forces the inline path. */
@@ -46,13 +46,19 @@ export interface PadTracksOptions extends PadParams {
 }
 
 /**
- * Pads `tracks` off the main thread. Resolves with one result per input
+ * Shifts `tracks` off the main thread. Resolves with one result per input
  * track, in the same order.
  */
-export function padTracksInWorker(
-  tracks: ReadonlyArray<PadTrack>,
-  {padSamples, channels, onProgress, signal, createWorker}: PadTracksOptions,
-): Promise<PaddedTrack[]> {
+export function shiftTracksInWorker(
+  tracks: ReadonlyArray<ShiftTrack>,
+  {
+    shiftSamples,
+    channels,
+    onProgress,
+    signal,
+    createWorker,
+  }: ShiftTracksOptions,
+): Promise<ShiftedTrack[]> {
   if (signal?.aborted) return Promise.reject(makeAbortError());
 
   const spawn =
@@ -64,13 +70,13 @@ export function padTracksInWorker(
 
   if (!spawn) {
     return Promise.resolve(
-      padTracks(tracks, {padSamples, channels}, onProgress),
+      shiftTracks(tracks, {shiftSamples, channels}, onProgress),
     );
   }
 
-  return runAbortableWorker<PaddedTrack[]>(spawn, signal, (worker, settle) => {
+  return runAbortableWorker<ShiftedTrack[]>(spawn, signal, (worker, settle) => {
     worker.onmessage = (e: MessageEvent) => {
-      const message = e.data as PadWorkerMessage;
+      const message = e.data as ShiftWorkerMessage;
       if (message.type === 'progress') {
         const {type: _type, ...progress} = message;
         onProgress?.(progress);
@@ -81,12 +87,12 @@ export function padTracksInWorker(
       }
     };
     worker.onerror = e => {
-      settle.reject(new Error(e.message || 'Audio padding worker error'));
+      settle.reject(new Error(e.message || 'Audio shift worker error'));
     };
 
-    const request: PadRequest = {
-      type: 'pad',
-      padSamples,
+    const request: ShiftRequest = {
+      type: 'shift',
+      shiftSamples,
       channels,
       tracks: tracks.map(track => ({name: track.name, pcm: track.pcm})),
     };

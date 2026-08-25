@@ -9,21 +9,13 @@
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {readChartDirectory, readSngFile} from '@/lib/chart-files/chart-package';
+import {readChartHandle} from '@/lib/chart-files/chart-package';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {matchSong, type SongRef} from './songMatch';
 
 /** Read every file for an enumerated song (folder or .sng). */
 export async function readAllSongFiles(song: SongAccumulator): Promise<Files> {
-  const {parentDir, fileName} = song.handleInfo;
-  if (fileName.toLowerCase().endsWith('.sng')) {
-    const fileHandle = await parentDir.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const loaded = await readSngFile(file);
-    return loaded.files;
-  }
-  const dirHandle = await parentDir.getDirectoryHandle(fileName);
-  const loaded = await readChartDirectory(dirHandle);
+  const loaded = await readChartHandle(song.handleInfo);
   return loaded.files;
 }
 

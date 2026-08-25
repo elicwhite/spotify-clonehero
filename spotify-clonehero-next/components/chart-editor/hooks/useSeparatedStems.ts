@@ -2,7 +2,7 @@
 
 /**
  * The stems an assist run separated out of a project's audio, read back from
- * the fingerprint-keyed stem cache and handed to `usePaddedAudio` so they
+ * the fingerprint-keyed stem cache and handed to `useShiftedAudio` so they
  * appear on the Stems mixer with their AI-separated badge (plan 0076 item
  * 18).
  *
@@ -51,7 +51,7 @@ import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
 import {packageHasDrumsAudio, type DecodedPackageAudio} from './projectAudio';
-import type {AudioStemInput} from './usePaddedAudio';
+import type {AudioStemInput} from './useShiftedAudio';
 
 /** The tasks whose success can leave a new stem in the cache. */
 const SEPARATING_TASKS = new Set([

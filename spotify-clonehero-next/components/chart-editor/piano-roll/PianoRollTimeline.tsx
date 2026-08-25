@@ -88,8 +88,9 @@ import {
   phraseTranslationBounds,
   DEFAULT_VOCALS_PART,
   getAudioAnchor,
-  getSongStart,
-  openingFromSync,
+  getSongStartTick,
+  snapSongStartTick,
+  carryDocSidecars,
   schemaForTrack,
   fullLaneRange,
   laneToType as schemaLaneToType,
@@ -135,6 +136,7 @@ import {
   AddBPMCommand,
   AddNoteCommand,
   AddTempoMarkerCommand,
+  AddTimeSignatureCommand,
   BatchCommand,
   DeleteNotesCommand,
   DeleteTempoMarkerCommand,
@@ -148,7 +150,6 @@ import {
   MoveTimeSignatureCommand,
   RemoveTimeSignatureCommand,
   SetTimeSignatureCommand,
-  SetOpeningMeterCommand,
   SetSongStartCommand,
   PromoteOpeningTempoCommand,
   PromoteOpeningMeterCommand,
@@ -184,6 +185,7 @@ import {
   clampMarkerMs,
   hitTempoMarker,
   hitTsChip,
+  hitSongStartFlag,
   nearestBeatTick,
   TS_CHIP_H,
   TS_CHIP_TOP,
@@ -382,6 +384,7 @@ type PointerMode =
   | 'erase'
   | 'tempo'
   | 'timesig'
+  | 'song-start'
   | 'section'
   | 'loop'
   | 'lyric'
@@ -835,6 +838,13 @@ export default function PianoRollTimeline({
   const tempoBaseDocRef = useRef<ChartDocument | null>(null);
   /** In-flight time-signature-chip drag; null when not dragging a chip. */
   const tsDragRef = useRef<TimeSignatureDrag | null>(null);
+  /** In-flight drag of the song-start flag, in chart ms. The commit snaps to
+   *  a nearby tempo marker, so this is the raw pointer position. */
+  const songStartDragRef = useRef<{
+    startMs: number;
+    currentMs: number;
+    moved: boolean;
+  } | null>(null);
   /** Measured label width per signature tick, recorded by `drawTempoLane` so
    *  `hitTsChip` tests the pill that was actually painted. */
   const tsChipWidthsRef = useRef<Map<number, number>>(new Map());
@@ -1031,12 +1041,20 @@ export default function PianoRollTimeline({
       maxNoteTick > 0 ? tickToMs(maxNoteTick, timedTempos, resolution) : 0,
     );
 
+    const songStartTick = getSongStartTick(effectiveDoc);
     return {
       resolution,
       timedTempos,
       beats,
       tempos,
       timeSignatures,
+      // Chart ms: the flag marks the recorded song-start TICK, read under
+      // the chart's own tempos. A tick is what is stored, so the flag cannot
+      // drift away from the grid it is drawn on.
+      songStartMs:
+        songStartTick === null
+          ? null
+          : tickToMs(songStartTick, timedTempos, resolution),
       sections,
       notes,
       rows,
@@ -1355,6 +1373,7 @@ export default function PianoRollTimeline({
         tsHoverTickRef.current,
         tempoSelectionRef.current,
         tsSelectionRef.current,
+        songStartDragRef.current?.currentMs ?? null,
       );
       if (scene.lyricsVisible) {
         const drag = lyricDragRef.current;
@@ -2456,6 +2475,28 @@ export default function PianoRollTimeline({
                 tsChipWidthsRef.current,
               )
             : -1;
+        // The flag answers only in its pennant strip, so the marker or chip
+        // it shares a tick with — the normal case, since `recordSongStart`
+        // snaps onto one — stays grabbable below it.
+        const songStartMs = scene.songStartMs;
+        if (
+          songStartMs !== null &&
+          hitSongStartFlag(songStartMs, viewRef.current, x, y - g.tempoTop)
+        ) {
+          canvas.setPointerCapture(e.pointerId);
+          pointerModeRef.current = 'song-start';
+          viewRef.current.follow = false;
+          pointerStartRef.current = {x, y};
+          songStartDragRef.current = {
+            startMs: songStartMs,
+            currentMs: songStartMs,
+            moved: false,
+          };
+          canvas.style.cursor = 'ew-resize';
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+          return;
+        }
         if (tsIndex >= 0) {
           const chip = scene.timeSignatures[tsIndex];
           canvas.setPointerCapture(e.pointerId);
@@ -2730,6 +2771,17 @@ export default function PianoRollTimeline({
 
       // Live time-signature-chip drag: absolute grid-snap, the same snap the
       // section drag and every other placement uses.
+      if (mode === 'song-start' && songStartDragRef.current) {
+        const drag = songStartDragRef.current;
+        const ms = Math.max(0, xToMs(x, viewRef.current));
+        if (ms !== drag.currentMs) {
+          songStartDragRef.current = {...drag, currentMs: ms, moved: true};
+          dirtyRef.current = true;
+          drawRef.current(Math.max(0, audioManager.chartTime * 1000));
+        }
+        return;
+      }
+
       if (mode === 'timesig' && tsDragRef.current) {
         const drag = tsDragRef.current;
         const start = pointerStartRef.current;
@@ -3370,6 +3422,22 @@ export default function PianoRollTimeline({
       // Commit a time-signature-chip drag: the drop runs the shared bar-line
       // placement, so it rewrites the measure before the new tick exactly the
       // way "make this a downbeat" does.
+      // The drop takes the pointer's own tick, never a marker's. An earlier
+      // version pulled the drop onto any marker within a BEAT, which moved it
+      // somewhere the user had not pointed. `SetSongStartCommand` then snaps
+      // within a 32nd note — narrow enough to only ever correct a miss.
+      if (mode === 'song-start' && songStartDragRef.current) {
+        const drag = songStartDragRef.current;
+        if (drag.moved && drag.currentMs !== drag.startMs) {
+          const tick = Math.max(
+            0,
+            snappedTickAt(msToX(drag.currentMs, viewRef.current)),
+          );
+          executeCommand(new SetSongStartCommand(tick));
+        }
+        songStartDragRef.current = null;
+      }
+
       if (mode === 'timesig' && tsDragRef.current) {
         const drag = tsDragRef.current;
         if (drag.moved && drag.currentTick !== drag.originalTick) {
@@ -3570,6 +3638,7 @@ export default function PianoRollTimeline({
       tempoDragRef.current = null;
       tempoBaseDocRef.current = null;
       tsDragRef.current = null;
+      songStartDragRef.current = null;
       sectionDragRef.current = null;
       loopDragRef.current = null;
       lyricDragRef.current = null;
@@ -3582,7 +3651,7 @@ export default function PianoRollTimeline({
       }
       drawRef.current(Math.max(0, audioManager.chartTime * 1000));
     },
-    [audioManager, dispatch, executeCommand, seekTo],
+    [audioManager, dispatch, executeCommand, seekTo, snappedTickAt],
   );
 
   // Drop the add-mode ghost when the pointer leaves the panel (no lane is
@@ -3651,8 +3720,16 @@ export default function PianoRollTimeline({
    *  toggle; Round 2 §6's ×2/÷2 structural correction) at screen x. Returns
    *  [] when nothing actionable is under x. */
   const buildTempoMenu = useCallback(
-    (x: number, y: number, scene: ChartScene): MenuItem[] => {
+    (x: number, scene: ChartScene): MenuItem[] => {
       const view = viewRef.current;
+      // The recorded song start, as a tick. Two branches of this menu need
+      // it: the item that sets it, and the rephase item that stands down once
+      // it exists.
+      const songStartTick =
+        editStateRef.current.chartDoc === null
+          ? null
+          : getSongStartTick(editStateRef.current.chartDoc);
+      const hasSongStart = songStartTick !== null;
       const st = editStateRef.current;
       // ×2/÷2 need the same gating the old floating buttons had: a chart
       // loaded, no structural preview already up, and editing enabled.
@@ -3709,6 +3786,39 @@ export default function PianoRollTimeline({
       // exists — a tempo value is a property of a marker, so the way to get a
       // new one is to add it (which inherits the governing tempo) and then set
       // its value.
+      /**
+       * "The song starts here" — available anywhere on the tempo lane.
+       *
+       * It records a tick and changes nothing else. No marker is added and
+       * none is moved: the song start is a statement about the chart, not an
+       * edit to it, and an earlier version that re-padded here made the whole
+       * chart jump under the user.
+       *
+       * It takes the pointer's own tick, never the marker `anchorTick`
+       * would resolve to — that is a beat wide, and a click a few pixels off
+       * a marker would land somewhere the user had not pointed.
+       * `recordSongStart` then snaps within a 32nd note, which is narrow
+       * enough to only ever correct a miss.
+       *
+       * The tempo at the song start is the song's opening, so the lead-in is
+       * whole bars of it. In REAPER the same job is "drag the first downbeat
+       * to bar 9": the music moves to a bar line and the bars before it are
+       * the count-in.
+       */
+      const songStartItem = (wantTick: number): MenuItem => {
+        // Compared AFTER the snap, so a click that `recordSongStart` will
+        // collapse onto the current value reads as the no-op it is, rather
+        // than pushing an undo entry that changes nothing.
+        const chart = editStateRef.current.chartDoc?.parsedChart;
+        const resulting = chart ? snapSongStartTick(chart, wantTick) : wantTick;
+        return {
+          label: 'The song starts here',
+          disabled:
+            !capabilities.showEditingControls || songStartTick === resulting,
+          onSelect: () => executeCommand(new SetSongStartCommand(wantTick)),
+        };
+      };
+
       const bpmItem = (anchorTick: number, initialBpm: number): MenuItem => ({
         label: `Set tempo value (${initialBpm.toFixed(1)} BPM)…`,
         disabled: !capabilities.showEditingControls,
@@ -3733,164 +3843,197 @@ export default function PianoRollTimeline({
         },
       });
 
-      // An authored signature chip under the pointer is the only place the
-      // remove item appears: the hit test reads the very chips the lane
-      // painted, so it can never offer to remove a marker that isn't there.
-      // Tick 0 answers here, because its meter is editable (plan 0124 step
-      // 6) — the remove item below excludes it on its own.
+      // ONE menu for the tempo lane, in fixed sections, whatever the pointer
+      // happens to be over:
       //
-      // The chip answers only inside its own strip, the way the drag path
-      // already requires. Without the y gate a chip swallows the menu of a
-      // tempo marker at the same x for the whole height of the lane, and at
-      // tick 0 the two always share an x.
-      const inChipStrip =
-        y >= panelGeometry().tempoTop &&
-        y < panelGeometry().tempoTop + TS_CHIP_TOP + TS_CHIP_H;
-      const tsIndex = inChipStrip
-        ? hitTsChip(
-            scene.timeSignatures,
-            view,
-            x,
-            tsChipWidthsRef.current,
-            true,
-          )
-        : -1;
-      if (tsIndex >= 0) {
-        const chip = scene.timeSignatures[tsIndex];
-        return [
-          ...octaveItems,
-          tapItem(chip.tick),
-          {
-            // Same in-place swap as the tap and BPM tools: the fields open
-            // where the right-click was, seeded with the chip's own meter.
-            label: `Edit time signature (${chip.label})…`,
-            disabled: !capabilities.showEditingControls,
-            onSelect: () => {
-              const {bar, beat} = barBeatAtTick(chip.tick, scene.beats);
-              const rect = containerRef.current?.getBoundingClientRect();
-              setMenu(open =>
-                open === null
-                  ? open
-                  : {
-                      ...open,
-                      content: {
-                        kind: 'timesig',
-                        anchorTick: chip.tick,
-                        anchorLabel: `${bar}.${beat}`,
-                        initialNumerator: chip.numerator,
-                        initialDenominator: chip.denominator,
-                        clientX: (rect?.left ?? 0) + open.x,
-                        clientY: (rect?.top ?? 0) + open.y,
-                      },
-                    },
-              );
+      //   1. the lane's own tools (x2 / /2, tap, the song start)
+      //   2. the TEMPO at this position — edit the marker here, or add one
+      //   3. the METER at this position — edit the signature here, or place one
+      //   4. rephase, while there is no song start to say it better
+      //
+      // Three shapes of menu for one lane was the problem: on a signature you
+      // could not add a tempo marker, on a marker you could not place a
+      // signature, and the structural items vanished whenever something sat
+      // under the pointer. Each section now shows edit-or-add rather than
+      // appearing and disappearing.
+      const chipIndex = hitTsChip(
+        scene.timeSignatures,
+        view,
+        x,
+        tsChipWidthsRef.current,
+        true,
+      );
+      const k = hitTempoMarker(scene.tempos, view, x);
+      const chip = chipIndex >= 0 ? scene.timeSignatures[chipIndex] : null;
+      const marker = k >= 0 ? scene.tempos[k] : null;
+
+      // The beat items speak in beats, so they resolve to the nearest one.
+      // Everything that PLACES uses the pointer's own grid-snapped tick: a
+      // beat can be half a beat away from the click.
+      const beatTick = nearestBeatTick(scene.beats, view, x);
+      const pointerTick = Math.max(0, snappedTickAt(x));
+      const anchorTick = marker?.tick ?? chip?.tick ?? beatTick ?? pointerTick;
+
+      const chart = editStateRef.current.chartDoc?.parsedChart;
+      const downbeatPlan = chart
+        ? planDownbeatAt(chart.timeSignatures, chart.resolution, pointerTick)
+        : null;
+      const isDownbeat =
+        beatTick !== null &&
+        editStateRef.current.downbeatFlags.downbeats.some(
+          d => d.tick === beatTick,
+        );
+
+      const tempoSection: MenuItem[] = marker
+        ? [
+            bpmItem(marker.tick, marker.bpm),
+            ...(k === 0 && scene.tempos.length > 1
+              ? [
+                  {
+                    // "Delete the first marker" means the next one governs
+                    // from the start: a chart always has a tempo at tick 0.
+                    // Beats are kept and the lead-in absorbs the time change
+                    // (plan 0124 step 6).
+                    label: `Use ${scene.tempos[1].bpm.toFixed(1)} BPM from the start`,
+                    disabled: !capabilities.showEditingControls,
+                    onSelect: () =>
+                      executeCommand(new PromoteOpeningTempoCommand()),
+                  },
+                ]
+              : []),
+            {
+              label: `Delete tempo marker (${marker.bpm.toFixed(1)} BPM)`,
+              disabled: k === 0, // marker 0 is the immovable song-start anchor
+              danger: true,
+              onSelect: () =>
+                executeCommand(
+                  new DeleteTempoMarkerCommand(
+                    marker.tick,
+                    editStateRef.current.tempoGlueMode,
+                  ),
+                ),
             },
-          },
-          ...(chip.tick === 0 && scene.timeSignatures.length > 1
-            ? [
-                {
-                  // The same shape as the tempo promotion, and the same
-                  // reason: tick 0 always holds a signature. Bars after the
-                  // promoted event are renumbered, which the label says.
-                  label: `Use ${scene.timeSignatures[1].label} from the start (renumbers later bars)`,
-                  disabled: !capabilities.showEditingControls,
-                  onSelect: () =>
-                    executeCommand(new PromoteOpeningMeterCommand()),
-                },
-              ]
-            : []),
-          // The opening meter cannot be removed — a chart always has one at
-          // tick 0 — so only a later signature offers it.
-          ...(chip.tick === 0
-            ? []
-            : [
-                {
+          ]
+        : [
+            {
+              // The BPM is the one already governing this tick, so the
+              // mapping is unchanged until the marker is dragged or retyped.
+              label: 'Add tempo marker here',
+              disabled:
+                !capabilities.showEditingControls ||
+                scene.tempos.some(t => t.tick === pointerTick),
+              onSelect: () =>
+                executeCommand(new AddTempoMarkerCommand(pointerTick)),
+            },
+          ];
+
+      const meterSection: MenuItem[] = chip
+        ? [
+            {
+              // Same in-place swap as the tap and BPM tools: the fields open
+              // where the right-click was, seeded with the chip's own meter.
+              label: `Edit time signature (${chip.label})…`,
+              disabled: !capabilities.showEditingControls,
+              onSelect: () => {
+                const {bar, beat} = barBeatAtTick(chip.tick, scene.beats);
+                const rect = containerRef.current?.getBoundingClientRect();
+                setMenu(open =>
+                  open === null
+                    ? open
+                    : {
+                        ...open,
+                        content: {
+                          kind: 'timesig',
+                          anchorTick: chip.tick,
+                          anchorLabel: `${bar}.${beat}`,
+                          initialNumerator: chip.numerator,
+                          initialDenominator: chip.denominator,
+                          clientX: (rect?.left ?? 0) + open.x,
+                          clientY: (rect?.top ?? 0) + open.y,
+                        },
+                      },
+                );
+              },
+            },
+            ...(chip.tick === 0 && scene.timeSignatures.length > 1
+              ? [
+                  {
+                    // The same shape as the tempo promotion, and the same
+                    // reason: tick 0 always holds a signature. Bars after the
+                    // promoted event are renumbered, which the label says.
+                    label: `Use ${scene.timeSignatures[1].label} from the start (renumbers later bars)`,
+                    disabled: !capabilities.showEditingControls,
+                    onSelect: () =>
+                      executeCommand(new PromoteOpeningMeterCommand()),
+                  },
+                ]
+              : []),
+            chip.tick === 0
+              ? {
+                  // A chart always has a meter at tick 0. Saying so beats
+                  // showing nothing: without a word, a user who placed that
+                  // signature reads its absence as a broken menu.
+                  label: 'The first time signature cannot be removed',
+                  disabled: true,
+                  onSelect: () => {},
+                }
+              : {
                   label: `Remove time signature change (${chip.label})`,
                   danger: true,
                   disabled: !capabilities.showEditingControls,
                   onSelect: () =>
                     executeCommand(new RemoveTimeSignatureCommand(chip.tick)),
                 },
-              ]),
-        ];
-      }
+          ]
+        : [
+            {
+              // Two jobs, one item, because to a user they are one thing:
+              // "a time signature belongs here".
+              //
+              // Mid-bar, a bar line has to start here and the measure before
+              // it is rewritten to end here — that is `PlaceDownbeatCommand`.
+              // ON a bar line there is no bar line to move, so the plan calls
+              // it a no-op; what belongs there is a signature EVENT carrying
+              // the meter already in force, which the user then edits. Before
+              // this the item was simply disabled at every bar line, so a
+              // meter change could not be started at the one place it is
+              // most often wanted.
+              label: 'Insert Time Signature',
+              disabled:
+                !capabilities.showEditingControls ||
+                downbeatPlan === null ||
+                scene.timeSignatures.some(ts => ts.tick === pointerTick),
+              onSelect: () => {
+                if (!downbeatPlan) return;
+                if (downbeatPlan.status === 'noop') {
+                  const here = scene.timeSignatures.reduce(
+                    (best, ts) => (ts.tick <= pointerTick ? ts : best),
+                    scene.timeSignatures[0],
+                  );
+                  executeCommand(
+                    new AddTimeSignatureCommand(
+                      pointerTick,
+                      here?.numerator ?? 4,
+                      here?.denominator ?? 4,
+                    ),
+                  );
+                  return;
+                }
+                commitBarLinePlan(
+                  downbeatPlan,
+                  new PlaceDownbeatCommand(pointerTick),
+                );
+              },
+            },
+          ];
 
-      const k = hitTempoMarker(scene.tempos, view, x);
-      if (k >= 0) {
-        const marker = scene.tempos[k];
-        return [
-          ...octaveItems,
-          tapItem(marker.tick),
-          bpmItem(marker.tick, marker.bpm),
-          ...(k === 0 && scene.tempos.length > 1
-            ? [
-                {
-                  // "Delete the first marker" means the next one governs from
-                  // the start: a chart always has a tempo at tick 0. Beats
-                  // are kept and the lead-in absorbs the time change (plan
-                  // 0124 step 6).
-                  label: `Use ${scene.tempos[1].bpm.toFixed(1)} BPM from the start`,
-                  disabled: !capabilities.showEditingControls,
-                  onSelect: () =>
-                    executeCommand(new PromoteOpeningTempoCommand()),
-                },
-              ]
-            : []),
-          {
-            label: `Delete tempo marker (${marker.bpm.toFixed(1)} BPM)`,
-            disabled: k === 0, // marker 0 is the immovable song-start anchor
-            danger: true,
-            onSelect: () =>
-              executeCommand(
-                new DeleteTempoMarkerCommand(
-                  marker.tick,
-                  editStateRef.current.tempoGlueMode,
-                ),
-              ),
-          },
-        ];
-      }
-      // Empty lane. The beat items (rephase, tap) speak in beats, so they
-      // resolve to the nearest one.
-      const beatTick = nearestBeatTick(scene.beats, view, x);
-      const hasSongStart =
-        editStateRef.current.chartDoc !== null &&
-        getSongStart(editStateRef.current.chartDoc) !== null;
-      // The tick under the pointer, per the current grid setting: where every
-      // "…here" item on this lane places, and the fallback for a lane with no
-      // beat grid to resolve against.
-      const pointerTick = Math.max(0, snappedTickAt(x));
-      // With no beat grid there is nothing to anchor the structural items to,
-      // but a tap still has somewhere to land.
-      if (beatTick === null) {
-        return [...octaveItems, tapItem(pointerTick)];
-      }
-      const hasMarker = scene.tempos.some(t => t.tick === pointerTick);
-      const isDownbeat = editStateRef.current.downbeatFlags.downbeats.some(
-        d => d.tick === beatTick,
-      );
-      const chart = editStateRef.current.chartDoc?.parsedChart;
-      const downbeatPlan = chart
-        ? planDownbeatAt(chart.timeSignatures, chart.resolution, pointerTick)
-        : null;
-      // PRIMARY (QA round-1 / 0061 §6): the expected fix for a mis-phased
-      // grid is a whole-song rephase — the phase error is global, not local.
-      // Anchoring at an already bar-aligned beat is phase 0 (a no-op), so the
-      // item is disabled there. Reuses the existing RephaseDownbeatsCommand.
-      // SECONDARY: place a single bar line here, for a grid that drifts part
-      // way through rather than being mis-phased from the start.
-      return [
-        ...octaveItems,
-        tapItem(beatTick),
-        // The rotation writes a short measure at tick 0, and the next
-        // recompute would read the opening meter from there, taking the song
-        // off its bar line with no pad recompute able to put it back. With a
-        // song start, "Move the song start here" above says the same thing
-        // without the short measure, so the rotation stands down entirely
-        // (plan 0124 step 6b). It is not a superset of the rotation: that
-        // re-phases every region against its own numerator, while moving the
-        // song start rotates only regions inheriting phase from tick 0.
-        ...(hasSongStart
+      // The rotation writes a short measure at tick 0, and the next recompute
+      // would read the opening meter from there, taking the song off its bar
+      // line with no pad recompute able to put it back. With a song start,
+      // "The song starts here" says the same thing without the short measure,
+      // so the rotation stands down entirely (plan 0124 step 6b).
+      const rephaseSection: MenuItem[] =
+        hasSongStart || beatTick === null
           ? []
           : [
               {
@@ -3901,74 +4044,20 @@ export default function PianoRollTimeline({
                     new RephaseDownbeatsCommand(beatTick, scene.endTick),
                   ),
               },
-            ]),
-        {
-          // The pad is measured from here (plan 0124 step 4), and only the
-          // user can say where it is: the tempo map's origin is grid phase,
-          // and lands within one bar of audio sample 0 whatever silence the
-          // file carries. A tap inside the lead-in is refused rather than
-          // clamped to zero, which would move the song start somewhere the
-          // user did not point at.
-          //
-          // Once a song start exists this item IS the rephase gesture, so it
-          // is always enabled: "the song actually starts one bar later" is a
-          // tap on a beat that is already a downbeat, which the rotation's
-          // own gate refuses (plan 0124 step 6b).
-          label: hasSongStart
-            ? 'Move the song start here'
-            : 'Music starts here',
-          disabled: !capabilities.showEditingControls,
-          onSelect: () => {
-            const doc = editStateRef.current.chartDoc;
-            if (!doc) return;
-            const padMs = getAudioAnchor(doc)?.ms ?? 0;
-            const chartMs = tickToMs(
-              beatTick,
-              scene.timedTempos,
-              scene.resolution,
-            );
-            if (chartMs < padMs - 1e-6) {
-              toast.error('That point is inside the lead-in', {
-                description:
-                  'The song start is where the music begins, after the silence.',
-              });
-              return;
-            }
-            executeCommand(new SetSongStartCommand(chartMs - padMs));
-          },
-        },
-        {
-          // Placed at the pointer's tick, not the nearest beat: a beat can be
-          // half a beat away from the click, which is far enough to drop the
-          // new marker on top of one the pointer deliberately steered clear
-          // of — within `TEMPO_MARKER_HIT_RADIUS` the lane hands out that
-          // marker's own menu instead of this one, so the two would paint
-          // over each other and the older one would look deleted.
-          //
-          // The BPM is the one already governing this tick, so the mapping is
-          // unchanged until the marker is dragged or its value retyped.
-          label: 'Add tempo marker here',
-          disabled: hasMarker,
-          onSelect: () =>
-            executeCommand(new AddTempoMarkerCommand(pointerTick)),
-        },
-        {
-          // One capability, one item: a bar line starts here, the measure
-          // before it is rewritten to end here, and every later bar line
-          // counts from here. On 1/16 snap a bar line can land on a
-          // sixteenth — the pointer's tick, not the nearest quarter.
-          label: 'Insert Time Signature',
-          // Tick 0 always starts a bar, and a target already on a bar line
-          // with its own signature has nothing to place.
-          disabled: downbeatPlan === null || downbeatPlan.status === 'noop',
-          onSelect: () => {
-            if (!downbeatPlan) return;
-            commitBarLinePlan(
-              downbeatPlan,
-              new PlaceDownbeatCommand(pointerTick),
-            );
-          },
-        },
+            ];
+
+      return [
+        ...octaveItems,
+        tapItem(anchorTick),
+        // `pointerTick`, not `anchorTick`: this one PLACES. `anchorTick`
+        // prefers a marker or chip within the hit radius and then the nearest
+        // BEAT, which is right for the items that EDIT one and wrong here —
+        // a beat is eight times `recordSongStart`'s snap window, so it lands
+        // the flag somewhere the user never pointed.
+        songStartItem(pointerTick),
+        ...tempoSection,
+        ...meterSection,
+        ...rephaseSection,
       ];
     },
     [executeCommand, capabilities, commitBarLinePlan, snappedTickAt],
@@ -4392,7 +4481,7 @@ export default function PianoRollTimeline({
       // Tempo lane (§7/§8; Round 2 §6's ×2/÷2 structural correction):
       // add/delete markers, mark/unmark downbeats.
       if (y < g.laneTop) {
-        const items = buildTempoMenu(x, y, scene);
+        const items = buildTempoMenu(x, scene);
         openItemsMenu(menuX, menuY, items);
         return;
       }
@@ -4594,14 +4683,14 @@ export default function PianoRollTimeline({
           ? shiftOnsets(decodedOnsets, anchor.ms)
           : (decodedOnsets ?? null);
       const result = repredictTempo(base, correctedSync, onsets);
-      // The sync going in carries the real opening; the chart coming out
-      // carries the writer's construct over tick 0. Record it here, while
-      // both are in hand (plan 0124 step 1b).
+      // A structural correction rebuilds the doc, so the records beside it
+      // have to travel — the song start above all, since nothing in the chart
+      // itself says where the music begins.
       dispatch({
         type: 'SET_PENDING_TEMPO_CANDIDATE',
         candidate: {
           op: result.op,
-          doc: openingFromSync(result.doc, correctedSync),
+          doc: carryDocSidecars(base, result.doc),
         },
       });
     },
@@ -4829,14 +4918,14 @@ export default function PianoRollTimeline({
                   initialDenominator={timeSigMenu.initialDenominator}
                   anchorLabel={timeSigMenu.anchorLabel}
                   onCommit={(numerator, denominator) => {
-                    // Tick 0 is the opening meter: it writes through
-                    // `addTimeSignature` and resizes the lead-in in the same
-                    // undo step, which `SetTimeSignatureCommand` cannot do —
-                    // it routes through `planDownbeatAt`, which rejects a
-                    // target at or before tick 0.
+                    // Tick 0 writes straight through `addTimeSignature`,
+                    // which replaces the event there. `SetTimeSignatureCommand`
+                    // cannot: it routes through `planDownbeatAt`, which
+                    // rejects a target at or before tick 0. Nothing is
+                    // recomputed either way — a meter carries no time.
                     executeCommand(
                       timeSigMenu.anchorTick === 0
-                        ? new SetOpeningMeterCommand({numerator, denominator})
+                        ? new AddTimeSignatureCommand(0, numerator, denominator)
                         : new SetTimeSignatureCommand(timeSigMenu.anchorTick, {
                             numerator,
                             denominator,

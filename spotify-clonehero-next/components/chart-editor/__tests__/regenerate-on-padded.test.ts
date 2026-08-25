@@ -12,13 +12,14 @@ import {AddLeadingSilenceCommand, ReplaceTempoMapCommand} from '../commands';
 import {
   applyDocSidecars,
   getAudioAnchor,
-  getLeadIn,
-  getOpening,
+  getSongStartTick,
+  leadInBars,
   planLeadIn,
-  setOpening,
-  setSongStart,
   type ChartDocument,
 } from '@/lib/chart-edit';
+// The raw setter is module-private on purpose: production code must go
+// through `recordSongStart`, which snaps. Tests want the unsnapped value.
+import {setSongStartTick} from '@/lib/chart-edit/leading-silence';
 import type {Synctrack} from '@/lib/tempo-map/types';
 import {makeFixtureDoc} from './fixtures';
 
@@ -30,14 +31,12 @@ const FRESH: Synctrack = {
     {ms: 4000, bpm: 60},
   ],
   timeSignatures: [{ms: 0, numerator: 4, denominator: 4}],
+  musicStartMs: 0,
 };
 
 /** The fixture with a song start at 0 and a two-bar lead-in applied. */
 function paddedDoc(): ChartDocument {
-  const doc = applyDocSidecars(makeFixtureDoc(), {
-    songStart: {audioMs: 0},
-    opening: {bpm: 120, meter: {numerator: 4, denominator: 4}},
-  });
+  const doc = applyDocSidecars(makeFixtureDoc(), {songStartTick: 0});
   const plan = planLeadIn(doc, 2)!;
   return new AddLeadingSilenceCommand(plan).execute(doc);
 }
@@ -58,42 +57,32 @@ describe('ReplaceTempoMapCommand on a padded chart', () => {
     expect(changed!.msTime).toBeCloseTo(4000 + getAudioAnchor(after)!.ms, 0);
   });
 
-  it('emits the opening, so the writer manufactures no new lead-in', () => {
-    const after = new ReplaceTempoMapCommand(FRESH).execute(paddedDoc());
-    const chart = after.parsedChart;
-    expect(chart.tempos[0].tick).toBe(0);
-    expect(chart.tempos[0].msTime).toBe(0);
-    expect(chart.timeSignatures[0].tick).toBe(0);
-    // One tempo before the song start, and it is the real one.
-    expect(chart.tempos[0].beatsPerMinute).toBeCloseTo(120, 3);
+  it('keeps the pad exactly as it was: a new map is not a re-pad', () => {
+    const before = paddedDoc();
+    const padBefore = getAudioAnchor(before)!.ms;
+    const after = new ReplaceTempoMapCommand(FRESH).execute(before);
+    // Nothing recomputes on its own (plan 0124). The lead-in may stop being
+    // whole bars, and the card reports that rather than the editor moving
+    // the chart underneath the user.
+    expect(getAudioAnchor(after)!.ms).toBeCloseTo(padBefore, 6);
+    expect(leadInBars(after)).toBeCloseTo(2, 6);
   });
 
-  it('keeps the song start, the lead-in and the recomputed pad', () => {
+  it('records where the new map says the music starts', () => {
     const before = paddedDoc();
+    const pad = getAudioAnchor(before)!.ms;
     const after = new ReplaceTempoMapCommand(FRESH).execute(before);
-    expect(getLeadIn(after)).toEqual({bars: 2});
-    expect(getOpening(after)).toEqual({
-      bpm: 120,
-      meter: {numerator: 4, denominator: 4},
-    });
-    // The song start is the user's statement; a new map does not know it.
-    expect((after as {songStart?: {audioMs: number} | null}).songStart).toEqual(
-      {audioMs: 0},
-    );
-    // Two bars at the map's own opening tempo.
-    expect(getAudioAnchor(after)!.ms).toBeCloseTo(4000, 0);
+    // `musicStartMs` is 0 in the ORIGINAL audio, so in the padded chart the
+    // music starts at the pad — which is two bars of 120 BPM 4/4 in.
+    const chart = after.parsedChart;
+    expect(getSongStartTick(after)).toBe(2 * 4 * chart.resolution);
+    expect(pad).toBeCloseTo(4000, 0);
   });
 
   it('leaves an unpadded chart alone', () => {
-    const before = setSongStart(
-      setOpening(makeFixtureDoc(), {
-        bpm: 120,
-        meter: {numerator: 4, denominator: 4},
-      }),
-      {audioMs: 0},
-    );
+    const before = setSongStartTick(makeFixtureDoc(), 0);
     const after = new ReplaceTempoMapCommand(FRESH).execute(before);
     expect(getAudioAnchor(after)).toBeNull();
-    expect(getLeadIn(after)).toBeNull();
+    expect(getSongStartTick(after)).toBe(0);
   });
 });

@@ -2,7 +2,7 @@
  * The chart-package audio a `/chart-editor` project plays and exports
  * (plan 0076 item 18, contract point 2).
  *
- * `padPackageAudio` is the export half: when the chart carries an
+ * `shiftPackageAudio` is the export half: when the chart carries an
  * `audioAnchor`, every note has moved by that much, so each of the package's
  * own files has to move with it. What must hold is that EVERY file comes back
  * (under its own name), each padded by exactly the anchor, and that a browser
@@ -14,7 +14,7 @@ import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {
   decodeChartPackageAudio,
   packageHasDrumsAudio,
-  padPackageAudio,
+  shiftPackageAudio,
   planExportAudio,
   PACKAGE_AUDIO_CHANNELS,
   type DecodedPackageAudio,
@@ -78,9 +78,9 @@ beforeEach(() => {
   mockOpus.mockImplementation(async (pcm: Float32Array) => new Uint8Array(pcm));
 });
 
-describe('padPackageAudio', () => {
+describe('shiftPackageAudio', () => {
   it('returns every one of the package’s files, each padded by the anchor', async () => {
-    const sources = await padPackageAudio(makePackage(), 100);
+    const sources = await shiftPackageAudio(makePackage(), 100);
     expect(sources.map(s => s.fileName)).toEqual(['song.opus', 'guitar.opus']);
     for (const source of sources) {
       expect(source.data.byteLength).toBe((100 + 8) * channels);
@@ -89,7 +89,7 @@ describe('padPackageAudio', () => {
 
   it('falls back to padded WAV when the browser has no Opus encoder', async () => {
     mockOpus.mockRejectedValue(new Error('no WebCodecs AudioEncoder'));
-    const sources = await padPackageAudio(makePackage(), 100);
+    const sources = await shiftPackageAudio(makePackage(), 100);
     expect(sources.map(s => s.fileName)).toEqual(['song.wav', 'guitar.wav']);
     for (const source of sources) {
       expect(wavFrames(source.data)).toBe(100 + 8);
@@ -109,7 +109,7 @@ describe('padPackageAudio', () => {
       ],
       meta: {sampleRate: SAMPLE_RATE, channels},
     };
-    const sources = await padPackageAudio(pkg, 10);
+    const sources = await shiftPackageAudio(pkg, 10);
     expect(sources.map(s => s.fileName)).toEqual(['guitar.opus', 'drums.opus']);
   });
 
@@ -118,7 +118,7 @@ describe('padPackageAudio', () => {
     // reach here: `DecodedPackageAudio` carries the package's files alone,
     // and `useSeparatedStems` publishes the AI-separated ones elsewhere.
     const pkg = makePackage();
-    const sources = await padPackageAudio(pkg, 10);
+    const sources = await shiftPackageAudio(pkg, 10);
     expect(sources).toHaveLength(1 + pkg.stems.length);
   });
 });
@@ -227,14 +227,24 @@ describe('encodeWavBlob header assumption', () => {
 
 describe('planExportAudio', () => {
   it('ships the package files as they are when nothing has shifted', () => {
-    expect(planExportAudio(makePackage(), null)).toEqual({kind: 'raw'});
-    expect(planExportAudio(makePackage(), {ms: 0})).toEqual({kind: 'raw'});
+    expect(planExportAudio(makePackage().meta, null)).toEqual({kind: 'raw'});
+    expect(planExportAudio(makePackage().meta, {ms: 0})).toEqual({kind: 'raw'});
   });
 
   it('pads, quantized to the package’s own rate, when the chart has shifted', () => {
-    expect(planExportAudio(makePackage(), {ms: 1000})).toEqual({
-      kind: 'padded',
-      padSamples: SAMPLE_RATE,
+    expect(planExportAudio(makePackage().meta, {ms: 1000})).toEqual({
+      kind: 'shifted',
+      shiftSamples: SAMPLE_RATE,
+    });
+  });
+
+  it('trims the front for a negative anchor', () => {
+    // A chart whose audio already carried the silence — imported, or one of
+    // ours opened again — and the user removed a bar of lead-in. The audio
+    // has to lose that bar with the chart.
+    expect(planExportAudio(makePackage().meta, {ms: -500})).toEqual({
+      kind: 'shifted',
+      shiftSamples: -SAMPLE_RATE / 2,
     });
   });
 
@@ -247,5 +257,6 @@ describe('planExportAudio', () => {
     // Exporting the files unpadded here would pair a chart moved by whole
     // bars with audio that never moved, and nothing downstream could tell.
     expect(planExportAudio(null, {ms: 1000})).toEqual({kind: 'blocked'});
+    expect(planExportAudio(null, {ms: -1000})).toEqual({kind: 'blocked'});
   });
 });

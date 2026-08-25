@@ -11,6 +11,9 @@ import {
   nearestBeatTick,
   MIN_SEGMENT_MS,
   TEMPO_MARKER_HIT_RADIUS,
+  hitSongStartFlag,
+  SONG_START_PENNANT_TOP,
+  SONG_START_PENNANT_H,
 } from '../tempoHitTest';
 import type {PianoRollView} from '../viewMath';
 
@@ -126,5 +129,39 @@ describe('hitTsChip', () => {
     expect(hitTsChip(chips, VIEW, rect.left, widths)).toBe(1);
     expect(hitTsChip(chips, VIEW, rect.right, widths)).toBe(1);
     expect(hitTsChip(chips, VIEW, rect.right + 1, widths)).toBe(-1);
+  });
+});
+
+describe('hitSongStartFlag', () => {
+  // The flag at 1000ms → 100px.
+  const MS = 1000;
+  const IN = SONG_START_PENNANT_TOP;
+  const BELOW = SONG_START_PENNANT_TOP + SONG_START_PENNANT_H;
+
+  it('answers in the pennant strip', () => {
+    expect(hitSongStartFlag(MS, VIEW, 100, IN)).toBe(true);
+    expect(hitSongStartFlag(MS, VIEW, 100, BELOW - 1)).toBe(true);
+  });
+
+  it('leaves the rest of the lane to the marker it sits on', () => {
+    // `recordSongStart` snaps the song start ONTO a tempo or signature
+    // marker, so sharing a tick is the normal case. A flag that answered the
+    // lane's full height would take the pointerdown first and the marker
+    // underneath could never be dragged again.
+    expect(hitSongStartFlag(MS, VIEW, 100, BELOW)).toBe(false);
+    expect(hitSongStartFlag(MS, VIEW, 100, SONG_START_PENNANT_TOP - 1)).toBe(
+      false,
+    );
+  });
+
+  it('does not claim the boundary pixel a marker also wants', () => {
+    // `<`, matching `hitTempoMarker`, so one pixel belongs to one thing.
+    const edge = 100 + TEMPO_MARKER_HIT_RADIUS;
+    expect(hitSongStartFlag(MS, VIEW, edge, IN)).toBe(false);
+    expect(hitSongStartFlag(MS, VIEW, edge - 1, IN)).toBe(true);
+  });
+
+  it('is never hit when there is no song start', () => {
+    expect(hitSongStartFlag(null, VIEW, 100, IN)).toBe(false);
   });
 });

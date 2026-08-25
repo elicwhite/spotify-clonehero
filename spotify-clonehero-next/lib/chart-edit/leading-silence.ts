@@ -61,37 +61,15 @@ export function setAudioAnchor(
 }
 
 // ---------------------------------------------------------------------------
-// Song start, lead-in bars and the opening (plan 0124 step 1)
+// Where the music starts (plan 0124 §3)
 // ---------------------------------------------------------------------------
-
-/** Where the song's first downbeat sits inside the ORIGINAL audio. Always
- *  set by the user: the tempo map cannot supply it, because its `origin_ms`
- *  is grid phase and always lands within one bar of audio sample 0. */
-export interface SongStart {
-  audioMs: number;
-}
-
-/** Whole bars of lead-in the user has asked for. Absent means the opening
- *  has never been emitted, which is also what `resolveOpening` keys on. */
-export interface LeadIn {
-  bars: number;
-}
 
 export interface OpeningMeter {
   numerator: number;
   denominator: number;
 }
 
-/**
- * The song's real opening, recorded when a synctrack becomes a chart.
- *
- * That moment is the only one where the values are in hand and no lead-in
- * construct exists: `buildSyncLayout` wraps tick 0 in a stretched segment, a
- * partial bar or a collapse marker, and after that the chart cannot be asked
- * what the song's opening was. Two earlier designs tried to infer it from the
- * chart's shape and both rewrote real charts (plan 0124, "Where `barMs`
- * comes from").
- */
+/** The tempo and meter the song opens on. */
 export interface Opening {
   bpm: number;
   meter: OpeningMeter;
@@ -102,64 +80,131 @@ export interface Opening {
  * nowhere to carry them, so they are own-properties on the document, mirrored
  * into project metadata, and copied whenever a command rebuilds the doc.
  *
- * One type, so the list exists once: both project stores extend it, the
- * mirror and the re-attach are two functions rather than four assignments
- * each, and a new record is a one-line change instead of a seven-site one.
+ * Two fields, and everything else this feature needs is derived from them:
+ * the pad `X = tickToMs(songStartTick) - audioAnchor.ms`, the lead-in bar
+ * count, and the opening tempo and meter. Revision 9 of plan 0124 persisted
+ * the bar count and the opening as records of their own, and both could go
+ * stale against the chart they claimed to describe.
+ *
+ * A TICK is the right thing to persist. It does not move when the meter or
+ * the tempo changes; a bar count and a millisecond position both do.
  */
 export interface DocSidecars {
   audioAnchor?: AudioAnchor | null | undefined;
-  songStart?: SongStart | null | undefined;
-  leadIn?: LeadIn | null | undefined;
-  opening?: Opening | null | undefined;
+  songStartTick?: number | null | undefined;
 }
 
-type DocWithRecords = ChartDocument & {
-  songStart?: SongStart | null;
-  leadIn?: LeadIn | null;
-  opening?: Opening | null;
-};
+/**
+ * What a stored project may hold: the sidecars this version writes, plus the
+ * ones older versions wrote. The old fields are read once on load and
+ * converted (see {@link applyDocSidecars}); nothing writes them again.
+ *
+ * They live in their own type so the everyday shape stays two fields. A
+ * caller that has a `DocSidecars` can pass it here unchanged.
+ */
+export interface StoredDocSidecars extends DocSidecars {
+  songStart?: {audioMs: number} | null | undefined;
+  leadIn?: {bars: number} | null | undefined;
+}
 
-export function getSongStart(doc: ChartDocument): SongStart | null {
-  return (doc as DocWithRecords).songStart ?? null;
+type DocWithSongStart = ChartDocument & {songStartTick?: number | null};
+
+/**
+ * The chart tick where the music begins, or null when nothing has said.
+ *
+ * Set from the tempo map's own `musicStartMs` when a map is installed, or by
+ * the user through the tempo lane. Null on a chart that arrived from
+ * somewhere else, and the feature then says what it does not know rather
+ * than guessing: with no song start the pad can only ever grow, because
+ * trimming the front of a recording whose music you cannot locate is not a
+ * risk worth taking.
+ */
+export function getSongStartTick(doc: ChartDocument): number | null {
+  return (doc as DocWithSongStart).songStartTick ?? null;
 }
 
 /** Returns a new doc with the song start set (or cleared). Does not mutate. */
-export function setSongStart(
+export function setSongStartTick(
   doc: ChartDocument,
-  songStart: SongStart | null,
+  tick: number | null,
 ): ChartDocument {
-  return {...doc, songStart} as DocWithRecords;
+  return {...doc, songStartTick: tick} as DocWithSongStart;
 }
 
-export function getLeadIn(doc: ChartDocument): LeadIn | null {
-  return (doc as DocWithRecords).leadIn ?? null;
-}
+/**
+ * How far a song start may sit from a sync marker and still be taken to mean
+ * that marker: a 32nd note. Resolution-independent, and far below any
+ * spacing a real tempo map uses — a beat at 154 BPM is 389 ms, this window
+ * is 48.
+ */
+export const SONG_START_SNAP_TICKS_PER_QUARTER = 8;
 
-export function setLeadIn(
+/**
+ * Record where the music starts, snapped onto a coincident tempo or
+ * time-signature marker.
+ *
+ * The snap is what stops a near miss from producing a sliver. The emit keeps
+ * every event strictly after the song start, so a song start a few ticks
+ * BEFORE the marker the user meant leaves that marker alive a few
+ * milliseconds after the emitted opening — a segment far too short to be
+ * music, which the writer then has to cover at an absurd BPM. It also reads
+ * the opening from the wrong side of that marker: the values in force a few
+ * ticks earlier are the ones the song was supposed to leave behind.
+ *
+ * The window is a 32nd note, not the one-beat window an earlier design used.
+ * That one moved the flag somewhere the user had not pointed. This one
+ * corrects a miss no user could have intended, and the flag visibly lands on
+ * the marker, so they can see that it took.
+ *
+ * Every route that records a song start goes through here — the tempo lane's
+ * menu, the flag drag, the tempo map's own `musicStartMs`, and the migration
+ * of an older project's record. A tick recorded by any other path would
+ * carry exactly the near-miss this exists to remove.
+ */
+export function recordSongStart(
   doc: ChartDocument,
-  leadIn: LeadIn | null,
+  tick: number,
 ): ChartDocument {
-  return {...doc, leadIn} as DocWithRecords;
+  return setSongStartTick(doc, snapSongStartTick(doc.parsedChart, tick));
 }
 
-export function getOpening(doc: ChartDocument): Opening | null {
-  return (doc as DocWithRecords).opening ?? null;
-}
-
-export function setOpening(
-  doc: ChartDocument,
-  opening: Opening | null,
-): ChartDocument {
-  return {...doc, opening} as DocWithRecords;
+/**
+ * The snap itself: a tick in, a tick out. Split from
+ * {@link recordSongStart} so a caller that only wants to know WHERE a click
+ * would land — the menu, to decide whether its item is a no-op — can ask
+ * without building a document to throw away.
+ */
+export function snapSongStartTick(chart: ParsedChart, tick: number): number {
+  const window = Math.max(
+    1,
+    Math.round(chart.resolution / SONG_START_SNAP_TICKS_PER_QUARTER),
+  );
+  const target = Math.max(0, Math.round(tick));
+  let best = target;
+  let bestDistance = window;
+  for (const event of [...chart.tempos, ...chart.timeSignatures]) {
+    // Measured from the TARGET, not from the running best: comparing against
+    // a moving reference would let a chain of markers walk the song start
+    // away from where it was put.
+    const distance = Math.abs(event.tick - target);
+    // `<`, so a straddle resolves to the marker scanned first rather than to
+    // whichever list happened to come last in the concatenation. Ties on the
+    // SAME tick assign the same value either way; ties at equal distance on
+    // DIFFERENT ticks are the case that needs a rule, and "keep the first
+    // one found" is at least a stated one.
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = event.tick;
+    }
+  }
+  return best;
 }
 
 /** The doc's sidecars, for mirroring into project metadata. */
 export function readDocSidecars(doc: ChartDocument): DocSidecars {
   return {
     audioAnchor: getAudioAnchor(doc),
-    songStart: getSongStart(doc),
-    leadIn: getLeadIn(doc),
-    opening: getOpening(doc),
+    songStartTick: getSongStartTick(doc),
   };
 }
 
@@ -168,17 +213,27 @@ export function readDocSidecars(doc: ChartDocument): DocSidecars {
  *  partial record (an older project) does not clear what is already set. */
 export function applyDocSidecars(
   doc: ChartDocument,
-  sidecars: DocSidecars,
+  sidecars: StoredDocSidecars,
 ): ChartDocument {
   let out = doc;
   if (sidecars.audioAnchor !== undefined) {
     out = setAudioAnchor(out, sidecars.audioAnchor);
   }
-  if (sidecars.songStart !== undefined) {
-    out = setSongStart(out, sidecars.songStart);
+  if (sidecars.songStartTick !== undefined) {
+    return setSongStartTick(out, sidecars.songStartTick);
   }
-  if (sidecars.leadIn !== undefined) out = setLeadIn(out, sidecars.leadIn);
-  if (sidecars.opening !== undefined) out = setOpening(out, sidecars.opening);
+  // An older project stored the song start as a position in the audio. The
+  // anchor is applied first, so the tick it converts to is the one the chart
+  // already holds: nothing about the chart moves.
+  if (sidecars.songStart) {
+    const chart = out.parsedChart;
+    const padMs = getAudioAnchor(out)?.ms ?? 0;
+    const timed = buildTimedTempos(chart.tempos, chart.resolution);
+    out = recordSongStart(
+      out,
+      msToTick(sidecars.songStart.audioMs + padMs, timed, chart.resolution),
+    );
+  }
   return out;
 }
 
@@ -192,6 +247,123 @@ export function carryDocSidecars(
 }
 
 /**
+ * Record a song start given in CHART ms — the form the tempo map states it
+ * in. Returns the doc unchanged when the producer said nothing.
+ *
+ * The ms→tick conversion rounds, so this goes through {@link recordSongStart}
+ * like every other route: a rounded tick is exactly the near miss that
+ * leaves a sliver.
+ */
+export function recordSongStartFromMs(
+  doc: ChartDocument,
+  ms: number | undefined,
+): ChartDocument {
+  // A map that cannot say clears the record rather than leaving the old one.
+  // The tick it held described the PREVIOUS grid, and installing a map
+  // re-ticks every event keep-ms, so the old tick now points somewhere else
+  // in the music. "We do not know" is the honest state; the card says so and
+  // the user can place the flag.
+  if (ms === undefined) return setSongStartTick(doc, null);
+  const chart = doc.parsedChart;
+  const timed = buildTimedTempos(chart.tempos, chart.resolution);
+  return recordSongStart(doc, msToTick(ms, timed, chart.resolution));
+}
+
+/**
+ * Where the music sits inside the STORED audio, in ms — `X`. Null when no
+ * song start is recorded.
+ *
+ * Derived, never stored: the chart ms of the song start, less the silence
+ * the anchor says was put in front of the recording.
+ */
+export function songStartAudioMs(doc: ChartDocument): number | null {
+  const chartMs = songStartChartMsOf(doc);
+  return chartMs === null ? null : chartMs - (getAudioAnchor(doc)?.ms ?? 0);
+}
+
+/** The song start in CHART ms — the tick read under the doc's own tempos. */
+function songStartChartMsOf(doc: ChartDocument): number | null {
+  const tick = getSongStartTick(doc);
+  if (tick == null) return null;
+  const chart = doc.parsedChart;
+  const timed = buildTimedTempos(chart.tempos, chart.resolution);
+  return tickToMs(tick, timed, chart.resolution);
+}
+
+/**
+ * Lead-in bars, as the chart currently expresses them. Null when no song
+ * start is recorded.
+ *
+ * FRACTIONAL when the chart has moved out from under the lead-in — retyping
+ * the opening meter from 4/4 to 3/4 turns two bars into 2.667. Nothing
+ * corrects that on its own (plan 0124, "Nothing recomputes on its own"); the
+ * card reports it and the user re-fits when they want to.
+ */
+export function leadInBars(doc: ChartDocument): number | null {
+  const tick = getSongStartTick(doc);
+  if (tick == null) return null;
+  const {barTicks} = openingBar(doc);
+  return barTicks > 0 ? tick / barTicks : null;
+}
+
+/**
+ * One bar of the song's own opening, in both units.
+ *
+ * The single source for every bar length this feature uses. It reads
+ * {@link resolveOpening}, so the count the card reports is in the same unit
+ * the buttons add and remove — which is the whole point of reporting it.
+ *
+ * An earlier version measured the lead-in at TICK 0 instead. On a generated
+ * chart those are different meters: with 3/4 at tick 0 and the song in 4/4
+ * at tick 1440, tick 0 makes the lead-in "1 bar" and the song's own meter
+ * makes it 0.75. The card believed the first, called it whole, and hid the
+ * re-fit on the one chart shape the re-fit exists to repair.
+ */
+export function openingBar(doc: ChartDocument): {
+  barMs: number;
+  barTicks: number;
+} {
+  const {bpm, meter} = resolveOpening(doc);
+  const barsPerWhole = (meter.numerator * 4) / meter.denominator;
+  return {
+    barMs: barsPerWhole * (60000 / bpm),
+    barTicks: barsPerWhole * doc.parsedChart.resolution,
+  };
+}
+
+/**
+ * The tempo and meter the lead-in's bar length is computed from.
+ *
+ * Read AT THE SONG START, not at tick 0. Tick 0 holds whatever precedes the
+ * music: a `buildSyncLayout` lead-in construct, or the user's own intro in
+ * another meter. Reading tick 0 with the song start further in was
+ * destructive rather than merely wrong — the emit keeps only what is strictly
+ * after the song start, so the song start's own markers were dropped and the
+ * intro's values written over the top, and a 3/4 168.4 intro ate a 4/4 150.5
+ * song.
+ *
+ * With no song start the chart's own tick-0 values stand. The one value
+ * refused there is a collapse marker, which is not music: `barMs` at 20000
+ * BPM is 12 ms, and the lead-in would run to hundreds of bars.
+ */
+export function resolveOpening(doc: ChartDocument): Opening {
+  const chart = doc.parsedChart;
+
+  const songStartTick = getSongStartTick(doc);
+  if (songStartTick != null) {
+    return {
+      bpm: bpmAt(songStartTick, chart.tempos),
+      meter: tsAt(songStartTick, chart.timeSignatures),
+    };
+  }
+
+  return {
+    bpm: bpmAt(0, chart.tempos),
+    meter: tsAt(0, chart.timeSignatures),
+  };
+}
+
+/**
  * Move a synctrack from the original-audio frame into a padded chart's frame.
  *
  * Assist tasks measure on the original audio (`loadOriginalBytes`), so a map
@@ -199,71 +371,19 @@ export function carryDocSidecars(
  * unshifted puts every tempo change one pad early.
  */
 export function shiftSynctrackMs(sync: Synctrack, deltaMs: number): Synctrack {
+  // `...sync` first: this is the fourth transform that rebuilds a
+  // `Synctrack`, and a literal listing only the required fields is how
+  // `musicStartMs` went missing from the other three. Everything the map
+  // carries survives by default; only what moves is named.
   return {
+    ...sync,
     origin_ms: sync.origin_ms + deltaMs,
     tempos: sync.tempos.map(t => ({...t, ms: t.ms + deltaMs})),
     timeSignatures: sync.timeSignatures.map(t => ({...t, ms: t.ms + deltaMs})),
+    ...(sync.musicStartMs === undefined
+      ? {}
+      : {musicStartMs: sync.musicStartMs + deltaMs}),
   };
-}
-
-/**
- * Record the opening from the synctrack being installed. Call it at every
- * site where a synctrack becomes a chart: that is the one moment the real
- * tempo and meter are in hand, before `buildSyncLayout` wraps a lead-in
- * construct around tick 0.
- */
-export function openingFromSync(
-  doc: ChartDocument,
-  sync: Synctrack,
-): ChartDocument {
-  const bpm = sync.tempos[0]?.bpm;
-  if (bpm === undefined) return doc;
-  const ts = sync.timeSignatures[0];
-  return setOpening(doc, {
-    bpm,
-    meter: {
-      numerator: ts?.numerator ?? 4,
-      denominator: ts?.denominator ?? 4,
-    },
-  });
-}
-
-export type ResolvedOpening = Opening;
-
-/**
- * The tempo and meter the lead-in's bar length is computed from.
- *
- * With a record: the recorded tempo, and 4/4. The prediction's numerator is
- * not used — it has 33.3% precision on meters that are not 4/4, and the
- * Python pipeline ships `force4` for the same reason.
- *
- * Without a record: the chart's own tick-0 values, unchanged. The one value
- * refused is a collapse marker, which is not music; there the next tempo is
- * used, because `barMs` at 20000 BPM is 12 ms and the lead-in would run to
- * hundreds of bars.
- */
-export function resolveOpening(doc: ChartDocument): ResolvedOpening {
-  const record = getOpening(doc);
-  const chart = doc.parsedChart;
-
-  // One predicate: has the opening been emitted yet? Once it has, tick 0
-  // holds values this feature wrote, so the chart is the truth — including
-  // any later edit to the opening meter, which must resize the pad rather
-  // than be overruled by a stale 4/4.
-  const emitted = getLeadIn(doc) !== null;
-  if (emitted || !record) {
-    const tempos = [...chart.tempos].sort((a, b) => a.tick - b.tick);
-    let bpm = tempos[0]?.beatsPerMinute ?? 120;
-    if (bpm >= COLLAPSE_BPM_MIN && tempos.length > 1) {
-      bpm = tempos[1].beatsPerMinute;
-    }
-    return {bpm, meter: tsAt(0, chart.timeSignatures)};
-  }
-
-  // Before the first emit tick 0 is the writer's construct, so the recorded
-  // tempo stands, and the meter is 4/4: the predicted numerator has 33.3%
-  // precision on meters that are not 4/4.
-  return {bpm: record.bpm, meter: {numerator: 4, denominator: 4}};
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +434,7 @@ export const COLLAPSE_BPM_MIN = 5000;
 export interface LeadingSilencePlan {
   /** The pad: the WHOLE silence in front of the audio, not an amount to add
    *  to what is already there. The audio layer rounds it to whole samples
-   *  when it pads (`anchorPadSamples`), so this stays in milliseconds and
+   *  when it pads (`anchorShiftSamples`), so this stays in milliseconds and
    *  nothing here needs a sample rate.
    *
    *  What the chart shifts by is `padMs` minus the doc's current pad, and
@@ -324,15 +444,43 @@ export interface LeadingSilencePlan {
   padMs: number;
   /** N — whole lead-in bars. */
   bars: number;
-  bpm0: number;
-  numerator: number;
-  denominator: number;
   /** Writer constructs in front of the song start that this plan removes. */
   droppedTempos: number;
   droppedTimeSignatures: number;
   /** The ms-domain synctrack to install via `swapSynctrack`, with the
    *  opening already emitted so `buildSyncLayout` infers nothing. */
   newSync: Synctrack;
+}
+
+/**
+ * BPM governing `tick` — the last tempo at or before it — refusing a collapse
+ * marker.
+ *
+ * The refusal lives here, not at the call site, because "this BPM is not
+ * music" needs one definition. It had two: the no-song-start branch of
+ * `resolveOpening` checked, and the song-start branch — the one this plan
+ * made primary — did not. A collapse marker at tick 0 with a song start
+ * snapped onto it gives `barMs` of 12 at 20000 BPM, and a lead-in of 167
+ * bars.
+ *
+ * The list is assumed tick-sorted and to start at tick 0, as every parsed
+ * chart is.
+ */
+function bpmAt(tick: number, tempos: ParsedChart['tempos']): number {
+  const sorted = [...tempos].sort((a, b) => a.tick - b.tick);
+  let index = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].tick <= tick) index = i;
+    else break;
+  }
+  const bpm = sorted[index]?.beatsPerMinute ?? 120;
+  if (bpm < COLLAPSE_BPM_MIN) return bpm;
+  // Not music: `buildSyncLayout` writes these to cover a sub-beat or
+  // negative-origin region. Take the next real tempo instead.
+  const next = sorted
+    .slice(index + 1)
+    .find(t => t.beatsPerMinute < COLLAPSE_BPM_MIN);
+  return next?.beatsPerMinute ?? bpm;
 }
 
 /** Time signature governing `tick` (default 4/4 when the chart has none). */
@@ -350,106 +498,74 @@ function tsAt(
 }
 
 /**
- * Plan the lead-in the user asked for: `P = N * barMs - X`, with `X` the song
- * start in original-audio ms and `N` the bar count (plan 0124 step 2).
+ * Plan the lead-in: `P = N * barMs - X`, with `X` the song start inside the
+ * stored audio and `N` a whole number of bars (plan 0124 §4).
  *
- * `bars` is an explicit count — a `[+]`/`[-]` click or a Reset. Omit it for a
- * first press and the smallest legal count is chosen. Either way the
- * two-second floor applies, because the user is choosing the lead-in.
+ * `bars` is an explicit count — an Add-a-bar / Remove-a-bar click. Omit it
+ * and the count is chosen: the doc's current one when it already has a
+ * lead-in, otherwise the smallest count that clears the two-second floor and
+ * leaves the recording's own opening silence in place.
  *
- * Returns `null` when the song start is unset — the caller gates on that —
- * or when the pad already equals the target.
+ * Returns null when the chart has no tempo to measure a bar with, or when
+ * the pad already equals the target.
  */
 export function planLeadIn(
   doc: ChartDocument,
   bars?: number,
 ): LeadingSilencePlan | null {
-  return planPad(doc, bars, true);
-}
-
-/**
- * The bar count that best describes a pad this feature did not create (plan
- * 0124 step 8).
- *
- * A project padded by the old model has an anchor and no bar count. Rounding
- * its pad onto the bar grid moves it — by up to half a bar when the bounds
- * already hold, and by more when they do not, because a small pad rounds to
- * zero bars and the bounds then raise it. That is the price of putting an
- * arbitrary pad onto the grid, and the caller announces it rather than
- * pretending the pad is unchanged.
- */
-export function barsForExistingPad(doc: ChartDocument): number | null {
-  const songStart = getSongStart(doc);
-  if (!songStart) return null;
-  const padMs = getAudioAnchor(doc)?.ms ?? 0;
-  if (padMs <= 0) return null;
-  const {bpm, meter} = resolveOpening(doc);
-  const barMs = ((meter.numerator * 4) / meter.denominator) * (60000 / bpm);
-  if (!(barMs > 0)) return null;
-  return Math.max(
-    1,
-    Math.round((padMs + Math.max(0, songStart.audioMs)) / barMs),
-  );
-}
-
-/**
- * Re-plan the existing lead-in after something changed underneath it: the
- * opening tempo or meter, the song start, a new tempo map.
- *
- * The bar count is the doc's own, and the two-second floor does NOT apply.
- * The floor is cosmetic and alignment is not: enforcing it here would turn a
- * merely short lead-in into a song a whole bar out of place — at `X = 0`,
- * `N = 1`, 4/4, promoting 60 BPM to 240 makes a bar 1000 ms, and raising `N`
- * to clear 2000 ms would move the song a second against its audio.
- */
-export function replanLeadIn(doc: ChartDocument): LeadingSilencePlan | null {
-  // No lead-in yet means there is nothing to re-plan. A recompute must never
-  // create silence the user did not ask for.
-  if (getLeadIn(doc) === null) return null;
-  return planPad(doc, undefined, false);
-}
-
-function planPad(
-  doc: ChartDocument,
-  bars: number | undefined,
-  userChoice: boolean,
-): LeadingSilencePlan | null {
   const chart = doc.parsedChart;
-  const songStart = getSongStart(doc);
-  if (!songStart) return null;
   // A chart with no tempo has no bar length, so there is nothing to pad by.
   if (chart.tempos.length === 0) return null;
 
-  const X = Math.max(0, songStart.audioMs);
   const padOld = getAudioAnchor(doc)?.ms ?? 0;
+  // With no song start recorded, `X` is 0: the music is taken to begin where
+  // the pad already ends. `P = N * barMs` can then never go negative, so the
+  // audio is never trimmed — the right refusal on a chart whose music we
+  // cannot locate.
+  const X = songStartAudioMs(doc) ?? 0;
   const opening = resolveOpening(doc);
   const {numerator, denominator} = opening.meter;
   const bpm0 = opening.bpm;
-  const barMs = ((numerator * 4) / denominator) * (60000 / bpm0);
+  const {barMs} = openingBar(doc);
   if (!(barMs > 0)) return null;
 
-  // Bound 3 works in the ORIGINAL audio frame, the one frame that does not
-  // move: an event at chart ms `m` sits at `m - padOld` in the audio, and
-  // after the pad it must land at or after tick 0.
-  let earliestEventAudioMs = Infinity;
-  for (const track of chart.trackData) {
-    for (const group of track.noteEventGroups) {
-      for (const note of group) {
-        const audioMs = note.msTime - padOld;
-        if (audioMs < earliestEventAudioMs) earliestEventAudioMs = audioMs;
-      }
-    }
-  }
+  // Measured in the stored-audio frame, the one frame that does not move:
+  // an event at chart ms `m` sits at `m - padOld` there. Over EVERY timed
+  // event, through the same traversal that shifts them — a bound that covers
+  // less than the shift is a bound that lets something fall off tick 0.
+  const earliestEventAudioMs = earliestEventMs(chart) - padOld;
 
-  const lower = [X];
-  if (userChoice) lower.push(LEAD_MIN_MS);
+  // Two lower bounds, and one this design deliberately does not have.
+  //
+  // The floor is on the WHOLE lead-in, not on what this press adds: the
+  // census measured where the first note falls, not how much silence was
+  // appended. It applies to a press with no count of its own — "Add leading
+  // silence" — because an explicit count is an Add-a-bar / Remove-a-bar
+  // click, and that is the user's own choice about their own chart.
+  //
+  // No event may end up before tick 0.
+  //
+  // And there is no `N * barMs >= X` bound. The anchor is signed, so a
+  // lead-in shorter than the recording's own opening silence trims that
+  // silence instead of failing, and the music is safe without the bound:
+  // `P + X = N * barMs >= barMs`, so it always sits at least one whole bar
+  // into the padded audio.
+  const lower = bars === undefined ? [LEAD_MIN_MS] : [];
   if (Number.isFinite(earliestEventAudioMs)) {
     lower.push(X - earliestEventAudioMs);
   }
   const minBars = Math.max(1, ...lower.map(v => Math.ceil(v / barMs - 1e-9)));
-  const requested = bars ?? getLeadIn(doc)?.bars ?? minBars;
 
-  const barCount = Math.max(minBars, requested);
+  // Without an explicit count: the smallest whole number of bars that still
+  // reaches the song start. On a chart this feature already padded that is
+  // exactly the count it has, because the song start is a bar line under the
+  // opening it emitted. On any other chart it rounds UP, which is what keeps
+  // "Add leading silence" from taking seconds off the front of a recording
+  // that opens with silence of its own.
+  const barCount = Math.max(
+    minBars,
+    bars ?? Math.ceil((X + padOld) / barMs - 1e-9),
+  );
 
   const padMs = barCount * barMs - X;
   if (Math.abs(padMs - padOld) < 1e-9) return null;
@@ -473,9 +589,6 @@ function planPad(
   return {
     padMs,
     bars: barCount,
-    bpm0,
-    numerator,
-    denominator,
     droppedTempos: sync.tempos.length - keptTempos.length,
     droppedTimeSignatures:
       sync.timeSignatures.length - keptTimeSignatures.length,
@@ -491,51 +604,73 @@ function planPad(
 // Applying
 // ---------------------------------------------------------------------------
 
-/** Bump `msTime` (audio-relative position) on every timed event in place —
- * everything `swapSynctrack` re-ticks from `msTime` (see its source for the
- * exhaustive list). `msLength` values are durations, not positions, and are
- * left untouched. */
-function shiftEventMs<T extends {msTime: number}>(
-  events: T[],
-  padMs: number,
+/**
+ * Visit every array of timed events the chart carries — everything
+ * `swapSynctrack` re-ticks from `msTime` (see its source for the exhaustive
+ * list). `msLength` values are durations, not positions, and are not visited.
+ *
+ * One traversal, because there are two questions about the same set and they
+ * must not drift apart: which events MOVE when the lead-in changes, and which
+ * events BOUND how far it may move. They used to be two hand-written lists,
+ * and they differed — the shift covered twenty-odd arrays while the bound
+ * scanned only `noteEventGroups`. That was invisible while the pad could not
+ * go negative. With a signed anchor it means a section, a text event or a
+ * lyric in front of the song start is shifted past tick 0, clamped there by
+ * `reTickEvent`, and silently collapsed onto the same tick as everything else
+ * that went with it.
+ */
+function forEachTimedEvents(
+  chart: ParsedChart,
+  visit: (events: {msTime: number}[]) => void,
 ): void {
-  for (const e of events) e.msTime += padMs;
+  for (const track of chart.trackData) {
+    for (const group of track.noteEventGroups) visit(group);
+    visit(track.starPowerSections);
+    visit(track.rejectedStarPowerSections);
+    visit(track.soloSections);
+    visit(track.flexLanes);
+    visit(track.drumFreestyleSections);
+    visit(track.textEvents);
+    visit(track.versusPhrases);
+    visit(track.animations);
+  }
+  visit(chart.sections);
+  visit(chart.endEvents);
+  visit(chart.unrecognizedEventsTrackTextEvents);
+
+  const vocalTracks = chart.vocalTracks;
+  if (!vocalTracks) return;
+  visit(vocalTracks.rangeShifts);
+  visit(vocalTracks.lyricShifts);
+  for (const part of Object.values(vocalTracks.parts)) {
+    for (const phrases of [part.notePhrases, part.staticLyricPhrases]) {
+      visit(phrases);
+      for (const phrase of phrases) {
+        visit(phrase.notes);
+        visit(phrase.lyrics);
+      }
+    }
+    visit(part.starPowerSections);
+    visit(part.rangeShifts);
+    visit(part.lyricShifts);
+    visit(part.textEvents);
+  }
+}
+
+/** The earliest `msTime` any event in the chart holds, or `Infinity` for a
+ *  chart with no timed events at all. */
+function earliestEventMs(chart: ParsedChart): number {
+  let earliest = Infinity;
+  forEachTimedEvents(chart, events => {
+    for (const e of events) if (e.msTime < earliest) earliest = e.msTime;
+  });
+  return earliest;
 }
 
 function shiftChartMs(chart: ParsedChart, padMs: number): void {
-  for (const track of chart.trackData) {
-    for (const group of track.noteEventGroups) shiftEventMs(group, padMs);
-    shiftEventMs(track.starPowerSections, padMs);
-    shiftEventMs(track.rejectedStarPowerSections, padMs);
-    shiftEventMs(track.soloSections, padMs);
-    shiftEventMs(track.flexLanes, padMs);
-    shiftEventMs(track.drumFreestyleSections, padMs);
-    shiftEventMs(track.textEvents, padMs);
-    shiftEventMs(track.versusPhrases, padMs);
-    shiftEventMs(track.animations, padMs);
-  }
-  shiftEventMs(chart.sections, padMs);
-  shiftEventMs(chart.endEvents, padMs);
-  shiftEventMs(chart.unrecognizedEventsTrackTextEvents, padMs);
-
-  const vocalTracks = chart.vocalTracks;
-  if (vocalTracks) {
-    shiftEventMs(vocalTracks.rangeShifts, padMs);
-    shiftEventMs(vocalTracks.lyricShifts, padMs);
-    for (const part of Object.values(vocalTracks.parts)) {
-      for (const phrases of [part.notePhrases, part.staticLyricPhrases]) {
-        shiftEventMs(phrases, padMs);
-        for (const phrase of phrases) {
-          shiftEventMs(phrase.notes, padMs);
-          shiftEventMs(phrase.lyrics, padMs);
-        }
-      }
-      shiftEventMs(part.starPowerSections, padMs);
-      shiftEventMs(part.rangeShifts, padMs);
-      shiftEventMs(part.lyricShifts, padMs);
-      shiftEventMs(part.textEvents, padMs);
-    }
-  }
+  forEachTimedEvents(chart, events => {
+    for (const e of events) e.msTime += padMs;
+  });
 }
 
 function cloneTrack(track: ParsedChart['trackData'][number]) {
@@ -581,28 +716,41 @@ function cloneDocForLeadingSilence(doc: ChartDocument): ChartDocument {
 }
 
 /**
- * Take a re-planned pad WITHOUT shifting the chart (plan 0124 step 6).
+ * Resize the lead-in so the song stays where it is in the recording, after an
+ * edit that kept every tick (plan 0124 §6).
  *
- * For an edit that kept every tick — promoting the opening tempo — the events
- * have already moved into the new grid: `retimeChart` recomputed their ms
- * from ticks the edit did not touch, which changes each one by exactly the
- * lead-in's own change in duration. Shifting them again by `P_new - P_old`
- * would count that twice and take the music off its audio by that amount.
+ * A tempo change at the opening makes the bars before the song longer or
+ * shorter. Their COUNT does not change — ticks did not move — so the song
+ * start slides in chart time by the difference, and the silence in front has
+ * to take up exactly that difference or the whole song slides against its own
+ * audio.
  *
- * So the pad is adopted, not applied: the anchor and the bar count move, the
- * chart does not.
+ * Nothing here shifts an event: `retimeChart` has already moved every event's
+ * ms into the new grid, and the caller's edit kept the ticks. Only the anchor
+ * moves. Shifting as well would count the change twice.
+ *
+ * The pad may come out negative, which trims the front of the decoded audio.
+ * That is the correct answer when the new tempo needs less silence than the
+ * recording carries, and it is only reachable at all because the song start
+ * is known.
  */
-export function adoptLeadInPad(
-  doc: ChartDocument,
-  plan: LeadingSilencePlan,
+export function keepSongOnItsAudio(
+  before: ChartDocument,
+  after: ChartDocument,
 ): ChartDocument {
-  const timed = buildTimedTempos(
-    doc.parsedChart.tempos,
-    doc.parsedChart.resolution,
-  );
-  const tick = msToTick(plan.padMs, timed, doc.parsedChart.resolution);
-  return setLeadIn(setAudioAnchor(doc, {ms: plan.padMs, tick}), {
-    bars: plan.bars,
+  const tick = getSongStartTick(after);
+  if (tick == null) return after;
+
+  const songStartAudio = songStartAudioMs(before);
+  if (songStartAudio === null) return after;
+
+  const newChart = after.parsedChart;
+  const timedNew = buildTimedTempos(newChart.tempos, newChart.resolution);
+  const padMs = tickToMs(tick, timedNew, newChart.resolution) - songStartAudio;
+
+  return setAudioAnchor(after, {
+    ms: padMs,
+    tick: msToTick(padMs, timedNew, newChart.resolution),
   });
 }
 
@@ -613,7 +761,7 @@ export function adoptLeadInPad(
  *
  * The shift is a difference, not the whole pad: the pad is absolute, so
  * shifting by all of it on a second press would move the chart twice. The
- * anchor is set to `padMs`, never added to, which is what `usePaddedAudio`
+ * anchor is set to `padMs`, never added to, which is what `useShiftedAudio`
  * already assumes — it keeps the original PCM and re-pads from source.
  */
 export function applyLeadIn(
@@ -644,8 +792,17 @@ export function applyLeadIn(
   const timedNew = buildTimedTempos(swapped.tempos, swapped.resolution);
   const anchorTick = msToTick(plan.padMs, timedNew, swapped.resolution);
 
-  return setLeadIn(
+  // The song now starts a whole number of bars in, by construction: the emit
+  // put the opening at ms 0 and the pad is `N * barMs - X`. Recording that
+  // tick is what lets the next press count bars instead of guessing.
+  // From the plan's OWN emitted signature, not from the doc: the doc still
+  // carries the pre-pad song-start tick, and `resolveOpening` would read the
+  // meter there — a tick that means something else in this new frame.
+  const emitted = plan.newSync.timeSignatures[0];
+  const barTicks =
+    ((emitted.numerator * 4) / emitted.denominator) * swapped.resolution;
+  return setSongStartTick(
     setAudioAnchor(withChart, {ms: plan.padMs, tick: anchorTick}),
-    {bars: plan.bars},
+    Math.round(plan.bars * barTicks),
   );
 }

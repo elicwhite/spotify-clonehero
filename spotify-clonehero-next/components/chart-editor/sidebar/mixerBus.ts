@@ -10,7 +10,7 @@
  */
 
 import {CLICK_TRACK_NAME} from '@/lib/preview/clickTrack';
-import type {AudioStemOrigin} from '../hooks/usePaddedAudio';
+import type {AudioStemOrigin} from '../hooks/useShiftedAudio';
 
 /** One row's controls, as the user set them. `volume` is 0-100. */
 export interface MixerRowState {

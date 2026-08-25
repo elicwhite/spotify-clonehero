@@ -28,7 +28,7 @@
  * reason on the tooltip. `/drum-transcription` wires all four to run;
  * `/tempo` wires the leading-silence card only; the shared `TrackEditPage`
  * shell (`/chart-editor`) pads its own playback and exported audio
- * (`usePaddedAudio`), so it runs every audio-backed task honestly, drum
+ * (`useShiftedAudio`), so it runs every audio-backed task honestly, drum
  * transcription included — that one separates its own drum stem out of the
  * song mix the host supplies, so it needs no project behind it. A bare
  * `ChartEditor` with no wiring renders no section at all.

@@ -16,7 +16,9 @@ import {
   applyLeadIn,
   getAudioAnchor,
   setAudioAnchor,
-  setSongStart,
+  applyDocSidecars,
+  getSongStartTick,
+  songStartAudioMs,
   refreshAnchorKeepMs,
   refreshAnchorKeepTick,
 } from '../leading-silence';
@@ -83,9 +85,9 @@ describe('property: the writer adds no lead-in of its own', () => {
       retimeChart(base.parsedChart);
       addNoteAtTick(base, RES * 8);
 
-      // No opening record: the chart's own tick-0 values stand, which is the
-      // hard case — the emitted meter is the chart's, not a forced 4/4.
-      const doc = setSongStart(base, {audioMs: songStartMs});
+      // The song start is given in audio ms and converted on the way in, so
+      // this also exercises the migration path older projects take.
+      const doc = applyDocSidecars(base, {songStart: {audioMs: songStartMs}});
       const plan = planLeadIn(doc);
       expect(plan).not.toBeNull();
       const applied = applyLeadIn(doc, plan!);
@@ -107,10 +109,14 @@ describe('property: the writer adds no lead-in of its own', () => {
         applied.parsedChart.resolution,
       );
       const songStartTick = plan!.bars * barTicks;
+      // `X` against the doc's own record, not the raw ms this case asked
+      // for: the record is a TICK, so `X` is tick-quantized on the way in.
       expect(tickToMs(songStartTick, timed, RES)).toBeCloseTo(
-        plan!.padMs + songStartMs,
+        plan!.padMs + songStartAudioMs(doc)!,
         0,
       );
+      // And the song start the apply recorded is that same bar line.
+      expect(getSongStartTick(applied)).toBe(songStartTick);
     });
   }
 });

@@ -36,7 +36,7 @@ import {
 } from '@/lib/tempo-map/swap-synctrack';
 import {snapGroupToGrid} from '@/lib/tempo-map/quantize-grid';
 import {finalizeSynctrack} from '@/lib/tempo-map/finalize-synctrack';
-import {openingFromSync} from '@/lib/chart-edit';
+import {recordSongStartFromMs} from '@/lib/chart-edit';
 import type {SnapMode} from '../ml/class-mapping';
 import type {LinkSegSections, Synctrack} from '@/lib/tempo-map/types';
 import type {MeterStats} from '@/lib/tempo-map/meter-confidence';
@@ -282,13 +282,15 @@ export function buildChartDocument(
   // Add end event
   parsedChart.endEvents = [{tick: endTick, msTime: 0, msLength: 0}];
 
-  // Record the real opening from the synctrack that was installed, before
-  // the writer's lead-in construct at tick 0 becomes the only answer the
-  // chart can give (plan 0124 step 1b). This flow reaches the editor without
-  // passing through any editor command, so it must record its own.
-  const doc: ChartDocument = installedSynctrack
-    ? openingFromSync({parsedChart, assets: []}, installedSynctrack)
-    : {parsedChart, assets: []};
+  // Record where the music starts, from the map that was installed (plan
+  // 0124 §3). This flow reaches the editor without passing through any
+  // editor command, so it must record its own. Without it the chart cannot
+  // later be asked where the song begins: tick 0 holds the writer's lead-in
+  // construct, and nothing else in the file says.
+  const doc = recordSongStartFromMs(
+    {parsedChart, assets: []},
+    installedSynctrack?.musicStartMs,
+  );
 
   const timeSigs = parsedChart.timeSignatures.map(ts => ({
     tick: ts.tick,

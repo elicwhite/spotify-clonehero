@@ -20,11 +20,13 @@ import {
   LEAD_MIN_MS,
   applyLeadIn,
   getAudioAnchor,
-  getLeadIn,
+  getSongStartTick,
+  leadInBars,
+  songStartAudioMs,
   planLeadIn,
-  setOpening,
-  setSongStart,
+  setSongStartTick,
 } from '../leading-silence';
+import {buildTimedTempos, msToTick} from '@/lib/drum-transcription/timing';
 import {noteTypes} from '@eliwhite/scan-chart';
 
 const RES = 192;
@@ -42,14 +44,17 @@ function makeDoc(bpm: number, meter: [number, number] = [4, 4]): ChartDocument {
   return doc;
 }
 
-/** A doc with a song start, and an opening record so 4/4 and the tempo are
- *  known rather than read off a possibly-synthetic tick 0. */
-function ready(bpm: number, audioMs: number): ChartDocument {
-  const doc = setOpening(makeDoc(bpm), {
-    bpm,
-    meter: {numerator: 4, denominator: 4},
-  });
-  return setSongStart(doc, {audioMs});
+/** A doc whose song start sits `audioMs` into the (as yet unpadded) audio.
+ *  The record is a TICK, so `audioMs` is quantized on the way in. */
+function ready(
+  bpm: number,
+  audioMs: number,
+  meter: [number, number] = [4, 4],
+): ChartDocument {
+  const doc = makeDoc(bpm, meter);
+  const chart = doc.parsedChart;
+  const timed = buildTimedTempos(chart.tempos, chart.resolution);
+  return setSongStartTick(doc, msToTick(audioMs, timed, chart.resolution));
 }
 
 function addNote(doc: ChartDocument, tick: number) {
@@ -84,24 +89,28 @@ describe('choosing N', () => {
   });
 
   it('tops an already-silent song up to the next bar line, not a new lead-in', () => {
-    // X = 8000 -> ceil(8000 / 1632.875) = 5 bars; P = 8164.4 - 8000.
-    const plan = planLeadIn(ready(146.98, 8000))!;
+    // X ~= 8000 -> ceil(8000 / 1632.875) = 5 bars; P = 5 bars - X. X is
+    // tick-quantized by the record, so it is read back rather than assumed.
+    const doc = ready(146.98, 8000);
+    const plan = planLeadIn(doc)!;
     expect(plan.bars).toBe(5);
-    expect(plan.padMs).toBeCloseTo(164.4, 0);
+    expect(plan.padMs).toBeCloseTo(
+      5 * barMs(146.98) - songStartAudioMs(doc)!,
+      6,
+    );
   });
 
-  it('keeps every event at or after tick 0 (bound 3)', () => {
+  it('keeps every event at or after tick 0', () => {
     // A pickup 500 ms before the song start: P must reach 500 ms at least.
-    const doc = ready(120, 0);
+    const doc = ready(120, 500);
     addNote(doc, 0);
-    const withStart = setSongStart(doc, {audioMs: 500});
-    const plan = planLeadIn(withStart)!;
+    const plan = planLeadIn(doc)!;
     expect(plan.padMs).toBeGreaterThanOrEqual(500);
   });
 
   it('is a ceil, never a nearest', () => {
     // X just over one bar must give two bars, not one.
-    const plan = planLeadIn(ready(120, 2001))!;
+    const plan = planLeadIn(ready(120, 2010))!;
     expect(plan.bars).toBe(2);
   });
 
@@ -110,17 +119,34 @@ describe('choosing N', () => {
       [7, 8],
       [5, 4],
     ] as const) {
-      const doc = setSongStart(setOpening(makeDoc(120, [num, den]), null), {
-        audioMs: 0,
-      });
+      const doc = ready(120, 0, [num, den]);
       const plan = planLeadIn(doc)!;
       expect(plan.padMs).toBeCloseTo(plan.bars * barMs(120, num, den), 0);
       expect(plan.padMs).toBeGreaterThanOrEqual(LEAD_MIN_MS);
     }
   });
 
-  it('returns null with no song start: the caller must gate on it', () => {
-    expect(planLeadIn(makeDoc(120))).toBeNull();
+  it('still adds whole bars with no song start, and never trims', () => {
+    // Nothing has said where the music is, so `X` is taken as 0: the pad can
+    // only grow. Trimming the front of a recording whose music we cannot
+    // locate is the one thing this must not do.
+    const plan = planLeadIn(makeDoc(120))!;
+    expect(plan.bars).toBe(1);
+    expect(plan.padMs).toBeCloseTo(barMs(120), 1);
+    expect(plan.padMs).toBeGreaterThan(0);
+  });
+
+  it('trims when an explicit count asks for less than the silence there', () => {
+    // 8 s of silence in front, and the user asks for one bar. The anchor is
+    // signed, so the answer is a negative pad — 4.7 s comes off the front —
+    // not a refusal. The music is still a whole bar into the padded audio.
+    const doc = ready(146.98, 8000);
+    const X = songStartAudioMs(doc)!;
+    const plan = planLeadIn(doc, 1)!;
+    expect(plan.bars).toBe(1);
+    expect(plan.padMs).toBeLessThan(0);
+    expect(plan.padMs).toBeCloseTo(barMs(146.98) - X, 6);
+    expect(plan.padMs + X).toBeGreaterThan(0);
   });
 });
 
@@ -132,7 +158,8 @@ describe('the pad is absolute, and the bar count accumulates', () => {
   it('a second press adds exactly one bar, not another whole pad', () => {
     const first = planLeadIn(ready(120, 0))!;
     const padded = applyLeadIn(ready(120, 0), first);
-    expect(getLeadIn(padded)).toEqual({bars: first.bars});
+    expect(leadInBars(padded)).toBeCloseTo(first.bars, 6);
+    expect(getSongStartTick(padded)).toBe(first.bars * 4 * RES);
 
     const second = planLeadIn(padded, first.bars + 1)!;
     // Absolute: the second plan's pad is the whole silence, one bar more
@@ -182,9 +209,10 @@ describe('the audio-position invariant', () => {
     addNote(doc, RES * 8);
     const before = audioPositions(doc);
 
+    const bars1 = Math.round(leadInBars(applyLeadIn(doc, planLeadIn(doc)!))!);
     const one = applyLeadIn(doc, planLeadIn(doc)!);
-    const two = applyLeadIn(one, planLeadIn(one, getLeadIn(one)!.bars + 1)!);
-    const back = applyLeadIn(two, planLeadIn(two, getLeadIn(one)!.bars)!);
+    const two = applyLeadIn(one, planLeadIn(one, bars1 + 1)!);
+    const back = applyLeadIn(two, planLeadIn(two, bars1)!);
 
     // One tick of tolerance: every apply re-ticks and retimes from the
     // rounded tick, so the equality is a tick equality, not an ms one.
@@ -232,7 +260,10 @@ describe('the emitted opening', () => {
       // whole number of bars under the emitted grid.
       const chart = after.parsedChart;
       const msPerTick = 60000 / chart.tempos[0].beatsPerMinute / RES;
-      expect(songStartTick * msPerTick).toBeCloseTo(plan.padMs + X, 0);
+      expect(songStartTick * msPerTick).toBeCloseTo(
+        plan.padMs + songStartAudioMs(doc)!,
+        0,
+      );
     }
   });
 
@@ -241,13 +272,12 @@ describe('the emitted opening', () => {
     const doc = makeDoc(20000);
     addTempo(doc, 1, 146.98);
     retimeChart(doc.parsedChart);
-    const ready = setSongStart(
-      setOpening(doc, {bpm: 146.98, meter: {numerator: 4, denominator: 4}}),
-      {audioMs: 0},
-    );
-    const plan = planLeadIn(ready)!;
-    expect(plan.bpm0).toBeCloseTo(146.98, 2);
-    const after = applyLeadIn(ready, plan);
+    // The song start is the real tempo's own tick, so the opening is read
+    // there and not off the collapse marker at tick 0.
+    const withStart = setSongStartTick(doc, 1);
+    const plan = planLeadIn(withStart)!;
+    expect(plan.newSync.tempos[0].bpm).toBeCloseTo(146.98, 2);
+    const after = applyLeadIn(withStart, plan);
     expect(after.parsedChart.tempos.every(t => t.beatsPerMinute < 5000)).toBe(
       true,
     );

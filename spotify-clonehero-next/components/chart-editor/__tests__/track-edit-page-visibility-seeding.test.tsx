@@ -71,7 +71,7 @@ jest.mock('../../../lib/preview/audioManager', () => ({
     this.trackNames = audioFiles.map(f => f.fileName);
     this.setChartDelay = jest.fn();
     this.setVolume = jest.fn();
-    // usePaddedAudio carries mixer state across a rebuild by reading
+    // useShiftedAudio carries mixer state across a rebuild by reading
     // getVolume for every name in trackNames, then pauses the old manager.
     // Without these the rebuild throws on the first track and is swallowed by
     // its own catch, so the audio under test is silently never rebuilt.
@@ -99,7 +99,7 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
 // The editor decodes the project's audio files into PCM for
-// `usePaddedAudio`; jsdom has neither OfflineAudioContext nor the soxr
+// `useShiftedAudio`; jsdom has neither OfflineAudioContext nor the soxr
 // resampler behind the real decode.
 jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
   decodeAtRate: jest.fn(async () => ({

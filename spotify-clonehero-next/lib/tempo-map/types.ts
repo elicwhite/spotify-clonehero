@@ -19,6 +19,44 @@ export interface Synctrack {
   origin_ms: number;
   tempos: TempoEvent[];
   timeSignatures: TimeSignatureEvent[];
+  /**
+   * Where the MUSIC starts, in the same ms frame as the events — the first
+   * downbeat the beat tracker found.
+   *
+   * This is not `origin_ms`, which is grid phase: `anchorOriginToAudioStart`
+   * advances the origin by whole bars to the first downbeat at or after
+   * t=0, so it always lands within one bar of sample 0 no matter how much
+   * silence the recording opens with. Leading silence is sized from the
+   * musical start, so it needs this instead.
+   *
+   * Absent when the producer did not state one — a hand-built map, or a map
+   * from an older pipeline run.
+   */
+  musicStartMs?: number;
+}
+
+/** The three fields that describe a synctrack's GRID, and nothing else. */
+export type SynctrackGrid = Pick<
+  Synctrack,
+  'origin_ms' | 'tempos' | 'timeSignatures'
+>;
+
+/**
+ * Rebuild a synctrack's grid, keeping everything else the map carries.
+ *
+ * Use this instead of an object literal wherever a transform replaces the
+ * origin, the tempos and the signatures — the warp, the octave rescale, the
+ * reach revert. Those transforms have an opinion about the grid and no
+ * opinion about anything else, and a literal silently drops the rest.
+ *
+ * `musicStartMs` is what made this necessary. It is optional, so a literal
+ * supplying the three required fields still satisfies `Synctrack` and the
+ * compiler says nothing; the field simply vanished partway down the
+ * pipeline, on the data-dependent branch where the warp admitted. The next
+ * optional field would have gone the same way.
+ */
+export function withGrid(sync: Synctrack, grid: SynctrackGrid): Synctrack {
+  return {...sync, ...grid};
 }
 
 /** Progress message posted by the pipeline worker. */

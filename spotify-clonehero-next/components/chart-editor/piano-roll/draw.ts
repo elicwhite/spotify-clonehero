@@ -467,6 +467,39 @@ export function drawNotes(
 }
 
 /**
+ * The song-start flag: a pennant on a pole at the first downbeat of the music.
+ *
+ * It marks where the song begins, which is what the lead-in is measured from
+ * (plan 0124). Drawn last in the lane so it reads above the markers and chips
+ * it usually shares a tick with, and drawn full-height so it is grabbable
+ * anywhere in the lane rather than only on the pennant.
+ */
+function drawSongStartFlag(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  top: number,
+  dragging: boolean,
+): void {
+  const poleTop = top + 1;
+  const poleBottom = top + TEMPO_H - 1;
+  ctx.strokeStyle = dragging ? COLORS.songStartActive : COLORS.songStart;
+  ctx.lineWidth = dragging ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x + 0.5, poleTop);
+  ctx.lineTo(x + 0.5, poleBottom);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+
+  ctx.fillStyle = dragging ? COLORS.songStartActive : COLORS.songStart;
+  ctx.beginPath();
+  ctx.moveTo(x + 1, poleTop);
+  ctx.lineTo(x + 11, poleTop + 4);
+  ctx.lineTo(x + 1, poleTop + 8);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/**
  * The tempo lane: sparse BPM markers and one chip per authored time
  * signature. `tsWidthsOut` is populated with each chip's measured label width
  * so `hitTsChip` tests the SAME pill that was painted — the menu and the drag
@@ -487,6 +520,8 @@ export function drawTempoLane(
   selectedTempoTicks: ReadonlySet<number>,
   /** Ticks of marquee-selected time-signature chips. */
   selectedTsTicks: ReadonlySet<number>,
+  /** In-flight song-start drag, in chart ms; null when not dragging. */
+  songStartDragMs: number | null,
 ): void {
   ctx.fillStyle = COLORS.tempoBg;
   ctx.fillRect(0, top, w, TEMPO_H);
@@ -573,6 +608,12 @@ export function drawTempoLane(
     }
     ctx.fillStyle = COLORS.tempoInk;
     ctx.fillText(ts.label, rect.left + 4, top + TS_CHIP_TOP + 9.5);
+  }
+
+  // Last, so it reads above the marker and chip it usually shares a tick with.
+  const flagMs = songStartDragMs ?? scene.songStartMs;
+  if (flagMs !== null) {
+    drawSongStartFlag(ctx, msToX(flagMs, view), top, songStartDragMs !== null);
   }
 }
 
