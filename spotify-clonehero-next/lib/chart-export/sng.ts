@@ -237,8 +237,7 @@ export function exportAsSng(files: FileEntry[]): Uint8Array {
   let filteredFiles = files;
 
   if (songIniEntry) {
-    const iniText = new TextDecoder().decode(songIniEntry.data);
-    const {iniObject} = parseIni(iniText);
+    const {iniObject} = parseIni(songIniEntry.data);
 
     // Flatten all sections into a single key-value map.
     // song.ini typically has a [song] or [Song] section.

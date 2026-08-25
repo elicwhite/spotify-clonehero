@@ -36,9 +36,7 @@ function assembledIni(metadata: ChartPackageMetadata): Record<string, string> {
   const entries = assembleChartFiles({chartFile: chartFile(), metadata});
   const ini = entries.find(f => f.fileName === 'song.ini');
   expect(ini).toBeDefined();
-  const {iniObject, iniErrors} = parseIni(
-    new TextDecoder().decode(ini!.data as Uint8Array),
-  );
+  const {iniObject, iniErrors} = parseIni(ini!.data as Uint8Array);
   expect(iniErrors).toEqual([]);
   return iniObject['song'] ?? iniObject[$NoSection] ?? {};
 }

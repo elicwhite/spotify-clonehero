@@ -11,12 +11,36 @@ function createParseError(line: string) {
   return `Unsupported type of line: "${line}"`;
 }
 
-export function parse(data: string) {
+/**
+ * @returns the most likely text encoding for the text in `buffer`.
+ */
+function getEncoding(buffer: Uint8Array) {
+  if (buffer.length < 2) {
+    return 'utf-8';
+  }
+
+  if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return 'utf-16le';
+  }
+
+  if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+    return 'utf-16be';
+  }
+
+  return 'utf-8';
+}
+
+export function parse(file: Uint8Array) {
   const iniObject: IniObject = {};
   const iniErrors: string[] = [];
 
   let currentSection = '';
 
+  // The parser takes bytes, not text, because Windows chart tools write
+  // song.ini as UTF-16. Decoded as UTF-8, such a file gives no recognizable
+  // `[Song]` header, so it parses to no sections and the chart appears to
+  // have no metadata. TextDecoder drops a UTF-8 byte-order mark on its own.
+  const data = new TextDecoder(getEncoding(file)).decode(file);
   const lines = data.split(/\r?\n/g).map(line => line.trim());
   for (const line of lines) {
     if (line.length === 0 || line.startsWith(';')) {

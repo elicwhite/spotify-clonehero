@@ -159,8 +159,7 @@ async function scanLocalChartsDirectory(
       try {
         const file = await songIniHandle.getFile();
         try {
-          const text = await file.text();
-          const values = parse(text);
+          const values = parse(new Uint8Array(await file.arrayBuffer()));
           // @ts-ignore Assuming JSON matches TypeScript
           songIniData = values.iniObject?.song || values.iniObject?.Song;
           songIniMTime = file.lastModified;

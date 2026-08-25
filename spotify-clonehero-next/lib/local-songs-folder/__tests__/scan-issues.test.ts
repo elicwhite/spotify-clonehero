@@ -6,7 +6,7 @@ jest.mock('p-limit', () => ({
   default: () => async (work: () => Promise<unknown>) => work(),
 }));
 jest.mock('../../ini-parser', () => ({
-  parse: (contents: string) => mockParse(contents),
+  parse: (contents: Uint8Array) => mockParse(contents),
 }));
 jest.mock('@eliwhite/parse-sng', () => ({
   readSongIni: (stream: ReadableStream) => mockReadSongIni(stream),
@@ -64,7 +64,9 @@ describe('scanLocalCharts issues', () => {
       kind: 'file',
       name: 'song.ini',
       getFile: jest.fn(async () => ({
-        text: jest.fn(async () => 'not valid ini'),
+        arrayBuffer: jest.fn(
+          async () => new TextEncoder().encode('not valid ini').buffer,
+        ),
         lastModified: 1,
       })),
     } as unknown as FileSystemFileHandle;

@@ -75,7 +75,7 @@ function sourceDocument(): ChartDocument {
 function assembledIni(entries: {fileName: string; data: Uint8Array}[]) {
   const ini = entries.find(f => f.fileName === 'song.ini');
   if (!ini) throw new Error('assembly produced no song.ini');
-  const {iniObject, iniErrors} = parseIni(new TextDecoder().decode(ini.data));
+  const {iniObject, iniErrors} = parseIni(ini.data);
   expect(iniErrors).toEqual([]);
   return iniObject['song'] ?? iniObject[$NoSection] ?? {};
 }
