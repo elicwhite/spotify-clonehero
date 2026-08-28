@@ -4,9 +4,11 @@ import filenamify from 'filenamify/browser';
 import {track, type ChartDownloadSource} from '@/lib/analytics/track';
 import {writeFile} from '@/lib/fileSystemHelpers';
 import scanLocalCharts, {
+  BlockedChartFolder,
   LocalChartScanIssue,
   SongAccumulator,
 } from './scanLocalCharts';
+import {rescueSongInis} from './songIniRescue';
 import {coalesceProgress} from './scan-progress';
 import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
@@ -129,6 +131,8 @@ type InstalledChartsResponse = {
   lastScanned: Date;
   installedCharts: SongAccumulator[];
   issues: LocalChartScanIssue[];
+  /** Chart folders whose `song.ini` the browser did not give the scan. */
+  needSongIniRescue: BlockedChartFolder[];
 };
 
 export function getLocalScanWarning(issueCount: number) {
@@ -165,7 +169,7 @@ export async function scanInstalledCharts(
   // re-render ~15k times during a full library scan.
   const progress = coalesceProgress(onProgress);
 
-  const {lastScanned, installedCharts, issues, status} =
+  const {lastScanned, installedCharts, issues, needSongIniRescue, status} =
     await scanDirectoryForCharts(progress.bump, handle);
 
   progress.flush();
@@ -198,7 +202,35 @@ export async function scanInstalledCharts(
     lastScanned,
     installedCharts,
     issues,
+    needSongIniRescue,
   };
+}
+
+/**
+ * Read the `song.ini` of every folder the scan could not, from one
+ * `webkitdirectory` selection of the same Songs folder, and record what that
+ * recovers.
+ *
+ * Nothing is pruned: the charts the scan did read are still installed, and a
+ * folder this selection missed may be recovered by the next one.
+ */
+export async function recoverBlockedSongInis(
+  candidates: BlockedChartFolder[],
+  selection: File[],
+): Promise<{recovered: number; missed: number}> {
+  const {charts, missed} = await rescueSongInis(candidates, selection);
+
+  if (charts.length > 0) {
+    await upsertLocalCharts(charts, {pruneMissing: false});
+  }
+
+  track({
+    event: 'song_ini_rescued',
+    recovered: charts.length,
+    missed,
+  });
+
+  return {recovered: charts.length, missed};
 }
 
 async function scanDirectoryForCharts(
@@ -207,7 +239,7 @@ async function scanDirectoryForCharts(
 ): Promise<InstalledChartsResponse> {
   const beforeScan = Date.now();
   const installedCharts: SongAccumulator[] = [];
-  const {issues} = await scanLocalCharts(
+  const {issues, needSongIniRescue} = await scanLocalCharts(
     directoryHandle,
     installedCharts,
     callbackPerSong,
@@ -225,6 +257,7 @@ async function scanDirectoryForCharts(
     lastScanned: now,
     installedCharts,
     issues,
+    needSongIniRescue,
   };
 }
 

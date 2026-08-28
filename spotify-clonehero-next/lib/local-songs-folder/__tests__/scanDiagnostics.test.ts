@@ -110,6 +110,36 @@ describe('collectScanDiagnostics', () => {
     expect(report.verdict).toContain('spells song.ini differently');
   });
 
+  // Chrome's File System Access API refuses a file named exactly `song.ini`,
+  // so on Windows a chart folder lists a chart file and no metadata at all.
+  it('names a chart folder the browser listed no song.ini in', async () => {
+    const blocked = dir('Band - Track', [
+      file('notes.chart', ''),
+      file('song.ogg', ''),
+    ]);
+    const report = await collectScanDiagnostics(dir('Songs', [blocked]));
+
+    expect(report.chartsScannable).toBe(0);
+    expect(report.chartsMissed).toBe(0);
+    expect(report.chartsWithoutSongIni).toBe(1);
+    expect(report.sample[0].songIni).toBe('missing');
+    expect(report.sample[0].songIniName).toBeUndefined();
+    expect(report.verdict).toContain('refuses to open a file named song.ini');
+  });
+
+  it('counts a blocked folder beside the folders that do scan', async () => {
+    const report = await collectScanDiagnostics(
+      dir('Songs', [
+        chart('Band - Track (Charter)'),
+        dir('Other Band - Other Track', [file('notes.mid', '')]),
+      ]),
+    );
+
+    expect(report.chartsScannable).toBe(1);
+    expect(report.chartsWithoutSongIni).toBe(1);
+    expect(report.verdict).toContain('1 hold a chart file');
+  });
+
   it('says when the picked folder is itself a chart', async () => {
     const report = await collectScanDiagnostics(chart('Band - Track'));
 
@@ -176,6 +206,7 @@ describe('verdictFor', () => {
     sngFilesFound: 0,
     chartsScannable: 0,
     chartsMissed: 0,
+    chartsWithoutSongIni: 0,
     maxDepthSeen: 0,
     pathsNearWindowsLimit: 0,
     sample: [],

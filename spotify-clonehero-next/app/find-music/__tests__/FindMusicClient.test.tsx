@@ -115,12 +115,13 @@ jest.mock('../../../lib/apple-music/navigation', () => ({
 
 const mockToastError = jest.fn();
 const mockToastWarning = jest.fn();
+const mockToastSuccess = jest.fn();
 jest.mock('sonner', () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
     warning: (...args: unknown[]) => mockToastWarning(...args),
     info: jest.fn(),
-    success: jest.fn(),
+    success: (...args: unknown[]) => mockToastSuccess(...args),
   },
 }));
 
@@ -135,6 +136,7 @@ type LocalScanResult = {
   lastScanned: Date;
   installedCharts: unknown[];
   issues: Array<{path: string}>;
+  needSongIniRescue: Array<{path: string}>;
 };
 type ScanProgress = ((count: number) => void) | undefined;
 // One scan entry point now, told apart by the handle getter it is given: the
@@ -168,8 +170,20 @@ jest.mock('../../../lib/local-songs-folder', () => {
     },
     getLocalScanWarning: (issueCount: number) =>
       `${issueCount} locations skipped`,
+    recoverBlockedSongInis: (candidates: unknown[], selection: unknown[]) =>
+      mockRecoverBlockedSongInis(candidates, selection),
   };
 });
+
+const mockRecoverBlockedSongInis = jest.fn(
+  async (
+    _candidates: unknown[],
+    _selection: unknown[],
+  ): Promise<{recovered: number; missed: number}> => ({
+    recovered: 0,
+    missed: 0,
+  }),
+);
 
 const mockGetFindMusicSongs = jest.fn();
 const mockGetRadarSongs = jest.fn(async () => []);
@@ -996,6 +1010,7 @@ function completeScan(): LocalScanResult {
     lastScanned: new Date(),
     installedCharts: [],
     issues: [],
+    needSongIniRescue: [],
   };
 }
 
@@ -1017,6 +1032,7 @@ it('shows one aggregate warning for a partial local scan', async () => {
     lastScanned: new Date(),
     installedCharts: [],
     issues: [{path: 'Songs/Inaccessible'}, {path: 'Songs/Offline'}],
+    needSongIniRescue: [],
   });
 
   fireEvent.click(await renderSetupGuide());
@@ -1025,6 +1041,82 @@ it('shows one aggregate warning for a partial local scan', async () => {
     expect(mockToastWarning).toHaveBeenCalledWith('2 locations skipped'),
   );
   expect(mockToastWarning).toHaveBeenCalledTimes(1);
+});
+
+// Chrome's File System Access API refuses a file named exactly `song.ini`, so
+// a Windows library of chart folders scans as no charts. The recovery reads
+// the same files through a folder input, once for the whole library.
+it('offers to read the chart folders the browser would not open', async () => {
+  mockStoredOrPickedScan.mockResolvedValue({
+    ...completeScan(),
+    needSongIniRescue: [
+      {path: 'Songs/Artist - Song (Charter)'},
+      {path: 'Songs/Other Band - Other Song (Charter)'},
+    ],
+  });
+  mockRecoverBlockedSongInis.mockResolvedValue({recovered: 2, missed: 0});
+
+  fireEvent.click(await renderSetupGuide());
+
+  await waitFor(() => expect(mockToastWarning).toHaveBeenCalled());
+  const [message, options] = mockToastWarning.mock.calls[0] as [
+    string,
+    {action: {label: string; onClick: () => void}},
+  ];
+  expect(message).toBe(
+    '2 chart folders have a song.ini this browser will not open.',
+  );
+
+  // The action opens the folder input, which is what the browser needs a
+  // gesture for.
+  const input = screen.getByTestId('song-ini-rescue-input');
+  const click = jest.spyOn(input, 'click');
+  act(() => options.action.onClick());
+  expect(click).toHaveBeenCalled();
+
+  const selection = [
+    {
+      name: 'song.ini',
+      webkitRelativePath: 'Songs/Artist - Song (Charter)/song.ini',
+    },
+  ];
+  fireEvent.change(input, {target: {files: selection}});
+
+  await waitFor(() =>
+    expect(mockRecoverBlockedSongInis).toHaveBeenCalledWith(
+      [
+        {path: 'Songs/Artist - Song (Charter)'},
+        {path: 'Songs/Other Band - Other Song (Charter)'},
+      ],
+      selection,
+    ),
+  );
+  await waitFor(() =>
+    expect(mockToastSuccess).toHaveBeenCalledWith('Recovered 2 charts.'),
+  );
+});
+
+it('says so when the selected folder answers for no chart', async () => {
+  mockStoredOrPickedScan.mockResolvedValue({
+    ...completeScan(),
+    needSongIniRescue: [{path: 'Songs/Artist - Song (Charter)'}],
+  });
+  mockRecoverBlockedSongInis.mockResolvedValue({recovered: 0, missed: 1});
+
+  fireEvent.click(await renderSetupGuide());
+
+  await waitFor(() => expect(mockToastWarning).toHaveBeenCalled());
+  fireEvent.change(screen.getByTestId('song-ini-rescue-input'), {
+    target: {
+      files: [{name: 'song.ini', webkitRelativePath: 'Downloads/song.ini'}],
+    },
+  });
+
+  await waitFor(() =>
+    expect(mockToastError).toHaveBeenCalledWith(
+      'No chart info was found in that folder. Select the Songs folder you scanned.',
+    ),
+  );
 });
 
 it('leaves the local card actionable when folder selection is canceled', async () => {

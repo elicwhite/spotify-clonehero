@@ -58,11 +58,15 @@ export type SampledFolder = {
   /**
    * `exact` when the file is named exactly `song.ini`, which is what the scan
    * matches; `case-mismatch` when it is spelled another way, so the scan skips
-   * it. A folder without one at all never reaches the sample.
+   * it; `missing` when the folder holds a chart file and the listing held no
+   * `song.ini` of any spelling. Chrome's File System Access API refuses a file
+   * named exactly `song.ini`, so `missing` is what a blocked chart looks like
+   * from here. A folder with neither a `song.ini` nor a chart file is not a
+   * chart, and never reaches the sample.
    */
-  songIni: 'exact' | 'case-mismatch';
+  songIni: 'exact' | 'case-mismatch' | 'missing';
   /** The spelling found, only ever a variant of `song.ini`. */
-  songIniName: string;
+  songIniName?: string | undefined;
   ini?: IniShape;
   /** Set when reading or listing this folder threw. */
   error?: string;
@@ -105,8 +109,13 @@ export type ScanDiagnosticsReport = {
   sngFilesFound: number;
   /** Folders that hold a `song.ini` the scan would accept. */
   chartsScannable: number;
-  /** Folders that hold a `song.ini` the scan would skip. */
+  /** Folders that hold a `song.ini` the scan would skip for its spelling. */
   chartsMissed: number;
+  /**
+   * Folders that hold a chart file, and no `song.ini` in the listing. On
+   * Windows this is the count of charts Chrome hides from the scan.
+   */
+  chartsWithoutSongIni: number;
   /** Deepest level reached, and how many sampled paths approach MAX_PATH. */
   maxDepthSeen: number;
   pathsNearWindowsLimit: number;
@@ -197,6 +206,9 @@ export function verdictFor(r: Omit<ScanDiagnosticsReport, 'verdict'>): string {
   if (r.rootIsChart) {
     return 'The folder you picked is itself a chart, not a folder of charts. Pick the folder that holds all your song folders.';
   }
+  if (r.chartsWithoutSongIni > 0 && r.chartsScannable === 0) {
+    return `${r.chartsWithoutSongIni} folders hold a chart file, and the browser listed no song.ini in any of them. Chrome refuses to open a file named song.ini, which reads exactly like this. Find Music can read those files through the folder picker instead.`;
+  }
   if (r.chartsMissed > 0 && r.chartsScannable === 0) {
     return `Every chart found spells song.ini differently from what the scan matches (${r.chartsMissed} of them). That is the bug.`;
   }
@@ -204,7 +216,9 @@ export function verdictFor(r: Omit<ScanDiagnosticsReport, 'verdict'>): string {
     return `${r.chartsMissed} chart folders spell song.ini differently from what the scan matches, and ${r.chartsScannable} do not.`;
   }
   if (r.chartsScannable > 0) {
-    return `${r.chartsScannable} chart folders look scannable, so the fault is after the folder walk.`;
+    return r.chartsWithoutSongIni > 0
+      ? `${r.chartsScannable} chart folders look scannable, and ${r.chartsWithoutSongIni} hold a chart file the browser listed no song.ini for.`
+      : `${r.chartsScannable} chart folders look scannable, so the fault is after the folder walk.`;
   }
   if (r.listingErrors.length > 0) {
     return `The browser refused to list ${r.listingErrors.length} directories. See listingErrors.`;
@@ -275,6 +289,9 @@ export async function collectScanDiagnostics(
     const extensions: Record<string, number> = {};
     let fileCount = 0;
     let songIniHandle: FileSystemFileHandle | null = null;
+    // A folder with one of these is a chart folder, whether or not its
+    // `song.ini` came back from the browser.
+    let hasChartFile = false;
 
     for (const [, handle] of entries) {
       if (handle.kind === 'directory') {
@@ -287,6 +304,7 @@ export async function collectScanDiagnostics(
       if (handle.name.toLowerCase() === 'song.ini') {
         songIniHandle = handle as FileSystemFileHandle;
       }
+      if (ext === 'chart' || ext === 'mid') hasChartFile = true;
       if (handle.name.toLowerCase().endsWith('.sng')) sngFilesFound++;
     }
 
@@ -297,7 +315,7 @@ export async function collectScanDiagnostics(
 
     // Only folders that look like a chart are worth a sample slot; a library
     // is mostly folders of folders and those say nothing.
-    if (songIniHandle) {
+    if (songIniHandle || hasChartFile) {
       const folder: SampledFolder = {
         depth,
         nameLength: dir.name.length,
@@ -307,14 +325,21 @@ export async function collectScanDiagnostics(
         directoryCount: subdirs.length,
         fileCount,
         extensions,
-        songIni: songIniHandle.name === 'song.ini' ? 'exact' : 'case-mismatch',
-        songIniName: songIniHandle.name,
+        songIni:
+          songIniHandle == null
+            ? 'missing'
+            : songIniHandle.name === 'song.ini'
+              ? 'exact'
+              : 'case-mismatch',
+        songIniName: songIniHandle?.name,
       };
-      try {
-        const file = await songIniHandle.getFile();
-        folder.ini = describeIni(new Uint8Array(await file.arrayBuffer()));
-      } catch (error) {
-        folder.error = messageOf(error);
+      if (songIniHandle) {
+        try {
+          const file = await songIniHandle.getFile();
+          folder.ini = describeIni(new Uint8Array(await file.arrayBuffer()));
+        } catch (error) {
+          folder.error = messageOf(error);
+        }
       }
       sample.push(folder);
     }
@@ -327,6 +352,7 @@ export async function collectScanDiagnostics(
   await visit(root, 0, root.name.length);
 
   const chartsScannable = sample.filter(f => f.songIni === 'exact').length;
+  const chartsMissed = sample.filter(f => f.songIni === 'case-mismatch').length;
   const withoutVerdict = {
     version: 1 as const,
     userAgent: navigator.userAgent,
@@ -337,7 +363,8 @@ export async function collectScanDiagnostics(
     listingErrors,
     sngFilesFound,
     chartsScannable,
-    chartsMissed: sample.length - chartsScannable,
+    chartsMissed,
+    chartsWithoutSongIni: sample.filter(f => f.songIni === 'missing').length,
     maxDepthSeen,
     pathsNearWindowsLimit: sample.filter(
       f => f.pathLength >= WINDOWS_MAX_PATH - 60,

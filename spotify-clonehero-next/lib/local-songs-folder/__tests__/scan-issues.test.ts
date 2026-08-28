@@ -46,6 +46,7 @@ describe('scanLocalCharts issues', () => {
     const result = await scanLocalCharts(songs, [], jest.fn());
 
     expect(result).toEqual({
+      needSongIniRescue: [],
       issues: [
         {
           kind: 'directory',
@@ -82,6 +83,7 @@ describe('scanLocalCharts issues', () => {
     } as unknown as FileSystemDirectoryHandle;
 
     await expect(scanLocalCharts(songs, [], jest.fn())).resolves.toEqual({
+      needSongIniRescue: [],
       issues: [
         {
           kind: 'song-ini',
@@ -109,6 +111,7 @@ describe('scanLocalCharts issues', () => {
     } as unknown as FileSystemDirectoryHandle;
 
     await expect(scanLocalCharts(songs, [], jest.fn())).resolves.toEqual({
+      needSongIniRescue: [],
       issues: [
         {
           kind: 'sng',
@@ -143,7 +146,7 @@ describe('scanLocalCharts issues', () => {
     const accumulator: SongAccumulator[] = [];
     await expect(
       scanLocalCharts(picked, accumulator, jest.fn()),
-    ).resolves.toEqual({issues: []});
+    ).resolves.toEqual({issues: [], needSongIniRescue: []});
     expect(accumulator).toHaveLength(1);
     expect(accumulator[0].song).toBe('Root Song');
     expect(accumulator[0].handleInfo).toEqual({

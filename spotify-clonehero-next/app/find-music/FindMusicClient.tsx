@@ -1,6 +1,13 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react';
 import {Menu, Sparkles} from 'lucide-react';
 import {usePathname} from 'next/navigation';
 import {toast} from 'sonner';
@@ -28,9 +35,11 @@ import {
   getGrantedSongsDirectoryHandle,
   getLocalScanWarning,
   pickSongsDirectory,
+  recoverBlockedSongInis,
   scanSongsDirectory,
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
+import type {BlockedChartFolder} from '@/lib/local-songs-folder/scanLocalCharts';
 import {Button} from '@/components/ui/button';
 import {
   Sheet,
@@ -112,6 +121,8 @@ export default function FindMusicClient() {
   const storedFolderScannedRef = useRef(false);
   const activeControllersRef = useRef<AbortController[]>([]);
   const snapshotQueueRef = useRef(Promise.resolve());
+  const songIniInputRef = useRef<HTMLInputElement | null>(null);
+  const rescueCandidatesRef = useRef<BlockedChartFolder[]>([]);
   const chorusRefreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const view: FindMusicView =
@@ -515,6 +526,76 @@ export default function FindMusicClient() {
     user,
   ]);
 
+  /**
+   * Offer to read the chart folders the browser would not give the scan.
+   *
+   * Chrome's File System Access API refuses a file named exactly `song.ini`,
+   * so on Windows a library of chart folders can scan as no charts at all.
+   * The file picker reads the same files, and one selection answers for the
+   * whole library, so this is offered once per scan and not once per chart.
+   */
+  const offerSongIniRescue = useCallback((candidates: BlockedChartFolder[]) => {
+    rescueCandidatesRef.current = candidates;
+    if (candidates.length === 0) return;
+
+    toast.warning(
+      `${candidates.length.toLocaleString()} chart ${
+        candidates.length === 1 ? 'folder has' : 'folders have'
+      } a song.ini this browser will not open.`,
+      {
+        duration: Infinity,
+        description:
+          'Select the same Songs folder again to read them. Chrome titles that prompt "Upload", but nothing leaves your browser.',
+        action: {
+          label: 'Recover chart info',
+          onClick: () => songIniInputRef.current?.click(),
+        },
+      },
+    );
+  }, []);
+
+  const runSongIniRescue = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const selection = Array.from(event.target.files ?? []);
+      // Cleared now, so selecting the same folder again fires another change.
+      event.target.value = '';
+      const candidates = rescueCandidatesRef.current;
+      if (selection.length === 0 || candidates.length === 0) return;
+
+      setLocalStatus({phase: 'loading', summary: 'Reading chart info…'});
+      try {
+        const {recovered, missed} = await recoverBlockedSongInis(
+          candidates,
+          selection,
+        );
+        await refreshSnapshot();
+        // The card goes back to the count the snapshot holds, which now
+        // includes what was recovered.
+        setLocalStatus(null);
+
+        if (recovered === 0) {
+          toast.error(
+            'No chart info was found in that folder. Select the Songs folder you scanned.',
+          );
+          return;
+        }
+        // The recorded folders are kept: a selection that answered for part
+        // of the library leaves the rest to a second one.
+        toast.success(
+          `Recovered ${recovered.toLocaleString()} ${
+            recovered === 1 ? 'chart' : 'charts'
+          }${missed > 0 ? `, ${missed.toLocaleString()} still unread` : ''}.`,
+        );
+      } catch (error) {
+        setLocalStatus(null);
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message);
+        Sentry.captureException(error);
+      }
+    },
+    [refreshSnapshot],
+  );
+
   // `getHandle` decides how the folder is obtained: reuse the stored one, or
   // insist on the picker. Whichever it is, a null handle means the user has no
   // folder to scan and the card returns to its derived status.
@@ -545,6 +626,7 @@ export default function FindMusicClient() {
               : `${result.installedCharts.length.toLocaleString()} installed charts`,
           detail: 'Scanned just now',
         });
+        offerSongIniRescue(result.needSongIniRescue);
         await refreshSnapshot();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -560,7 +642,7 @@ export default function FindMusicClient() {
         Sentry.captureException(error);
       }
     },
-    [refreshSnapshot],
+    [offerSongIniRescue, refreshSnapshot],
   );
 
   const runRequestedScan = useCallback(
@@ -742,6 +824,18 @@ export default function FindMusicClient() {
       <div
         data-testid="find-music-page"
         className="flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
+        {/* The way back to the chart folders the File System Access API
+            refuses to open. Hidden, and opened by the toast that offers the
+            recovery, because a folder input has no state a user can read. */}
+        <input
+          ref={songIniInputRef}
+          type="file"
+          webkitdirectory=""
+          multiple
+          hidden
+          data-testid="song-ini-rescue-input"
+          onChange={event => void runSongIniRescue(event)}
+        />
         <header className="border-b px-3 py-3 md:px-5">
           <div className="flex items-center gap-2.5">
             <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>

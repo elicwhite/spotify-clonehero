@@ -2,6 +2,7 @@ import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
+import {chartFileFormatOf} from '@/lib/chart-files/chart-file-names';
 import type {ChartHandleInfo} from '@/lib/chart-files/chart-package';
 
 // Caps concurrent FS ops across the whole recursive scan. Without a shared
@@ -47,8 +48,24 @@ export type LocalChartScanIssue = {
   message: string;
 };
 
+/**
+ * A folder that holds a chart file, but gave the scan no metadata to record.
+ *
+ * Chrome's File System Access API refuses a file named exactly `song.ini`, so
+ * on Windows such a folder is a whole chart the scan cannot see: the entry is
+ * missing from the listing, or opening it fails. The folder is recorded here
+ * so `songIniRescue` can read the same file through a `webkitdirectory`
+ * selection, which the restriction does not apply to.
+ */
+export type BlockedChartFolder = {
+  /** From the picked folder down, as `Songs/Artist - Song`. */
+  path: string;
+  handleInfo: ChartHandleInfo;
+};
+
 export type LocalChartScanResult = {
   issues: LocalChartScanIssue[];
+  needSongIniRescue: BlockedChartFolder[];
 };
 
 export default async function scanLocalCharts(
@@ -61,22 +78,33 @@ export default async function scanLocalCharts(
   // this listing is the one that is allowed to reject.
   const entries = await listEntries(directoryHandle);
   const issues: LocalChartScanIssue[] = [];
-  const {subdirs, sngFiles, songIniHandle} = partitionEntries(entries);
+  const needSongIniRescue: BlockedChartFolder[] = [];
+  const {subdirs, sngFiles, songIniHandle, hasChartFile} =
+    partitionEntries(entries);
   const path = directoryHandle.name;
 
   // The user may pick one chart's own folder rather than a folder of charts.
   // Such a chart has no parent handle, so it addresses its own files.
-  if (songIniHandle) {
-    const {songIniData, songIniMTime} = await readSongIniData(
-      songIniHandle,
-      path,
-      issues,
-    );
-    pushChart(accumulator, callbackPerSong, songIniData, songIniMTime, {
-      dirHandle: directoryHandle,
-      fileName: directoryHandle.name,
-    });
-  }
+  const rootHandleInfo = {
+    dirHandle: directoryHandle,
+    fileName: directoryHandle.name,
+  };
+  const {songIniData, songIniMTime, opened} = songIniHandle
+    ? await readSongIniData(songIniHandle, path, issues)
+    : {songIniData: null, songIniMTime: 0, opened: false};
+  pushChart(
+    accumulator,
+    callbackPerSong,
+    songIniData,
+    songIniMTime,
+    rootHandleInfo,
+  );
+  recordIfBlocked(needSongIniRescue, {
+    hasChartFile,
+    songIniOpened: opened,
+    path,
+    handleInfo: rootHandleInfo,
+  });
 
   await Promise.all([
     ...subdirs.map(sub =>
@@ -88,6 +116,7 @@ export default async function scanLocalCharts(
         limit,
         `${path}/${sub.name}`,
         issues,
+        needSongIniRescue,
       ),
     ),
     ...sngFiles.map(sng =>
@@ -103,34 +132,77 @@ export default async function scanLocalCharts(
     ),
   ]);
 
-  return {issues};
+  return {issues, needSongIniRescue};
 }
 
-/** The three things a scan cares about among a directory's entries. */
+/**
+ * Record a folder the rescue may be able to read: one that holds a chart file
+ * and whose `song.ini` the browser did not give the scan. A folder with no
+ * chart file in it is not a chart, so its missing `song.ini` says nothing, and
+ * a `song.ini` that was read is nothing a second reader can improve on.
+ */
+function recordIfBlocked(
+  needSongIniRescue: BlockedChartFolder[],
+  {
+    hasChartFile,
+    songIniOpened,
+    path,
+    handleInfo,
+  }: {
+    hasChartFile: boolean;
+    songIniOpened: boolean;
+    path: string;
+    handleInfo: ChartHandleInfo;
+  },
+) {
+  if (!hasChartFile || songIniOpened) return;
+  needSongIniRescue.push({path, handleInfo});
+}
+
+/** The four things a scan cares about among a directory's entries. */
 function partitionEntries(entries: Array<[string, EntryHandle]>) {
   const subdirs: FileSystemDirectoryHandle[] = [];
   const sngFiles: FileSystemFileHandle[] = [];
   let songIniHandle: FileSystemFileHandle | null = null;
+  // Says the folder is a chart even when its `song.ini` never came back from
+  // the browser. Any `.chart` or `.mid` counts: a folder that holds one is a
+  // chart folder, whichever of its files is the one the game plays.
+  let hasChartFile = false;
 
   for (const [, subHandle] of entries) {
     if (subHandle.kind === 'directory') {
       subdirs.push(subHandle);
-    } else if (subHandle.name.toLowerCase().endsWith('.sng')) {
+      continue;
+    }
+    if (subHandle.name.toLowerCase().endsWith('.sng')) {
       sngFiles.push(subHandle);
     } else if (subHandle.name === 'song.ini') {
       songIniHandle = subHandle;
     }
+    if (chartFileFormatOf(subHandle.name) != null) {
+      hasChartFile = true;
+    }
   }
 
-  return {subdirs, sngFiles, songIniHandle};
+  return {subdirs, sngFiles, songIniHandle, hasChartFile};
 }
 
-/** A chart folder's metadata, or nulls when the `song.ini` cannot be used. */
+/**
+ * A chart folder's metadata, or nulls when the `song.ini` cannot be used.
+ *
+ * `opened` says the file was read and parsed. Metadata that is null with
+ * `opened` true is a `song.ini` that holds no `[Song]` section, which no
+ * rescue can improve on.
+ */
 async function readSongIniData(
   songIniHandle: FileSystemFileHandle,
   path: string,
   issues: LocalChartScanIssue[],
-): Promise<{songIniData: SongIniData | null; songIniMTime: number}> {
+): Promise<{
+  songIniData: SongIniData | null;
+  songIniMTime: number;
+  opened: boolean;
+}> {
   let file: File;
   try {
     file = await songIniHandle.getFile();
@@ -142,7 +214,7 @@ async function readSongIniData(
       `Could not read ${path}/song.ini`,
       error,
     );
-    return {songIniData: null, songIniMTime: 0};
+    return {songIniData: null, songIniMTime: 0, opened: false};
   }
 
   try {
@@ -151,7 +223,7 @@ async function readSongIniData(
     // to carry the fields SongIniData names.
     const songIniData = (values.iniObject['song'] ??
       null) as unknown as SongIniData | null;
-    return {songIniData, songIniMTime: file.lastModified};
+    return {songIniData, songIniMTime: file.lastModified, opened: true};
   } catch (error) {
     reportScanIssue(
       issues,
@@ -160,23 +232,24 @@ async function readSongIniData(
       `Could not parse ${path}/song.ini`,
       error,
     );
-    return {songIniData: null, songIniMTime: 0};
+    return {songIniData: null, songIniMTime: 0, opened: false};
   }
 }
 
 /**
- * Record one scanned chart. Metadata with neither a name nor an artist says
- * the folder is not a chart, so nothing is recorded for it.
+ * One scanned chart, or null when the metadata has neither a name nor an
+ * artist, which says the folder is not a chart.
+ *
+ * Takes `song.ini` metadata rather than a handle, so a rescue that read the
+ * same file through a `webkitdirectory` selection makes the same chart.
  */
-function pushChart(
-  accumulator: SongAccumulator[],
-  callbackPerSong: () => void,
+export function buildChart(
   songIniData: SongIniData | null,
   modifiedTime: number,
   handleInfo: ChartHandleInfo,
-) {
+): SongAccumulator | null {
   if (songIniData == null || (!songIniData.name && !songIniData.artist)) {
-    return;
+    return null;
   }
 
   const chart = {
@@ -196,6 +269,20 @@ function pushChart(
     enumerable: false, // Can't serialize to JSON
   });
 
+  return chart;
+}
+
+/** Record one scanned chart, if the metadata makes one. */
+function pushChart(
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+  songIniData: SongIniData | null,
+  modifiedTime: number,
+  handleInfo: ChartHandleInfo,
+) {
+  const chart = buildChart(songIniData, modifiedTime, handleInfo);
+  if (chart == null) return;
+
   accumulator.push(chart);
   callbackPerSong();
 }
@@ -208,6 +295,7 @@ async function scanLocalChartsDirectory(
   limit: LimitFunction,
   path: string,
   issues: LocalChartScanIssue[],
+  needSongIniRescue: BlockedChartFolder[],
 ) {
   // Run listEntries + song.ini parse atomically inside one limit slot. This
   // bounds total in-flight FS-Access ops to ~`limit` instead of fanning out
@@ -222,6 +310,8 @@ async function scanLocalChartsDirectory(
     sngFiles: FileSystemFileHandle[];
     songIniData: SongIniData | null;
     songIniMTime: number;
+    songIniOpened: boolean;
+    hasChartFile: boolean;
   } | null;
 
   const result: LeafResult = await limit(async () => {
@@ -239,15 +329,28 @@ async function scanLocalChartsDirectory(
       return null;
     }
 
-    const {subdirs, sngFiles, songIniHandle} = partitionEntries(entries);
-    const {songIniData, songIniMTime} = songIniHandle
+    const {subdirs, sngFiles, songIniHandle, hasChartFile} =
+      partitionEntries(entries);
+    const {songIniData, songIniMTime, opened} = songIniHandle
       ? await readSongIniData(songIniHandle, path, issues)
-      : {songIniData: null, songIniMTime: 0};
+      : {songIniData: null, songIniMTime: 0, opened: false};
 
-    return {subdirs, sngFiles, songIniData, songIniMTime};
+    return {
+      subdirs,
+      sngFiles,
+      songIniData,
+      songIniMTime,
+      songIniOpened: opened,
+      hasChartFile,
+    };
   });
 
   if (result == null) return;
+
+  const handleInfo = {
+    parentDir: parentDirectoryHandle,
+    fileName: currentDirectoryHandle.name,
+  };
 
   // Push chart immediately on slot release so the counter starts ticking
   // before any children have been processed.
@@ -256,8 +359,14 @@ async function scanLocalChartsDirectory(
     callbackPerSong,
     result.songIniData,
     result.songIniMTime,
-    {parentDir: parentDirectoryHandle, fileName: currentDirectoryHandle.name},
+    handleInfo,
   );
+  recordIfBlocked(needSongIniRescue, {
+    hasChartFile: result.hasChartFile,
+    songIniOpened: result.songIniOpened,
+    path,
+    handleInfo,
+  });
 
   // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
   await Promise.all([
@@ -270,6 +379,7 @@ async function scanLocalChartsDirectory(
         limit,
         `${path}/${sub.name}`,
         issues,
+        needSongIniRescue,
       ),
     ),
     ...result.sngFiles.map(sng =>

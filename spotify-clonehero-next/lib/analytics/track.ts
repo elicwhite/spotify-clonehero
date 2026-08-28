@@ -56,6 +56,13 @@ export type ChartDownloadSource =
 export type AnalyticsEvent =
   // Library scan / downloads
   | {event: 'charts_scanned'; value: number}
+  /**
+   * A `webkitdirectory` recovery of the `song.ini` files Chrome's File System
+   * Access API would not give the scan. `missed` counts the recorded folders
+   * the selection did not answer for, which says whether the recovery is
+   * reaching whole libraries or parts of them.
+   */
+  | {event: 'song_ini_rescued'; recovered: number; missed: number}
   | {
       event: 'chart_downloaded';
       source: ChartDownloadSource;
