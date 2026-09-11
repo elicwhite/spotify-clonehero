@@ -551,7 +551,9 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   // 3. Viterbi
   progress('Running Viterbi alignment...');
   const t1 = performance.now();
-  const aligned = forcedAlign(logProbs, T, C, tokens, 0);
+  const aligned = forcedAlign(logProbs, T, C, tokens, 0, frac =>
+    progress('Running Viterbi alignment...', frac),
+  );
   const viterbiMs = performance.now() - t1;
   progress(
     `Viterbi: ${aligned.length} tokens aligned (${(viterbiMs / 1000).toFixed(1)}s)`,
