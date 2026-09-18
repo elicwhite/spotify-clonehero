@@ -43,16 +43,24 @@ const START_HOLD_SEC = 2;
 /** Seconds below it before a song is declared over. */
 const STOP_HOLD_SEC = 3;
 /**
- * How long to listen to the room before deciding what its quiet flux is.
+ * How long to listen before the gate will make any decision at all.
  *
- * Getting this wrong is expensive and silent. An earlier version calibrated from
- * the first 0.1 s block; on a recording that opens on near-silence it fixed the
- * room 24 dB too low, the gate never registered a single stop for the rest of
- * the session, and the follower rode a false start through an entire take.
+ * The room's scale is then kept as a low percentile over a long rolling window
+ * rather than frozen from this opening sample. Freezing it was measured to be
+ * badly unstable: the same song calibrated to 3.6 one week and 60 the next
+ * purely because of what those first seconds happened to contain, and the same
+ * performance read 59.8 through one capture path and 11.9 through another whose
+ * quiet room sat 14 dB higher. A denominator that swings by an order of
+ * magnitude for reasons unrelated to the music makes the threshold meaningless.
  */
 const CALIBRATION_SEC = 2;
-/** Percentile of the calibration period's flux taken as the room's scale. */
-const CALIBRATION_PERCENTILE = 0.9;
+/** Percentile of the rolling window taken as the room's own scale. Low enough
+ *  to sit in the quiet gaps even while the band is playing. */
+const CALIBRATION_PERCENTILE = 0.1;
+/** How much not-playing history the room's scale is drawn from. Long enough to
+ *  be robust to a moment of noise, short enough to follow a room that genuinely
+ *  changes between songs. */
+const QUIET_WINDOW_SEC = 120;
 /** Percentile of the last second's flux compared against it. */
 const TRANSIENT_PERCENTILE = 0.95;
 
@@ -134,8 +142,9 @@ export class PlayingGate {
   #previousMagnitude: Float32Array | null = null;
   /** Flux from the last second. */
   #recentFlux: number[] = [];
-  #calibrationFlux: number[] = [];
-  #quietFlux: number | null = null;
+  /** Sparsely sampled flux history, for the rolling estimate of the quiet room. */
+  #quietHistory: number[] = [];
+  #sinceQuietSample = 0;
 
   #streamSec = 0;
   #aboveSec = 0;
@@ -156,8 +165,8 @@ export class PlayingGate {
     return this.#playing;
   }
 
-  /** Forgets the song in progress but keeps the room calibration, which does
-   *  not change between takes. */
+  /** Forgets the song in progress but keeps the room estimate, which does not
+   *  change between takes. */
   reset() {
     this.#slicer.reset();
     this.#previousMagnitude = null;
@@ -177,15 +186,30 @@ export class PlayingGate {
     }
     const frames = this.#fluxFrames(filtered);
 
-    if (this.#quietFlux === null) {
-      this.#calibrationFlux.push(...frames);
-      if (this.#streamSec < CALIBRATION_SEC) {
-        return {playing: false, transientRatio: 0, quietFlux: null};
+    // Only sample the room while nobody is playing. Letting the history run
+    // during a song is fatal: after a couple of minutes the whole window is
+    // music, the low percentile rises to the band's own level, the ratio
+    // collapses and the gate declares the song over while it is still being
+    // played. Measured on a real take, the ratio fell from 175 to 6.5 over three
+    // minutes and tripped the stop at 139 seconds, which restarts the follower
+    // and throws the page back to the first bar.
+    //
+    // Keeping every tenth frame is enough for a percentile and keeps the
+    // retained history small.
+    if (!this.#playing) {
+      for (const f of frames) {
+        if (this.#sinceQuietSample++ % 10 === 0) this.#quietHistory.push(f);
       }
-      this.#quietFlux =
-        percentile(this.#calibrationFlux, CALIBRATION_PERCENTILE) || 1e-9;
-      this.#calibrationFlux = [];
     }
+    const historyKeep = Math.round((QUIET_WINDOW_SEC * this.#fluxFps) / 10);
+    if (this.#quietHistory.length > historyKeep) {
+      this.#quietHistory.splice(0, this.#quietHistory.length - historyKeep);
+    }
+    if (this.#streamSec < CALIBRATION_SEC) {
+      return {playing: false, transientRatio: 0, quietFlux: null};
+    }
+    const quietFlux =
+      percentile(this.#quietHistory, CALIBRATION_PERCENTILE) || 1e-9;
 
     this.#recentFlux.push(...frames);
     const keep = Math.round(this.#fluxFps);
@@ -193,7 +217,7 @@ export class PlayingGate {
       this.#recentFlux.splice(0, this.#recentFlux.length - keep);
     }
     const transientRatio =
-      percentile(this.#recentFlux, TRANSIENT_PERCENTILE) / this.#quietFlux;
+      percentile(this.#recentFlux, TRANSIENT_PERCENTILE) / quietFlux;
 
     if (transientRatio >= PLAYING_TRANSIENT_RATIO) {
       this.#aboveSec += blockSec;
@@ -211,7 +235,7 @@ export class PlayingGate {
         // so the music began about a second before the hold started counting.
         startedSecondsAgo: this.#aboveSec + 1,
         transientRatio,
-        quietFlux: this.#quietFlux,
+        quietFlux,
       };
     }
     if (this.#playing && this.#belowSec >= STOP_HOLD_SEC) {
@@ -220,14 +244,10 @@ export class PlayingGate {
         playing: false,
         justStopped: true,
         transientRatio,
-        quietFlux: this.#quietFlux,
+        quietFlux,
       };
     }
-    return {
-      playing: this.#playing,
-      transientRatio,
-      quietFlux: this.#quietFlux,
-    };
+    return {playing: this.#playing, transientRatio, quietFlux};
   }
 
   /** Streaming spectral flux over the snare band. */
