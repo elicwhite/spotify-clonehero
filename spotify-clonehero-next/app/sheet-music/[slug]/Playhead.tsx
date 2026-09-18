@@ -98,25 +98,40 @@ export const Playhead = memo(function ({
       const playhead = playheadRef.current;
       if (!playhead) return;
 
+      const view = scrollViewOf(playhead);
+      const rowPitch = rowPitchOf(timePositionMap);
+      if (!view || !rowPitch) {
+        playhead.scrollIntoView({behavior: 'smooth', block: 'center'});
+        return;
+      }
+
+      // Centre the ROW, not the playhead's box.
+      //
+      // `scrollIntoView({block: 'center'})` centres the element, and the
+      // playhead is a tall bar whose height is a fixed multiple of the zoom and
+      // has nothing to do with the row it marks. The notes are at its TOP, so
+      // centring the box leaves the music being played about half a bar above
+      // the middle of the view — at 150% zoom the bar is 180px against a 195px
+      // row, which reads as the current part sitting near the top line.
+      const playheadBox = playhead.getBoundingClientRect();
+      const viewBox = view.getBoundingClientRect();
+      const rowCentre = playheadBox.top + rowPitch / 2;
+      const offsetFromCentre = rowCentre - (viewBox.top + viewBox.height / 2);
+
       if (fromLiveEstimate) {
         const now = performance.now();
         if (now - lastScrollAtRef.current < MIN_SCROLL_INTERVAL_MS) return;
-
-        const view = scrollViewOf(playhead);
-        const rowPitch = rowPitchOf(timePositionMap);
-        if (view && rowPitch) {
-          const playheadBox = playhead.getBoundingClientRect();
-          const viewBox = view.getBoundingClientRect();
-          const offsetFromCentre =
-            playheadBox.top +
-            playheadBox.height / 2 -
-            (viewBox.top + viewBox.height / 2);
-          if (Math.abs(offsetFromCentre) < rowPitch * DEAD_BAND_ROWS) return;
-        }
+        if (Math.abs(offsetFromCentre) < rowPitch * DEAD_BAND_ROWS) return;
         lastScrollAtRef.current = now;
       }
 
-      playhead.scrollIntoView({behavior: 'smooth', block: 'center'});
+      // An absolute target rather than a relative nudge: the offset is measured
+      // afresh each call, so repeated calls during a smooth scroll converge on
+      // the same place instead of compounding into an overshoot.
+      view.scrollTo({
+        top: view.scrollTop + offsetFromCentre,
+        behavior: 'smooth',
+      });
     };
 
     // Set up animation frame loop for smooth movement
