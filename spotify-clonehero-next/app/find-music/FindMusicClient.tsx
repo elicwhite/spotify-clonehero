@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Menu, Sparkles} from 'lucide-react';
+import Link from 'next/link';
 import {usePathname} from 'next/navigation';
 import {toast} from 'sonner';
 import type {User} from '@supabase/supabase-js';
@@ -16,6 +17,7 @@ import {
   isChorusUnavailableError,
 } from '@/lib/chorus-errors';
 import {localDbExists} from '@/lib/local-db/client';
+import {isLocalDbUnavailableError} from '@/lib/local-db/errors';
 import {
   onPlaylistCacheUpdated,
   useSpotifyLibraryUpdate,
@@ -56,6 +58,7 @@ import {
   saveFindMusicFilters,
 } from './filterPersistence';
 import {getFindMusicSongs, getFindMusicStats, getRadarSongs} from './queries';
+import {LOCAL_DB_RESET_PATH} from '@/app/storage/routes';
 import {FIND_MUSIC_RECOMMENDATIONS_PATH, findMusicPathForView} from './routes';
 import {
   type FindMusicFilters,
@@ -107,6 +110,15 @@ export default function FindMusicClient() {
     null,
   );
   const [chorusError, setChorusError] = useState<string | null>(null);
+  /**
+   * The database itself would not open, rather than a source failing.
+   *
+   * Held apart from `chorusError` because the two need opposite answers. A
+   * refresh that failed is worth retrying; a database whose migrations cannot
+   * run will fail every retry identically, and the only way out is the reset
+   * in `/storage`.
+   */
+  const [databaseUnavailable, setDatabaseUnavailable] = useState(false);
   const initializedRef = useRef(false);
   const sourceAccessEnabledRef = useRef(false);
   const storedFolderScannedRef = useRef(false);
@@ -247,8 +259,10 @@ export default function FindMusicClient() {
         await refreshSnapshot();
         setCatalogState('ready');
         setChorusError(null);
+        setDatabaseUnavailable(false);
       } catch (error) {
         if (!controller.signal.aborted) {
+          setDatabaseUnavailable(isLocalDbUnavailableError(error));
           if (isChorusUnavailableError(error)) {
             setChorusError(CHORUS_UNAVAILABLE_MESSAGE);
             toast.error(CHORUS_UNAVAILABLE_MESSAGE);
@@ -832,11 +846,14 @@ export default function FindMusicClient() {
                 <div className="text-center">
                   <Sparkles className="mx-auto mb-3 h-6 w-6 text-destructive" />
                   <p className="font-medium">
-                    Your Chorus index needs a refresh
+                    {databaseUnavailable
+                      ? 'This browser cannot open its song library'
+                      : 'Your Chorus index needs a refresh'}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    The stored catalog could not be updated, so its instrument
-                    metadata is being kept hidden until the refresh succeeds.
+                    {databaseUnavailable
+                      ? 'The database this page keeps in your browser is in a state it cannot repair, so no source can load. Resetting it clears the stored song library — not your charts, your audio or your Songs folder — and it fills again on the next visit.'
+                      : 'The stored catalog could not be updated, so its instrument metadata is being kept hidden until the refresh succeeds.'}
                   </p>
                   {/* Without this the card says only that something failed.
                       Diagnosing the first report of one cost a Discord thread
@@ -846,12 +863,23 @@ export default function FindMusicClient() {
                       {chorusError}
                     </p>
                   ) : null}
-                  <Button
-                    type="button"
-                    className="mt-4"
-                    onClick={() => void loadCatalog()}>
-                    Try again
-                  </Button>
+                  {databaseUnavailable ? (
+                    // Straight to the row that holds the reset. Retrying is
+                    // what a user does instead when offered it, and this
+                    // failure answers every retry the same way.
+                    <Button asChild type="button" className="mt-4">
+                      <Link href={LOCAL_DB_RESET_PATH}>
+                        Reset the song library
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      className="mt-4"
+                      onClick={() => void loadCatalog()}>
+                      Try again
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : committed.music.length === 0 &&

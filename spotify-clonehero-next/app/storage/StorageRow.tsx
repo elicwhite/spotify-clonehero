@@ -14,11 +14,18 @@ import {formatBytes} from '@/lib/sng/file-utils';
  * of this page a report rather than something you could act on.
  */
 export function StorageRow({
+  id,
   title,
   detail,
   sizeBytes,
   actions,
 }: {
+  /**
+   * Names the row so another page can link straight to it. A page that sends
+   * someone here to do one specific thing has to land them on that thing;
+   * `/storage` on its own is a wall of rows to search.
+   */
+  id?: string;
   title: ReactNode;
   detail?: ReactNode;
   /** Omitted for an empty state, which has no size worth printing. */
@@ -26,7 +33,9 @@ export function StorageRow({
   actions?: ReactNode;
 }) {
   return (
-    <li className="flex flex-wrap items-baseline gap-x-4 gap-y-2 border-t border-border py-3 first:border-t-0">
+    <li
+      id={id}
+      className="flex scroll-mt-24 flex-wrap items-baseline gap-x-4 gap-y-2 border-t border-border py-3 first:border-t-0">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-foreground">{title}</p>
         {detail ? (

@@ -9,7 +9,7 @@
  * dialog, loaded only when someone asks for one.
  */
 
-import {LOCAL_DB_PATH} from '@/lib/local-db/path';
+import {LOCAL_DB_PATH, SQLITE_SIDECARS} from '@/lib/local-db/path';
 import {
   CHART_EDITOR_LEGACY_NAMESPACES,
   CHART_EDITOR_NAMESPACE,
@@ -24,12 +24,6 @@ const PROJECT_NAMESPACES = [
 
 /** The `/drum-fills` scan and practice database. */
 const DRUM_FILLS_DB_PATH = 'drum-fills.sqlite3';
-
-/**
- * SQLite writes a write-ahead log and a shared-memory file beside the
- * database. They are the user's data too, and a `-wal` can reach tens of MB.
- */
-const DB_SIDECARS = ['-wal', '-shm'];
 
 /** Cache directories that live inside a project namespace. */
 const CACHE_DIRS_IN_NAMESPACES = new Set(['stem-cache']);
@@ -63,6 +57,12 @@ export interface ProjectStorage {
   projects: StoredProject[];
   /** The local databases and their SQLite sidecars. */
   databaseBytes: number;
+  /**
+   * The song-library database alone, sidecars included. Reported apart from
+   * the total because it is the one a user can reset, and a size beside a
+   * button has to be the size that button removes.
+   */
+  localDatabaseBytes: number;
   /** Everything above: the user's work in total. */
   bytes: number;
 }
@@ -122,6 +122,7 @@ function str(value: unknown): string | null {
 export async function measureProjectStorage(): Promise<ProjectStorage> {
   const projects: StoredProject[] = [];
   let databaseBytes = 0;
+  let localDatabaseBytes = 0;
   try {
     const root = await navigator.storage.getDirectory();
 
@@ -152,18 +153,21 @@ export async function measureProjectStorage(): Promise<ProjectStorage> {
     }
 
     for (const dbPath of [LOCAL_DB_PATH, DRUM_FILLS_DB_PATH]) {
-      databaseBytes += await fileBytes(root, dbPath);
-      for (const sidecar of DB_SIDECARS) {
-        databaseBytes += await fileBytes(root, dbPath + sidecar);
+      let bytes = await fileBytes(root, dbPath);
+      for (const sidecar of SQLITE_SIDECARS) {
+        bytes += await fileBytes(root, dbPath + sidecar);
       }
+      databaseBytes += bytes;
+      if (dbPath === LOCAL_DB_PATH) localDatabaseBytes = bytes;
     }
   } catch {
-    return {projects: [], databaseBytes: 0, bytes: 0};
+    return {projects: [], databaseBytes: 0, localDatabaseBytes: 0, bytes: 0};
   }
 
   return {
     projects,
     databaseBytes,
+    localDatabaseBytes,
     bytes:
       databaseBytes +
       projects.reduce((sum, project) => sum + project.sizeBytes, 0),

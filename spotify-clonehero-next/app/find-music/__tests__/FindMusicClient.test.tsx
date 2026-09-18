@@ -279,6 +279,8 @@ jest.mock('../FindMusicTable', () => ({
 }));
 
 import FindMusicClient from '../FindMusicClient';
+import {LocalDbUnavailableError} from '../../../lib/local-db/errors';
+import {LOCAL_DB_RESET_PATH} from '../../storage/routes';
 import {
   CHORUS_UNAVAILABLE_MESSAGE,
   ChorusUnavailableError,
@@ -419,6 +421,42 @@ it('reports a Chorus refresh failure that is not an outage', async () => {
   expect(
     screen.getByText(/duplicate column name: artist_normalized/),
   ).toBeInTheDocument();
+  // A source that failed is worth retrying. Only the database being unusable
+  // earns the reset, and offering both would send users to the destructive
+  // one for an outage.
+  expect(screen.getByRole('button', {name: 'Try again'})).toBeInTheDocument();
+  expect(
+    screen.queryByRole('link', {name: /Reset the song library/}),
+  ).not.toBeInTheDocument();
+});
+
+it('sends the user to the reset when the database itself will not open', async () => {
+  window.sessionStorage.clear();
+  mockLocalDbExists.mockResolvedValue(true);
+  mockRefreshChorus.mockRejectedValue(
+    new LocalDbUnavailableError(
+      new Error('SQLITE_ERROR: duplicate column name: artist_normalized'),
+    ),
+  );
+
+  render(<FindMusicClient />);
+
+  await waitFor(() => expect(mockRefreshChorus).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(
+      screen.getByText(/cannot open its song library/),
+    ).toBeInTheDocument(),
+  );
+  // Straight to the row holding the reset. Landing on `/storage` itself
+  // leaves the user searching a page of rows for the one that was meant.
+  expect(
+    screen.getByRole('link', {name: /Reset the song library/}),
+  ).toHaveAttribute('href', LOCAL_DB_RESET_PATH);
+  // Retrying answers this failure identically every time, so it is not on
+  // offer beside the fix.
+  expect(
+    screen.queryByRole('button', {name: 'Try again'}),
+  ).not.toBeInTheDocument();
 });
 
 it('does not create the local index or prepare sources before first interaction', async () => {

@@ -34,6 +34,7 @@ describe('measureProjectStorage', () => {
     expect(await measureProjectStorage()).toEqual({
       projects: [],
       databaseBytes: 0,
+      localDatabaseBytes: 0,
       bytes: 0,
     });
   });
@@ -129,9 +130,13 @@ describe('measureProjectStorage', () => {
     put('/spotify-clonehero-local.sqlite3-shm', 10);
     put('/drum-fills.sqlite3', 200);
 
+    // The song library is reported apart from the total: it is the one the
+    // storage page offers to reset, and the size beside that button has to be
+    // the size the button removes rather than drum-fills' as well.
     expect(await measureProjectStorage()).toEqual({
       projects: [],
       databaseBytes: 360,
+      localDatabaseBytes: 160,
       bytes: 360,
     });
   });
@@ -145,6 +150,7 @@ describe('measureProjectStorage', () => {
     expect(await measureProjectStorage()).toEqual({
       projects: [],
       databaseBytes: 0,
+      localDatabaseBytes: 0,
       bytes: 0,
     });
   });

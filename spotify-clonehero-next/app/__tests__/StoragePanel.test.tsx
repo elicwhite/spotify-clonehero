@@ -16,6 +16,7 @@ const deleteStemEntry = jest.fn();
 const getCachedModelBytes = jest.fn();
 const deleteCachedModels = jest.fn();
 const measureProjectStorage = jest.fn();
+const resetLocalDb = jest.fn();
 const deleteStoredProject = jest.fn();
 const chartExportDialog = jest.fn();
 const attachStorageContext = jest.fn();
@@ -65,6 +66,12 @@ jest.mock('../../lib/sentry/storage-context', () => ({
   attachStorageContext: () => attachStorageContext(),
 }));
 
+// The real module is ESM-only SQLocal, which is exactly why the page reaches
+// for it on the click rather than at the top of the file.
+jest.mock('../../lib/local-db/client', () => ({
+  resetLocalDb: () => resetLocalDb(),
+}));
+
 const MB = 1024 * 1024;
 
 const CHART = {
@@ -103,8 +110,10 @@ beforeEach(() => {
   measureProjectStorage.mockResolvedValue({
     projects: [CHART],
     databaseBytes: 20 * MB,
+    localDatabaseBytes: 12 * MB,
     bytes: 60 * MB,
   });
+  resetLocalDb.mockResolvedValue(undefined);
   pruneStemCache.mockResolvedValue({
     deletedFingerprints: ['fp-1', 'fp-orphan'],
     freedBytes: 200 * MB,
@@ -206,6 +215,7 @@ describe('StoragePanel', () => {
     measureProjectStorage.mockResolvedValue({
       projects: [{...CHART, isProject: false, name: 'half-made'}],
       databaseBytes: 0,
+      localDatabaseBytes: 0,
       bytes: 40 * MB,
     });
 
@@ -237,6 +247,55 @@ describe('StoragePanel', () => {
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Deleted Song One'),
     );
+  });
+
+  it('resets the song library database once confirmed', async () => {
+    render(<StoragePanel />);
+
+    await click(await screen.findByRole('button', {name: 'Reset'}));
+    await click(screen.getByRole('button', {name: 'Reset it'}));
+
+    expect(resetLocalDb).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /song library database was reset/,
+      ),
+    );
+  });
+
+  it('leaves the database alone when the confirmation is declined', async () => {
+    render(<StoragePanel />);
+
+    await click(await screen.findByRole('button', {name: 'Reset'}));
+    await click(screen.getByRole('button', {name: 'Keep it'}));
+
+    expect(resetLocalDb).not.toHaveBeenCalled();
+  });
+
+  it('says a reset failed rather than claiming one that did not happen', async () => {
+    // A tab still holding the file open is the case that matters: the browser
+    // refuses the delete, and the page must not go on to say it succeeded.
+    resetLocalDb.mockRejectedValue(new Error('The file is in use'));
+    render(<StoragePanel />);
+
+    await click(await screen.findByRole('button', {name: 'Reset'}));
+    await click(screen.getByRole('button', {name: 'Reset it'}));
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /The file is in use/,
+      ),
+    );
+  });
+
+  it('sizes the reset by the database it removes, not by both of them', async () => {
+    // The drum-fills database is measured on the same page and is not what
+    // this button removes. A total beside it would overstate what is freed.
+    render(<StoragePanel />);
+    await screen.findByRole('button', {name: 'Reset'});
+
+    const row = document.getElementById('song-library-database');
+    expect(row).toHaveTextContent('12 MB');
   });
 
   it('does not report a deletion that did not happen', async () => {

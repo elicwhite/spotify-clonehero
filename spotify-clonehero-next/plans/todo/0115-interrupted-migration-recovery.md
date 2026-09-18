@@ -4,6 +4,9 @@ Status: todo
 
 Depends on: 0114
 
+Related: 0129 (the reset escape hatch, and a second broken-schema cause). Not a
+dependency in either direction.
+
 ## The hazard
 
 Kysely's SQLite adapter reports `supportsTransactionalDdl: false`
@@ -24,30 +27,42 @@ the tab closes, the browser is killed, or OPFS errors after the third, then:
 Unlike the race in 0114, a browser restart does not clear this: the half-applied
 schema is on disk. The database is bricked until the user clears site data.
 
-## What is not known
+## Reachability: confirmed
 
-No user has been observed in this state. The report that produced 0114 recovered
-by itself after a browser restart, which rules that instance out — a persisted
-half-migration would have survived it.
+[FRONTEND-CZ](https://clone-hero-chart-tools.sentry.io/issues/FRONTEND-CZ) is
+this state in production. 73 events since 2026-07-08, from six distinct cities,
+51 of them on release `ef9fd37`, which already carries the 0114 cross-tab lock.
+A lock cannot repair a schema that is already half-applied on disk, so those
+events are users whose databases are bricked exactly as described above,
+retrying and failing on every load.
 
-So this plan starts by establishing whether the state is reachable in practice,
-not by writing the fix. If it is not reachable, the right outcome is to close
-this plan and write down why.
+The earlier note said no user had been observed in this state and that the plan
+should start by establishing reachability. That question is answered; skip it.
 
-## Phase 1 — establish reachability
+## Phase 1 — reproduce it in a test
+
+Not to decide whether to act, only to have a failing test to fix against.
 
 - Read how SQLocal commits a statement against OPFS, and whether a worker
   terminated mid-migration can leave a partial write. The OPFS access handle and
-  SQLite's own journalling both matter here.
-- Reproduce deliberately: run migrations against a database and kill the worker
-  between two `ALTER TABLE` statements of `005`. Inspect the file afterwards with
-  the `check-opfs` skill.
-- If the state is reachable, record exactly how. If it is not, close the plan
-  with that finding and stop.
+  SQLite's own journalling both matter here, and they decide which of the Phase 2
+  fixes can work.
+- Build the half-applied state directly: apply the first three `ALTER TABLE`
+  statements of `005` without recording `005` in `kysely_migration`, then assert
+  the next `migrateToLatest` fails with the duplicate-column error.
 
-## Phase 2 — only if Phase 1 reproduces it
+## Phase 2
 
 Two candidate fixes. Choose on the evidence Phase 1 produces, do not assume.
+
+They are not equivalent for the databases that are already broken, and the
+choice must be made on that as well as on cleanliness. Idempotent `ADD COLUMN`
+repairs a half-applied `005` on the next load, so FRONTEND-CZ's existing
+population recovers by itself. Transactional DDL prevents new breakage and
+leaves that population bricked forever, recoverable only through the reset in
+plan 0129. Record which was chosen and why; 0129's Phase 1 is written to work
+either way, but it becomes the only fix those users get if this picks
+transactions.
 
 **Wrap each migration in an explicit transaction.** Addresses the cause rather
 than the symptom: a migration then either applies fully or not at all, and the

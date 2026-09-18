@@ -40,6 +40,7 @@ import {attachStorageContext} from '@/lib/sentry/storage-context';
 import {formatBytes} from '@/lib/sng/file-utils';
 
 import {ChartExportDialog} from './ChartExportDialog';
+import {LOCAL_DB_ANCHOR} from './routes';
 import {StorageGroup, StorageRow} from './StorageRow';
 import {UsageBar, type UsageSegment} from './UsageBar';
 
@@ -107,6 +108,8 @@ export function StoragePanel() {
   const [opening, setOpening] = useState(false);
   /** The chart the delete confirmation is asking about, if any. */
   const [confirming, setConfirming] = useState<StoredProject | null>(null);
+  /** True while the database reset confirmation is open. */
+  const [confirmingReset, setConfirmingReset] = useState(false);
   /** Rising count, so a slow reading cannot overwrite a newer one. */
   const latestRead = useRef(0);
 
@@ -119,6 +122,29 @@ export function StoragePanel() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  /**
+   * Scrolls to the row a link asked for, once that row exists.
+   *
+   * Every row here is drawn from a reading taken after mount, so the browser
+   * has nothing to scroll to when it processes the fragment and leaves the
+   * user at the top of a long page. A link that sends someone here to do one
+   * specific thing has to land them on it.
+   */
+  const jumped = useRef(false);
+  useEffect(() => {
+    if (reading == null || jumped.current) return;
+    jumped.current = true;
+    const id = window.location.hash.slice(1);
+    if (id === '') return;
+    // After paint, not during the commit: arriving by a client-side link puts
+    // the router's own scroll handling in this same tick, and whichever ran
+    // last would win.
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({block: 'start'});
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reading]);
 
   // Stable, because the export dialog lists them in an effect's dependencies.
   // New identities on every render made it re-read the chart, and a second
@@ -285,11 +311,30 @@ export function StoragePanel() {
             />
           ))
         )}
-        {reading.work.databaseBytes > 0 ? (
+        {reading.work.localDatabaseBytes > 0 ? (
           <StorageRow
+            id={LOCAL_DB_ANCHOR}
             title="Song library and matching Chorus charts"
+            detail="Rebuilt from Chorus and from your Songs folder"
+            sizeBytes={reading.work.localDatabaseBytes}
+            actions={
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => setConfirmingReset(true)}>
+                Reset
+              </Button>
+            }
+          />
+        ) : null}
+        {reading.work.databaseBytes - reading.work.localDatabaseBytes > 0 ? (
+          <StorageRow
+            title="Drum fills practice"
             detail="Kept with your charts, and not removable from here"
-            sizeBytes={reading.work.databaseBytes}
+            sizeBytes={
+              reading.work.databaseBytes - reading.work.localDatabaseBytes
+            }
           />
         ) : null}
       </StorageGroup>
@@ -391,6 +436,44 @@ export function StoragePanel() {
           </Button>
         ) : null}
       </div>
+
+      <AlertDialog open={confirmingReset} onOpenChange={setConfirmingReset}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Reset the song library database?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes the list of Chorus charts and the scan of your Songs
+              folder, then builds an empty one. Your charts, your audio and your
+              Songs folder are not touched. The next visit to Find Music
+              downloads the Chorus list again and re-scans your folder, which
+              takes a few minutes. Close any other tabs of this site first —
+              they hold the same file open, and the reset cannot remove it while
+              they do.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmingReset(false);
+                void run(async () => {
+                  // Imported here rather than at the top of the file: this is
+                  // the page a user opens when storage misbehaves, and it must
+                  // not need SQLocal, Kysely and every migration merely to
+                  // render. Pressing the button is the first time any of that
+                  // is worth loading.
+                  const {resetLocalDb} = await import('@/lib/local-db/client');
+                  await resetLocalDb();
+                  return 'The song library database was reset. Find Music will fill it again.';
+                });
+              }}>
+              Reset it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={confirming != null}

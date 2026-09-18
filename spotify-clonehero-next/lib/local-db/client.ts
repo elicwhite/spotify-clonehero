@@ -7,7 +7,8 @@ import {
   getWebLocks,
   withWebLock,
 } from '@/lib/web-locks';
-import {LOCAL_DB_PATH} from './path';
+import {LOCAL_DB_PATH, SQLITE_SIDECARS} from './path';
+import {LocalDbUnavailableError} from './errors';
 
 // The resolved promise IS the cache: `getLocalDb` awaits it on every call, so a
 // second variable holding the same database could only ever disagree with it.
@@ -47,6 +48,74 @@ export async function getLocalDb(): Promise<Kysely<DB>> {
     return await attempt;
   } catch (error) {
     if (dbInitializationPromise === attempt) dbInitializationPromise = null;
+    // Re-wrapping a wrapped error would bury the SQLite message one level
+    // deeper on every caller that replays the same rejected attempt.
+    throw error instanceof LocalDbUnavailableError
+      ? error
+      : new LocalDbUnavailableError(error);
+  }
+}
+
+/**
+ * Deletes the database file and opens a fresh one.
+ *
+ * The escape hatch for a database no migration can reconcile: a half-applied
+ * migration, or a table left in a shape its migration no longer describes.
+ * Neither repairs itself, and every feature that awaits `getLocalDb` fails
+ * until one of them does.
+ *
+ * What is discarded is a mirror of the Chorus catalog and a scan of the user's
+ * own chart folder. Both rebuild from their sources, which is what makes
+ * discarding it an acceptable answer here and would not in a database holding
+ * work the user authored.
+ *
+ * Deleting the file needs the same exclusion as opening it, so it runs under
+ * the migration lock. Re-opening is deliberately outside: `getLocalDb` takes
+ * that lock itself, and a lock request made while holding it never returns.
+ */
+export async function resetLocalDb(): Promise<void> {
+  const locks = getWebLocks();
+  const discard = async () => {
+    // The client may be live — a table broken after the database opened leaves
+    // a working connection holding the file — or already destroyed by a failed
+    // open. Closing covers both; only the first case does any work.
+    await closeSqlocalClient();
+    // A resolved promise here holds a Kysely over a file about to disappear,
+    // and a rejected one replays the failure being escaped. Both must go.
+    dbInitializationPromise = null;
+
+    const root = await navigator.storage.getDirectory();
+    for (const name of [
+      LOCAL_DB_PATH,
+      ...SQLITE_SIDECARS.map(suffix => LOCAL_DB_PATH + suffix),
+    ]) {
+      await removeIfPresent(root, name);
+    }
+  };
+
+  await (locks
+    ? withWebLock(LOCAL_DB_MIGRATION_LOCK, locks, discard)
+    : discard());
+  await getLocalDb();
+}
+
+/**
+ * Removes one file, treating "it was never there" as success and everything
+ * else as failure.
+ *
+ * A sidecar is often absent, and a database deleted in a browser that never
+ * wrote a `-wal` must not report a failure. A file another tab still holds
+ * open is the opposite case: the reset did not happen, and the caller has to
+ * be able to say so.
+ */
+async function removeIfPresent(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+): Promise<void> {
+  try {
+    await dir.removeEntry(name);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'NotFoundError') return;
     throw error;
   }
 }
