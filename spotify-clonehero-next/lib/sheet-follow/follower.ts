@@ -34,8 +34,16 @@ export interface FollowerOptions {
   searchRadiusSec: number;
   /** How far either side of the coasted prediction a cold start may look. */
   bootstrapRadiusSec: number;
-  /** Slowest and fastest the band may play relative to the recording. Across
-   *  five measured songs the band was always faster, by 7% to 25%. */
+  /**
+   * Slowest and fastest the band may play relative to the recording.
+   *
+   * Centred on 1.0, because a covering band plays roughly at the record's
+   * tempo. An earlier range of 0.95–1.4 came from measurements that were all
+   * inflated by about 12%: the CLI recorder used to gather them was dropping
+   * samples, so every take looked faster than it was. Verified against a
+   * capture whose timebase was proven correct against wall clock, the same
+   * performance runs at 1.01, not 1.13.
+   */
   minSpeed: number;
   maxSpeed: number;
   /** A match must beat the best rival this far away to count as decisive. */
@@ -69,8 +77,8 @@ export const DEFAULT_FOLLOWER_OPTIONS: FollowerOptions = {
   windowSec: 20,
   searchRadiusSec: 6,
   bootstrapRadiusSec: 8,
-  minSpeed: 0.95,
-  maxSpeed: 1.4,
+  minSpeed: 0.85,
+  maxSpeed: 1.25,
   rivalExclusionSec: 2,
   decisiveMargin: 0.02,
   maxCorrectionSec: 1,
@@ -199,7 +207,11 @@ export function trackingSpeeds(speed: number, opts: FollowerOptions): number[] {
 export function bootstrapSpeeds(opts: FollowerOptions): number[] {
   const out: number[] = [];
   if (opts.rememberedSpeed && opts.rememberedSpeed > 0) {
-    for (let factor = 0.98; factor <= 1.0201; factor += 0.005) {
+    // ±8%, not ±2%. A band's speed for the same song is not stable between
+    // nights: measured a week apart, the same song went from 1.10 to 1.15. A
+    // window tight enough to be worth remembering would have excluded the
+    // truth, making the memory actively harmful on the second play.
+    for (let factor = 0.92; factor <= 1.0801; factor += 0.01) {
       out.push(opts.rememberedSpeed * factor);
     }
     return out;
@@ -284,9 +296,9 @@ export class ScoreFollower {
     this.#refTimeSec = 0;
     this.#anchorStreamSec = streamSec;
     this.#songStartStreamSec = streamSec;
-    // Measured band speeds ranged 1.07 to 1.27; the remembered one is better
-    // than that average when this song has been played before.
-    this.#speed = this.#opts.rememberedSpeed || 1.1;
+    // A band covering a song plays near the record's tempo, so that is the
+    // starting guess when this song has not been played before.
+    this.#speed = this.#opts.rememberedSpeed || 1.0;
     this.#confidence = 0;
   }
 

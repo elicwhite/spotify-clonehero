@@ -199,8 +199,8 @@ describe('speed candidates', () => {
     });
     expect(speeds.length).toBeGreaterThan(2);
     for (const s of speeds) {
-      expect(s).toBeGreaterThanOrEqual(1.2 * 0.98 - 1e-9);
-      expect(s).toBeLessThanOrEqual(1.2 * 1.02 + 1e-9);
+      expect(s).toBeGreaterThanOrEqual(1.2 * 0.92 - 1e-9);
+      expect(s).toBeLessThanOrEqual(1.2 * 1.08 + 1e-9);
     }
   });
 
