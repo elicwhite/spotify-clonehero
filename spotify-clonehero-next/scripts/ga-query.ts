@@ -6,8 +6,18 @@ import {BetaAnalyticsDataClient} from '@google-analytics/data';
  * Queries the GA4 Data API for the property behind G-LEE7EDJH14.
  *
  *   pnpm ga meta                          list custom dimensions/metrics
+ *   pnpm ga trend --days 28               sessions/users/new users per day
+ *   pnpm ga hosts --days 28               sessions per hostName
  *   pnpm ga pages --days 28               top pages by sessions
  *   pnpm ga events --days 28              event volume + users per event
+ *   pnpm ga scan-funnel --days 28         /find-music reach -> scan -> download
+ *   pnpm ga downloads --days 28           downloads per source and format
+ *   pnpm ga authoring-funnel --days 28    the five plan-0105 steps
+ *   pnpm ga assist-health --days 28       assist runs per task and outcome
+ *   pnpm ga open-failures --days 28       why the editor refused a chart
+ *   pnpm ga sheet-music --days 28         sheet-music events + play seconds
+ *   pnpm ga lyrics-funnel --days 28       add-lyrics four steps
+ *   pnpm ga exports --days 28             exports per format, origin, tools
  *   pnpm ga funnel --days 28              per-tool reach -> engage -> finish
  *   pnpm ga retention --days 28           new vs returning by landing page
  *   pnpm ga raw '<runReport json>'        arbitrary request, escape hatch
@@ -19,6 +29,11 @@ import {BetaAnalyticsDataClient} from '@google-analytics/data';
  * with no credentials until the environment is served again.
  *
  * Any report takes `--json` to dump the raw response instead of a table.
+ *
+ * Every report drops `hostName == 'localhost'`, because `pnpm dev` reports
+ * into this same property and a developer refreshing a page was 38% of all
+ * pageviews in the 28 days to 2026-08-25. `--include-local` puts it back, and
+ * `hosts` always shows every host so the size of that traffic stays visible.
  *
  * Credentials come from the environment (see `requireEnv`), never from the
  * repo — the key file is a secret and .gitignore'd.
@@ -93,7 +108,49 @@ function positionalArgs(): string[] {
 
 const days = Number(arg('days') ?? DAYS_DEFAULT);
 const asJson = process.argv.includes('--json');
+const includeLocal = process.argv.includes('--include-local');
 const dateRange = {startDate: `${days}daysAgo`, endDate: 'today'};
+
+// A report definition. `steps` names the funnel steps in the order they
+// happen: GA can only order rows by a metric or alphabetically, and both put
+// `chart_exported` above `chart_opened`, which reads as a funnel that gains
+// users. `allHosts` is for the one report whose subject is the hosts.
+type Report = {request: any; steps?: string[]; allHosts?: boolean};
+
+const NOT_LOCALHOST = {
+  notExpression: {
+    filter: {
+      fieldName: 'hostName',
+      stringFilter: {matchType: 'EXACT', value: 'localhost'},
+    },
+  },
+};
+
+function eventsAre(...names: string[]) {
+  return {filter: {fieldName: 'eventName', inListFilter: {values: names}}};
+}
+
+function eventsBeginWith(prefix: string) {
+  return {
+    filter: {
+      fieldName: 'eventName',
+      stringFilter: {matchType: 'BEGINS_WITH', value: prefix},
+    },
+  };
+}
+
+function landedOn(path: string) {
+  return {
+    filter: {
+      fieldName: 'landingPage',
+      stringFilter: {matchType: 'EXACT', value: path},
+    },
+  };
+}
+
+function and(...expressions: any[]) {
+  return {andGroup: {expressions}};
+}
 
 type Row = Record<string, string>;
 
@@ -134,70 +191,297 @@ function printTable(rows: Row[]): void {
   console.log(`\n${rows.length} rows`);
 }
 
-async function run(client: BetaAnalyticsDataClient, request: any) {
+// Adds the localhost exclusion to a request, keeping whatever filter the
+// report already carries.
+function excludeLocalhost(request: any): any {
+  if (!request.dimensionFilter)
+    return {...request, dimensionFilter: NOT_LOCALHOST};
+  return {
+    ...request,
+    dimensionFilter: and(request.dimensionFilter, NOT_LOCALHOST),
+  };
+}
+
+// Funnel steps in the order they happen, grouped by whatever the report splits
+// the funnel by — one block of steps per task, per origin — so a drop-off is
+// read down a block instead of across the table. A step GA sent that the report
+// did not name sorts last rather than disappearing.
+function inStepOrder(rows: Row[], steps: string[], groupBy: string[]): Row[] {
+  const rank = (row: Row) => {
+    const i = steps.indexOf(row['eventName'] ?? '');
+    return i === -1 ? steps.length : i;
+  };
+  const group = (row: Row) => groupBy.map(name => row[name] ?? '').join(' ');
+  return [...rows].sort(
+    (a, b) => group(a).localeCompare(group(b)) || rank(a) - rank(b),
+  );
+}
+
+async function run(client: BetaAnalyticsDataClient, report: Report) {
   const property = `properties/${requireEnv('GA_PROPERTY_ID')}`;
+  const request =
+    includeLocal || report.allHosts
+      ? report.request
+      : excludeLocalhost(report.request);
   const [response] = await client.runReport({property, ...request});
   if (asJson) {
     console.log(JSON.stringify(response, null, 2));
     return;
   }
-  printTable(toRows(response));
+  const rows = toRows(response);
+  if (!report.steps) return printTable(rows);
+  const groupBy = (request.dimensions ?? [])
+    .map((d: any) => d.name)
+    .filter((name: string) => name !== 'eventName');
+  printTable(inStepOrder(rows, report.steps, groupBy));
 }
 
-const REPORTS: Record<string, any> = {
+const REPORTS: Record<string, Report> = {
+  // The shape of the last month. Nothing else in this file makes a traffic
+  // spike visible: a 4x day sits inside a 28-day total as a rounding error.
+  trend: {
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'date'}],
+      metrics: [{name: 'sessions'}, {name: 'totalUsers'}, {name: 'newUsers'}],
+      orderBys: [{dimension: {dimensionName: 'date'}}],
+      limit: 90,
+    },
+  },
+
+  // Which hosts report into this property. Deliberately keeps localhost: the
+  // point of the report is to say how much of the property is us.
+  hosts: {
+    allHosts: true,
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'hostName'}],
+      metrics: [
+        {name: 'sessions'},
+        {name: 'totalUsers'},
+        {name: 'screenPageViews'},
+      ],
+      orderBys: [{metric: {metricName: 'sessions'}, desc: true}],
+      limit: 20,
+    },
+  },
+
   // What people land on and how deep they get. `screenPageViews` per session
   // is the cheapest signal of "did this page lead anywhere".
   pages: {
-    dateRanges: [dateRange],
-    dimensions: [{name: 'pagePath'}],
-    metrics: [
-      {name: 'sessions'},
-      {name: 'totalUsers'},
-      {name: 'userEngagementDuration'},
-      {name: 'bounceRate'},
-    ],
-    orderBys: [{metric: {metricName: 'sessions'}, desc: true}],
-    limit: 50,
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'pagePath'}],
+      metrics: [
+        {name: 'sessions'},
+        {name: 'totalUsers'},
+        {name: 'userEngagementDuration'},
+        {name: 'bounceRate'},
+      ],
+      orderBys: [{metric: {metricName: 'sessions'}, desc: true}],
+      limit: 50,
+    },
   },
 
   // Every event name with volume and reach. The gap between eventCount and
   // totalUsers is the "one person hammering it" tell.
   events: {
-    dateRanges: [dateRange],
-    dimensions: [{name: 'eventName'}],
-    metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
-    orderBys: [{metric: {metricName: 'eventCount'}, desc: true}],
-    limit: 100,
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'eventName'}],
+      metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
+      orderBys: [{metric: {metricName: 'eventCount'}, desc: true}],
+      limit: 100,
+    },
+  },
+
+  // The one funnel that carries most of the site's traffic. Scoped to
+  // sessions that started on /find-music, so `session_start` is the reach and
+  // the two steps below it are what that reach converted into. A user who
+  // scans without downloading is the whole question this page has.
+  'scan-funnel': {
+    steps: ['session_start', 'charts_scanned', 'chart_downloaded'],
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'eventName'}],
+      metrics: [{name: 'totalUsers'}, {name: 'eventCount'}],
+      dimensionFilter: and(
+        landedOn('/find-music'),
+        eventsAre('session_start', 'charts_scanned', 'chart_downloaded'),
+      ),
+    },
+  },
+
+  // Downloads split by where they came from and what format won. eventCount
+  // per totalUsers is the number to read: a library sync is thousands of
+  // downloads by one person and must not be mistaken for reach.
+  downloads: {
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'customEvent:source'}, {name: 'customEvent:format'}],
+      metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
+      dimensionFilter: eventsAre('chart_downloaded'),
+      orderBys: [{metric: {metricName: 'eventCount'}, desc: true}],
+      limit: 50,
+    },
+  },
+
+  // The plan-0105 taxonomy, in step order, split by the tool the chart came
+  // from. `origin` rather than the route, so a tool keeps its own row after
+  // its landing page becomes a redirect.
+  'authoring-funnel': {
+    steps: [
+      'tool_landing_viewed',
+      'chart_opened',
+      'assist_run_started',
+      'assist_run_completed',
+      'chart_exported',
+    ],
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'eventName'}, {name: 'customEvent:origin'}],
+      metrics: [{name: 'totalUsers'}, {name: 'eventCount'}],
+      dimensionFilter: eventsAre(
+        'tool_landing_viewed',
+        'chart_opened',
+        'assist_run_started',
+        'assist_run_completed',
+        'chart_exported',
+      ),
+      limit: 200,
+    },
+  },
+
+  // Does each assist task finish? started vs completed is the success rate;
+  // failed and cancelled say whether a task is broken or merely slow, which
+  // the average duration then tells apart.
+  'assist-health': {
+    steps: [
+      'assist_run_started',
+      'assist_run_completed',
+      'assist_run_failed',
+      'assist_run_cancelled',
+    ],
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'customEvent:task'}, {name: 'eventName'}],
+      metrics: [
+        {name: 'eventCount'},
+        {name: 'totalUsers'},
+        {name: 'averageCustomEvent:durationMs'},
+      ],
+      dimensionFilter: eventsBeginWith('assist_run_'),
+      limit: 200,
+    },
+  },
+
+  // Charts the editor refused. `reason` is a closed set, so every row here is
+  // actionable — and `storage-error` rows are a device problem, not a chart
+  // the tool cannot read.
+  'open-failures': {
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'customEvent:reason'}, {name: 'customEvent:origin'}],
+      metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
+      dimensionFilter: eventsAre('chart_open_failed'),
+      orderBys: [{metric: {metricName: 'eventCount'}, desc: true}],
+      limit: 50,
+    },
+  },
+
+  // The whole sheet-music feature at a glance. `playSeconds` only exists on
+  // sheet_music_playback_session, so that row carries the time actually spent
+  // playing and every other row shows 0.
+  'sheet-music': {
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'eventName'}],
+      metrics: [
+        {name: 'eventCount'},
+        {name: 'totalUsers'},
+        {name: 'customEvent:playSeconds'},
+      ],
+      dimensionFilter: eventsBeginWith('sheet_music_'),
+      orderBys: [{metric: {metricName: 'eventCount'}, desc: true}],
+      limit: 50,
+    },
+  },
+
+  // Four steps that each convert almost perfectly, on a page almost nobody
+  // starts. The low-confidence fraction says whether the alignments people do
+  // get are ones they can trust.
+  'lyrics-funnel': {
+    steps: [
+      'add_lyrics_chart_loaded',
+      'add_lyrics_align_started',
+      'add_lyrics_align_completed',
+      'add_lyrics_align_failed',
+      'add_lyrics_handed_off',
+    ],
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'eventName'}],
+      metrics: [
+        {name: 'totalUsers'},
+        {name: 'eventCount'},
+        {name: 'averageCustomEvent:lowConfidenceFrac'},
+      ],
+      dimensionFilter: eventsBeginWith('add_lyrics_'),
+      limit: 50,
+    },
+  },
+
+  // What shipped. `tools` is the sorted list of assist tasks applied before
+  // the export, so an empty value means the chart was edited entirely by hand.
+  exports: {
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [
+        {name: 'customEvent:origin'},
+        {name: 'customEvent:format'},
+        {name: 'customEvent:tools'},
+      ],
+      metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
+      dimensionFilter: eventsAre('chart_exported'),
+      orderBys: [{metric: {metricName: 'eventCount'}, desc: true}],
+      limit: 100,
+    },
   },
 
   // Reach vs. engagement per tool: landing page crossed with the events fired
-  // in the same session. This is the closest thing to a funnel available
-  // without a proper step taxonomy, which is what we intend to add next.
+  // in the same session. Predates the step taxonomy above and stays because it
+  // needs no taxonomy at all — it will show an event this file never named.
   funnel: {
-    dateRanges: [dateRange],
-    dimensions: [{name: 'landingPage'}, {name: 'eventName'}],
-    metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
-    orderBys: [{metric: {metricName: 'totalUsers'}, desc: true}],
-    limit: 200,
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'landingPage'}, {name: 'eventName'}],
+      metrics: [{name: 'eventCount'}, {name: 'totalUsers'}],
+      orderBys: [{metric: {metricName: 'totalUsers'}, desc: true}],
+      limit: 200,
+    },
   },
 
   // Does anything bring people back? Split by entry point.
   retention: {
-    dateRanges: [dateRange],
-    dimensions: [{name: 'landingPage'}, {name: 'newVsReturning'}],
-    metrics: [{name: 'totalUsers'}, {name: 'sessions'}],
-    orderBys: [{metric: {metricName: 'totalUsers'}, desc: true}],
-    limit: 100,
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'landingPage'}, {name: 'newVsReturning'}],
+      metrics: [{name: 'totalUsers'}, {name: 'sessions'}],
+      orderBys: [{metric: {metricName: 'totalUsers'}, desc: true}],
+      limit: 100,
+    },
   },
 
   // Where the traffic comes from, per landing page — tells us which tools are
   // found via search vs. linked from somewhere.
   acquisition: {
-    dateRanges: [dateRange],
-    dimensions: [{name: 'landingPage'}, {name: 'sessionDefaultChannelGroup'}],
-    metrics: [{name: 'sessions'}, {name: 'totalUsers'}],
-    orderBys: [{metric: {metricName: 'sessions'}, desc: true}],
-    limit: 100,
+    request: {
+      dateRanges: [dateRange],
+      dimensions: [{name: 'landingPage'}, {name: 'sessionDefaultChannelGroup'}],
+      metrics: [{name: 'sessions'}, {name: 'totalUsers'}],
+      orderBys: [{metric: {metricName: 'sessions'}, desc: true}],
+      limit: 100,
+    },
   },
 };
 
@@ -246,7 +530,9 @@ async function main(): Promise<void> {
         ? ''
         : process.argv[3];
     if (!body) throw new Error('raw needs inline JSON or --file <path>');
-    await run(client, JSON.parse(body));
+    // `allHosts`, so the request runs exactly as written. An escape hatch that
+    // quietly added a filter would not be one.
+    await run(client, {request: JSON.parse(body), allHosts: true});
     return;
   }
 

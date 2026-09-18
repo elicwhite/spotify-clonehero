@@ -9,7 +9,7 @@ import SiteNav from '@/components/SiteNav';
 import WebMCPInit from './WebMCPInit';
 import WebMCPTools from './WebMCPTools';
 import {getSiteUrl} from '@/lib/site-url';
-import RegionAwareAnalytics from './RegionAwareAnalytics';
+import AnalyticsGate from './AnalyticsGate';
 import TasteDataPrivacyBoundary from './TasteDataPrivacyBoundary';
 import PersistStorage from './PersistStorage';
 
@@ -66,7 +66,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
         <WebMCPTools />
         <TasteDataPrivacyBoundary />
         <PersistStorage />
-        <RegionAwareAnalytics gaId="G-LEE7EDJH14" />
+        <AnalyticsGate gaId="G-LEE7EDJH14" />
       </body>
     </html>
   );
