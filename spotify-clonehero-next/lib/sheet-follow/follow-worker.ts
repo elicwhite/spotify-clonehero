@@ -19,14 +19,37 @@ import {PlayingGate} from './playing-gate';
 
 /** Seconds of new audio between position searches. */
 const UPDATE_INTERVAL_SEC = 0.5;
+/**
+ * How much microphone audio to keep for saving, in seconds.
+ *
+ * Development-only, and the reason it exists: every threshold in this feature
+ * was measured on audio recorded with ffmpeg, while the browser captures the
+ * same room about 14 dB hotter and more clipped. The gate's decisive ratio is
+ * claimed to be gain-invariant, which is a prediction. Saving exactly the PCM
+ * the follower saw is the only way to replay the real capture path through the
+ * offline harness and check it. Ten minutes covers a song plus the run-up.
+ */
+const RECORDING_KEEP_SEC = 600;
 
 export type FollowWorkerRequest =
   | {type: 'reference'; pcm: Float32Array; rememberedSpeed?: number | undefined}
   | {type: 'audio'; pcm: Float32Array}
+  | {type: 'save-recording'}
   | {type: 'reset'};
 
 export type FollowWorkerResponse =
   | {type: 'ready'; durationSec: number}
+  | {
+      type: 'recording';
+      pcm: Float32Array;
+      sampleRate: number;
+      /** Wall-clock seconds the worker was actually receiving audio, against
+       *  the sample count it received. If these disagree, the capture dropped
+       *  or duplicated audio and every timing measured from the file is wrong —
+       *  which is exactly the ambiguity two disagreeing recordings of one
+       *  performance leave behind. */
+      wallClockSec: number;
+    }
   | {type: 'error'; message: string}
   | {
       type: 'position';
@@ -43,6 +66,13 @@ export type FollowWorkerResponse =
 let follower: ScoreFollower | null = null;
 const stream = new ChromaStream();
 const gate = new PlayingGate(CHROMA_SAMPLE_RATE);
+
+/** Rolling buffer of the microphone audio the follower actually received. */
+let recording: Float32Array[] = [];
+let recordedSamples = 0;
+
+/** Wall clock at the first audio block, for the timebase check above. */
+let firstBlockAtMs: number | null = null;
 
 let streamSamples = 0;
 /** Stream position where the current chroma stream started, so frame indices
@@ -64,8 +94,19 @@ function handleReference(pcm: Float32Array, rememberedSpeed?: number) {
   post({type: 'ready', durationSec: pcm.length / CHROMA_SAMPLE_RATE});
 }
 
+function remember(pcm: Float32Array) {
+  recording.push(pcm.slice());
+  recordedSamples += pcm.length;
+  const keep = RECORDING_KEEP_SEC * CHROMA_SAMPLE_RATE;
+  while (recordedSamples - recording[0].length > keep) {
+    recordedSamples -= recording.shift()!.length;
+  }
+}
+
 function handleAudio(pcm: Float32Array) {
   if (!follower) return;
+  firstBlockAtMs ??= Date.now();
+  remember(pcm);
 
   const blockSec = pcm.length / CHROMA_SAMPLE_RATE;
   streamSamples += pcm.length;
@@ -136,10 +177,34 @@ self.onmessage = (event: MessageEvent<FollowWorkerRequest>) => {
       case 'audio':
         handleAudio(message.pcm);
         break;
+      case 'save-recording': {
+        const pcm = new Float32Array(recordedSamples);
+        let at = 0;
+        for (const chunk of recording) {
+          pcm.set(chunk, at);
+          at += chunk.length;
+        }
+        (self as unknown as Worker).postMessage(
+          {
+            type: 'recording',
+            pcm,
+            sampleRate: CHROMA_SAMPLE_RATE,
+            wallClockSec:
+              firstBlockAtMs === null
+                ? 0
+                : (Date.now() - firstBlockAtMs) / 1000,
+          },
+          [pcm.buffer],
+        );
+        break;
+      }
       case 'reset':
         follower?.reset();
         stream.reset();
         gate.reset();
+        recording = [];
+        recordedSamples = 0;
+        firstBlockAtMs = null;
         break;
     }
   } catch (err) {

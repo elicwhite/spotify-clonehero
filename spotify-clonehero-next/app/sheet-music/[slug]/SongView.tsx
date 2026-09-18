@@ -1259,6 +1259,7 @@ export default function Renderer({
               checked={autoScroll}
               onCheckedChange={updateAutoScroll}
               state={follow}
+              onSaveRecording={follow.saveRecording}
             />
             {process.env.NODE_ENV === 'development' && (
               <div className="flex items-center space-x-2">

@@ -9,6 +9,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 
+import {encodeWavBlob} from '../audio/wav-encoder';
 import {CHROMA_SAMPLE_RATE} from './chroma';
 import type {FollowWorkerRequest, FollowWorkerResponse} from './follow-worker';
 import {buildReferenceAudio} from './reference';
@@ -70,6 +71,24 @@ const OFF_STATE: AutoScrollState = {
   error: null,
 };
 
+/** Hands the caller the microphone audio the follower actually received, as a
+ *  WAV download. Development-only; see the worker for why it exists. */
+function downloadRecording(
+  pcm: Float32Array,
+  sampleRate: number,
+  wallClockSec: number,
+) {
+  const blob = encodeWavBlob(pcm, sampleRate, 1);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const audioSec = Math.round(pcm.length / sampleRate);
+  link.download = `auto-scroll-heard-${stamp}-audio${audioSec}s-wall${Math.round(wallClockSec)}s.wav`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function useAutoScroll({
   enabled,
   audioFiles,
@@ -82,7 +101,11 @@ export function useAutoScroll({
   /** Identifies the song, so the speed this band plays it at can be reused
    *  next time. */
   songKey: string;
-}): AutoScrollState & {getChartTimeSec: () => number | null} {
+}): AutoScrollState & {
+  getChartTimeSec: () => number | null;
+  /** Null until the follower is running. */
+  saveRecording: (() => void) | null;
+} {
   const [state, setState] = useState<AutoScrollState>(OFF_STATE);
 
   // The position estimate is read every animation frame by the playhead, so it
@@ -93,6 +116,7 @@ export function useAutoScroll({
     receivedAtMs: number;
     speed: number;
   } | null>(null);
+  const [saveRecording, setSaveRecording] = useState<(() => void) | null>(null);
 
   const getChartTimeSec = useCallback(() => {
     const anchor = anchorRef.current;
@@ -167,6 +191,16 @@ export function useAutoScroll({
         const message = event.data;
         if (message.type === 'error') {
           fail(message.message);
+          return;
+        }
+        if (message.type === 'recording') {
+          // Named with both numbers so the file itself proves whether the
+          // capture kept real time.
+          downloadRecording(
+            message.pcm,
+            message.sampleRate,
+            message.wallClockSec,
+          );
           return;
         }
         if (message.type !== 'position') return;
@@ -244,6 +278,7 @@ export function useAutoScroll({
       if (context.state === 'suspended') await context.resume();
 
       if (!cancelled) {
+        setSaveRecording(() => () => send({type: 'save-recording'}));
         setState(prev => ({...prev, status: 'listening'}));
       }
     }
@@ -253,11 +288,16 @@ export function useAutoScroll({
     return () => {
       cancelled = true;
       anchorRef.current = null;
+      setSaveRecording(null);
       worker?.terminate();
       stream?.getTracks().forEach(track => track.stop());
       void context?.close();
     };
   }, [enabled, audioFiles, songKey]);
 
-  return {...(enabled ? state : OFF_STATE), getChartTimeSec};
+  return {
+    ...(enabled ? state : OFF_STATE),
+    getChartTimeSec,
+    saveRecording: enabled ? saveRecording : null,
+  };
 }

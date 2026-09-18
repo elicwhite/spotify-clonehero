@@ -1,3 +1,4 @@
+import {Button} from '@/components/ui/button';
 import {Switch} from '@/components/ui/switch';
 import type {AutoScrollState} from '@/lib/sheet-follow/useAutoScroll';
 import {cn} from '@/lib/utils';
@@ -42,10 +43,14 @@ export function AutoScrollSetting({
   checked,
   onCheckedChange,
   state,
+  onSaveRecording,
 }: {
   checked: boolean;
   onCheckedChange: (value: boolean) => void;
   state: AutoScrollState;
+  /** Saves the microphone audio the follower received, for replaying through
+   *  the offline harness. Null until it is running. */
+  onSaveRecording: (() => void) | null;
 }) {
   if (!AUTO_SCROLL_ENABLED) return null;
   return (
@@ -70,6 +75,13 @@ export function AutoScrollSetting({
           )}>
           {statusText(state)}
         </p>
+      )}
+      {checked && onSaveRecording && (
+        <div className="pl-11">
+          <Button variant="outline" size="sm" onClick={onSaveRecording}>
+            Save last 10 min of mic audio
+          </Button>
+        </div>
       )}
     </div>
   );
