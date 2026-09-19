@@ -12,6 +12,8 @@ import {
   isWebGpuFp16Available,
   probeWebGpuFp16,
   webGpuFp16Message,
+  webGpuFp16Note,
+  webGpuFp16Tooltip,
 } from '../webgpu-capability';
 
 type FakeAdapter = {features: ReadonlySet<string>};
@@ -85,18 +87,66 @@ describe('assertWebGpuFp16', () => {
     await expect(assertWebGpuFp16('Stem separation')).resolves.toBeUndefined();
   });
 
-  it('throws a message that names the feature and the missing extension', async () => {
+  it('throws a message that names the feature and what it needs', async () => {
     setGpu(adapterWith());
     await expect(assertWebGpuFp16('Stem separation')).rejects.toThrow(
-      /Stem separation needs the WebGPU shader-f16 feature/,
+      /Stem separation needs a 16-bit shader feature \(WebGPU shader-f16\)/,
+    );
+  });
+});
+
+describe('copy', () => {
+  it('blames the card, not the browser, for a missing shader-f16', () => {
+    // Sending this user to update their browser wastes their time: the
+    // browser is fine and there is no setting behind it.
+    const message = webGpuFp16Message('no-shader-f16', 'Tempo mapping');
+    expect(message).toMatch(/graphics card/);
+    expect(message).toMatch(/not a browser setting/);
+    expect(message).not.toMatch(/Chrome|Edge|update/);
+  });
+
+  it('blames the browser when the browser is the problem', () => {
+    expect(webGpuFp16Message('no-webgpu', 'Tempo mapping')).toMatch(
+      /this browser/,
     );
   });
 
-  it('separates the no-WebGPU case from the no-shader-f16 case', async () => {
-    // The two need different advice: one is the browser, one is the card.
-    expect(webGpuFp16Message('no-webgpu', 'Tempo mapping')).toMatch(/browser/);
-    expect(webGpuFp16Message('no-shader-f16', 'Tempo mapping')).toMatch(
-      /graphics card/,
+  it('keeps the feature name out of tooltips', () => {
+    // `shader-f16` belongs where it can be copied, not on a control.
+    for (const status of [
+      'no-webgpu',
+      'no-adapter',
+      'no-shader-f16',
+    ] as const) {
+      expect(webGpuFp16Tooltip(status)).not.toMatch(/shader-f16/);
+    }
+  });
+
+  it('names which control is blocked when a sibling still works', () => {
+    // The stems mixer keeps a working Demucs button beside the blocked one.
+    expect(webGpuFp16Tooltip('no-shader-f16', 'this one')).toMatch(
+      /can’t run this one/,
     );
+    expect(webGpuFp16Tooltip('no-shader-f16')).toMatch(/can’t run it/);
+  });
+
+  it('lets each card word the shader-f16 note for itself', () => {
+    const own = 'Can’t run on this computer: the separation model needs it.';
+    expect(webGpuFp16Note('no-shader-f16', own)).toBe(own);
+    // The browser-level cases are the same sentence everywhere, so a card
+    // cannot drift from its neighbour on them.
+    expect(webGpuFp16Note('no-webgpu', own)).toMatch(/needs WebGPU/);
+    expect(webGpuFp16Note('no-adapter', own)).toMatch(/hardware acceleration/);
+  });
+
+  it('never tells the user to buy a graphics card', () => {
+    const all = [
+      webGpuFp16Message('no-shader-f16', 'Tempo mapping'),
+      webGpuFp16Tooltip('no-shader-f16'),
+      webGpuFp16Note('no-shader-f16', 'x'),
+    ];
+    for (const copy of all) {
+      expect(copy).not.toMatch(/buy|purchase|upgrade|newer graphics card/i);
+    }
   });
 });

@@ -36,6 +36,12 @@ export interface CardShellProps {
   aiLabel?: string | undefined;
   explanation: string;
   note?: string | undefined;
+  /**
+   * How the note reads. `'attn'` (the default) is amber: something changed
+   * and the user should act. `'muted'` is body copy: a standing fact about
+   * this computer that no action will change, so amber would nag.
+   */
+  noteTone?: 'attn' | 'muted' | undefined;
   attn?: boolean | undefined;
   learnKey: LearnKey;
   onLearnMore: (key: LearnKey) => void;
@@ -57,6 +63,7 @@ export function CardShell({
   aiLabel,
   explanation,
   note,
+  noteTone = 'attn',
   attn,
   learnKey,
   onLearnMore,
@@ -112,7 +119,14 @@ export function CardShell({
       </div>
       <p className="text-[12px] text-muted-foreground">{explanation}</p>
       {note && (
-        <p className="text-[12px] text-amber-800 dark:text-amber-300">{note}</p>
+        <p
+          className={
+            noteTone === 'muted'
+              ? 'text-[12px] text-muted-foreground'
+              : 'text-[12px] text-amber-800 dark:text-amber-300'
+          }>
+          {note}
+        </p>
       )}
       {children}
       {actions && (

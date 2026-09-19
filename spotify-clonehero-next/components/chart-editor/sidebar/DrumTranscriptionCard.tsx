@@ -48,6 +48,11 @@ import type {EditCommand} from '../commands';
 import {ReplaceDrumTrackCommand} from '../commands';
 import {CardAction, CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
+import {
+  webGpuFp16Note,
+  webGpuFp16Tooltip,
+  type WebGpuFp16Status,
+} from '@/lib/onnx/webgpu-capability';
 
 export interface DrumTranscriptionCardProps {
   doc: ChartDocument | null;
@@ -62,16 +67,23 @@ export interface DrumTranscriptionCardProps {
    * about the chart in the editor rather than pipeline work.
    */
   rerunDisabledReason?: string | undefined;
+  /** Why this computer cannot run the separation transcription needs, or
+   *  null when it can (and while the probe is still in flight). */
+  webGpuBlocked: Exclude<WebGpuFp16Status, 'ok'> | null;
   runner: AssistRunnerControls;
   executeCommand: (command: EditCommand) => void;
   onLearnMore: (key: LearnKey) => void;
 }
+
+const STALE_NOTE =
+  'Tempo grid changed after transcription. The notes still sit where the old grid put them. Transcribe again to place them on the grid you have now. Your call.';
 
 export default function DrumTranscriptionCard({
   doc,
   stale,
   loadAudio,
   rerunDisabledReason,
+  webGpuBlocked,
   runner,
   executeCommand,
   onLearnMore,
@@ -132,6 +144,24 @@ export default function DrumTranscriptionCard({
     toast.success('Kept existing transcription');
   }, [dispatch, state.chartDoc, state.tempoStamp]);
 
+  // A standing limit of this computer outranks a transient one: an audio
+  // rebuild ends in seconds, a graphics card that cannot run the model does
+  // not, so the reason the user reads is the one that will still be true.
+  const disabledReason =
+    webGpuBlocked !== null
+      ? webGpuFp16Tooltip(webGpuBlocked)
+      : rerunDisabledReason;
+  // The blocked note replaces the staleness note rather than joining it.
+  // "Transcribe again" is not an option this computer has, and "Keep as-is"
+  // is a choice about a note that is no longer on screen.
+  const blockedNote =
+    webGpuBlocked !== null
+      ? webGpuFp16Note(
+          webGpuBlocked,
+          'Can’t run on this computer: the drum separation model needs a graphics-card feature this one doesn’t have. It’s the card, not a setting.',
+        )
+      : undefined;
+
   return (
     <CardShell
       icon={<Drum />}
@@ -139,25 +169,24 @@ export default function DrumTranscriptionCard({
       status={status}
       aiLabel={transcribed ? 'AI-transcribed' : undefined}
       explanation="Writes a first-pass Expert drum chart from the audio, a faster starting point to tweak, not a finished chart."
-      note={
-        stale
-          ? 'Tempo grid changed after transcription. The notes still sit where the old grid put them. Transcribe again to place them on the grid you have now. Your call.'
-          : undefined
-      }
-      attn={stale}
+      note={blockedNote ?? (stale ? STALE_NOTE : undefined)}
+      noteTone={blockedNote !== undefined ? 'muted' : 'attn'}
+      attn={blockedNote === undefined && stale}
       learnKey="drums"
       onLearnMore={onLearnMore}
       actions={
         running ? null : (
           <>
             <CardAction
-              disabledReason={rerunDisabledReason}
+              disabledReason={disabledReason}
               onClick={() => setConfirmOpen(true)}
               icon={RefreshCw}
               label="Run"
-              variant={stale ? 'default' : 'outline'}
+              variant={
+                stale && blockedNote === undefined ? 'default' : 'outline'
+              }
             />
-            {stale && (
+            {stale && blockedNote === undefined && (
               <Button variant="ghost" size="xs" onClick={handleKeepAsIs}>
                 Keep as-is
               </Button>

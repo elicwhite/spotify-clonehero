@@ -21,10 +21,15 @@ import {toast} from 'sonner';
 
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
-import {separateStemsTask} from '@/lib/assist/tasks/separate-stems';
+import {
+  separateStemsTask,
+  type StemSeparationModel,
+} from '@/lib/assist/tasks/separate-stems';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {selectReportedOrigin} from '@/lib/chart-editor-core';
+import {useWebGpuFp16Block} from '@/components/onnx/useWebGpuFp16';
+import {webGpuFp16Tooltip} from '@/lib/onnx/webgpu-capability';
 
 import {useChartEditorContext} from '../ChartEditorContext';
 import type {
@@ -44,7 +49,8 @@ export interface UseStemSeparationParams {
   offer: StemSeparationOffer;
   /** Set while the host is rebuilding its padded audio, so the buttons can
    *  explain why they are dead rather than starting a run against audio that
-   *  is about to be replaced. */
+   *  is about to be replaced. Applies to every model; the per-model limit
+   *  this hook adds is the graphics card's. */
   disabledReason?: string | undefined;
 }
 
@@ -59,6 +65,7 @@ export function useStemSeparation({
   offer,
   disabledReason,
 }: UseStemSeparationParams): StemSeparationHostProps | undefined {
+  const webGpuBlocked = useWebGpuFp16Block();
   const {state} = useChartEditorContext();
   const origin = selectReportedOrigin(state);
   // Subscribed to the run's identity only (task + status), never its steps,
@@ -86,13 +93,29 @@ export function useStemSeparation({
     [runner, loadAudio, origin],
   );
 
+  // Only BS-Roformer has fp16 weights. Demucs is fp32 and runs on any
+  // adapter — and on the CPU when there is none — so a graphics card without
+  // `shader-f16` loses the "great and slow" option and keeps the other one.
+  // A host reason (an audio rebuild) stops both, and wins while it lasts:
+  // it is about to change, and the capability is not.
+  const disabledReasonFor = useCallback(
+    (model: StemSeparationModel): string | undefined => {
+      if (disabledReason !== undefined) return disabledReason;
+      if (model === 'roformer' && webGpuBlocked !== null) {
+        return webGpuFp16Tooltip(webGpuBlocked, 'this one');
+      }
+      return undefined;
+    },
+    [disabledReason, webGpuBlocked],
+  );
+
   if (!loadAudio) return undefined;
 
   return {
     offer,
     running:
       activity.task === separateStemsTask.key && activity.status === 'running',
-    disabledReason,
+    disabledReasonFor,
     onSeparate,
     store: runner.store,
     onCancel: runner.cancel,

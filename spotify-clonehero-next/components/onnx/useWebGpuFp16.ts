@@ -1,0 +1,45 @@
+'use client';
+
+/**
+ * The fp16-on-WebGPU capability, as a React hook.
+ *
+ * `null` while the probe is in flight, so a caller can hold a control in its
+ * normal state for the one frame it takes rather than flashing a disabled
+ * one. The probe is async (`requestAdapter()` is a promise), which is why
+ * this is state plus an effect and not a `useSyncExternalStore` snapshot.
+ *
+ * Run it ONCE per surface and pass the status down. The chart editor has
+ * four controls that consult it — two Chart Assist cards, the Stems mixer
+ * and the waveform menu — and four probes would ask the same unchanging
+ * question four times.
+ *
+ * See `lib/onnx/webgpu-capability.ts` for what the statuses mean.
+ */
+
+import {useEffect, useState} from 'react';
+
+import {
+  probeWebGpuFp16,
+  type WebGpuFp16Status,
+} from '@/lib/onnx/webgpu-capability';
+
+export function useWebGpuFp16(): WebGpuFp16Status | null {
+  const [status, setStatus] = useState<WebGpuFp16Status | null>(null);
+  useEffect(() => {
+    let live = true;
+    probeWebGpuFp16().then(result => {
+      if (live) setStatus(result);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return status;
+}
+
+/** The status as the blocking surfaces want it: the reason to block, or
+ *  `undefined` while the probe runs and when the device can run the models. */
+export function useWebGpuFp16Block(): Exclude<WebGpuFp16Status, 'ok'> | null {
+  const status = useWebGpuFp16();
+  return status === null || status === 'ok' ? null : status;
+}

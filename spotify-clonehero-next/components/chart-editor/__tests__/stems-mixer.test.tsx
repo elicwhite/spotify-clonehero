@@ -468,6 +468,7 @@ describe('StemsMixer on-demand separation', () => {
     return {
       offer: {demucs: true, roformer: true},
       running: false,
+      disabledReasonFor: () => undefined,
       onSeparate: jest.fn(),
       store: new AssistStore(),
       onCancel: jest.fn(),
@@ -531,10 +532,27 @@ describe('StemsMixer on-demand separation', () => {
   it('disables the options, with the host’s reason, while the audio is busy', () => {
     renderMixer({
       audioManager: makeAudioManager(['song']),
-      stemSeparation: separation({disabledReason: 'Rebuilding audio'}),
+      stemSeparation: separation({disabledReasonFor: () => 'Rebuilding audio'}),
     });
 
     expect(screen.getByRole('button', {name: 'Good and fast'})).toBeDisabled();
     expect(screen.getAllByText('Rebuilding audio').length).toBeGreaterThan(0);
+  });
+
+  it('disables only the model this computer can’t run', () => {
+    // A graphics card without `shader-f16` loses BS-Roformer and keeps
+    // Demucs, which is fp32 — so the section still offers a way to get stems.
+    renderMixer({
+      audioManager: makeAudioManager(['song']),
+      stemSeparation: separation({
+        disabledReasonFor: model =>
+          model === 'roformer'
+            ? 'This computer’s graphics card can’t run this one.'
+            : undefined,
+      }),
+    });
+
+    expect(screen.getByRole('button', {name: 'Good and fast'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Great and slow'})).toBeDisabled();
   });
 });

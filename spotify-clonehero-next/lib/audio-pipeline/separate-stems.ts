@@ -172,7 +172,7 @@ export function assertSeparationUsable(
   ]);
   if (separated.anyNonFinite) {
     throw new Error(
-      'Stem separation produced invalid audio. Nothing was saved. This usually means the graphics card could not run the model.',
+      'Stem separation produced unusable audio, so nothing was saved. This usually means the graphics card couldn’t run the model.',
     );
   }
   if (
@@ -180,7 +180,7 @@ export function assertSeparationUsable(
     inspectChannels([mix.left, mix.right]).anySignal
   ) {
     throw new Error(
-      'Stem separation produced silence. Nothing was saved. This usually means the graphics card could not run the model.',
+      'Stem separation produced silence, so nothing was saved. This usually means the graphics card couldn’t run the model.',
     );
   }
 }

@@ -9,7 +9,7 @@
  * chart-editor project, then this entrypoint hands it off to /chart-editor.
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
 
@@ -20,12 +20,6 @@ import {
   type ParsedChart,
 } from '@eliwhite/scan-chart';
 import {Button} from '@/components/ui/button';
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
 import {
   findAudioFiles,
@@ -33,11 +27,8 @@ import {
 } from '@/lib/preview/chorus-chart-processing';
 import {chartDocToFolderFiles, readChart} from '@/lib/chart-edit';
 import {chartFileFormatOf} from '@/lib/chart-files/chart-file-names';
-import {
-  probeWebGpuFp16,
-  webGpuFp16Message,
-  type WebGpuFp16Status,
-} from '@/lib/onnx/webgpu-capability';
+import {useWebGpuFp16} from '@/components/onnx/useWebGpuFp16';
+import WebGpuRequirementNotice from '@/components/onnx/WebGpuRequirementNotice';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
@@ -136,7 +127,7 @@ export default function TempoClient({
   task = generateTempoMapTask,
 }: TempoClientProps = {}) {
   useToolLandingView('tempo');
-  const [webGPU, setWebGPU] = useState<WebGpuFp16Status | null>(null);
+  const webGPU = useWebGpuFp16();
   const [phase, setPhase] = useState<
     'pick' | 'pick-audio' | 'pick-chart' | 'processing'
   >('pick');
@@ -167,14 +158,6 @@ export default function TempoClient({
     setError(null);
     setPhase('pick');
   }, [cancelAssistTask]);
-
-  // The separation model has fp16 weights, so an adapter is not enough — it
-  // must also have `shader-f16`. A page that starts without it separates to
-  // silence and floods the console (lib/onnx/webgpu-capability.ts). The
-  // status, not a boolean, so the card below can say which case it is.
-  useEffect(() => {
-    probeWebGpuFp16().then(setWebGPU);
-  }, []);
 
   // ---------- the pipeline ----------
   const process = useCallback(
@@ -322,21 +305,6 @@ export default function TempoClient({
   );
 
   // ---------- render ----------
-  if (webGPU !== null && webGPU !== 'ok') {
-    return (
-      <main className="flex flex-1 items-center justify-center p-6">
-        <Card className="max-w-lg">
-          <CardHeader>
-            <CardTitle>This computer can’t run this tool</CardTitle>
-            <CardDescription>
-              {webGpuFp16Message(webGPU, 'Tempo mapping')}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </main>
-    );
-  }
-
   if (phase === 'processing') {
     return (
       <main className="flex flex-1 items-center justify-center p-6">
@@ -350,6 +318,25 @@ export default function TempoClient({
           onCancel={backToPicker}
         />
       </main>
+    );
+  }
+
+  // This computer cannot separate the drums, so it cannot map a tempo. The
+  // landing page still renders — it is how a blocked reader decides whether
+  // the tool is worth another computer — and only the entry controls are
+  // replaced, where the action they cannot take would have been.
+  if (webGPU !== null && webGPU !== 'ok') {
+    return (
+      <TempoLanding
+        entryIntro={undefined}
+        toolEntry={
+          <WebGpuRequirementNotice
+            status={webGPU}
+            feature="Tempo mapping"
+            shaderF16Description="It separates the drums out of the mix first, and that model needs a 16-bit shader feature this computer’s graphics card doesn’t have. It’s the card itself, not a browser setting, so there’s nothing to switch on."
+          />
+        }
+      />
     );
   }
 

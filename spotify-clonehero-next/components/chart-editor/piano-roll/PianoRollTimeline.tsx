@@ -4185,9 +4185,11 @@ export default function PianoRollTimeline({
       ? offeredStemSeparations(stemSeparation.offer).map(
           (option): MenuItem => ({
             label: option.menuLabel,
+            // Per model: a graphics card that cannot run BS-Roformer can
+            // still run Demucs, so only the entry it blocks goes dead.
             disabled:
               stemSeparation.running ||
-              stemSeparation.disabledReason !== undefined,
+              stemSeparation.disabledReasonFor(option.model) !== undefined,
             onSelect: () =>
               stemSeparation.onSeparate({
                 model: option.model,

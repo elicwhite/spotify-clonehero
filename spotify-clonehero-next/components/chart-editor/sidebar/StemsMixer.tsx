@@ -457,7 +457,9 @@ export default function StemsMixer({
                 {separationOptions.map(option => (
                   <CardAction
                     key={option.model}
-                    disabledReason={stemSeparation.disabledReason}
+                    disabledReason={stemSeparation.disabledReasonFor(
+                      option.model,
+                    )}
                     onClick={() =>
                       stemSeparation.onSeparate({
                         model: option.model,

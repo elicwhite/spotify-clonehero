@@ -95,7 +95,12 @@ export async function isWebGPUAdapterAvailable(): Promise<boolean> {
 }
 
 /**
- * The message a user sees when {@link probeWebGpuFp16} does not give `'ok'`.
+ * The long-form sentence for a device that cannot run an fp16 model.
+ *
+ * This is the backstop, not the experience. The pages and the editor test the
+ * capability before they offer the action, so a user should meet the copy at
+ * those surfaces instead. This string is what a worker's own assertion says
+ * if it ever fires after a probe has passed.
  *
  * `feature` names the part of the app that stopped, so the message tells the
  * user what they cannot do as well as why.
@@ -106,13 +111,69 @@ export function webGpuFp16Message(
 ): string {
   switch (status) {
     case 'no-webgpu':
-      return `${feature} needs WebGPU, which this browser does not have. Use a recent version of Chrome or Edge on a computer.`;
+      return `${feature} needs WebGPU, which this browser doesn’t have. Use a recent version of Chrome or Edge on a desktop or laptop.`;
     case 'no-adapter':
-      return `${feature} needs WebGPU, but this browser gave no graphics adapter. Make sure hardware acceleration is on, then reload the page.`;
+      return `${feature} needs WebGPU, but this browser couldn’t reach the graphics card. Check that hardware acceleration is on in the browser’s settings, then reload the page.`;
     case 'no-shader-f16':
-      return `${feature} needs the WebGPU shader-f16 feature, which this graphics card does not have. Cards before the NVIDIA RTX series usually do not have it. Use a computer with a newer graphics card.`;
+      return `${feature} needs a 16-bit shader feature (WebGPU shader-f16) that this computer’s graphics card doesn’t have. It’s the card itself, not a browser setting.`;
   }
 }
+
+/**
+ * The tooltip on a control this device cannot run.
+ *
+ * Short enough for a tooltip, and it never names `shader-f16`: the feature
+ * name belongs where someone can copy it (see {@link WEBGPU_FEATURE_DETAIL}),
+ * not on a control.
+ *
+ * `subject` is how the sentence refers to the blocked action — `'it'` for a
+ * card with one action, `'this one'` where a sibling control still works and
+ * the tooltip has to say which is which.
+ */
+export function webGpuFp16Tooltip(
+  status: Exclude<WebGpuFp16Status, 'ok'>,
+  subject: 'it' | 'this one' = 'it',
+): string {
+  switch (status) {
+    case 'no-webgpu':
+      return 'This browser doesn’t have WebGPU.';
+    case 'no-adapter':
+      return 'Can’t reach the graphics card. Check hardware acceleration and reload.';
+    case 'no-shader-f16':
+      return `This computer’s graphics card can’t run ${subject}.`;
+  }
+}
+
+/**
+ * The visible note on a blocked Chart Assist card.
+ *
+ * Only the `no-shader-f16` sentence changes between cards — it names what
+ * that card needs the graphics card for — so the caller supplies it and the
+ * two browser-level cases are shared.
+ */
+export function webGpuFp16Note(
+  status: Exclude<WebGpuFp16Status, 'ok'>,
+  shaderF16Note: string,
+): string {
+  switch (status) {
+    case 'no-webgpu':
+      return 'Can’t run in this browser: it needs WebGPU. Use a recent Chrome or Edge on a desktop or laptop.';
+    case 'no-adapter':
+      return 'Can’t reach the graphics card. Check that hardware acceleration is on in the browser’s settings, then reload the page.';
+    case 'no-shader-f16':
+      return shaderF16Note;
+  }
+}
+
+/** The one place the feature is named for a user: a detail line they can
+ *  copy into a search or a bug report. Prose and controls say "16-bit shader
+ *  feature" instead. */
+export const WEBGPU_FEATURE_DETAIL = 'Missing WebGPU feature: shader-f16';
+
+/** Which cards have the feature, for the blocked pages. It names only the
+ *  case we have evidence for, and makes no claim about AMD, Intel or Apple. */
+export const WEBGPU_CARD_GUIDANCE =
+  'Older cards are often missing it, NVIDIA’s GTX 10-series among them; newer cards generally have it. The rest of Music Charts Tools works on this computer, including the chart editor and lyric alignment.';
 
 /**
  * Throws {@link webGpuFp16Message} unless this device can run the fp16

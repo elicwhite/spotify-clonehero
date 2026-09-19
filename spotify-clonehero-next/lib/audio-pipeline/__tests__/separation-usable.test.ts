@@ -79,7 +79,7 @@ describe('assertSeparationUsable', () => {
         MIX,
         stems({drums: [0, NaN, 0, 0], vocals: [0, 0, 0.2, 0]}),
       ),
-    ).toThrow(/invalid audio/i);
+    ).toThrow(/unusable audio/i);
   });
 
   it('rejects Infinity samples', () => {
@@ -88,6 +88,6 @@ describe('assertSeparationUsable', () => {
         MIX,
         stems({drums: [0, 0.3, 0, 0], vocals: [0, Infinity, 0, 0]}),
       ),
-    ).toThrow(/invalid audio/i);
+    ).toThrow(/unusable audio/i);
   });
 });

@@ -49,7 +49,16 @@ const STEPS: {Icon: LucideIcon; label: string; desc: string}[] = [
  * explains it. The working entry screen is passed in as `toolEntry` so the
  * pipeline flow stays owned by TempoClient.
  */
-export function TempoLanding({toolEntry}: {toolEntry: ReactNode}) {
+export function TempoLanding({
+  toolEntry,
+  entryIntro = 'Pick a song file to get a new chart holding just the tempo map, or an existing chart to rebuild its tempo map without moving its notes in the audio.',
+}: {
+  toolEntry: ReactNode;
+  /** The line above the entry controls. A page that cannot run the tool here
+   *  passes `undefined`: its `toolEntry` explains why instead, and an intro
+   *  telling the reader to pick a song would contradict it. */
+  entryIntro?: string | undefined;
+}) {
   return (
     <LandingPage>
       <LandingHero
@@ -67,6 +76,7 @@ export function TempoLanding({toolEntry}: {toolEntry: ReactNode}) {
           'All processing happens on your computer. Your audio file and chart are never uploaded to a server.',
           'The first run downloads about 515 MB of model files.',
           'Needs WebGPU, so a recent Chrome or Edge.',
+          'Needs a graphics card with 16-bit shader support. NVIDIA’s GTX 10-series and older don’t have it.',
         ]}
         illustration={<BeatGridCanvas />}
         caption={
@@ -77,9 +87,7 @@ export function TempoLanding({toolEntry}: {toolEntry: ReactNode}) {
         }
       />
 
-      <ToolEntrySection
-        title="Start a song"
-        intro="Pick a song file to get a new chart holding just the tempo map, or an existing chart to rebuild its tempo map without moving its notes in the audio.">
+      <ToolEntrySection title="Start a song" intro={entryIntro}>
         {toolEntry}
       </ToolEntrySection>
 

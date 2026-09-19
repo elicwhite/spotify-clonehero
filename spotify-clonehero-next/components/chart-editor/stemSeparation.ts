@@ -67,9 +67,17 @@ export interface StemSeparationHostProps {
   offer: StemSeparationOffer;
   /** True while a separation run is in flight. */
   running: boolean;
-  /** Why a run cannot start right now (an audio rebuild in progress, ...).
-   *  Undefined when it can. */
-  disabledReason?: string | undefined;
+  /**
+   * Why this model cannot be run right now, or undefined when it can.
+   *
+   * Per model, not per surface: the two options do not have the same
+   * requirements. BS-Roformer has fp16 weights and needs a graphics card
+   * with `shader-f16`; Demucs is fp32 and runs on any adapter, falling back
+   * to the CPU when there is none. So a card that cannot run one can still
+   * run the other, and a single shared reason would disable a button that
+   * works.
+   */
+  disabledReasonFor: (model: StemSeparationModel) => string | undefined;
   /** Starts a run. */
   onSeparate: (request: StemSeparationRequest) => void;
   /** The shared run store, for the inline progress card the mixer renders. */

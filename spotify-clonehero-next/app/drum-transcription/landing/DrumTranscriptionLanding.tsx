@@ -88,7 +88,16 @@ function toGroupRows(rows: readonly ComparisonRow[]) {
  * page that explains it. The working entry screen is passed in as
  * `toolEntry` so the pipeline flow stays owned by DrumTranscriptionClient.
  */
-export function DrumTranscriptionLanding({toolEntry}: {toolEntry: ReactNode}) {
+export function DrumTranscriptionLanding({
+  toolEntry,
+  entryIntro = 'Drop in an audio file to build a new chart, or an existing chart package to keep its tempo map and transcribe drums onto it.',
+}: {
+  toolEntry: ReactNode;
+  /** The line above the entry controls. A page that cannot run the tool here
+   *  passes `undefined`: its `toolEntry` explains why instead, and an intro
+   *  telling the reader to drop a file in would contradict it. */
+  entryIntro?: string | undefined;
+}) {
   return (
     <LandingPage>
       <LandingHero
@@ -111,6 +120,7 @@ export function DrumTranscriptionLanding({toolEntry}: {toolEntry: ReactNode}) {
           'All processing happens on your computer. Your audio file and chart are never uploaded to a server.',
           'The first run downloads about 515 MB of model files.',
           'Needs WebGPU, so a recent Chrome or Edge.',
+          'Needs a graphics card with 16-bit shader support. NVIDIA’s GTX 10-series and older don’t have it.',
         ]}
         illustration={<EditPassCanvas />}
         caption={
@@ -123,9 +133,7 @@ export function DrumTranscriptionLanding({toolEntry}: {toolEntry: ReactNode}) {
         }
       />
 
-      <ToolEntrySection
-        title="Start a song"
-        intro="Drop in an audio file to build a new chart, or an existing chart package to keep its tempo map and transcribe drums onto it.">
+      <ToolEntrySection title="Start a song" intro={entryIntro}>
         {toolEntry}
       </ToolEntrySection>
 
