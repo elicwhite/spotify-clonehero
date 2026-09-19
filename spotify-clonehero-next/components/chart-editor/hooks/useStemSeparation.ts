@@ -29,7 +29,7 @@ import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {selectReportedOrigin} from '@/lib/chart-editor-core';
 import {useWebGpuFp16Block} from '@/components/onnx/useWebGpuFp16';
-import {webGpuFp16Tooltip} from '@/lib/onnx/webgpu-capability';
+import {blockedControlReason} from '@/components/onnx/webgpu-block';
 
 import {useChartEditorContext} from '../ChartEditorContext';
 import type {
@@ -96,16 +96,15 @@ export function useStemSeparation({
   // Only BS-Roformer has fp16 weights. Demucs is fp32 and runs on any
   // adapter — and on the CPU when there is none — so a graphics card without
   // `shader-f16` loses the "great and slow" option and keeps the other one.
-  // A host reason (an audio rebuild) stops both, and wins while it lasts:
-  // it is about to change, and the capability is not.
+  // The host's own reason stops both. `blockedControlReason` owns which of
+  // the two the user reads, the same way it does for the Chart Assist cards.
   const disabledReasonFor = useCallback(
-    (model: StemSeparationModel): string | undefined => {
-      if (disabledReason !== undefined) return disabledReason;
-      if (model === 'roformer' && webGpuBlocked !== null) {
-        return webGpuFp16Tooltip(webGpuBlocked, 'this one');
-      }
-      return undefined;
-    },
+    (model: StemSeparationModel): string | undefined =>
+      blockedControlReason(
+        model === 'roformer' ? webGpuBlocked : null,
+        disabledReason,
+        'this one',
+      ),
     [disabledReason, webGpuBlocked],
   );
 

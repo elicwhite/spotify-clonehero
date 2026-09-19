@@ -49,10 +49,10 @@ import {ReplaceDrumTrackCommand} from '../commands';
 import {CardAction, CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
 import {
-  webGpuFp16Note,
-  webGpuFp16Tooltip,
-  type WebGpuFp16Status,
-} from '@/lib/onnx/webgpu-capability';
+  blockedControlReason,
+  sharedBlockedNote,
+  type WebGpuBlock,
+} from '@/components/onnx/webgpu-block';
 
 export interface DrumTranscriptionCardProps {
   doc: ChartDocument | null;
@@ -69,7 +69,7 @@ export interface DrumTranscriptionCardProps {
   rerunDisabledReason?: string | undefined;
   /** Why this computer cannot run the separation transcription needs, or
    *  null when it can (and while the probe is still in flight). */
-  webGpuBlocked: Exclude<WebGpuFp16Status, 'ok'> | null;
+  webGpuBlocked: WebGpuBlock;
   runner: AssistRunnerControls;
   executeCommand: (command: EditCommand) => void;
   onLearnMore: (key: LearnKey) => void;
@@ -77,6 +77,11 @@ export interface DrumTranscriptionCardProps {
 
 const STALE_NOTE =
   'Tempo grid changed after transcription. The notes still sit where the old grid put them. Transcribe again to place them on the grid you have now. Your call.';
+
+/** What this card needs the graphics card for, when that is what is
+ *  missing. `sharedBlockedNote` covers the browser-level cases. */
+const OWN_BLOCKED_NOTE =
+  'Can’t run on this computer: the drum separation model needs a graphics-card feature this one doesn’t have. It’s the card, not a setting.';
 
 export default function DrumTranscriptionCard({
   doc,
@@ -144,22 +149,12 @@ export default function DrumTranscriptionCard({
     toast.success('Kept existing transcription');
   }, [dispatch, state.chartDoc, state.tempoStamp]);
 
-  // A standing limit of this computer outranks a transient one: an audio
-  // rebuild ends in seconds, a graphics card that cannot run the model does
-  // not, so the reason the user reads is the one that will still be true.
-  const disabledReason =
-    webGpuBlocked !== null
-      ? webGpuFp16Tooltip(webGpuBlocked)
-      : rerunDisabledReason;
   // The blocked note replaces the staleness note rather than joining it.
   // "Transcribe again" is not an option this computer has, and "Keep as-is"
   // is a choice about a note that is no longer on screen.
   const blockedNote =
     webGpuBlocked !== null
-      ? webGpuFp16Note(
-          webGpuBlocked,
-          'Can’t run on this computer: the drum separation model needs a graphics-card feature this one doesn’t have. It’s the card, not a setting.',
-        )
+      ? (sharedBlockedNote(webGpuBlocked) ?? OWN_BLOCKED_NOTE)
       : undefined;
 
   return (
@@ -178,7 +173,10 @@ export default function DrumTranscriptionCard({
         running ? null : (
           <>
             <CardAction
-              disabledReason={disabledReason}
+              disabledReason={blockedControlReason(
+                webGpuBlocked,
+                rerunDisabledReason,
+              )}
               onClick={() => setConfirmOpen(true)}
               icon={RefreshCw}
               label="Run"

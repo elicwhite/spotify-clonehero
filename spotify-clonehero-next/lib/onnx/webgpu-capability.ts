@@ -33,8 +33,7 @@
  * reported not to expose it for NVIDIA Pascal cards (GTX 10-series), which
  * have no usable native 16-bit shader math.
  *
- * Models in fp32 or int8 are not affected. Use {@link isWebGPUAdapterAvailable}
- * for those.
+ * Models in fp32 or int8 are not affected.
  */
 
 /** Why an adapter cannot run an fp16 model on WebGPU, or `'ok'` if it can. */
@@ -81,20 +80,6 @@ export async function isWebGpuFp16Available(): Promise<boolean> {
 }
 
 /**
- * Tests only whether a WebGPU adapter exists, for fp32 and int8 models,
- * which do not need `shader-f16`.
- */
-export async function isWebGPUAdapterAvailable(): Promise<boolean> {
-  const gpu = getGpu();
-  if (!gpu) return false;
-  try {
-    return (await gpu.requestAdapter()) !== null;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * The long-form sentence for a device that cannot run an fp16 model.
  *
  * This is the backstop, not the experience. The pages and the editor test the
@@ -118,62 +103,6 @@ export function webGpuFp16Message(
       return `${feature} needs a 16-bit shader feature (WebGPU shader-f16) that this computer’s graphics card doesn’t have. It’s the card itself, not a browser setting.`;
   }
 }
-
-/**
- * The tooltip on a control this device cannot run.
- *
- * Short enough for a tooltip, and it never names `shader-f16`: the feature
- * name belongs where someone can copy it (see {@link WEBGPU_FEATURE_DETAIL}),
- * not on a control.
- *
- * `subject` is how the sentence refers to the blocked action — `'it'` for a
- * card with one action, `'this one'` where a sibling control still works and
- * the tooltip has to say which is which.
- */
-export function webGpuFp16Tooltip(
-  status: Exclude<WebGpuFp16Status, 'ok'>,
-  subject: 'it' | 'this one' = 'it',
-): string {
-  switch (status) {
-    case 'no-webgpu':
-      return 'This browser doesn’t have WebGPU.';
-    case 'no-adapter':
-      return 'Can’t reach the graphics card. Check hardware acceleration and reload.';
-    case 'no-shader-f16':
-      return `This computer’s graphics card can’t run ${subject}.`;
-  }
-}
-
-/**
- * The visible note on a blocked Chart Assist card.
- *
- * Only the `no-shader-f16` sentence changes between cards — it names what
- * that card needs the graphics card for — so the caller supplies it and the
- * two browser-level cases are shared.
- */
-export function webGpuFp16Note(
-  status: Exclude<WebGpuFp16Status, 'ok'>,
-  shaderF16Note: string,
-): string {
-  switch (status) {
-    case 'no-webgpu':
-      return 'Can’t run in this browser: it needs WebGPU. Use a recent Chrome or Edge on a desktop or laptop.';
-    case 'no-adapter':
-      return 'Can’t reach the graphics card. Check that hardware acceleration is on in the browser’s settings, then reload the page.';
-    case 'no-shader-f16':
-      return shaderF16Note;
-  }
-}
-
-/** The one place the feature is named for a user: a detail line they can
- *  copy into a search or a bug report. Prose and controls say "16-bit shader
- *  feature" instead. */
-export const WEBGPU_FEATURE_DETAIL = 'Missing WebGPU feature: shader-f16';
-
-/** Which cards have the feature, for the blocked pages. It names only the
- *  case we have evidence for, and makes no claim about AMD, Intel or Apple. */
-export const WEBGPU_CARD_GUIDANCE =
-  'Older cards are often missing it, NVIDIA’s GTX 10-series among them; newer cards generally have it. The rest of Music Charts Tools works on this computer, including the chart editor and lyric alignment.';
 
 /**
  * Throws {@link webGpuFp16Message} unless this device can run the fp16

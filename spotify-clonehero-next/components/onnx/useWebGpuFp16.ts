@@ -22,6 +22,7 @@ import {
   probeWebGpuFp16,
   type WebGpuFp16Status,
 } from '@/lib/onnx/webgpu-capability';
+import type {WebGpuBlock} from './webgpu-block';
 
 export function useWebGpuFp16(): WebGpuFp16Status | null {
   const [status, setStatus] = useState<WebGpuFp16Status | null>(null);
@@ -37,9 +38,11 @@ export function useWebGpuFp16(): WebGpuFp16Status | null {
   return status;
 }
 
-/** The status as the blocking surfaces want it: the reason to block, or
- *  `undefined` while the probe runs and when the device can run the models. */
-export function useWebGpuFp16Block(): Exclude<WebGpuFp16Status, 'ok'> | null {
+/** The status as a blocking surface wants it: the reason to block, or null
+ *  while the probe runs and when the device can run the models. Both mean
+ *  "do not block yet", which is what keeps a control from flashing disabled
+ *  for the frame before the probe answers. */
+export function useWebGpuFp16Block(): WebGpuBlock {
   const status = useWebGpuFp16();
   return status === null || status === 'ok' ? null : status;
 }

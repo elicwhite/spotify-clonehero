@@ -19,10 +19,10 @@ import {ReplaceTempoMapCommand} from '../commands';
 import {CardAction, CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
 import {
-  webGpuFp16Note,
-  webGpuFp16Tooltip,
-  type WebGpuFp16Status,
-} from '@/lib/onnx/webgpu-capability';
+  blockedControlReason,
+  sharedBlockedNote,
+  type WebGpuBlock,
+} from '@/components/onnx/webgpu-block';
 
 export interface TempoMapCardProps {
   runner: AssistRunnerControls;
@@ -30,10 +30,15 @@ export interface TempoMapCardProps {
   audioBusyReason: string | undefined;
   /** Why this computer cannot run the separation the tempo map needs, or
    *  null when it can (and while the probe is still in flight). */
-  webGpuBlocked: Exclude<WebGpuFp16Status, 'ok'> | null;
+  webGpuBlocked: WebGpuBlock;
   executeCommand: (command: EditCommand) => void;
   onLearnMore: (key: LearnKey) => void;
 }
+
+/** What this card needs the graphics card for, when that is what is
+ *  missing. `sharedBlockedNote` covers the browser-level cases. */
+const OWN_BLOCKED_NOTE =
+  'Can’t run on this computer: it separates the drums first, and that model needs a graphics-card feature this one doesn’t have. It’s the card, not a setting.';
 
 export default function TempoMapCard({
   runner,
@@ -50,12 +55,6 @@ export default function TempoMapCard({
     successMessage: 'Tempo map generated',
   });
 
-  // A standing limit of this computer outranks a transient one: an audio
-  // rebuild ends in seconds, a graphics card that cannot run the model does
-  // not, so the reason the user reads is the one that will still be true.
-  const disabledReason =
-    webGpuBlocked !== null ? webGpuFp16Tooltip(webGpuBlocked) : audioBusyReason;
-
   return (
     <CardShell
       icon={<Clock />}
@@ -63,10 +62,7 @@ export default function TempoMapCard({
       explanation="Builds the grid every note snaps to. A rough first pass, so check the downbeat and the meter."
       note={
         webGpuBlocked !== null
-          ? webGpuFp16Note(
-              webGpuBlocked,
-              'Can’t run on this computer: it separates the drums first, and that model needs a graphics-card feature this one doesn’t have. It’s the card, not a setting.',
-            )
+          ? (sharedBlockedNote(webGpuBlocked) ?? OWN_BLOCKED_NOTE)
           : undefined
       }
       noteTone="muted"
@@ -75,7 +71,10 @@ export default function TempoMapCard({
       actions={
         running ? null : (
           <CardAction
-            disabledReason={disabledReason}
+            disabledReason={blockedControlReason(
+              webGpuBlocked,
+              audioBusyReason,
+            )}
             onClick={run}
             icon={RefreshCw}
             label="Generate tempo map"

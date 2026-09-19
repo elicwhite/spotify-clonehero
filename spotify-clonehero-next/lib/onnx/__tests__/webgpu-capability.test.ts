@@ -8,13 +8,14 @@
 
 import {
   assertWebGpuFp16,
-  isWebGPUAdapterAvailable,
   isWebGpuFp16Available,
   probeWebGpuFp16,
   webGpuFp16Message,
-  webGpuFp16Note,
-  webGpuFp16Tooltip,
 } from '../webgpu-capability';
+import {
+  blockedControlReason,
+  sharedBlockedNote,
+} from '@/components/onnx/webgpu-block';
 
 type FakeAdapter = {features: ReadonlySet<string>};
 
@@ -69,18 +70,6 @@ describe('probeWebGpuFp16', () => {
   });
 });
 
-describe('isWebGPUAdapterAvailable', () => {
-  it('accepts an adapter without shader-f16, for the fp32 and int8 models', async () => {
-    setGpu(adapterWith());
-    expect(await isWebGPUAdapterAvailable()).toBe(true);
-  });
-
-  it('rejects a browser with no WebGPU', async () => {
-    setGpu(undefined);
-    expect(await isWebGPUAdapterAvailable()).toBe(false);
-  });
-});
-
 describe('assertWebGpuFp16', () => {
   it('does not throw when the adapter has shader-f16', async () => {
     setGpu(adapterWith('shader-f16'));
@@ -111,42 +100,67 @@ describe('copy', () => {
     );
   });
 
-  it('keeps the feature name out of tooltips', () => {
-    // `shader-f16` belongs where it can be copied, not on a control.
+  it('keeps the feature name off controls', () => {
+    // `shader-f16` belongs where it can be copied, not in a tooltip.
     for (const status of [
       'no-webgpu',
       'no-adapter',
       'no-shader-f16',
     ] as const) {
-      expect(webGpuFp16Tooltip(status)).not.toMatch(/shader-f16/);
+      expect(blockedControlReason(status)).not.toMatch(/shader-f16/);
     }
   });
 
   it('names which control is blocked when a sibling still works', () => {
     // The stems mixer keeps a working Demucs button beside the blocked one.
-    expect(webGpuFp16Tooltip('no-shader-f16', 'this one')).toMatch(
-      /can’t run this one/,
-    );
-    expect(webGpuFp16Tooltip('no-shader-f16')).toMatch(/can’t run it/);
-  });
-
-  it('lets each card word the shader-f16 note for itself', () => {
-    const own = 'Can’t run on this computer: the separation model needs it.';
-    expect(webGpuFp16Note('no-shader-f16', own)).toBe(own);
-    // The browser-level cases are the same sentence everywhere, so a card
-    // cannot drift from its neighbour on them.
-    expect(webGpuFp16Note('no-webgpu', own)).toMatch(/needs WebGPU/);
-    expect(webGpuFp16Note('no-adapter', own)).toMatch(/hardware acceleration/);
+    expect(
+      blockedControlReason('no-shader-f16', undefined, 'this one'),
+    ).toMatch(/can’t run this one/);
+    expect(blockedControlReason('no-shader-f16')).toMatch(/can’t run it/);
   });
 
   it('never tells the user to buy a graphics card', () => {
     const all = [
       webGpuFp16Message('no-shader-f16', 'Tempo mapping'),
-      webGpuFp16Tooltip('no-shader-f16'),
-      webGpuFp16Note('no-shader-f16', 'x'),
+      blockedControlReason('no-shader-f16'),
+      sharedBlockedNote('no-webgpu'),
     ];
     for (const copy of all) {
       expect(copy).not.toMatch(/buy|purchase|upgrade|newer graphics card/i);
     }
+  });
+});
+
+describe('blockedControlReason', () => {
+  it('lets a control run when nothing blocks it', () => {
+    expect(blockedControlReason(null)).toBeUndefined();
+  });
+
+  it('passes the host’s own reason through when the device is fine', () => {
+    expect(blockedControlReason(null, 'Rebuilding audio')).toBe(
+      'Rebuilding audio',
+    );
+  });
+
+  it('puts the capability ahead of a reason that will clear', () => {
+    // Waiting clears an audio rebuild but never a graphics card, so a
+    // control that will not work after the wait must not ask the user to
+    // wait. Both cards and the stems mixer read this one rule.
+    expect(blockedControlReason('no-shader-f16', 'Rebuilding audio')).toMatch(
+      /graphics card/,
+    );
+  });
+});
+
+describe('sharedBlockedNote', () => {
+  it('shares one sentence for the browser-level cases', () => {
+    expect(sharedBlockedNote('no-webgpu')).toMatch(/needs WebGPU/);
+    expect(sharedBlockedNote('no-adapter')).toMatch(/hardware acceleration/);
+  });
+
+  it('gives no sentence for a missing card feature, so the card writes it', () => {
+    // What a card needs the graphics card FOR differs per card, so there is
+    // nothing shared to say.
+    expect(sharedBlockedNote('no-shader-f16')).toBeNull();
   });
 });

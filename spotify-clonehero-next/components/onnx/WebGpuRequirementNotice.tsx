@@ -17,8 +17,7 @@
 
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {
-  WEBGPU_CARD_GUIDANCE,
-  WEBGPU_FEATURE_DETAIL,
+  webGpuFp16Message,
   type WebGpuFp16Status,
 } from '@/lib/onnx/webgpu-capability';
 
@@ -27,6 +26,16 @@ export interface MissingBrowserCapability {
   name: string;
   reason: string;
 }
+
+/** Which cards have the feature. It names only the case we have evidence
+ *  for, and makes no claim about AMD, Intel or Apple. */
+const CARD_GUIDANCE =
+  'Older cards are often missing it, NVIDIA’s GTX 10-series among them; newer cards generally have it. The rest of Music Charts Tools works on this computer, including the chart editor and lyric alignment.';
+
+/** The one place the feature is named for a user: a line they can copy into
+ *  a search or a bug report. The prose above it says "16-bit shader feature"
+ *  instead. */
+const FEATURE_DETAIL = 'Missing WebGPU feature: shader-f16';
 
 export interface WebGpuRequirementNoticeProps {
   /** Why the graphics card cannot run the models, or null when it can. */
@@ -43,89 +52,106 @@ export interface WebGpuRequirementNoticeProps {
   otherMissing?: readonly MissingBrowserCapability[] | undefined;
 }
 
+interface NoticeContent {
+  title: string;
+  /** Prose above the list. */
+  body: string[];
+  bullets: MissingBrowserCapability[];
+  /** The closing line, below the list. */
+  footer?: string;
+  /** Whether to print the copyable feature name. Only a missing graphics-card
+   *  feature has one to print. */
+  detail: boolean;
+}
+
+/**
+ * What the notice says, as data.
+ *
+ * A graphics card that cannot run one model is a single fact, best said in
+ * prose. Anything else is a browser that is missing features, which is a
+ * list — and once the browser is short of something, that is what the reader
+ * has to fix first, so the list form covers the card too.
+ */
+function noticeContent(
+  status: Exclude<WebGpuFp16Status, 'ok'> | null,
+  feature: string,
+  shaderF16Description: string,
+  otherMissing: readonly MissingBrowserCapability[],
+): NoticeContent {
+  if (otherMissing.length === 0 && status === 'no-shader-f16') {
+    return {
+      title: `${feature} can’t run on this computer`,
+      body: [shaderF16Description, CARD_GUIDANCE],
+      bullets: [],
+      detail: true,
+    };
+  }
+  if (otherMissing.length === 0 && status === 'no-adapter') {
+    return {
+      title: `${feature} can’t reach the graphics card`,
+      body: [webGpuFp16Message(status, feature)],
+      bullets: [],
+      detail: false,
+    };
+  }
+  return {
+    title: `This browser can’t run ${feature.toLowerCase()}`,
+    body: [`${feature} needs features this browser doesn’t have.`],
+    footer: 'Use a recent version of Chrome or Edge on a desktop or laptop.',
+    bullets: [
+      ...(status === 'no-webgpu'
+        ? [{name: 'WebGPU', reason: 'runs the models on the graphics card'}]
+        : []),
+      ...(status === 'no-shader-f16'
+        ? [
+            {
+              name: '16-bit shaders',
+              reason: 'lets the graphics card run the separation model',
+            },
+          ]
+        : []),
+      ...otherMissing,
+    ],
+    detail: status === 'no-shader-f16',
+  };
+}
+
 export default function WebGpuRequirementNotice({
   status,
   feature,
   shaderF16Description,
   otherMissing = [],
 }: WebGpuRequirementNoticeProps) {
-  // A graphics card that cannot run one model is a single fact, best said in
-  // prose. Anything else is a browser that is missing features, which is a
-  // list — and once the browser is short of something, that is what the
-  // reader has to fix first, so the list form covers the card too.
-  const cardOnly = status === 'no-shader-f16' && otherMissing.length === 0;
-  const adapterOnly = status === 'no-adapter' && otherMissing.length === 0;
+  if (status === null && otherMissing.length === 0) return null;
 
-  if (cardOnly) {
-    return (
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>{feature} can’t run on this computer</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>{shaderF16Description}</p>
-          <p>{WEBGPU_CARD_GUIDANCE}</p>
-          <p className="text-xs">{WEBGPU_FEATURE_DETAIL}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (adapterOnly) {
-    return (
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>{feature} can’t reach the graphics card</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          <p>
-            Check that hardware acceleration is on in the browser’s settings,
-            then reload the page.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const missing: MissingBrowserCapability[] = [
-    ...(status === 'no-webgpu'
-      ? [
-          {
-            name: 'WebGPU',
-            reason: 'runs the models on the graphics card',
-          },
-        ]
-      : []),
-    ...(status === 'no-shader-f16'
-      ? [
-          {
-            name: '16-bit shaders',
-            reason: 'lets the graphics card run the separation model',
-          },
-        ]
-      : []),
-    ...otherMissing,
-  ];
+  const {title, body, bullets, footer, detail} = noticeContent(
+    status,
+    feature,
+    shaderF16Description,
+    otherMissing,
+  );
 
   return (
     <Card className="max-w-xl">
       <CardHeader>
-        <CardTitle>This browser can’t run {feature.toLowerCase()}</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm text-muted-foreground">
-        <p>{feature} needs features this browser doesn’t have.</p>
-        <ul className="space-y-1">
-          {missing.map(cap => (
-            <li key={cap.name}>
-              <span className="font-medium text-foreground">{cap.name}</span> —{' '}
-              {cap.reason}.
-            </li>
-          ))}
-        </ul>
-        <p>Use a recent version of Chrome or Edge on a desktop or laptop.</p>
-        {status === 'no-shader-f16' && (
-          <p className="text-xs">{WEBGPU_FEATURE_DETAIL}</p>
+        {body.map(text => (
+          <p key={text}>{text}</p>
+        ))}
+        {bullets.length > 0 && (
+          <ul className="space-y-1">
+            {bullets.map(cap => (
+              <li key={cap.name}>
+                <span className="font-medium text-foreground">{cap.name}</span>{' '}
+                — {cap.reason}.
+              </li>
+            ))}
+          </ul>
         )}
+        {footer !== undefined && <p>{footer}</p>}
+        {detail && <p className="text-xs">{FEATURE_DETAIL}</p>}
       </CardContent>
     </Card>
   );
