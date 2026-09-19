@@ -20,6 +20,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
+import {isWebGpuFp16Available} from '@/lib/onnx/webgpu-capability';
 import {forcedAlign} from './viterbi';
 import {getCachedModel} from './model-cache';
 import {MODEL_URLS} from './model-urls';
@@ -138,8 +139,14 @@ async function handleInit() {
   // web worker. WebGPU is the primary speed path; WASM stays single-threaded.
   ort.env.wasm.numThreads = 1;
 
-  // Prefer fp16 model + WebGPU, fall back to quantized + WASM
-  const hasWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator;
+  // Prefer fp16 model + WebGPU, fall back to quantized + WASM.
+  // `navigator.gpu` alone is not enough: the fp16 model needs an adapter
+  // with `shader-f16`, and ORT neither asks for it nor refuses the model
+  // without it — it produces broken shaders and reports them only to the
+  // console. See lib/onnx/webgpu-capability.ts. This is the one fp16 path
+  // with a real alternative, so a card without the feature takes the
+  // quantized/WASM arm below instead of being blocked.
+  const hasWebGPU = await isWebGpuFp16Available();
 
   if (hasWebGPU) {
     try {

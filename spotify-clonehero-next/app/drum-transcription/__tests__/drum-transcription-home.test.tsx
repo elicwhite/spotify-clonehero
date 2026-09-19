@@ -33,9 +33,16 @@ if (typeof Blob.prototype.arrayBuffer !== 'function') {
 }
 
 // The page gates itself on WebGPU + the WebCodecs encoder, neither of which
-// jsdom has; this suite is about the pipeline behind that gate.
+// jsdom has; this suite is about the pipeline behind that gate. The adapter
+// must report `shader-f16`: the gate blocks an adapter without it, because
+// the separation model has fp16 weights (lib/onnx/webgpu-capability.ts).
 if (!('gpu' in navigator)) {
-  Object.defineProperty(navigator, 'gpu', {value: {}, configurable: true});
+  Object.defineProperty(navigator, 'gpu', {
+    value: {
+      requestAdapter: async () => ({features: new Set(['shader-f16'])}),
+    },
+    configurable: true,
+  });
 }
 const globals = globalThis as Record<string, unknown>;
 globals['AudioEncoder'] ??= class {};

@@ -15,7 +15,14 @@ These are decisions already made. Violating one is not a style disagreement,
 it breaks the feature's premise.
 
 - **WebGPU required.** No WASM fallback. Block access with a clear message when
-  WebGPU is unavailable (`app/drum-transcription/webgpu-check/`).
+  WebGPU is unavailable. The gate is `useWebGPUCheck` in
+  `DrumTranscriptionClient.tsx`, and it asks `lib/onnx/webgpu-capability.ts`,
+  not `navigator.gpu`: the separation model has fp16 weights, so the adapter
+  must also have the `shader-f16` feature. An adapter without it compiles no
+  shader for that model, and ONNX Runtime reports this only to the console —
+  the run gives silence, not an error.
+  (`app/drum-transcription/webgpu-check/` is a dev parity harness, not this
+  gate.)
 - **No backend.** Everything runs client-side as a Next.js page. Nothing is
   uploaded — that is a promise the landing page makes to users, so it is a
   correctness constraint, not a preference.

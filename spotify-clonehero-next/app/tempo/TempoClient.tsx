@@ -33,7 +33,11 @@ import {
 } from '@/lib/preview/chorus-chart-processing';
 import {chartDocToFolderFiles, readChart} from '@/lib/chart-edit';
 import {chartFileFormatOf} from '@/lib/chart-files/chart-file-names';
-import {isWebGPUAvailable} from '@/lib/drum-transcription/ml/onnx-runtime';
+import {
+  probeWebGpuFp16,
+  webGpuFp16Message,
+  type WebGpuFp16Status,
+} from '@/lib/onnx/webgpu-capability';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
@@ -132,7 +136,7 @@ export default function TempoClient({
   task = generateTempoMapTask,
 }: TempoClientProps = {}) {
   useToolLandingView('tempo');
-  const [webGPU, setWebGPU] = useState<boolean | null>(null);
+  const [webGPU, setWebGPU] = useState<WebGpuFp16Status | null>(null);
   const [phase, setPhase] = useState<
     'pick' | 'pick-audio' | 'pick-chart' | 'processing'
   >('pick');
@@ -164,8 +168,12 @@ export default function TempoClient({
     setPhase('pick');
   }, [cancelAssistTask]);
 
+  // The separation model has fp16 weights, so an adapter is not enough — it
+  // must also have `shader-f16`. A page that starts without it separates to
+  // silence and floods the console (lib/onnx/webgpu-capability.ts). The
+  // status, not a boolean, so the card below can say which case it is.
   useEffect(() => {
-    isWebGPUAvailable().then(setWebGPU);
+    probeWebGpuFp16().then(setWebGPU);
   }, []);
 
   // ---------- the pipeline ----------
@@ -314,17 +322,14 @@ export default function TempoClient({
   );
 
   // ---------- render ----------
-  if (webGPU === false) {
+  if (webGPU !== null && webGPU !== 'ok') {
     return (
       <main className="flex flex-1 items-center justify-center p-6">
         <Card className="max-w-lg">
           <CardHeader>
-            <CardTitle>Your browser can’t run this tool</CardTitle>
+            <CardTitle>This computer can’t run this tool</CardTitle>
             <CardDescription>
-              Tempo mapping runs a separation model, a beat-tracking model, and
-              a transcription model on your graphics card using WebGPU, which
-              this browser doesn’t support. Try a recent version of Chrome or
-              Edge on a computer.
+              {webGpuFp16Message(webGPU, 'Tempo mapping')}
             </CardDescription>
           </CardHeader>
         </Card>

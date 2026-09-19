@@ -2,16 +2,16 @@
  * ONNX Runtime Web setup for the drum transcription pipeline.
  *
  * Loads ONNX Runtime from CDN as a global script (avoids bundling ~20MB of
- * WASM files). WebGPU is the primary execution provider with WASM as an
- * explicit fallback for ops that WebGPU does not support (e.g. Shape,
- * Gather). If WebGPU is unavailable the caller must block access to the
- * transcription feature.
+ * WASM files).
  *
  * Usage:
  *   1. Include the CDN script in your page's <head>:
  *      <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@dev/dist/ort.all.min.js"></script>
- *   2. Call `getOrt()` to access the runtime, `createInferenceSession()` to
- *      load a model.
+ *   2. Call `getOrt()` to access the runtime.
+ *
+ * Whether this device can run a model at all is a separate question, and
+ * `lib/onnx/webgpu-capability.ts` answers it — an adapter alone does not
+ * mean the fp16 models will run.
  */
 
 // ---------------------------------------------------------------------------
@@ -76,57 +76,4 @@ export function getOrt(): OrtGlobal {
   }
 
   return g.ort;
-}
-
-// ---------------------------------------------------------------------------
-// WebGPU check
-// ---------------------------------------------------------------------------
-
-/**
- * Returns `true` if the browser exposes a usable WebGPU adapter.
- */
-export async function isWebGPUAvailable(): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !navigator.gpu) {
-    return false;
-  }
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    return adapter !== null;
-  } catch {
-    return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Session management
-// ---------------------------------------------------------------------------
-
-/**
- * Creates an ONNX InferenceSession using WebGPU with WASM fallback.
- *
- * WebGPU handles the heavy compute ops; WASM covers ops that WebGPU does
- * not support (e.g. Shape, Gather). This dual-EP configuration silences
- * the "nodes not assigned to preferred EP" warning from ORT.
- *
- * @param modelUrl - URL to the `.onnx` model file (e.g. on HuggingFace).
- *   The browser will cache the download after the first fetch.
- * @throws {Error} if WebGPU is not available or session creation fails.
- */
-export async function createInferenceSession(
-  modelUrl: string,
-): Promise<OrtInferenceSession> {
-  if (typeof navigator === 'undefined' || !navigator.gpu) {
-    throw new Error('WebGPU is required for this feature');
-  }
-
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    throw new Error('WebGPU is required for this feature');
-  }
-
-  const ort = getOrt();
-  return ort.InferenceSession.create(modelUrl, {
-    executionProviders: ['webgpu', 'wasm'],
-    graphOptimizationLevel: 'all',
-  });
 }

@@ -10,6 +10,10 @@ import {
 } from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
+import {
+  probeWebGpuFp16,
+  type WebGpuFp16Status,
+} from '@/lib/onnx/webgpu-capability';
 import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {
@@ -59,20 +63,38 @@ const LANDING_RUN: AssistRunContext = {
   entrypoint: 'landing',
 };
 
-// Browser capabilities are static for the page lifetime, so the subscribe
-// function is a no-op. The server can't answer, so getServerSnapshot returns
-// null and callers treat that as "checking".
+// The WebCodecs capability below is static for the page lifetime, so the
+// subscribe function is a no-op. The server can't answer, so
+// getServerSnapshot returns null and callers treat that as "checking".
 const noopSubscribe = () => () => {};
 const nullServerSnapshot = (): boolean | null => null;
 
-const webGPUGetSnapshot = () => 'gpu' in navigator;
-
-function useWebGPUCheck() {
-  return useSyncExternalStore(
-    noopSubscribe,
-    webGPUGetSnapshot,
-    nullServerSnapshot,
-  );
+/**
+ * What this device can do with the fp16 models, or `null` while the probe
+ * runs.
+ *
+ * `'gpu' in navigator` is not the question. Both models this page runs are
+ * reached through BS-Roformer separation, which has fp16 weights, and an
+ * adapter without `shader-f16` compiles none of its shaders. ORT reports that only
+ * to the console, so a page that does not test the feature here lets the
+ * user upload a song, wait for a 336 MB download, and then get an all-zero
+ * stem and a flooded console. See `lib/onnx/webgpu-capability.ts`.
+ *
+ * The probe is async, so this is state plus an effect rather than a
+ * `useSyncExternalStore` snapshot.
+ */
+function useWebGPUCheck(): WebGpuFp16Status | null {
+  const [status, setStatus] = useState<WebGpuFp16Status | null>(null);
+  useEffect(() => {
+    let live = true;
+    probeWebGpuFp16().then(result => {
+      if (live) setStatus(result);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return status;
 }
 
 // WebCodecs AudioEncoder is required to encode exported stems to Opus.
@@ -448,11 +470,19 @@ function DrumTranscriptionInner() {
 
   // Capability check -- block access if a required browser feature is missing.
   const missingCapabilities: {name: string; reason: string}[] = [];
-  if (webGPUSupported === false) {
-    missingCapabilities.push({
-      name: 'WebGPU',
-      reason: 'runs the drum separation and transcription ML models',
-    });
+  if (webGPUSupported !== null && webGPUSupported !== 'ok') {
+    missingCapabilities.push(
+      webGPUSupported === 'no-shader-f16'
+        ? {
+            name: 'WebGPU shader-f16',
+            reason:
+              'lets the graphics card run the 16-bit drum separation model',
+          }
+        : {
+            name: 'WebGPU',
+            reason: 'runs the drum separation and transcription ML models',
+          },
+    );
   }
   if (audioEncoderSupported === false) {
     missingCapabilities.push({
@@ -487,8 +517,9 @@ function DrumTranscriptionInner() {
               ))}
             </ul>
             <p className="text-center">
-              Please use a recent version of Chrome, Edge, or another compatible
-              browser.
+              {webGPUSupported === 'no-shader-f16'
+                ? 'This is a limit of the graphics card, not of the browser. Cards before the NVIDIA RTX series usually do not have this feature. Please use a computer with a newer graphics card.'
+                : 'Please use a recent version of Chrome, Edge, or another compatible browser.'}
             </p>
           </CardContent>
         </Card>

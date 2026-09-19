@@ -118,8 +118,10 @@ class FakeResizeObserver {
 (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
   FakeResizeObserver;
 
+// `/tempo` separates with the fp16 BS-Roformer model, so its gate needs an
+// adapter that reports `shader-f16` (lib/onnx/webgpu-capability.ts).
 (globalThis.navigator as any).gpu = {
-  requestAdapter: async () => ({}),
+  requestAdapter: async () => ({features: new Set(['shader-f16'])}),
 };
 
 // jsdom has neither `Blob.prototype.arrayBuffer` (the file-picker branch

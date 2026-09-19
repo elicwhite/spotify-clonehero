@@ -116,6 +116,76 @@ export function runSeparationInWorker(
 }
 
 // ---------------------------------------------------------------------------
+// Separation sanity check
+// ---------------------------------------------------------------------------
+
+/**
+ * Walks every channel once and reports the two facts the guard below needs.
+ * A full song is ~10 M samples per channel, so one pass rather than two.
+ */
+function inspectChannels(channels: Float32Array[]): {
+  anySignal: boolean;
+  anyNonFinite: boolean;
+} {
+  let anySignal = false;
+  for (const channel of channels) {
+    for (let i = 0; i < channel.length; i++) {
+      const sample = channel[i];
+      if (!Number.isFinite(sample)) return {anySignal, anyNonFinite: true};
+      if (sample !== 0) anySignal = true;
+    }
+  }
+  return {anySignal, anyNonFinite: false};
+}
+
+/**
+ * Throws unless the separation produced usable audio.
+ *
+ * The stem cache is keyed by the fingerprint of the mix, and every page
+ * reads it, so a bad stem written once is a bad stem forever — until the
+ * user finds and clears the cache. A graphics card that cannot compile the
+ * model's shaders is the known way to get one: ONNX Runtime reports that
+ * failure only to the console, and the run reads back buffers that nothing
+ * wrote, which gives silence rather than an error.
+ * `lib/onnx/webgpu-capability.ts` stops that case before the run starts;
+ * this is the last guard before the write, for any cause.
+ *
+ * Silence is a fault only when the mix itself was not silent, so a silent
+ * upload still separates and caches normally.
+ *
+ * Exported for its unit test; only {@link separateStems} calls it.
+ */
+export function assertSeparationUsable(
+  mix: {left: Float32Array; right: Float32Array},
+  stems: {
+    drumsLeft: Float32Array;
+    drumsRight: Float32Array;
+    vocalsLeft: Float32Array;
+    vocalsRight: Float32Array;
+  },
+): void {
+  const separated = inspectChannels([
+    stems.drumsLeft,
+    stems.drumsRight,
+    stems.vocalsLeft,
+    stems.vocalsRight,
+  ]);
+  if (separated.anyNonFinite) {
+    throw new Error(
+      'Stem separation produced invalid audio. Nothing was saved. This usually means the graphics card could not run the model.',
+    );
+  }
+  if (
+    !separated.anySignal &&
+    inspectChannels([mix.left, mix.right]).anySignal
+  ) {
+    throw new Error(
+      'Stem separation produced silence. Nothing was saved. This usually means the graphics card could not run the model.',
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -204,6 +274,13 @@ export async function separateStems(
   if (opts.signal?.aborted) {
     throw makeAbortError();
   }
+
+  // Before the cache write, never after: a bad stem stored under this
+  // fingerprint is what every later run on this mix reads.
+  assertSeparationUsable(
+    {left, right},
+    {drumsLeft, drumsRight, vocalsLeft, vocalsRight},
+  );
 
   // Store BOTH freshly-separated stems — the worker always produces both,
   // so seed the whole cache rather than only what was requested.
