@@ -73,18 +73,7 @@ function getVocalPart(
  * the predicate upstream retires this (plan 0039).
  */
 export function hasAnyLyrics(doc: ChartDocument): boolean {
-  return parsedChartHasLyrics(doc.parsedChart);
-}
-
-/**
- * {@link hasAnyLyrics} for a caller that holds only the `ParsedChart` — the
- * export path, which decides what `song.ini` should declare about a chart it
- * is about to serialize and has no `ChartDocument` in hand at that point.
- */
-export function parsedChartHasLyrics(
-  parsedChart: ChartDocument['parsedChart'],
-): boolean {
-  const parts = parsedChart.vocalTracks?.parts;
+  const parts = doc.parsedChart.vocalTracks?.parts;
   if (!parts) return false;
   return Object.values(parts).some(part =>
     part.notePhrases.some(phrase => phrase.lyrics.length > 0),

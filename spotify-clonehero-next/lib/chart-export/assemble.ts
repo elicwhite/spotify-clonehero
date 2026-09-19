@@ -17,11 +17,7 @@ import type {
   ParsedChart,
 } from '@eliwhite/scan-chart';
 
-import {
-  parsedChartHasLyrics,
-  readChart,
-  writeChartFolder,
-} from '@/lib/chart-edit';
+import {readChart, writeChartFolder} from '@/lib/chart-edit';
 import {
   isChartOrIniFileName,
   type ChartFileFormat,
@@ -222,18 +218,6 @@ function stampMetadata(
           diff_drums_real: diffDrums,
         }
       : {};
-  // `song.ini` is the only place a package says it has a vocals part: chart
-  // browsers and part pickers read `diff_vocals`, and neither chart format
-  // carries the field. Left at the `-1` sentinel, a chart this tool just added
-  // lyrics to ships them but still advertises its instruments alone. Declared
-  // only for a chart that has the part, mirroring the drum defaults above; `0`
-  // matches the `diff_drums` fallback, since the field is here to say the part
-  // exists, not to rate it.
-  const vocalDefaults =
-    parsedChartHasLyrics(parsedChart) &&
-    !(existing.diff_vocals != null && existing.diff_vocals >= 0)
-      ? {diff_vocals: 0}
-      : {};
   // Whatever the user set in the song-details editor is authoritative over
   // both the document's value and the `diff_drums` fallback above. Only the
   // fields actually present in the record are overwritten, so an unedited
@@ -257,7 +241,6 @@ function stampMetadata(
       ...(metadata.genre !== undefined ? {genre: metadata.genre} : {}),
       ...(metadata.year !== undefined ? {year: metadata.year} : {}),
       ...drumDefaults,
-      ...vocalDefaults,
       ...difficulties,
       song_length:
         songLengthMs != null && songLengthMs > 0
