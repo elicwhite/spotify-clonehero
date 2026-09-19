@@ -491,6 +491,13 @@ function DrumTranscriptionInner() {
     });
   }
 
+  // The graphics card is the only thing missing. The copy then has to name
+  // the card rather than the browser: a recent Chrome on a pre-RTX card
+  // reaches this screen, and telling that user to update their browser sends
+  // them somewhere that cannot help.
+  const gpuFeatureOnly =
+    webGPUSupported === 'no-shader-f16' && audioEncoderSupported !== false;
+
   if (missingCapabilities.length > 0) {
     return (
       <div className="flex flex-col items-center justify-center flex-1 w-full max-w-lg gap-4">
@@ -499,10 +506,15 @@ function DrumTranscriptionInner() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>
-            <CardTitle>Unsupported Browser</CardTitle>
+            <CardTitle>
+              {gpuFeatureOnly
+                ? 'Unsupported graphics card'
+                : 'Unsupported Browser'}
+            </CardTitle>
             <CardDescription>
-              Drum transcription needs browser features your current browser
-              doesn&apos;t support.
+              {gpuFeatureOnly
+                ? 'Drum transcription needs a graphics-card feature this computer does not have.'
+                : 'Drum transcription needs browser features your current browser doesn’t support.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
@@ -517,7 +529,7 @@ function DrumTranscriptionInner() {
               ))}
             </ul>
             <p className="text-center">
-              {webGPUSupported === 'no-shader-f16'
+              {gpuFeatureOnly
                 ? 'This is a limit of the graphics card, not of the browser. Cards before the NVIDIA RTX series usually do not have this feature. Please use a computer with a newer graphics card.'
                 : 'Please use a recent version of Chrome, Edge, or another compatible browser.'}
             </p>
