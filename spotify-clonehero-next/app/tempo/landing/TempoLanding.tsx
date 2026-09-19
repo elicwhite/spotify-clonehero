@@ -76,7 +76,7 @@ export function TempoLanding({
           'All processing happens on your computer. Your audio file and chart are never uploaded to a server.',
           'The first run downloads about 515 MB of model files.',
           'Needs WebGPU, so a recent Chrome or Edge.',
-          'Needs a graphics card with 16-bit shader support. NVIDIA’s GTX 10-series and older don’t have it.',
+          'Needs a fairly recent graphics card. NVIDIA’s GTX 10-series and older can’t run it.',
         ]}
         illustration={<BeatGridCanvas />}
         caption={

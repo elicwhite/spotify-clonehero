@@ -79,7 +79,7 @@ describe('assertWebGpuFp16', () => {
   it('throws a message that names the feature and what it needs', async () => {
     setGpu(adapterWith());
     await expect(assertWebGpuFp16('Stem separation')).rejects.toThrow(
-      /Stem separation needs a 16-bit shader feature \(WebGPU shader-f16\)/,
+      /Stem separation needs a graphics-card feature this computer doesn’t have \(WebGPU shader-f16\)/,
     );
   });
 });
@@ -89,7 +89,7 @@ describe('copy', () => {
     // Sending this user to update their browser wastes their time: the
     // browser is fine and there is no setting behind it.
     const message = webGpuFp16Message('no-shader-f16', 'Tempo mapping');
-    expect(message).toMatch(/graphics card/);
+    expect(message).toMatch(/graphics[- ]card/);
     expect(message).toMatch(/not a browser setting/);
     expect(message).not.toMatch(/Chrome|Edge|update/);
   });
@@ -117,6 +117,22 @@ describe('copy', () => {
       blockedControlReason('no-shader-f16', undefined, 'this one'),
     ).toMatch(/can’t run this one/);
     expect(blockedControlReason('no-shader-f16')).toMatch(/can’t run it/);
+  });
+
+  it('keeps "16-bit"/"shader" out of everything a user reads as prose', () => {
+    // A reader who is not technical learns nothing from "16-bit shader".
+    // What they can act on is: it is the card, and nothing can be switched
+    // on. The feature's real name survives only in the parenthetical a bug
+    // report would carry.
+    expect(blockedControlReason('no-shader-f16')).not.toMatch(/16-bit|shader/i);
+    expect(sharedBlockedNote('no-webgpu')).not.toMatch(/16-bit|shader/i);
+    expect(sharedBlockedNote('no-adapter')).not.toMatch(/16-bit|shader/i);
+    expect(
+      webGpuFp16Message('no-shader-f16', 'Tempo mapping').replace(
+        /\(WebGPU shader-f16\)/,
+        '',
+      ),
+    ).not.toMatch(/16-bit|shader/i);
   });
 
   it('never tells the user to buy a graphics card', () => {

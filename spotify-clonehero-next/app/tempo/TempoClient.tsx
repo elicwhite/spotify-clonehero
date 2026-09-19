@@ -333,7 +333,7 @@ export default function TempoClient({
           <WebGpuRequirementNotice
             status={webGPU}
             feature="Tempo mapping"
-            shaderF16Description="It separates the drums out of the mix first, and that model needs a 16-bit shader feature this computer’s graphics card doesn’t have. It’s the card itself, not a browser setting, so there’s nothing to switch on."
+            shaderF16Description="Building the tempo map starts by separating the drums out of the song, and that needs a graphics-card feature this computer doesn’t have. It’s the card itself, not a browser setting, so there’s nothing to switch on."
           />
         }
       />

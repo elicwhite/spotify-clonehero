@@ -33,8 +33,9 @@ const CARD_GUIDANCE =
   'Older cards are often missing it, NVIDIA’s GTX 10-series among them; newer cards generally have it. The rest of Music Charts Tools works on this computer, including the chart editor and lyric alignment.';
 
 /** The one place the feature is named for a user: a line they can copy into
- *  a search or a bug report. The prose above it says "16-bit shader feature"
- *  instead. */
+ *  a search or a bug report. The prose above it says "a graphics-card
+ *  feature", since the name of the feature tells a reader nothing they can
+ *  act on. */
 const FEATURE_DETAIL = 'Missing WebGPU feature: shader-f16';
 
 export interface WebGpuRequirementNoticeProps {
@@ -105,8 +106,8 @@ function noticeContent(
       ...(status === 'no-shader-f16'
         ? [
             {
-              name: '16-bit shaders',
-              reason: 'lets the graphics card run the separation model',
+              name: 'Graphics card',
+              reason: 'must be recent enough to run the separation model',
             },
           ]
         : []),

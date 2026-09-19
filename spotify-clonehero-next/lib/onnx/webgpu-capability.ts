@@ -100,7 +100,7 @@ export function webGpuFp16Message(
     case 'no-adapter':
       return `${feature} needs WebGPU, but this browser couldn’t reach the graphics card. Check that hardware acceleration is on in the browser’s settings, then reload the page.`;
     case 'no-shader-f16':
-      return `${feature} needs a 16-bit shader feature (WebGPU shader-f16) that this computer’s graphics card doesn’t have. It’s the card itself, not a browser setting.`;
+      return `${feature} needs a graphics-card feature this computer doesn’t have (WebGPU shader-f16). It’s the card itself, not a browser setting.`;
   }
 }
 

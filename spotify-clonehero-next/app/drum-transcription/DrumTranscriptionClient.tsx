@@ -544,7 +544,7 @@ function DrumTranscriptionInner() {
           <WebGpuRequirementNotice
             status={gpuBlocked}
             feature="Drum transcription"
-            shaderF16Description="Its drum separation model needs a 16-bit shader feature that this computer’s graphics card doesn’t have. It’s the card itself, not a browser setting, so there’s nothing to switch on."
+            shaderF16Description="Separating the drums out of the song needs a graphics-card feature this computer doesn’t have. It’s the card itself, not a browser setting, so there’s nothing to switch on."
             otherMissing={missingBrowserCapabilities}
           />
         }
