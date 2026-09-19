@@ -194,6 +194,7 @@ export {
 export {
   DEFAULT_VOCALS_PART,
   hasAnyLyrics,
+  parsedChartHasLyrics,
   lyricId,
   listLyricTicks,
   moveLyric,
