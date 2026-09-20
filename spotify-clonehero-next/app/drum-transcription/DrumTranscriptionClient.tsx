@@ -10,7 +10,9 @@ import {
 } from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
-import {AlertTriangle, Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
+import {useWebGpuFp16} from '@/components/onnx/useWebGpuFp16';
+import WebGpuRequirementNotice from '@/components/onnx/WebGpuRequirementNotice';
+import {Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {
   Card,
@@ -59,21 +61,11 @@ const LANDING_RUN: AssistRunContext = {
   entrypoint: 'landing',
 };
 
-// Browser capabilities are static for the page lifetime, so the subscribe
-// function is a no-op. The server can't answer, so getServerSnapshot returns
-// null and callers treat that as "checking".
+// The WebCodecs capability below is static for the page lifetime, so the
+// subscribe function is a no-op. The server can't answer, so
+// getServerSnapshot returns null and callers treat that as "checking".
 const noopSubscribe = () => () => {};
 const nullServerSnapshot = (): boolean | null => null;
-
-const webGPUGetSnapshot = () => 'gpu' in navigator;
-
-function useWebGPUCheck() {
-  return useSyncExternalStore(
-    noopSubscribe,
-    webGPUGetSnapshot,
-    nullServerSnapshot,
-  );
-}
 
 // WebCodecs AudioEncoder is required to encode exported stems to Opus.
 const audioEncoderGetSnapshot = () =>
@@ -92,7 +84,8 @@ function useAudioEncoderCheck() {
  * Must be wrapped in Suspense because useSearchParams() requires it.
  */
 function DrumTranscriptionInner() {
-  const webGPUSupported = useWebGPUCheck();
+  // Probed once here and read by the entry notice below.
+  const webGPUSupported = useWebGpuFp16();
   const audioEncoderSupported = useAudioEncoderCheck();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -446,55 +439,29 @@ function DrumTranscriptionInner() {
     [],
   );
 
-  // Capability check -- block access if a required browser feature is missing.
-  const missingCapabilities: {name: string; reason: string}[] = [];
-  if (webGPUSupported === false) {
-    missingCapabilities.push({
-      name: 'WebGPU',
-      reason: 'runs the drum separation and transcription ML models',
-    });
-  }
-  if (audioEncoderSupported === false) {
-    missingCapabilities.push({
-      name: 'WebCodecs AudioEncoder',
-      reason: 'encodes exported stems to Opus audio',
-    });
-  }
+  // The browser-level capability this page needs beyond WebGPU. A graphics
+  // card that cannot run the models is not listed with it: the notice says
+  // that in prose, because there is only ever one feature missing and a
+  // one-item list reads like a checklist the reader could work through.
+  const missingBrowserCapabilities =
+    audioEncoderSupported === false
+      ? [
+          {
+            name: 'WebCodecs AudioEncoder',
+            reason: 'encodes exported stems to Opus audio',
+          },
+        ]
+      : [];
 
-  if (missingCapabilities.length > 0) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-1 w-full max-w-lg gap-4">
-        <Card className="w-full">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <AlertTriangle className="h-6 w-6 text-destructive" />
-            </div>
-            <CardTitle>Unsupported Browser</CardTitle>
-            <CardDescription>
-              Drum transcription needs browser features your current browser
-              doesn&apos;t support.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <ul className="space-y-1">
-              {missingCapabilities.map(cap => (
-                <li key={cap.name}>
-                  <span className="font-medium text-foreground">
-                    {cap.name}
-                  </span>{' '}
-                  — {cap.reason}.
-                </li>
-              ))}
-            </ul>
-            <p className="text-center">
-              Please use a recent version of Chrome, Edge, or another compatible
-              browser.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Why the graphics card cannot run the models, or null while the probe
+  // runs and when it can. Kept separate from the browser list above: the
+  // notice says different things about a card and about a browser, and
+  // folding one into the other makes it claim something untrue.
+  const gpuBlocked =
+    webGPUSupported !== null && webGPUSupported !== 'ok'
+      ? webGPUSupported
+      : null;
+  const blocked = gpuBlocked !== null || missingBrowserCapabilities.length > 0;
 
   // Loading state while checking capabilities
   if (webGPUSupported === null || audioEncoderSupported === null) {
@@ -561,6 +528,27 @@ function DrumTranscriptionInner() {
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Opening editor...</p>
       </div>
+    );
+  }
+
+  // This computer cannot transcribe. The landing page still renders — it is
+  // how a blocked reader decides whether the tool is worth another computer
+  // — and only the entry controls are replaced, where the action they cannot
+  // take would have been. Its intro goes with them: it tells the reader to
+  // drop in a file, which the notice is about to contradict.
+  if (blocked) {
+    return (
+      <DrumTranscriptionLanding
+        entryIntro={undefined}
+        toolEntry={
+          <WebGpuRequirementNotice
+            status={gpuBlocked}
+            feature="Drum transcription"
+            shaderF16Description="Separating the drums out of the song needs a graphics-card feature this computer doesn’t have. It’s the card itself, not a browser setting, so there’s nothing to switch on."
+            otherMissing={missingBrowserCapabilities}
+          />
+        }
+      />
     );
   }
 

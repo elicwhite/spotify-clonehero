@@ -20,3 +20,19 @@ if (typeof global.structuredClone !== 'function') {
   const v8 = require('v8');
   global.structuredClone = value => v8.deserialize(v8.serialize(value));
 }
+
+// jsdom has no WebGPU. Every model-backed control now probes for an adapter
+// with the `shader-f16` feature before it offers itself
+// (lib/onnx/webgpu-capability.ts), so without one the Chart Assist cards,
+// the stems mixer and both tool pages correctly refuse to run — which is not
+// what most suites are testing. Give them a capable adapter by default. A
+// suite that exercises the blocked path overrides `navigator.gpu` itself.
+if (typeof navigator !== 'undefined' && !('gpu' in navigator)) {
+  Object.defineProperty(navigator, 'gpu', {
+    value: {
+      requestAdapter: async () => ({features: new Set(['shader-f16'])}),
+    },
+    configurable: true,
+    writable: true,
+  });
+}

@@ -29,6 +29,13 @@ interface GPURequestAdapterOptions {
 
 interface GPUAdapter {
   readonly name: string;
+  /**
+   * The optional WebGPU features this adapter can enable, such as
+   * `shader-f16`. An adapter that does not list `shader-f16` cannot compile
+   * the WGSL that ONNX Runtime generates for an fp16 model — see
+   * `lib/onnx/webgpu-capability.ts`.
+   */
+  readonly features: ReadonlySet<string>;
   requestDevice(descriptor?: Record<string, unknown>): Promise<GPUDevice>;
 }
 

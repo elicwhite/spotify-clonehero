@@ -51,6 +51,7 @@ import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {LEARN_COPY, type LearnKey} from './learn-copy';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import TempoMapCard from './TempoMapCard';
+import {useWebGpuFp16Block} from '@/components/onnx/useWebGpuFp16';
 import SectionsCard from './SectionsCard';
 import LeadingSilenceCard from './LeadingSilenceCard';
 import DrumTranscriptionCard from './DrumTranscriptionCard';
@@ -90,6 +91,9 @@ export default function ChartAssist({
   audioBusyReason,
   onLyricsAlignedFromCachedVocals,
 }: ChartAssistProps) {
+  // One probe for the section: two cards read it, and it answers the same
+  // unchanging question for both.
+  const webGpuBlocked = useWebGpuFp16Block();
   const {state, capabilities} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
   const runner = useOptionalAssistRunnerContext();
@@ -172,6 +176,7 @@ export default function ChartAssist({
             runner={runner}
             loadAudio={loadAudio}
             audioBusyReason={audioBusyReason}
+            webGpuBlocked={webGpuBlocked}
             executeCommand={executeCommand}
             onLearnMore={setLearnOpen}
           />
@@ -202,6 +207,7 @@ export default function ChartAssist({
             stale={selectTempoDerivedStale(state, 'drum-transcription')}
             loadAudio={loadAudio}
             rerunDisabledReason={drumDisabledReason}
+            webGpuBlocked={webGpuBlocked}
             runner={runner}
             executeCommand={executeCommand}
             onLearnMore={setLearnOpen}

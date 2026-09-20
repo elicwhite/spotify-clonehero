@@ -96,6 +96,7 @@ function separation(
   return {
     offer: {demucs: true, roformer: true},
     running: false,
+    disabledReasonFor: () => undefined,
     onSeparate: jest.fn(),
     store: new AssistStore(),
     onCancel: jest.fn(),

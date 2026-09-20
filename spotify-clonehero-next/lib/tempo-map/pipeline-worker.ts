@@ -17,6 +17,7 @@
 
 import * as ort from 'onnxruntime-web';
 import {getCachedModel} from '@/lib/lyrics-align/model-cache';
+import {assertWebGpuFp16} from '@/lib/onnx/webgpu-capability';
 import {
   BEAT_THIS_CACHE_KEY,
   BEAT_THIS_MIN_BYTES,
@@ -163,6 +164,15 @@ async function obtainDrumStem(
       return cached;
     }
   }
+
+  // Only this branch needs WebGPU. The two branches above reuse a stem the
+  // caller supplied or the cache holds, and Beat This! runs on wasm, so a
+  // device without `shader-f16` can still finish those runs. Test the
+  // capability here, before the 336 MB download: BS-Roformer has fp16
+  // weights, and ORT reports a failed fp16 shader only as console noise,
+  // which would give an all-zero stem instead of an error. See
+  // lib/onnx/webgpu-capability.ts.
+  await assertWebGpuFp16('Stem separation');
 
   progress({stage: 'download-separation-model'});
   const roformerBytes = await getCachedModel(

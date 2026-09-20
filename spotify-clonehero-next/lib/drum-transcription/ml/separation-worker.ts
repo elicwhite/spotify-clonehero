@@ -21,6 +21,7 @@
 
 import * as ort from 'onnxruntime-web';
 import {getCachedModel} from '@/lib/lyrics-align/model-cache';
+import {assertWebGpuFp16} from '@/lib/onnx/webgpu-capability';
 import {separateDrumStem} from '@/lib/tempo-map/stem-separation';
 
 // Same model/cache constants as roformer-separation.ts (client) and
@@ -62,6 +63,13 @@ function post(msg: SeparationWorkerMessage, transfer?: Transferable[]) {
 }
 
 async function run(req: SeparationWorkerRunRequest) {
+  // Before the 336 MB download, not after it: the model has fp16 weights,
+  // and an adapter without `shader-f16` cannot compile its shaders. ORT
+  // reports that failure only as console noise, so the run would otherwise
+  // produce an all-zero stem instead of an error. See
+  // lib/onnx/webgpu-capability.ts.
+  await assertWebGpuFp16('Stem separation');
+
   ort.env.wasm.wasmPaths = ORT_WASM_CDN;
   ort.env.wasm.numThreads = 1;
   ort.env.logLevel = 'error';
