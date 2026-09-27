@@ -292,6 +292,11 @@ The `useEffect` has `hoverLane` and `hoverTick` in its dependency array, so it f
 
 ### 8.1 Keyboard placement mode missing
 
+> **Decided against (plan 0132):** the editor had these lane keys and removed
+> them. A bare number selects a tool in every mode (1 Cursor, 2 Place Note),
+> and notes are placed with the pointer. Do not re-add keyboard lane
+> placement without a new decision.
+
 **Moonscraper ref:** `PlaceNoteController.cs` supports **two placement modes** toggled via `ToggleMouseMode`:
 
 - **Mouse burst mode**: Click to place notes at mouse position (what we have).

@@ -2,8 +2,6 @@
  * Five-fret InstrumentSchema — guitar / bass / rhythm / keys.
  *
  * Open notes (lane 0) plus green/red/yellow/blue/orange (lanes 1-5).
- * Lane key bindings mirror common chart-editor conventions and are consumed
- * by the shared highway/piano-roll editor.
  *
  * Flag bindings cover scan-chart's HOPO / tap / strum-flag set. Sustain
  * editing isn't a flag in scan-chart (it's `length` on the NoteEvent),
@@ -29,7 +27,6 @@ const OPEN: LaneDefinition = {
   label: 'Open',
   color: '#a266ff',
   pianoRollColor: '#9b59b6',
-  defaultKey: '0',
   worldXOffset: OPEN_X,
   fullWidth: true,
   sustainWidthMultiplier: 5,
@@ -41,7 +38,6 @@ const GREEN: LaneDefinition = {
   label: 'Green',
   color: '#01b11a',
   pianoRollColor: '#5cc262',
-  defaultKey: '1',
   worldXOffset: FRET_X(0),
 };
 
@@ -51,7 +47,6 @@ const RED: LaneDefinition = {
   label: 'Red',
   color: '#dd2214',
   pianoRollColor: '#e5484d',
-  defaultKey: '2',
   worldXOffset: FRET_X(1),
 };
 
@@ -61,7 +56,6 @@ const YELLOW: LaneDefinition = {
   label: 'Yellow',
   color: '#deeb52',
   pianoRollColor: '#f5c742',
-  defaultKey: '3',
   worldXOffset: FRET_X(2),
 };
 
@@ -71,7 +65,6 @@ const BLUE: LaneDefinition = {
   label: 'Blue',
   color: '#006caf',
   pianoRollColor: '#4a9ef2',
-  defaultKey: '4',
   worldXOffset: FRET_X(3),
 };
 
@@ -81,7 +74,6 @@ const ORANGE: LaneDefinition = {
   label: 'Orange',
   color: '#f8b272',
   pianoRollColor: '#f2994a',
-  defaultKey: '5',
   worldXOffset: FRET_X(4),
 };
 

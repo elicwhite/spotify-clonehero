@@ -4,8 +4,8 @@
  *
  * The schema does NOT redeclare scan-chart's `NoteType` or flag identifiers.
  * It carries:
- *   - per-lane display data (label, color, default keyboard binding) plus
- *     the scan-chart `NoteType` that lives at that lane,
+ *   - per-lane display data (label, color, world X) plus the scan-chart
+ *     `NoteType` that lives at that lane,
  *   - per-flag display data (label, default key, applicability) keyed by
  *     `noteFlags` names.
  *
@@ -45,9 +45,6 @@ export interface LaneDefinition {
    * `color`; falls back to `color` when unset.
    */
   pianoRollColor?: string;
-  /** Place-mode hotkey ("1", "2", ...). Optional — schemas without
-   *  place-mode bindings (e.g. some rhythm games) leave this undefined. */
-  defaultKey?: string;
   /** Disambiguator for two lanes that share a `noteType`. The 5-lane
    *  drum kit's "green" reuses scan-chart's greenDrum NoteType but lives
    *  in a different display slot than 4-lane green; `variant: '5-lane'`

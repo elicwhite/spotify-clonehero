@@ -50,8 +50,6 @@ import {
   rhythmSchema,
   keysSchema,
   listNotes,
-  defaultFlagBits,
-  laneToType,
   schemaForInstrument,
   schemaForTrack,
   snapTickToGrid,
@@ -81,8 +79,9 @@ const GRID_SHORTCUT_MAP: Record<string, number> = {
 };
 
 /**
- * Tool mode mapped to number keys (always available via Ctrl+N, also
- * available without modifier when not in Place mode).
+ * Tool mode mapped to number keys, bare or with Mod, in every mode. No
+ * number key places a note: notes are placed with the pointer, so a number
+ * never means one thing in Place Note mode and another everywhere else.
  *
  * Only the modes the sidebar's tool row can show as active are bound.
  * `erase` is reachable through the piano roll's context menus and
@@ -96,12 +95,12 @@ const TOOL_SHORTCUT_MAP: Record<string, ToolMode> = {
 };
 
 /**
- * Every schema an editor page can be actively scoped to. Lane-key and
- * flag-key hotkeys are registered once per key in the union of these
- * schemas' `defaultKey` fields (a fixed set, so hook order/count stays
- * stable across renders) and resolve the *active* schema's binding for
- * that key at keypress time — a lane/flag without a `defaultKey` in the
- * active schema simply no-ops for that key.
+ * Every schema an editor page can be actively scoped to. Flag-key hotkeys
+ * are registered once per key in the union of these schemas' flag-binding
+ * `defaultKey` fields (a fixed set, so hook order/count stays stable across
+ * renders) and resolve the *active* schema's binding for that key at
+ * keypress time — a flag without a `defaultKey` in the active schema simply
+ * no-ops for that key.
  */
 const ALL_SCHEMAS: readonly InstrumentSchema[] = [
   drums4LaneSchema,
@@ -111,17 +110,6 @@ const ALL_SCHEMAS: readonly InstrumentSchema[] = [
   rhythmSchema,
   keysSchema,
 ];
-
-/** Union of lane `defaultKey`s across every schema (place-mode keys). */
-const LANE_KEYS: readonly string[] = Array.from(
-  new Set(
-    ALL_SCHEMAS.flatMap(schema =>
-      schema.lanes
-        .filter(l => l.defaultKey !== undefined)
-        .map(l => l.defaultKey!),
-    ),
-  ),
-);
 
 /** Union of flag-binding `defaultKey`s across every schema. */
 const FLAG_KEYS: readonly string[] = Array.from(
@@ -149,8 +137,7 @@ function activeNoteIds(
  * Generic shortcuts (shared across all editor pages):
  * - Grid navigation (Up/Down/Left/Right arrows = grid step, Mod+Up/Down =
  *   measure; Mod+Left/Right = section, bound in TransportControls)
- * - Lane keys (0-5 in Place mode = place/toggle note at cursor)
- * - Tool selection (Mod+1/2/6 always, 1/2/6 when not in Place mode)
+ * - Tool selection (1/2 and Mod+1/2, in every mode)
  * - Note flags (Q, A, S)
  * - Grid snap (Shift+1 through Shift+6, Shift+0)
  * - Editing (Mod+Z undo, Mod+Shift+Z/Mod+Y redo, Delete, Mod+A, Escape)
@@ -172,8 +159,8 @@ export function useEditorKeyboard(onSave?: () => void) {
   // there's no notes track to operate on.
   const getActiveTrack = useCallback(() => selectActiveTrack(state), [state]);
 
-  // Active-scope schema, for lane/flag keyboard shortcuts and note
-  // add/select. Falls back to `drums4LaneSchema` for non-track scopes so
+  // Active-scope schema, for flag keyboard shortcuts and note add/select.
+  // Falls back to `drums4LaneSchema` for non-track scopes so
   // callers that unconditionally need a schema (e.g. select-all with no
   // track) still get sane lane math for an empty result.
   const getActiveSchema = useCallback(
@@ -572,17 +559,14 @@ export function useEditorKeyboard(onSave?: () => void) {
   });
 
   // -----------------------------------------------------------------------
-  // Tool selection via Mod+N (always available)
+  // Tool selection: the number key, bare or with Mod, in every mode
   // -----------------------------------------------------------------------
   for (const [key, tool] of Object.entries(TOOL_SHORTCUT_MAP)) {
+    const selectTool = () => dispatch({type: 'SET_ACTIVE_TOOL', tool});
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(
-      `Mod+${key}` as Hotkey,
-      () => {
-        dispatch({type: 'SET_ACTIVE_TOOL', tool});
-      },
-      {conflictBehavior: 'allow'},
-    );
+    useHotkey(key as Hotkey, selectTool, {conflictBehavior: 'allow'});
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useHotkey(`Mod+${key}` as Hotkey, selectTool, {conflictBehavior: 'allow'});
   }
 
   // -----------------------------------------------------------------------
@@ -691,68 +675,6 @@ export function useEditorKeyboard(onSave?: () => void) {
         dispatch({type: 'SET_GRID_DIVISION', division});
       },
       {conflictBehavior: 'allow'},
-    );
-  }
-
-  // -----------------------------------------------------------------------
-  // Lane keys in Place mode — place/toggle note at cursor. Registered once
-  // per key in `LANE_KEYS` (the union across every schema, so hook order
-  // is stable); each handler resolves the *active* schema's lane for that
-  // key and no-ops if the active schema has no lane bound to it.
-  // -----------------------------------------------------------------------
-  for (const key of LANE_KEYS) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(
-      key as Hotkey,
-      () => {
-        if (!state.chartDoc) return;
-        const trackKey = trackKeyFromScope(state.activeScope);
-        if (!trackKey) return;
-        const schema = getActiveSchema();
-        const lane = schema.lanes.find(l => l.defaultKey === key);
-        if (!lane) return;
-        const type = laneToType(schema, lane.index);
-        const tick = state.cursorTick;
-
-        const track = getActiveTrack();
-        if (track) {
-          const existing = listNotes(track, schema).find(
-            n => n.tick === tick && n.type === type,
-          );
-          if (existing) {
-            const id = noteId(existing);
-            executeCommand(new DeleteNotesCommand(new Set([id]), trackKey));
-          } else {
-            executeCommand(
-              new AddNoteCommand(
-                toSchemaNote({
-                  tick,
-                  type,
-                  length: 0,
-                  flags: defaultFlagBits(schema, type),
-                }),
-                trackKey,
-                schema,
-              ),
-            );
-          }
-        }
-      },
-      {enabled: state.activeTool === 'place', conflictBehavior: 'allow'},
-    );
-  }
-
-  // -----------------------------------------------------------------------
-  // Tool selection (number keys, when NOT in Place mode)
-  // -----------------------------------------------------------------------
-  for (const [key, tool] of Object.entries(TOOL_SHORTCUT_MAP)) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useHotkey(
-      key as Hotkey,
-      () => {
-        dispatch({type: 'SET_ACTIVE_TOOL', tool});
-      },
-      {enabled: state.activeTool !== 'place', conflictBehavior: 'allow'},
     );
   }
 

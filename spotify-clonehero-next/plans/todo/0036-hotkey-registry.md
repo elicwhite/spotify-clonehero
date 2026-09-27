@@ -6,13 +6,13 @@
 
 ## Context
 
-`components/chart-editor/hooks/useEditorKeyboard.ts` registers hotkeys via inline `useHotkey` calls scattered across multiple useEffect blocks, with a `react-hooks/rules-of-hooks` eslint-disable to loop over keys. Drum-transcription's "Enter to mark reviewed" / "N for next low-confidence" are inline calls in another hook. Place-mode lane keys (1-5), flag toggle keys (Q/A/S), and tool-mode keys are all separate.
+`components/chart-editor/hooks/useEditorKeyboard.ts` registers hotkeys via inline `useHotkey` calls scattered across multiple useEffect blocks, with a `react-hooks/rules-of-hooks` eslint-disable to loop over keys. Drum-transcription's "Enter to mark reviewed" / "N for next low-confidence" are inline calls in another hook. Flag toggle keys (Q/A/S) and tool-mode keys (1/2, bare or with Mod) are separate. There are no lane keys: plan 0132 removed them, and notes are placed with the pointer.
 
 Adding a new shortcut today means finding the right place to wedge it in; collisions happen silently.
 
 ## Goal
 
-A central action registry. Pages register actions and declare scope. The dispatcher handles enable/disable based on current scope (e.g. "place-tool active" / "note-selected"). One source of truth for the keymap, queryable from a future shortcuts UI.
+A central action registry. Pages register actions and declare scope. The dispatcher handles enable/disable based on current scope (e.g. "note-selected"). One source of truth for the keymap, queryable from a future shortcuts UI.
 
 ## Design
 
@@ -22,13 +22,12 @@ A central action registry. Pages register actions and declare scope. The dispatc
 type ActionScope =
   | 'global' // always live
   | 'editor' // any time editor is mounted
-  | 'place-tool' // only when toolMode === 'place'
   | 'note-selected' // any selected note
   | 'marker-selected' // any selected marker (lyric / phrase / etc.)
   | 'transport'; // playback context
 
 interface ActionDefinition {
-  id: string; // 'editor.placeLane.0', 'editor.flag.cymbal'
+  id: string; // 'editor.tool.cursor', 'editor.flag.cymbal'
   keys: string; // tanstack-hotkeys format
   scope: ActionScope[];
   preventDefault?: boolean;
@@ -51,16 +50,16 @@ Defined in `components/chart-editor/actions.ts`:
 export const DEFAULT_ACTIONS: ActionDefinition[] = [
   {id: 'editor.undo', keys: 'Mod+Z', scope: ['editor']},
   {id: 'editor.redo', keys: 'Mod+Shift+Z', scope: ['editor']},
-  {id: 'editor.placeLane.0', keys: '1', scope: ['place-tool']},
-  // ... per-lane keys read from the active InstrumentSchema (phase 1)
+  {id: 'editor.tool.cursor', keys: '1', scope: ['editor']},
   {id: 'editor.flag.cymbal', keys: 'Q', scope: ['note-selected']},
+  // ... per-flag keys read from the active InstrumentSchema (phase 1)
   // ...
   {id: 'transport.playPause', keys: 'Space', scope: ['transport']},
   {id: 'editor.delete', keys: 'Delete', scope: ['editor']},
 ];
 ```
 
-Place-mode keys aren't hard-coded any more — they're emitted from the active `InstrumentSchema.lanes[].defaultKey`. The registry is the merge of defaults + per-page overrides + schema-derived per-lane bindings.
+Flag keys aren't hard-coded — they're emitted from the active `InstrumentSchema.flagBindings[].defaultKey`. The registry is the merge of defaults + per-page overrides + schema-derived flag bindings.
 
 ### 3. Per-page additions
 
@@ -85,7 +84,7 @@ Behind the scenes, this can still use `@tanstack/react-hotkeys` — but the surf
 
 - `useEditorKeyboard` becomes a thin wrapper that registers `DEFAULT_ACTIONS` + binds each id to the existing imperative handlers.
 - The drum-transcription review hotkeys move to a `useTranscriptionActions(...)` hook in the page.
-- The lane key map and flag key map are removed; replaced by schema lookups.
+- The flag key map is removed; replaced by schema lookups.
 
 ## Tasks (suggested order)
 
@@ -104,7 +103,7 @@ Behind the scenes, this can still use `@tanstack/react-hotkeys` — but the surf
 
 ## Open questions
 
-1. **Scope precedence on conflicts** — if `editor` and `place-tool` both register `1`, which wins? Lean: more specific scope (here, `place-tool`). Document precedence rules.
+1. **Scope precedence on conflicts** — if two scopes register the same key, which wins? Lean: the more specific scope. Document precedence rules.
 2. **Mac/Win meta key** — `Mod` is the conventional "Cmd on Mac, Ctrl on Win". Confirm `@tanstack/react-hotkeys` supports it natively. If not, write a small translator.
 
 ## Out of scope

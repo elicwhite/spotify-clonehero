@@ -26,6 +26,7 @@ import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {addNote} from '@/lib/chart-edit/entities/notes';
 import {guitarSchema} from '@/lib/chart-edit';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 
 // jsdom never implements `HTMLElement.isContentEditable` (it's always
 // `undefined`), which is what `@tanstack/hotkeys` reads to decide an element
@@ -164,5 +165,82 @@ describe('useEditorKeyboard — ignore hotkeys while a text entry is focused (pl
     fireEvent.keyDown(editable, {key: 'Escape'});
 
     expect(screen.getByTestId('selected-count').textContent).toBe('0');
+  });
+});
+
+/** Opens the drums fixture in Place Note mode and shows the active tool and
+ *  how many notes the track holds. */
+function ToolHarness() {
+  const {state, dispatch} = useChartEditorContext();
+  useEditorKeyboard();
+
+  useEffect(() => {
+    dispatch({type: 'SET_CHART_DOC', chartDoc: makeFixtureDoc()});
+    dispatch({type: 'SET_ACTIVE_TOOL', tool: 'place'});
+  }, [dispatch]);
+
+  const noteCount =
+    state.chartDoc?.parsedChart.trackData[0].noteEventGroups.flat().length ?? 0;
+  return (
+    <div>
+      <div data-testid="tool">{state.activeTool}</div>
+      <div data-testid="note-count">{noteCount}</div>
+    </div>
+  );
+}
+
+describe('useEditorKeyboard — number keys pick tools and never place notes', () => {
+  function mountInPlaceMode() {
+    render(
+      <AudioServiceProvider>
+        <ChartEditorProvider>
+          <ToolHarness />
+        </ChartEditorProvider>
+      </AudioServiceProvider>,
+    );
+    expect(screen.getByTestId('tool').textContent).toBe('place');
+    // The fixture's drums/expert track: kick, red, yellow, blue, green.
+    expect(screen.getByTestId('note-count').textContent).toBe('5');
+  }
+
+  it('a bare 1 selects the Cursor tool in Place Note mode', () => {
+    mountInPlaceMode();
+
+    fireEvent.keyDown(document, {key: '1'});
+
+    expect(screen.getByTestId('tool').textContent).toBe('cursor');
+    expect(screen.getByTestId('note-count').textContent).toBe('5');
+  });
+
+  it('a bare 2 selects Place Note again', () => {
+    mountInPlaceMode();
+
+    fireEvent.keyDown(document, {key: '1'});
+    expect(screen.getByTestId('tool').textContent).toBe('cursor');
+    fireEvent.keyDown(document, {key: '2'});
+
+    expect(screen.getByTestId('tool').textContent).toBe('place');
+  });
+
+  it('no number key adds or removes a note in Place Note mode', () => {
+    mountInPlaceMode();
+
+    // 2 is the Place Note key itself: pressed in Place Note mode it keeps
+    // that tool and places nothing.
+    for (const key of ['0', '2', '3', '4', '5', '6', '7', '8', '9']) {
+      fireEvent.keyDown(document, {key});
+    }
+
+    expect(screen.getByTestId('note-count').textContent).toBe('5');
+    expect(screen.getByTestId('tool').textContent).toBe('place');
+  });
+
+  it('Mod+1 selects the Cursor tool too', () => {
+    mountInPlaceMode();
+
+    fireEvent.keyDown(document, {key: '1', ctrlKey: true});
+
+    expect(screen.getByTestId('tool').textContent).toBe('cursor');
+    expect(screen.getByTestId('note-count').textContent).toBe('5');
   });
 });

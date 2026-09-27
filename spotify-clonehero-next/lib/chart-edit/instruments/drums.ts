@@ -8,11 +8,6 @@
  * that speaks in "editor lane" numbers derive from this array's order —
  * reordering it is the one and only way to change lane numbering.
  *
- * `defaultKey` on each lane is the place-mode hotkey (`1` kick,
- * `2`-`5` strip lanes) — independent of lane *number*, kept stable across
- * the reorder above so muscle memory doesn't shift; `useEditorKeyboard.ts`
- * reads these.
- *
  * Flag bindings cover the drum-specific `cymbal` / `accent` / `ghost` /
  * `flam` / `doubleKick` flags. Only flags with a `defaultKey` get a
  * keyboard shortcut and a button in `NoteInspector`, in this array's
@@ -49,9 +44,9 @@ const STRIP_X_5LANE = (i: number): number =>
 // is only where its hover ghost sits and where a pointer has to be to mean
 // "kick" rather than a pad. With four pads that is the free gap between
 // yellow and blue; with five it is the blue pad's own center, so 5-lane
-// pointer placement resolves to blue and the kick is placed with its
-// `defaultKey` instead (`worldXToLane` in `InteractionManager.ts` spells the
-// tie-break, and `drums.schema.test.ts` pins it).
+// highway placement resolves to blue and the kick is placed on the piano
+// roll's kick row instead (`worldXToLane` in `InteractionManager.ts` spells
+// the tie-break, and `InteractionManager.test.ts` pins it).
 const KICK_X = 0;
 
 // `index` is each lane's position in its schema's `lanes` array, which is the
@@ -64,7 +59,6 @@ const KICK_4LANE: LaneDefinition = {
   label: 'Kick',
   color: '#f8b272',
   pianoRollColor: '#f2994a',
-  defaultKey: '1',
   worldXOffset: KICK_X,
   fullWidth: true,
 };
@@ -77,7 +71,6 @@ const RED: LaneDefinition = {
   label: 'Red',
   color: '#dd2214',
   pianoRollColor: '#e5484d',
-  defaultKey: '2',
   worldXOffset: STRIP_X(0),
 };
 
@@ -87,7 +80,6 @@ const YELLOW: LaneDefinition = {
   label: 'Yellow',
   color: '#deeb52',
   pianoRollColor: '#f5c742',
-  defaultKey: '3',
   worldXOffset: STRIP_X(1),
 };
 
@@ -97,7 +89,6 @@ const BLUE: LaneDefinition = {
   label: 'Blue',
   color: '#006caf',
   pianoRollColor: '#4a9ef2',
-  defaultKey: '4',
   worldXOffset: STRIP_X(2),
 };
 
@@ -107,7 +98,6 @@ const GREEN_4LANE: LaneDefinition = {
   label: 'Green',
   color: '#01b11a',
   pianoRollColor: '#5cc262',
-  defaultKey: '5',
   worldXOffset: STRIP_X(3),
 };
 
@@ -117,7 +107,6 @@ const GREEN_5LANE: LaneDefinition = {
   label: 'Green',
   color: '#01b11a',
   pianoRollColor: '#5cc262',
-  defaultKey: '6',
   variant: '5-lane',
   worldXOffset: STRIP_X_5LANE(4),
 };

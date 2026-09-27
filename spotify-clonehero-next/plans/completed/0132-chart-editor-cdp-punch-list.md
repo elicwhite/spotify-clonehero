@@ -1,6 +1,6 @@
 # 0132 — Four chart-editor bugs found driving the editor over CDP
 
-Status: in-progress
+Status: completed
 
 Four defects in `/chart-editor`, found by driving the real editor over the
 Chrome DevTools Protocol. Each one got a failing test before its fix.
