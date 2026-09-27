@@ -21,12 +21,9 @@ import {
 import {
   AddNoteCommand,
   DeleteNotesCommand,
-  MoveEntitiesCommand,
 } from '@/lib/chart-editor-core/commands';
 import {prospectiveNoteAt} from '../editing/prospectiveNote';
 import {
-  entityContextFromScope,
-  localNoteIdsForTrack,
   trackKeyFromScope,
   trackQualifiedNoteId,
 } from '@/lib/chart-editor-core/scope';
@@ -38,6 +35,7 @@ import {
   exceedsDragThreshold,
   selectionLaneSpan,
 } from '../editing/gestures';
+import {noteDragCommit} from '../editing/dragCommit';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 
 /**
@@ -153,27 +151,10 @@ export const selectMoveTool: EditorTool = {
 
   onPointerUp(ctx: ToolContext): void {
     const trackKey = trackKeyFromScope(ctx.state.activeScope);
-    const noteSelection = trackKey
-      ? new Set(
-          localNoteIdsForTrack(getSelectedIds(ctx.state, 'note'), trackKey),
-        )
-      : new Set<string>();
     const noteDrag = ctx.drag.noteDrag;
-    if (
-      noteDrag?.active &&
-      (noteDrag.tickDelta !== 0 || noteDrag.laneDelta !== 0) &&
-      noteSelection.size > 0
-    ) {
-      ctx.executeCommand(
-        new MoveEntitiesCommand(
-          'note',
-          Array.from(noteSelection),
-          noteDrag.tickDelta,
-          noteDrag.laneDelta,
-          entityContextFromScope(ctx.state.activeScope),
-        ),
-      );
-    }
+    if (!trackKey || !noteDrag?.active) return;
+    const commit = noteDragCommit(ctx.state, trackKey, noteDrag);
+    if (commit) ctx.executeCommand(commit.command, commit.selection);
   },
 };
 

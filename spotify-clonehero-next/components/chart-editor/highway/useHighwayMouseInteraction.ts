@@ -27,7 +27,7 @@ import {
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
 import type {EntityKind, NoteEvent} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import type {ExecuteCommand} from '../hooks/useEditCommands';
 import type {
   ChartEditorAction,
   ChartEditorState,
@@ -73,7 +73,7 @@ export interface UseHighwayMouseInteractionInputs {
   activeNotes: NoteEvent[];
   timedTempos: TimedTempo[];
   resolution: number;
-  executeCommand: (cmd: EditCommand) => void;
+  executeCommand: ExecuteCommand;
   dispatch: (action: ChartEditorAction) => void;
   /**
    * When true, an uncommitted tempo candidate is being previewed: the highway

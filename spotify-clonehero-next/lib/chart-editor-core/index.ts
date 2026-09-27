@@ -68,5 +68,6 @@ export type {
   ChartEditorContextValue,
   ChartEditorState,
   PendingTempoCandidate,
+  SelectionPatch,
   ToolMode,
 } from './state';

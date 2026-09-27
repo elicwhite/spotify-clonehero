@@ -16,7 +16,7 @@
  */
 
 import type {EntityKind, InstrumentSchema, NoteEvent} from '@/lib/chart-edit';
-import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import type {ExecuteCommand} from '../hooks/useEditCommands';
 import type {
   ChartEditorAction,
   ChartEditorState,
@@ -77,7 +77,7 @@ export interface ToolContext {
   timedTempos: TimedTempo[];
   resolution: number;
   dispatch: (action: ChartEditorAction) => void;
-  executeCommand: (cmd: EditCommand) => void;
+  executeCommand: ExecuteCommand;
   screenToLane: (x: number, y: number) => number;
   screenToMs: (x: number, y: number) => number;
   screenToTick: (x: number, y: number) => number;

@@ -570,20 +570,33 @@ export class MoveEntitiesCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
+    return this.run(doc).doc;
+  }
+
+  /**
+   * Where each of this command's ids lands when it runs on `doc`, in input
+   * order; an id that names nothing keeps its own. An entity's id is its
+   * position (`tick:type` for a note, `part:tick` for a lyric), so a move
+   * renames everything it moves, and a selection has to follow the new names
+   * or it points at nothing. Pure like `execute`: it moves a copy.
+   */
+  movedIds(doc: ChartDocument): string[] {
+    return this.run(doc).ids;
+  }
+
+  private run(doc: ChartDocument): {doc: ChartDocument; ids: string[]} {
     const handler = entityHandlers[this.kind];
     const newDoc = cloneDocFor(this.kind, doc, this.ctx);
     const laneDelta = handler.supportsLaneDelta ? this.laneDelta : 0;
     // A kind whose ids encode position resolves the whole set at once: moving
     // them one at a time would look each id up in a document the previous
     // moves already changed.
-    if (handler.moveMany) {
-      handler.moveMany(newDoc, this.ids, this.tickDelta, laneDelta, this.ctx);
-    } else {
-      for (const id of this.ids) {
-        handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx);
-      }
-    }
-    return newDoc;
+    const ids = handler.moveMany
+      ? handler.moveMany(newDoc, this.ids, this.tickDelta, laneDelta, this.ctx)
+      : this.ids.map(id =>
+          handler.move(newDoc, id, this.tickDelta, laneDelta, this.ctx),
+        );
+    return {doc: newDoc, ids};
   }
 }
 

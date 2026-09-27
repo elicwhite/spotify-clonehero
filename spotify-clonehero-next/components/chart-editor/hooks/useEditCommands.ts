@@ -1,8 +1,17 @@
 'use client';
 
 import {useCallback} from 'react';
+import type {SelectionPatch} from '@/lib/chart-editor-core';
 import {useChartEditorContext} from '../ChartEditorContext';
 import type {EditCommand} from '@/lib/chart-editor-core/commands';
+
+/** Runs a command against the current doc — see {@link useExecuteCommand}.
+ *  Every surface that forwards it takes this type, so none can drop the
+ *  `selection` a move hands it. */
+export type ExecuteCommand = (
+  command: EditCommand,
+  selection?: SelectionPatch,
+) => void;
 
 /**
  * Hook that provides a function to execute an EditCommand.
@@ -21,17 +30,21 @@ import type {EditCommand} from '@/lib/chart-editor-core/commands';
  * effect and pushes to the reconciler whenever that doc reference changes.
  * This hook only needs to dispatch the new doc — it does not push to the
  * reconciler itself.
+ *
+ * `selection` is the selection once the command has run, for a command that
+ * renames what is selected (a move). It lands in the same step as the doc,
+ * so undo puts the old selection back with the old positions.
  */
 export function useExecuteCommand() {
   const {state, dispatch} = useChartEditorContext();
 
-  const executeCommand = useCallback(
-    (command: EditCommand) => {
+  const executeCommand = useCallback<ExecuteCommand>(
+    (command, selection) => {
       const doc = state.chartDoc;
       if (!doc) return;
 
       const newDoc = command.execute(doc);
-      dispatch({type: 'EXECUTE_COMMAND', command, chartDoc: newDoc});
+      dispatch({type: 'EXECUTE_COMMAND', command, chartDoc: newDoc, selection});
     },
     [state.chartDoc, dispatch],
   );

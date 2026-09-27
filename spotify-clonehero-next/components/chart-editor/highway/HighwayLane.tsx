@@ -64,7 +64,7 @@ import type {HighwayStage} from '@/lib/preview/highway';
 import type {HighwayRect} from '@/lib/preview/highway/layout';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {ChartDocument} from '@/lib/chart-edit';
-import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import type {ExecuteCommand} from '../hooks/useEditCommands';
 import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {useChartElements} from './useChartElements';
@@ -97,7 +97,7 @@ export interface HighwayLaneProps {
   state: ChartEditorState;
   dispatch: (action: ChartEditorAction) => void;
   capabilities: EditorCapabilities;
-  executeCommand: (cmd: EditCommand) => void;
+  executeCommand: ExecuteCommand;
   renderDoc: ChartDocument | null;
   timedTempos: TimedTempo[];
   renderTimedTempos: TimedTempo[];

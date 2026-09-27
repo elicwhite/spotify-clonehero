@@ -168,6 +168,7 @@ import {
   exceedsDragThreshold,
   selectionLaneSpan,
 } from '../editing/gestures';
+import {selectionDragCommit} from '../editing/dragCommit';
 import {
   MARQUEE_KINDS,
   bandsTouched,
@@ -3352,52 +3353,17 @@ export default function PianoRollTimeline({
         noteResizeRef.current = null;
       }
 
-      if (mode === 'drag' && noteDragRef.current) {
-        const drag = noteDragRef.current;
-        if (drag.active && (drag.tickDelta !== 0 || drag.laneDelta !== 0)) {
-          const st = editStateRef.current;
-          const ids = localNoteIdsForTrack(
-            getSelectedIds(st, 'note'),
-            drag.trackKey,
-          );
-          // A mixed note+lyric selection (built via shift-click or marquee)
-          // moves together: lyrics ride along at the notes' grid-snapped
-          // tickDelta (no lane delta — lyrics don't have lanes), each
-          // independently clamped to its own phrase by `moveLyric` inside
-          // the lyric handler. Both moves land in one `BatchCommand` so
-          // undo/redo treats the group drag as a single edit.
-          //
-          // Co-selected tempo markers and signature chips deliberately stay
-          // put. A marker move is not a tick translation: `applyMarkerMoveBpms`
-          // moves it in MS and rewrites the BPM of the segments on both sides,
-          // so "move five markers by this delta" needs its own lib operation
-          // (and its own `MIN_SEGMENT_MS` clamping) before it can mean
-          // anything. Sections are chart-wide and likewise ride only their own
-          // ruler drag.
-          const lyricIds = Array.from(getSelectedIds(st, 'lyric'));
-          const cmds: EditCommand[] = [];
-          if (ids.length > 0) {
-            cmds.push(
-              new MoveEntitiesCommand(
-                'note',
-                ids,
-                drag.tickDelta,
-                drag.laneDelta,
-                {trackKey: drag.trackKey},
-              ),
-            );
-          }
-          if (lyricIds.length > 0) {
-            cmds.push(
-              new MoveEntitiesCommand('lyric', lyricIds, drag.tickDelta, 0),
-            );
-          }
-          if (cmds.length === 1) {
-            executeCommand(cmds[0]);
-          } else if (cmds.length > 1) {
-            executeCommand(new BatchCommand(cmds));
-          }
-        }
+      // Commit a note drag: the selected notes on the dragged row, plus any
+      // co-selected lyrics, move in one step and stay selected under their
+      // new ids (`selectionDragCommit`).
+      const noteDrag = noteDragRef.current;
+      if (mode === 'drag' && noteDrag?.active) {
+        const commit = selectionDragCommit(
+          editStateRef.current,
+          noteDrag.trackKey,
+          noteDrag,
+        );
+        if (commit) executeCommand(commit.command, commit.selection);
       }
 
       // Commit a tempo-marker drag: the committed op is the same one the live
@@ -3477,6 +3443,9 @@ export default function PianoRollTimeline({
       if (mode === 'section' && sectionDragRef.current) {
         const drag = sectionDragRef.current;
         if (drag.moved && drag.currentTick !== drag.originalTick) {
+          // A section's id is its tick, so the move renames it. The selection
+          // follows in the same step, so undo puts the old one back — even
+          // where the drop replaced another section at that tick.
           executeCommand(
             new MoveEntitiesCommand(
               'section',
@@ -3485,12 +3454,8 @@ export default function PianoRollTimeline({
               0,
               entityContextFromScope(editStateRef.current.activeScope),
             ),
+            {section: new Set([String(drag.currentTick)])},
           );
-          dispatch({
-            type: 'SET_SELECTION',
-            kind: 'section',
-            ids: new Set([String(drag.currentTick)]),
-          });
         } else {
           const scene = sceneRef.current;
           const section = scene?.sections.find(

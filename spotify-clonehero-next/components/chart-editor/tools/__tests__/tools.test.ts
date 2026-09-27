@@ -9,7 +9,7 @@
 
 import {noteTypes} from '@eliwhite/scan-chart';
 import {drums4LaneSchema} from '@/lib/chart-edit';
-import {EditorSession} from '@/lib/chart-editor-core';
+import {EditorSession, type SelectionPatch} from '@/lib/chart-editor-core';
 import {DRUM_EDIT_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
 import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {noteId, type EditCommand} from '@/lib/chart-editor-core/commands';
@@ -80,7 +80,7 @@ function makeContext(
     timedTempos: [{tick: 0, beatsPerMinute: 120, msTime: 0}],
     resolution: RESOLUTION,
     dispatch: session.dispatch,
-    executeCommand: (cmd: EditCommand) => {
+    executeCommand: (cmd: EditCommand, selection?: SelectionPatch) => {
       const doc = session.getState().chartDoc;
       if (!doc) return;
       const newDoc = cmd.execute(doc);
@@ -88,6 +88,7 @@ function makeContext(
         type: 'EXECUTE_COMMAND',
         command: cmd,
         chartDoc: newDoc,
+        selection,
       });
     },
     screenToLane: (x: number) => x,
@@ -97,6 +98,20 @@ function makeContext(
     ...overrides,
   };
   return ctx;
+}
+
+/** A context mid-drag: `noteDrag` is the drag the pointer is holding. */
+function draggingContext(session: EditorSession, noteDrag: NoteDragState) {
+  const ctx = makeContext(session);
+  return makeContext(session, {
+    drag: {
+      ...ctx.drag,
+      isDragging: true,
+      noteDrag,
+      dragStart: {x: 0, y: 0},
+      dragCurrent: {x: 0, y: 0},
+    },
+  });
 }
 
 function evt(overrides: Partial<PointerHitInfo> = {}): PointerHitInfo {
@@ -194,6 +209,49 @@ describe('selectMoveTool', () => {
         .flat()
         .find(n => n.type === noteTypes.redDrum);
     expect(movedNote?.tick).toBe(720);
+    // A note id is its position, so the move renamed it; the selection
+    // follows, or it would name nothing and the moved note would lose its
+    // halo.
+    expect(ctx.state.selection.get('note')).toEqual(
+      new Set([qualified(noteId({tick: 720, type: noteTypes.redDrum}))]),
+    );
+  });
+
+  it('undo puts back the selection the drag renamed, even where it dropped a note onto another', () => {
+    const session = makeSession();
+    session.dispatch({
+      type: 'SET_SELECTION',
+      kind: 'note',
+      ids: new Set([qualified(RED_ID)]),
+    });
+    // Red at 480 lands on yellow's lane at 960, where the fixture already
+    // has a yellow note: the moved note replaces it.
+    selectMoveTool.onPointerUp?.(
+      draggingContext(session, {
+        anchorTick: 480,
+        anchorLane: 0,
+        tickDelta: 480,
+        laneDelta: 1,
+        active: true,
+      }),
+      evt(),
+    );
+    const selectedNotes = () => session.getState().selection.get('note');
+    expect(selectedNotes()).toEqual(new Set([qualified(YELLOW_ID)]));
+
+    session.dispatch({
+      type: 'UNDO',
+      chartDoc: session.getState().undoEntries.at(-1)!.doc,
+    });
+    // The yellow note is back and was never selected, so a Delete now must
+    // not reach it.
+    expect(selectedNotes()).toEqual(new Set([qualified(RED_ID)]));
+
+    session.dispatch({
+      type: 'REDO',
+      chartDoc: session.getState().redoEntries.at(-1)!.doc,
+    });
+    expect(selectedNotes()).toEqual(new Set([qualified(YELLOW_ID)]));
   });
 
   it('leaves selection untouched for a non-note entity', () => {

@@ -33,6 +33,11 @@ export type ToolMode = (typeof TOOL_MODES)[number];
 /** Maximum number of undo entries before oldest are discarded. */
 export const UNDO_STACK_CAP = 200;
 
+/** New selection sets for some kinds; the kinds it leaves out keep theirs. */
+export type SelectionPatch = Partial<
+  Record<SelectableKind, ReadonlySet<string>>
+>;
+
 /**
  * One reversible step: the command that ran, the `ChartDocument` as it was
  * before it ran, and the `visibleTrackKeys` as they were before it ran.
@@ -44,11 +49,18 @@ export const UNDO_STACK_CAP = 200;
  * what makes undo restore the rows that were on screen, since visibility is
  * separate state that a doc-changing command (a delete, and the reducer's
  * at-least-one-visible repair) can move on its own.
+ *
+ * `selection` is there for the same reason, on the steps that carried one
+ * (`EXECUTE_COMMAND`'s `selection`): an entity's id is its position, so a
+ * move renames what is selected, and without the snapshot an undo would
+ * leave the selection naming positions the restored doc no longer has — or,
+ * where the move dropped a note onto another, naming the other note.
  */
 export interface UndoEntry {
   command: EditCommand;
   doc: ChartDocument;
   visible: ReadonlySet<string>;
+  selection?: Map<SelectableKind, Set<string>>;
 }
 
 /**
@@ -254,10 +266,7 @@ export type ChartEditorAction =
    * state object when no kind's set actually changed, so a marquee dragged
    * across empty space costs nothing.
    */
-  | {
-      type: 'SET_SELECTION_MULTI';
-      selection: Partial<Record<SelectableKind, ReadonlySet<string>>>;
-    }
+  | {type: 'SET_SELECTION_MULTI'; selection: SelectionPatch}
   /** Clear selection across all entity kinds. */
   | {type: 'CLEAR_SELECTION'}
   /** Set the single hovered entity (or null to clear). */
@@ -269,6 +278,12 @@ export type ChartEditorAction =
       command: EditCommand;
       /** Updated chart document (with re-parsed parsedChart) after apply. */
       chartDoc: ChartDocument;
+      /**
+       * The selection once the command has run, for a command that renames
+       * what is selected (a move). Applied with the doc, and put back by
+       * undo — see {@link UndoEntry}.
+       */
+      selection?: SelectionPatch | undefined;
     }
   /**
    * Replace the doc's `assistProvenance` bag without touching the undo or

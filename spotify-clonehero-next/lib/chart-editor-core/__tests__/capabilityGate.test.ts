@@ -136,6 +136,26 @@ describe('EditorSession.dispatch capability gate', () => {
     warnSpy.mockRestore();
   });
 
+  it('rejects the selection a disallowed command carries along with it', () => {
+    // A move hands the reducer the selection it leaves behind. When the move
+    // is refused, that selection names positions nothing moved to.
+    const session = sessionWith(TEMPO_CAPABILITIES);
+    const before = session.getState();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const cmd = noteCmd();
+    session.dispatch({
+      type: 'EXECUTE_COMMAND',
+      command: cmd,
+      chartDoc: cmd.execute(before.chartDoc!),
+      selection: {note: new Set(['drums:expert|240:kick'])},
+    });
+
+    expect(session.getState()).toBe(before);
+    expect(session.getState().selection.size).toBe(0);
+    warnSpy.mockRestore();
+  });
+
   it('applies an allowed command normally', () => {
     const session = sessionWith(DRUM_EDIT_CAPABILITIES);
     const before = session.getState();

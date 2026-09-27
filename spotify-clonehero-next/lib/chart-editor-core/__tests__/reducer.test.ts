@@ -20,7 +20,12 @@ import {
   type ChartEditorState,
 } from '@/lib/chart-editor-core';
 import type {EditCommand} from '../commands';
-import {AddBPMCommand, AddNoteCommand, toSchemaNote} from '../commands';
+import {
+  AddBPMCommand,
+  AddNoteCommand,
+  MoveEntitiesCommand,
+  toSchemaNote,
+} from '../commands';
 import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
 import {makeFixtureDoc} from './fixtures';
 import {noteTypes} from '@eliwhite/scan-chart';
@@ -337,6 +342,75 @@ describe('chartEditorReducer', () => {
         chartDoc: doc,
       });
       expect(next).toBe(seeded);
+    });
+  });
+
+  describe('a command that renames the selection', () => {
+    // A move renames what it moves (ids are positions), so it hands the
+    // reducer the selection it leaves behind. That selection is part of the
+    // step: undo and redo swap it with the doc.
+    const moved = {note: new Set(['drums:expert|720:redDrum'])};
+    const selectedNotes = (state: ChartEditorState) =>
+      state.selection.get('note');
+
+    function executeMove() {
+      const doc = makeFixtureDoc();
+      const seeded = chartEditorReducer(
+        {...initialState, chartDoc: doc},
+        {
+          type: 'SET_SELECTION',
+          kind: 'note',
+          ids: new Set(['drums:expert|480:redDrum']),
+        },
+      );
+      const cmd = new MoveEntitiesCommand('note', ['480:redDrum'], 240, 0, {
+        trackKey: DRUMS_KEY,
+      });
+      const exec = chartEditorReducer(seeded, {
+        ...executeAction(cmd, doc),
+        selection: moved,
+      });
+      return {doc, exec};
+    }
+
+    it('applies the selection with the doc', () => {
+      expect(selectedNotes(executeMove().exec)).toEqual(moved.note);
+    });
+
+    it('UNDO restores the selection from before the step, and REDO the one after it', () => {
+      const {doc, exec} = executeMove();
+      const undone = chartEditorReducer(exec, {type: 'UNDO', chartDoc: doc});
+      expect(selectedNotes(undone)).toEqual(
+        new Set(['drums:expert|480:redDrum']),
+      );
+
+      const redone = chartEditorReducer(undone, {
+        type: 'REDO',
+        chartDoc: exec.chartDoc!,
+      });
+      expect(selectedNotes(redone)).toEqual(moved.note);
+    });
+
+    it('UNDO of a step that set no selection leaves the selection alone', () => {
+      const doc = makeFixtureDoc();
+      const cmd = new AddNoteCommand(
+        toSchemaNote({tick: 240, type: noteTypes.kick}),
+        DRUMS_KEY,
+      );
+      const exec = chartEditorReducer(
+        {...initialState, chartDoc: doc},
+        executeAction(cmd, doc),
+      );
+      const selected = chartEditorReducer(exec, {
+        type: 'SET_SELECTION',
+        kind: 'note',
+        ids: new Set(['drums:expert|0:kick']),
+      });
+      const undone = chartEditorReducer(selected, {
+        type: 'UNDO',
+        chartDoc: doc,
+      });
+      expect(undone.selection).toBe(selected.selection);
     });
   });
 

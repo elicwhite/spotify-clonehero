@@ -14,6 +14,9 @@
  * translates the whole phrase instead, so the syllables keep their places
  * inside it rather than piling up against a bound that didn't move.
  *
+ * Whatever a drag moves stays selected: note and lyric ids are positions, so
+ * the drag renames them and the selection follows the new names.
+ *
  * Mounts the real PianoRollTimeline (same harness as contextMenu.test.tsx)
  * and drives the actual pointer event path.
  */
@@ -34,8 +37,14 @@ import {
 import type {Dispatch} from 'react';
 
 type ChartEditorDispatch = Dispatch<ChartEditorAction>;
-import {retimeChart} from '@/lib/chart-edit';
+import {
+  drums4LaneSchema,
+  listNotes,
+  lyricId,
+  retimeChart,
+} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
+import {noteId} from '@/lib/chart-editor-core/commands';
 import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
@@ -244,6 +253,25 @@ function lyricTicks(state: ChartEditorState | null): number[] {
     state?.chartDoc?.parsedChart.vocalTracks?.parts['vocals']?.notePhrases ??
     [];
   return phrases.flatMap(p => p.lyrics.map(l => l.tick)).sort((a, b) => a - b);
+}
+
+/** Every drum note's id, in the track-qualified form a selection holds. */
+function drumNoteIds(state: ChartEditorState | null): Set<string> {
+  const track = state?.chartDoc?.parsedChart.trackData[0];
+  if (!track) return new Set();
+  return new Set(
+    listNotes(track, drums4LaneSchema).map(n => `drums:expert|${noteId(n)}`),
+  );
+}
+
+/** Every lyric's id, in the form a selection holds. */
+function lyricIds(state: ChartEditorState | null): Set<string> {
+  return new Set(lyricTicks(state).map(tick => lyricId(tick)));
+}
+
+/** The ids in `after` that `before` lacked: where a drag put what it moved. */
+function added(before: Set<string>, after: Set<string>): Set<string> {
+  return new Set([...after].filter(id => !before.has(id)));
 }
 
 function phraseSpans(
@@ -614,5 +642,158 @@ describe('dragging the words of a fully-selected phrase moves the whole phrase',
     expect(phraseSpans(stateRef.current)).toEqual([{tick: 0, length: 960}]);
     // The dragged syllable clamped to the stationary phrase's end instead.
     expect(lyricTicks(stateRef.current)).toEqual([720, 960]);
+  });
+});
+
+describe('a drag keeps what it moved selected, under the new ids', () => {
+  // A note or lyric id is its position, so a drag renames everything it
+  // moves. Left on the old names, the selection names nothing: the moved
+  // notes lose their halo, and Cmd+C — which copies the track's notes whose
+  // ids are selected — copies nothing.
+
+  it('re-keys notes dragged along the timeline', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+    act(() => {
+      dispatchRef.current!({type: 'SET_GRID_DIVISION', division: 16});
+    });
+    const blueX = findNoteX(canvas, stateRef, '1440:blueDrum', 116, 100, 80);
+    act(() => {
+      click(canvas, RED_NOTE.x, RED_NOTE.y);
+    });
+    act(() => {
+      click(canvas, blueX, 116, true);
+    });
+    const before = drumNoteIds(stateRef.current);
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: RED_NOTE.x, y: RED_NOTE.y});
+      fireAt(canvas, 'pointermove', {x: RED_NOTE.x + 20, y: RED_NOTE.y});
+      fireAt(canvas, 'pointerup', {x: RED_NOTE.x + 20, y: RED_NOTE.y});
+    });
+
+    const moved = added(before, drumNoteIds(stateRef.current));
+    expect(moved.size).toBe(2);
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(moved);
+  });
+
+  it('re-keys a note dragged to another lane', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+    // Fine enough that wherever the pointer's x snaps, the moved note stays
+    // clear of the fixture's yellow note a quarter later.
+    act(() => {
+      dispatchRef.current!({type: 'SET_GRID_DIVISION', division: 16});
+    });
+    act(() => {
+      click(canvas, RED_NOTE.x, RED_NOTE.y);
+    });
+    const before = drumNoteIds(stateRef.current);
+
+    // One note lane (17.6px) down from red is yellow.
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: RED_NOTE.x, y: RED_NOTE.y});
+      fireAt(canvas, 'pointermove', {x: RED_NOTE.x, y: RED_NOTE.y + 18});
+      fireAt(canvas, 'pointerup', {x: RED_NOTE.x, y: RED_NOTE.y + 18});
+    });
+
+    const moved = added(before, drumNoteIds(stateRef.current));
+    expect([...moved]).toEqual([expect.stringMatching(/:yellowDrum$/)]);
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(moved);
+  });
+
+  it('re-keys the lyrics that ride along with a note drag', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+    act(() => {
+      dispatchRef.current!({type: 'SET_GRID_DIVISION', division: 16});
+    });
+    act(() => {
+      click(canvas, RED_NOTE.x, RED_NOTE.y);
+    });
+    act(() => {
+      click(canvas, LYRIC_240.x, LYRIC_240.y, true);
+    });
+    const notesBefore = drumNoteIds(stateRef.current);
+    const lyricsBefore = lyricIds(stateRef.current);
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: RED_NOTE.x, y: RED_NOTE.y});
+      fireAt(canvas, 'pointermove', {x: RED_NOTE.x + 20, y: RED_NOTE.y});
+      fireAt(canvas, 'pointerup', {x: RED_NOTE.x + 20, y: RED_NOTE.y});
+    });
+
+    const movedLyrics = added(lyricsBefore, lyricIds(stateRef.current));
+    expect(movedLyrics.size).toBe(1);
+    expect(getSelectedIds(stateRef.current!, 'lyric')).toEqual(movedLyrics);
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(
+      added(notesBefore, drumNoteIds(stateRef.current)),
+    );
+  });
+
+  it('puts the old selection back when the drag is undone', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+    act(() => {
+      dispatchRef.current!({type: 'SET_GRID_DIVISION', division: 16});
+    });
+    act(() => {
+      click(canvas, RED_NOTE.x, RED_NOTE.y);
+    });
+    const selectedBefore = new Set(getSelectedIds(stateRef.current!, 'note'));
+
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: RED_NOTE.x, y: RED_NOTE.y});
+      fireAt(canvas, 'pointermove', {x: RED_NOTE.x + 20, y: RED_NOTE.y});
+      fireAt(canvas, 'pointerup', {x: RED_NOTE.x + 20, y: RED_NOTE.y});
+    });
+    act(() => {
+      dispatchRef.current!({
+        type: 'UNDO',
+        chartDoc: stateRef.current!.undoEntries.at(-1)!.doc,
+      });
+    });
+
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(selectedBefore);
+    // ...and that selection names a note the restored chart has.
+    for (const id of selectedBefore) {
+      expect(drumNoteIds(stateRef.current).has(id)).toBe(true);
+    }
+  });
+
+  it('puts a dragged section’s selection back on undo, even where the drop replaced a section', async () => {
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
+    const sectionTicks = () =>
+      stateRef.current!.chartDoc!.parsedChart.sections.map(s => s.tick);
+    const selectedSections = () => getSelectedIds(stateRef.current!, 'section');
+
+    // Find the "Verse" flag (tick 1920) by clicking along the ruler: a press
+    // on a flag selects it.
+    let verseX = -1;
+    for (let x = 100; x <= 240 && verseX < 0; x++) {
+      act(() => {
+        click(canvas, x, 12);
+      });
+      if (selectedSections().has('1920')) verseX = x;
+    }
+    expect(verseX).toBeGreaterThan(0);
+
+    // Drop it on "Intro" at tick 0, which the move replaces.
+    act(() => {
+      fireAt(canvas, 'pointerdown', {x: verseX, y: 12});
+    });
+    act(() => {
+      fireAt(canvas, 'pointermove', {x: 0, y: 12});
+      fireAt(canvas, 'pointerup', {x: 0, y: 12});
+    });
+    expect(sectionTicks()).toEqual([0]);
+    expect(selectedSections()).toEqual(new Set(['0']));
+
+    act(() => {
+      dispatchRef.current!({
+        type: 'UNDO',
+        chartDoc: stateRef.current!.undoEntries.at(-1)!.doc,
+      });
+    });
+    // Both sections are back, and the selected one is still the one that was
+    // dragged — not the one it replaced, which a Delete would then remove.
+    expect(sectionTicks()).toEqual([0, 1920]);
+    expect(selectedSections()).toEqual(new Set(['1920']));
   });
 });

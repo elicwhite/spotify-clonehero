@@ -4,7 +4,11 @@ import type {
   SelectableKind,
 } from '@/lib/chart-edit';
 import {chartEndTick, deriveDownbeatFlags} from '@/lib/chart-edit';
-import type {ChartEditorAction, ChartEditorState} from './state';
+import type {
+  ChartEditorAction,
+  ChartEditorState,
+  SelectionPatch,
+} from './state';
 import {UNDO_STACK_CAP} from './state';
 import {
   parseTrackKeyId,
@@ -30,6 +34,26 @@ function sameIdSet(
   if (!a) return true;
   for (const id of a) if (!b.has(id)) return false;
   return true;
+}
+
+/** `selection` with `patch`'s kinds replaced (an empty set drops its kind),
+ *  or the same map when no kind actually changed. */
+function patchSelection(
+  selection: ChartEditorState['selection'],
+  patch: SelectionPatch,
+): ChartEditorState['selection'] {
+  let changed = false;
+  const next = new Map(selection);
+  for (const [kind, ids] of Object.entries(patch) as [
+    SelectableKind,
+    ReadonlySet<string>,
+  ][]) {
+    if (sameIdSet(next.get(kind), ids)) continue;
+    changed = true;
+    if (ids.size === 0) next.delete(kind);
+    else next.set(kind, new Set(ids));
+  }
+  return changed ? next : selection;
 }
 
 function recoverTrackScope(
@@ -195,19 +219,8 @@ export function chartEditorReducer(
       return {...state, selection: next};
     }
     case 'SET_SELECTION_MULTI': {
-      let changed = false;
-      const next = new Map(state.selection);
-      for (const [kind, ids] of Object.entries(action.selection) as [
-        SelectableKind,
-        ReadonlySet<string>,
-      ][]) {
-        const current = next.get(kind);
-        if (sameIdSet(current, ids)) continue;
-        changed = true;
-        if (ids.size === 0) next.delete(kind);
-        else next.set(kind, new Set(ids));
-      }
-      return changed ? {...state, selection: next} : state;
+      const selection = patchSelection(state.selection, action.selection);
+      return selection === state.selection ? state : {...state, selection};
     }
     case 'CLEAR_SELECTION':
       if (state.selection.size === 0) return state;
@@ -236,13 +249,16 @@ export function chartEditorReducer(
       const prevDoc = state.chartDoc;
       if (!prevDoc) return state;
 
-      // Push the pre-command state as one entry, capped at the limit.
+      // Push the pre-command state as one entry, capped at the limit. The
+      // selection rides along only when the command set one: a step that
+      // leaves the selection alone leaves undo's alone too.
       const undoEntries = [
         ...state.undoEntries,
         {
           command: action.command,
           doc: prevDoc,
           visible: state.visibleTrackKeys,
+          ...(action.selection && {selection: state.selection}),
         },
       ].slice(-UNDO_STACK_CAP);
 
@@ -268,6 +284,9 @@ export function chartEditorReducer(
       return {
         ...state,
         ...applyDocToState(state, action.chartDoc),
+        selection: action.selection
+          ? patchSelection(state.selection, action.selection)
+          : state.selection,
         dirty: true,
         undoEntries,
         // Clear redo stack on new edit (new branch)
@@ -315,6 +334,7 @@ export function chartEditorReducer(
       return {
         ...state,
         ...applyDocToState(state, action.chartDoc, undone.visible),
+        selection: undone.selection ?? state.selection,
         dirty: isDirty,
         undoEntries: state.undoEntries.slice(0, -1),
         redoEntries: [
@@ -323,6 +343,7 @@ export function chartEditorReducer(
             command: undone.command,
             doc: state.chartDoc,
             visible: state.visibleTrackKeys,
+            ...(undone.selection && {selection: state.selection}),
           },
         ],
         // Full recompute from the restored doc (plan 0074 Design C) — this
@@ -345,6 +366,7 @@ export function chartEditorReducer(
       return {
         ...state,
         ...applyDocToState(state, action.chartDoc, redone.visible),
+        selection: redone.selection ?? state.selection,
         dirty: isDirty,
         undoEntries: [
           ...state.undoEntries,
@@ -352,6 +374,7 @@ export function chartEditorReducer(
             command: redone.command,
             doc: state.chartDoc,
             visible: state.visibleTrackKeys,
+            ...(redone.selection && {selection: state.selection}),
           },
         ],
         redoEntries: state.redoEntries.slice(0, -1),
