@@ -6,6 +6,8 @@
  * the song, so all decodable stems are summed.
  */
 
+import {runSliced} from '@/lib/sliced-work';
+
 /** Per-channel sample data of one decoded audio file. Matches what an
  *  AudioBuffer yields via getChannelData(), but kept structural so the
  *  mixer is testable outside the browser. */
@@ -53,4 +55,36 @@ export function mixToInterleavedStereo(
   }
 
   return {data, channels: 2};
+}
+
+/**
+ * {@link mixToInterleavedStereo} for stems that are already interleaved in
+ * one shared layout — a chart package's files, which the editor decodes to
+ * interleaved stereo at a single rate. Same rules: the sum covers the
+ * longest stem, and a sum that clips is scaled down by its peak.
+ *
+ * Runs in slices that yield to the event loop ({@link runSliced}): the
+ * editor sums a package while it is already open, and a whole song of stems
+ * in one go would stall the highway.
+ */
+export async function mixInterleavedYielding(
+  stems: readonly Float32Array[],
+): Promise<Float32Array> {
+  const length = Math.max(0, ...stems.map(stem => stem.length));
+  const mix = new Float32Array(length);
+  let peak = 0;
+  await runSliced(length, (from, to) => {
+    for (const stem of stems) {
+      const end = Math.min(to, stem.length);
+      for (let i = from; i < end; i++) mix[i] += stem[i];
+    }
+    for (let i = from; i < to; i++) peak = Math.max(peak, Math.abs(mix[i]));
+  });
+  if (peak > 1) {
+    const scale = 1 / peak;
+    await runSliced(length, (from, to) => {
+      for (let i = from; i < to; i++) mix[i] *= scale;
+    });
+  }
+  return mix;
 }

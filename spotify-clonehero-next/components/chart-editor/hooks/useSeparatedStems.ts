@@ -50,7 +50,11 @@ import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
 import {interleaveAudioBuffer} from '@/lib/drum-transcription/audio/decoder';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {useAssistRunActivity} from '@/components/assist/useAssistRunner';
-import {packageHasDrumsAudio, type DecodedPackageAudio} from './projectAudio';
+import {
+  packageFiles,
+  packageHasDrumsAudio,
+  type DecodedPackageAudio,
+} from './projectAudio';
 import type {AudioStemInput} from './useShiftedAudio';
 
 /** The tasks whose success can leave a new stem in the cache. */
@@ -220,7 +224,9 @@ export function useSeparatedStems({
       // has no room for either separated stem, so there is nothing to look
       // up and nothing to offer separating.
       const wantDrums = !packageHasDrumsAudio(pkg);
-      const wantVocals = !pkg.stems.some(stem => stem.name === VOCALS_STEM);
+      const wantVocals = !packageFiles(pkg).some(
+        file => file.name === VOCALS_STEM,
+      );
       if (!wantDrums && !wantVocals) {
         setOffer(NO_OFFER);
         return;

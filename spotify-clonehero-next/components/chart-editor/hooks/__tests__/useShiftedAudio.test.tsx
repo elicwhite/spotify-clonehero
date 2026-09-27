@@ -156,6 +156,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       stems,
       chartDoc,
       () => {},
+      'song',
     );
 
     const fileNames = lastCapturedFiles.map(f => f.fileName);
@@ -180,6 +181,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       [{name: 'bass', pcm: interleavedPcm(100), origin: 'chart-file' as const}],
       makeChartDoc(),
       () => {},
+      'song',
     );
 
     for (const file of lastCapturedFiles) {
@@ -207,6 +209,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       [{name: 'bass', pcm: bass, origin: 'chart-file' as const}],
       makeChartDoc(),
       () => {},
+      'song',
     );
 
     expect(shiftedFullMixPcm).toBe(fullMix);
@@ -239,6 +242,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       [{name: 'bass', pcm: bass, origin: 'chart-file' as const}],
       makeChartDoc(),
       () => {},
+      'song',
     );
 
     const {sampleRate, channels} = AUDIO_META;
@@ -261,6 +265,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       [],
       makeChartDoc(),
       () => {},
+      'song',
     );
 
     expect(
@@ -279,6 +284,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       [],
       chartDoc,
       () => {},
+      'song',
     );
 
     const fileNames = lastCapturedFiles.map(f => f.fileName);
@@ -286,9 +292,9 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
   });
 
   it('names the full mix after the file it came from', async () => {
-    // A package with no `song` file promotes one of its own (here guitar)
-    // into the full-mix slot; the mixer row and its WAV take that name, so
-    // the row isn't labelled "song" while playing guitar.
+    // A package's full-mix file keeps its own name (here guitar); the mixer
+    // row and its WAV take that name, so the row isn't labelled "song" while
+    // playing guitar.
     await buildShiftedAudioManager(
       0,
       AUDIO_META,
@@ -301,6 +307,43 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
 
     const fileNames = lastCapturedFiles.map(f => f.fileName);
     expect(fileNames.sort()).toEqual(['bass.wav', 'click.wav', 'guitar.wav']);
+  });
+
+  it('pads a full mix with no track name but does not play it', async () => {
+    // A package that ships only stems has no full-mix file of its own: its
+    // full mix is their sum, drawn and measured as the song. The stems
+    // already play, so playing the sum beside them would double every
+    // instrument.
+    const shiftSamples = 50;
+    const {shiftedFullMixPcm, shiftedStems} = await buildShiftedAudioManager(
+      shiftSamples,
+      AUDIO_META,
+      interleavedPcm(100, 2, 0.75),
+      [
+        {
+          name: 'drums',
+          pcm: interleavedPcm(100),
+          origin: 'chart-file' as const,
+        },
+        {
+          name: 'vocals',
+          pcm: interleavedPcm(100, 2, 0.25),
+          origin: 'chart-file' as const,
+        },
+      ],
+      makeChartDoc(),
+      () => {},
+      null,
+    );
+
+    const fileNames = lastCapturedFiles.map(f => f.fileName);
+    expect(fileNames.sort()).toEqual(['click.wav', 'drums.wav', 'vocals.wav']);
+    const paddedLength = (100 + shiftSamples) * AUDIO_META.channels;
+    expect(shiftedFullMixPcm?.length).toBe(paddedLength);
+    expect(shiftedStems.map(stem => stem.pcm.length)).toEqual([
+      paddedLength,
+      paddedLength,
+    ]);
   });
 
   it('pads every stem by the same sample count as the full mix', async () => {
@@ -323,6 +366,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       stems,
       chartDoc,
       () => {},
+      'song',
     );
 
     const expectedLength = (100 + shiftSamples) * AUDIO_META.channels;
@@ -358,6 +402,7 @@ describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)',
       stems,
       chartDoc,
       () => {},
+      'song',
     );
 
     expect(shiftedStems.find((s: any) => s.name === 'drums')?.origin).toBe(
@@ -415,6 +460,7 @@ describe('buildShiftedAudioManager — a project with no audio', () => {
       [],
       chartDoc,
       () => {},
+      'song',
     );
     expect(withAudio.audioManager.setVolume).toHaveBeenCalledWith('click', 0);
   });
@@ -451,6 +497,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
           onSongEnded: () => {},
         }),
@@ -489,6 +536,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems,
           onSongEnded: () => {},
         }),
@@ -542,6 +590,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems,
           onSongEnded: () => {},
         }),
@@ -580,6 +629,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
           onSongEnded: () => {},
         }),
@@ -614,6 +664,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems,
           onSongEnded: () => {},
         }),
@@ -653,6 +704,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems,
           onSongEnded: () => {},
         }),
@@ -695,6 +747,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems,
           onSongEnded: () => {},
         }),
@@ -745,6 +798,7 @@ describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems: [],
           onSongEnded: () => {},
         }),
@@ -782,6 +836,7 @@ describe('useShiftedAudio — rebuild gating covers the full mix and the length'
           chartDoc,
           audioMeta: pcm ? AUDIO_META : null,
           fullMixPcm: pcm,
+          fullMixName: 'song',
           stems: [],
           silentDurationSeconds,
           onSongEnded: () => {},
@@ -815,6 +870,7 @@ describe('useShiftedAudio — rebuild gating covers the full mix and the length'
           chartDoc,
           audioMeta: null,
           fullMixPcm: null,
+          fullMixName: 'song',
           stems: [],
           silentDurationSeconds: seconds,
           onSongEnded: () => {},
@@ -867,6 +923,7 @@ describe('useShiftedAudio — the click track follows the tempo map', () => {
           chartDoc: doc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems: [],
           onSongEnded: () => {},
         }),
@@ -956,6 +1013,7 @@ describe('useShiftedAudio — pre-padding for an anchor change', () => {
           chartDoc,
           audioMeta: AUDIO_META,
           fullMixPcm,
+          fullMixName: 'song',
           stems: STEMS,
           onSongEnded: () => {},
         }),

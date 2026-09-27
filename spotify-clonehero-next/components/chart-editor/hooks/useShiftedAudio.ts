@@ -84,7 +84,7 @@ interface BuildTarget {
   stems: ReadonlyArray<AudioStemInput>;
   /** Compared by reference, like stem PCM. */
   fullMixPcm: Float32Array | null;
-  fullMixName: string;
+  fullMixName: string | null;
   silentDurationSeconds: number | undefined;
 }
 
@@ -93,7 +93,6 @@ interface BuildTarget {
 interface PrebuiltShift {
   shiftSamples: number;
   fullMixPcm: Float32Array | null;
-  fullMixName: string;
   stems: ReadonlyArray<AudioStemInput>;
   shifted: ShiftedTrack[];
 }
@@ -112,7 +111,6 @@ interface LiveClickTrack {
 interface ShiftAheadInputs {
   audioMeta: ShiftedAudioMeta | null;
   fullMixPcm: Float32Array | null;
-  fullMixName: string;
   stems: ReadonlyArray<AudioStemInput>;
 }
 
@@ -182,15 +180,16 @@ function stemsEqual(
   return true;
 }
 
-/** The tracks a build shifts, in the order the results come back: the full mix
- *  first (when there is one), then the stems as given. */
+/** The audio a build shifts, in the order the results come back: the full mix
+ *  first (when there is one), then the stems as given. The names label the
+ *  shift's progress; what each track plays as comes from the build's own
+ *  inputs. */
 function tracksToShift(
   fullMixPcm: Float32Array | null,
-  fullMixName: string,
   stems: ReadonlyArray<AudioStemInput>,
 ) {
   const tracks = stems.map(stem => ({name: stem.name, pcm: stem.pcm}));
-  if (fullMixPcm) tracks.unshift({name: fullMixName, pcm: fullMixPcm});
+  if (fullMixPcm) tracks.unshift({name: 'full mix', pcm: fullMixPcm});
   return tracks;
 }
 
@@ -227,10 +226,11 @@ export interface BuildShiftedAudioOptions {
  * (a copy in, a copy out) is skipped. That is every load of a chart with no
  * leading silence.
  *
- * `fullMixName` is the mixer/track name the full mix registers under. It
- * defaults to `song`, but a package with no `song` file promotes one of its
- * own files (e.g. `guitar`) to the full-mix slot, and that row has to carry
- * the name of the audio it is actually playing.
+ * `fullMixName` is the mixer/track name the full mix registers under — the
+ * name of the audio it is actually playing, so a package whose one file is
+ * `guitar` does not get a row called "song". Null registers no track for
+ * the full mix: it is shifted, drawn and measured like any full mix, but
+ * never played, because the host's stems already carry that audio.
  *
  * `fullMixPcm` is null on a project with no audio yet. The manager is then
  * the click track alone, spanning `silentDurationSeconds`, so the transport,
@@ -243,7 +243,7 @@ export async function buildShiftedAudioManager(
   stems: ReadonlyArray<AudioStemInput>,
   chartDoc: ChartDocument,
   onSongEnded: () => void,
-  fullMixName = 'song',
+  fullMixName: string | null,
   silentDurationSeconds = 0,
   {prebuilt, createWorker, silentProject}: BuildShiftedAudioOptions = {},
 ): Promise<{
@@ -259,7 +259,7 @@ export async function buildShiftedAudioManager(
    *  manager's duration and the signature would never settle. */
   clickDurationMs: number;
 }> {
-  const sources = tracksToShift(fullMixPcm, fullMixName, stems);
+  const sources = tracksToShift(fullMixPcm, stems);
   const shifted =
     prebuilt ??
     (shiftSamples === 0
@@ -282,18 +282,6 @@ export async function buildShiftedAudioManager(
     for (const track of sources) forgetDecodedBuffer(track.pcm);
   }
 
-  const audioFiles: AudioSource[] = [];
-  for (const track of shifted) {
-    audioFiles.push({
-      fileName: `${track.name}.wav`,
-      pcm: {
-        samples: track.shiftedPcm,
-        sampleRate: meta.sampleRate,
-        channels: meta.channels,
-      },
-    });
-  }
-
   // The full mix leads `shifted` when there is one, so the stems line up
   // with the tail of the list, in order.
   const stemsOffset = fullMixPcm ? 1 : 0;
@@ -302,6 +290,19 @@ export async function buildShiftedAudioManager(
     name: stem.name,
     pcm: shifted[stemsOffset + index].shiftedPcm,
     origin: stem.origin,
+  }));
+
+  // What plays: the full mix under its track name, then every stem. A full
+  // mix with no name is audio the stems already carry, so it stays out.
+  const playing = [
+    ...(shiftedFullMixPcm && fullMixName !== null
+      ? [{name: fullMixName, pcm: shiftedFullMixPcm}]
+      : []),
+    ...shiftedStems,
+  ];
+  const audioFiles: AudioSource[] = playing.map(({name, pcm}) => ({
+    fileName: `${name}.wav`,
+    pcm: {samples: pcm, sampleRate: meta.sampleRate, channels: meta.channels},
   }));
 
   // Synthesized metronome click, registered as its own "click" stem so it
@@ -357,9 +358,10 @@ export interface UseShiftedAudioParams {
   audioMeta: ShiftedAudioMeta | null;
   /** ORIGINAL (unshifted) full-mix PCM. Null until loaded. */
   fullMixPcm: Float32Array | null;
-  /** Track name for the full mix. Defaults to `song`; a package with no
-   *  `song` file passes the name of the file it promoted instead. */
-  fullMixName?: string;
+  /** Track name the full mix plays under, or null when it must not play at
+   *  all because the stems already carry its audio — see
+   *  {@link buildShiftedAudioManager}. */
+  fullMixName: string | null;
   /** ORIGINAL (unshifted) named stems (e.g. an isolated drum stem, an
    *  AI-separated vocal stem). Empty (or omitted) for pages with a single
    *  audio source, e.g. /tempo. Changing the list (add/remove/swap a stem)
@@ -407,7 +409,7 @@ export function useShiftedAudio({
   chartDoc,
   audioMeta,
   fullMixPcm,
-  fullMixName = 'song',
+  fullMixName,
   stems = [],
   silentDurationSeconds,
   silentProject,
@@ -466,14 +468,9 @@ export function useShiftedAudio({
   // The latest build inputs, for the non-reactive `shiftAudioAhead` closure.
   // Written after every render so a run started now encodes from the audio
   // the hook would build from now.
-  const inputsRef = useRef<ShiftAheadInputs>({
-    audioMeta,
-    fullMixPcm,
-    fullMixName,
-    stems,
-  });
+  const inputsRef = useRef<ShiftAheadInputs>({audioMeta, fullMixPcm, stems});
   useEffect(() => {
-    inputsRef.current = {audioMeta, fullMixPcm, fullMixName, stems};
+    inputsRef.current = {audioMeta, fullMixPcm, stems};
   });
 
   useEffect(() => {
@@ -493,11 +490,7 @@ export function useShiftedAudio({
     async (anchorMs, {signal, onProgress}) => {
       const inputs = inputsRef.current;
       const meta = inputs.audioMeta;
-      const tracks = tracksToShift(
-        inputs.fullMixPcm,
-        inputs.fullMixName,
-        inputs.stems,
-      );
+      const tracks = tracksToShift(inputs.fullMixPcm, inputs.stems);
       // A silent project has no audio format and nothing to shift; the click
       // track is regenerated by the build either way.
       if (!meta || tracks.length === 0) return;
@@ -513,7 +506,6 @@ export function useShiftedAudio({
       prebuiltRef.current = {
         shiftSamples,
         fullMixPcm: inputs.fullMixPcm,
-        fullMixName: inputs.fullMixName,
         stems: inputs.stems,
         shifted,
       };
@@ -568,7 +560,6 @@ export function useShiftedAudio({
       claimed &&
       claimed.shiftSamples === nextShiftSamples &&
       claimed.fullMixPcm === nextTarget.fullMixPcm &&
-      claimed.fullMixName === fullMixName &&
       stemsEqual(claimed.stems, stems)
         ? claimed.shifted
         : undefined;

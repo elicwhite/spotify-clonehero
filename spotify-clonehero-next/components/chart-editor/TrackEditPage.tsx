@@ -1063,10 +1063,10 @@ function TrackEditEditor({
     chartDoc: state.chartDoc,
     audioMeta: packageAudio?.meta ?? null,
     fullMixPcm: packageAudio?.fullMixPcm ?? null,
-    // A package with no `song` file promotes one of its own (guitar, bass)
-    // into the full-mix slot; the mixer row has to carry that file's name,
-    // not a "song" row playing guitar.
-    fullMixName: packageAudio?.fullMixName ?? 'song',
+    // The full mix plays under its own file's name — a one-file package's
+    // guitar is not a "song" row — or, for a package of stems with no `song`,
+    // not at all: its full mix is their sum and the stems do the playing.
+    fullMixName: packageAudio?.fullMixName ?? null,
     stems,
     silentDurationSeconds,
     // Audio that is merely still decoding is not a silent project: the click

@@ -1,4 +1,27 @@
-import {mixToInterleavedStereo} from '../waveformMix';
+import {mixInterleavedYielding, mixToInterleavedStereo} from '../waveformMix';
+
+describe('mixInterleavedYielding', () => {
+  it('sums interleaved stems sample by sample and pads to the longest', async () => {
+    const mix = await mixInterleavedYielding([
+      new Float32Array([0.25, -0.25]),
+      new Float32Array([0.25, 0.5, 0.125, -0.125]),
+    ]);
+    expect(Array.from(mix)).toEqual([0.5, 0.25, 0.125, -0.125]);
+  });
+
+  it('normalizes by the peak only when the sum clips', async () => {
+    const clipped = await mixInterleavedYielding([
+      new Float32Array([0.8, 0.4]),
+      new Float32Array([0.8, 0.4]),
+    ]);
+    // Peak 1.6 → scaled by 1/1.6
+    expect(clipped[0]).toBeCloseTo(1.0);
+    expect(clipped[1]).toBeCloseTo(0.5);
+
+    const quiet = await mixInterleavedYielding([new Float32Array([0.2])]);
+    expect(quiet[0]).toBeCloseTo(0.2);
+  });
+});
 
 describe('mixToInterleavedStereo', () => {
   it('returns null for no stems', () => {

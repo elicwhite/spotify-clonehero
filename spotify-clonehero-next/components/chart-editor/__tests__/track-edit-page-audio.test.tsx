@@ -40,6 +40,8 @@ import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {decodeAtRate} from '@/lib/audio-pipeline/decode-audio';
+import {interleaveAudioBufferYielding} from '@/lib/drum-transcription/audio/decoder';
+import type {AudioSamples} from '../audioSamples';
 import TrackEditPage from '../TrackEditPage';
 import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
 import type {AssistRunContext} from '@/components/assist/useAssistRunner';
@@ -75,20 +77,28 @@ class FakeResizeObserver {
 // ---------------------------------------------------------------------------
 // Heavy/canvas children
 // ---------------------------------------------------------------------------
+// The highway draws the song's waveform from `audioData`, and the piano roll
+// draws the lyrics-row waveform from `lyricsWaveData`; the stubs record what
+// the host handed them so the wiring is assertable without a canvas.
+type WaveProp = AudioSamples | undefined;
+const highwayProps: {audioData?: WaveProp} = {};
 jest.mock('../HighwayEditor', () => ({
   __esModule: true,
-  default: () => <div data-testid="highway-editor-stub" />,
+  default: (props: {audioData?: WaveProp}) => {
+    highwayProps.audioData = props.audioData;
+    return <div data-testid="highway-editor-stub" />;
+  },
 }));
-// The piano roll draws the lyrics-row waveform from `lyricsWaveData`; the
-// stub records what the host handed it so the wiring is assertable without a
-// canvas.
 const pianoRollProps: {
-  lyricsWaveData?: unknown | undefined;
+  lyricsWaveData?: WaveProp;
   lyricsWaveChannels?: number | undefined;
 } = {};
 jest.mock('../piano-roll/PianoRollTimeline', () => ({
   __esModule: true,
-  default: (props: {lyricsWaveData?: unknown; lyricsWaveChannels?: number}) => {
+  default: (props: {
+    lyricsWaveData?: WaveProp;
+    lyricsWaveChannels?: number;
+  }) => {
     pianoRollProps.lyricsWaveData = props.lyricsWaveData;
     pianoRollProps.lyricsWaveChannels = props.lyricsWaveChannels;
     return <div data-testid="piano-roll-stub" />;
@@ -210,8 +220,11 @@ jest.mock('../../../lib/audio-pipeline/stem-cache', () => {
 });
 
 // ---------------------------------------------------------------------------
-// OPFS project store — one-file package (song.ogg).
+// OPFS project store — a one-file package (song.ogg) unless a test ships
+// other files. A file's second byte is its index in the package, so a decode
+// stub can tell the files apart.
 // ---------------------------------------------------------------------------
+let packageFileNames: string[] = [];
 let fixtureChartText = '';
 const mockWriteEditedChart = jest.fn(async () => {});
 const mockUpdateProject = jest.fn(async () => ({}));
@@ -243,12 +256,12 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
       data: new TextEncoder().encode(fixtureChartText),
     })),
     readSongIni: jest.fn(async () => null),
-    loadAudioFiles: jest.fn(async () => [
-      {
-        fileName: 'song.ogg',
-        data: new Uint8Array([PROJECT_AUDIO_BYTE[currentProjectId], 2, 3, 4]),
-      },
-    ]),
+    loadAudioFiles: jest.fn(async () =>
+      packageFileNames.map((fileName, index) => ({
+        fileName,
+        data: new Uint8Array([PROJECT_AUDIO_BYTE[currentProjectId], index, 3]),
+      })),
+    ),
     writeSongIni: jest.fn(async () => {}),
     writeEditedChart: mockWriteEditedChart,
     updateProject: mockUpdateProject,
@@ -325,11 +338,13 @@ function buildFixtureChartText(): string {
 
 beforeEach(() => {
   fixtureChartText = buildFixtureChartText();
+  packageFileNames = ['song.ogg'];
   currentProjectId = 'proj1';
   cachedDrumStem = null;
   cachedDrumFingerprint = '';
   cachedVocalsOpus = null;
   cachedVocalsFingerprint = '';
+  delete highwayProps.audioData;
   delete pianoRollProps.lyricsWaveData;
   delete pianoRollProps.lyricsWaveChannels;
   mockWriteEditedChart.mockClear();
@@ -522,6 +537,90 @@ describe('/chart-editor Stems list', () => {
       expect(screen.queryByTestId('stem-row-drums')).not.toBeInTheDocument();
     });
   });
+});
+
+describe('/chart-editor on a package of stems with no song file', () => {
+  const STEMS = ['vocals', 'drums', 'bass', 'guitar', 'rhythm'];
+  const mockDecode = decodeAtRate as jest.Mock;
+  const mockInterleave = interleaveAudioBufferYielding as jest.Mock;
+  const defaultDecode = mockDecode.getMockImplementation();
+  const defaultInterleave = mockInterleave.getMockImplementation();
+
+  beforeEach(() => {
+    // `vocals` first: the file a "the first file is the song" rule promotes.
+    packageFileNames = STEMS.map(stem => `${stem}.opus`);
+    // File N decodes to the constant (N + 1) / 100, so each stem — and the
+    // sum of all five — is plain to read back off the waveform props.
+    mockDecode.mockImplementation(async (data: Uint8Array) => ({
+      numberOfChannels: 2,
+      length: 8,
+      sampleRate: 44100,
+      duration: 8 / 44100,
+      getChannelData: () => new Float32Array(8),
+      level: (data[1] + 1) / 100,
+    }));
+    mockInterleave.mockImplementation(async ({level}: {level: number}) =>
+      new Float32Array(16).fill(level),
+    );
+  });
+
+  afterEach(() => {
+    mockDecode.mockImplementation(defaultDecode);
+    mockInterleave.mockImplementation(defaultInterleave);
+  });
+
+  // The Jest timeout is longer than this file's 10s `waitFor`, so a lyrics
+  // row that never gets its waveform fails on that assertion, not on Jest's
+  // own timeout.
+  it('plays every file once, draws their sum as the song, and draws the vocals on the lyrics row', async () => {
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    await screen.findByTestId('stem-row-rhythm');
+    // Exactly one mixer row per file, plus the click: no row for the summed
+    // full mix, whatever it might be called.
+    const rows = screen
+      .getAllByTestId(/^stem-row-/)
+      .map(row => row.getAttribute('data-testid'));
+    expect(rows.sort()).toEqual(
+      [...STEMS, 'click'].map(name => `stem-row-${name}`).sort(),
+    );
+
+    await waitFor(() => expect(pianoRollProps.lyricsWaveData).toBeDefined());
+    expect(Array.from(pianoRollProps.lyricsWaveData!.data)).toEqual(
+      Array(16).fill(expect.closeTo(0.01)),
+    );
+    // 0.01 + 0.02 + 0.03 + 0.04 + 0.05: all five stems, not the vocals alone.
+    expect(Array.from(highwayProps.audioData!.data)).toEqual(
+      Array(16).fill(expect.closeTo(0.15)),
+    );
+  }, 20_000);
+
+  it('adds no separated vocals to a package whose one file is its vocals', async () => {
+    packageFileNames = ['vocals.ogg'];
+    // What a separation of this project's audio would have left behind.
+    cachedVocalsOpus = new Uint8Array([1, 2, 3]);
+    cachedVocalsFingerprint = 'fingerprint-1';
+
+    render(
+      <TooltipProvider>
+        <TrackEditPage {...CHART_EDITOR_CONFIG} />
+      </TooltipProvider>,
+    );
+
+    // The separation offer lands in the same render as any stem the probe
+    // found, so once it is up the probe has had its say. The package lacks
+    // drums, so the offer is there.
+    await screen.findByRole('button', {name: 'Good and fast'});
+    const vocalsRows = screen.getAllByTestId('stem-row-vocals');
+    expect(vocalsRows).toHaveLength(1);
+    expect(
+      within(vocalsRows[0]).queryByLabelText('AI-separated stem'),
+    ).not.toBeInTheDocument();
+  }, 20_000);
 });
 
 describe('/chart-editor when the audio cannot be loaded', () => {

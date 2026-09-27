@@ -13,6 +13,7 @@
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {
   decodeChartPackageAudio,
+  packageFiles,
   packageHasDrumsAudio,
   shiftPackageAudio,
   planExportAudio,
@@ -121,6 +122,23 @@ describe('shiftPackageAudio', () => {
     const sources = await shiftPackageAudio(pkg, 10);
     expect(sources).toHaveLength(1 + pkg.stems.length);
   });
+
+  it('exports a stems-only package as its stems, never the sum it draws', async () => {
+    // The summed full mix is no file of the package. Shipping it would add
+    // a `song` the game plays on top of every stem it was summed from.
+    const pkg: DecodedPackageAudio = {
+      fullMixName: null,
+      fullMixPcm: new Float32Array(4 * channels),
+      stems: ['drums', 'vocals'].map(name => ({
+        name,
+        pcm: new Float32Array(4 * channels),
+        origin: 'chart-file' as const,
+      })),
+      meta: {sampleRate: SAMPLE_RATE, channels},
+    };
+    const sources = await shiftPackageAudio(pkg, 10);
+    expect(sources.map(s => s.fileName)).toEqual(['drums.opus', 'vocals.opus']);
+  });
 });
 
 describe('decodeChartPackageAudio', () => {
@@ -154,13 +172,36 @@ describe('decodeChartPackageAudio', () => {
     expect(decoded.stems.every(s => s.origin === 'chart-file')).toBe(true);
   });
 
-  it('promotes the first file when the package ships no `song`', async () => {
+  it('keeps a single file as the full mix, whatever it is called', async () => {
     const decoded = await decodeChartPackageAudio([
       {fileName: 'guitar.ogg', data: new Uint8Array([1])},
-      {fileName: 'bass.ogg', data: new Uint8Array([2])},
     ]);
     expect(decoded.fullMixName).toBe('guitar');
-    expect(decoded.stems.map(s => s.name)).toEqual(['bass']);
+    expect(decoded.stems).toEqual([]);
+  });
+
+  it('draws a package of stems with no `song` as their sum, and plays every one as a stem', async () => {
+    // Each file decodes to a constant a tenth of its first byte, so the sum
+    // is plain to read off.
+    mockDecode.mockImplementation(async (data: Uint8Array) => ({tag: data[0]}));
+    mockInterleave.mockImplementation(async ({tag}: {tag: number}) =>
+      new Float32Array(4).fill(tag / 10),
+    );
+
+    const decoded = await decodeChartPackageAudio([
+      {fileName: 'vocals.opus', data: new Uint8Array([1])},
+      {fileName: 'drums.opus', data: new Uint8Array([2])},
+      {fileName: 'bass.opus', data: new Uint8Array([3])},
+    ]);
+
+    // No file is promoted into the full-mix slot — `vocals` in it would be
+    // the "song" on its own, and no longer the stem the lyrics row draws.
+    expect(decoded.fullMixName).toBeNull();
+    expect(decoded.stems.map(s => s.name)).toEqual(['vocals', 'drums', 'bass']);
+    expect(decoded.stems.every(s => s.origin === 'chart-file')).toBe(true);
+    expect(Array.from(decoded.fullMixPcm)).toEqual(
+      Array(4).fill(expect.closeTo(0.6)),
+    );
   });
 
   it('uniquifies files that share a basename, so neither is lost', async () => {
@@ -170,6 +211,20 @@ describe('decodeChartPackageAudio', () => {
     ]);
     expect(decoded.fullMixName).toBe('song');
     expect(decoded.stems.map(s => s.name)).toEqual(['song-2']);
+  });
+
+  it('keeps a stem a stem when the `song` beside it fails to decode', async () => {
+    mockDecode.mockRejectedValueOnce(new Error('bad audio'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const decoded = await decodeChartPackageAudio([
+      {fileName: 'song.ogg', data: new Uint8Array([1])},
+      {fileName: 'vocals.opus', data: new Uint8Array([2])},
+    ]);
+    // Two files is not a one-file package, so the vocals are not promoted to
+    // be the song: they stay the stem the lyrics row draws.
+    expect(decoded.fullMixName).toBeNull();
+    expect(decoded.stems.map(s => s.name)).toEqual(['vocals']);
+    warn.mockRestore();
   });
 
   it('skips a file it cannot decode rather than failing the load', async () => {
@@ -196,6 +251,20 @@ describe('decodeChartPackageAudio', () => {
   });
 });
 
+describe('packageFiles', () => {
+  it('lists the full-mix file first, then every stem', () => {
+    expect(packageFiles(makePackage()).map(file => file.name)).toEqual([
+      'song',
+      'guitar',
+    ]);
+  });
+
+  it('lists only the stems of a stems-only package, never its summed full mix', () => {
+    const pkg: DecodedPackageAudio = {...makePackage(), fullMixName: null};
+    expect(packageFiles(pkg).map(file => file.name)).toEqual(['guitar']);
+  });
+});
+
 describe('packageHasDrumsAudio', () => {
   it('is true when a stem file names the drums', () => {
     const pkg = makePackage();
@@ -207,10 +276,20 @@ describe('packageHasDrumsAudio', () => {
     expect(packageHasDrumsAudio(pkg)).toBe(true);
   });
 
-  it('is true when the promoted full mix names the drums', () => {
+  it('is true when the package’s one file names the drums', () => {
     expect(packageHasDrumsAudio({...makePackage(), fullMixName: 'drums'})).toBe(
       true,
     );
+  });
+
+  it('reads a stems-only package by its stems, since its full mix is no file', () => {
+    const pkg: DecodedPackageAudio = {
+      ...makePackage(),
+      fullMixName: null,
+      stems: [{name: 'drums', pcm: new Float32Array(2), origin: 'chart-file'}],
+    };
+    expect(packageHasDrumsAudio(pkg)).toBe(true);
+    expect(packageHasDrumsAudio({...pkg, stems: []})).toBe(false);
   });
 
   it('is false for a package with no drums audio of its own', () => {

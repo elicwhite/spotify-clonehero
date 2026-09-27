@@ -554,6 +554,7 @@ export default function EditorApp({
     chartDoc: state.chartDoc,
     audioMeta,
     fullMixPcm: originalFullMixPcm,
+    fullMixName: 'song',
     stems: paddedAudioStems,
     onSongEnded: () => dispatch({type: 'SET_PLAYING', isPlaying: false}),
   });

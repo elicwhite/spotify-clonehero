@@ -19,6 +19,7 @@ import {encodePcmToOpus} from '@/lib/audio/opus-encoder';
 import {encodeWavBlob} from '@/lib/audio/wav-encoder';
 import {DRUMS_STEM} from '@/lib/audio-pipeline/separate-stems';
 import {rememberDecodedBuffer} from '@/lib/preview/decodedPcm';
+import {mixInterleavedYielding} from '@/lib/preview/waveformMix';
 import {getBasename} from '@/lib/src-shared/utils';
 import type {AudioSource} from '../ExportDialog';
 import {anchorShiftSamples} from './useShiftedAudio';
@@ -36,9 +37,14 @@ const PACKAGE_FALLBACK_SAMPLE_RATE = 44100;
 
 /** The project's audio as `useShiftedAudio` takes it. */
 export interface DecodedPackageAudio {
-  /** Base name of the file the full mix came from (`song` for `song.ogg`),
-   *  so a padded export can name it what the package named it. */
-  fullMixName: string;
+  /**
+   * Base name of the package file that is the full mix (`song` for
+   * `song.ogg`): the track it plays as, and the name a padded export writes
+   * it back under. Null for a package of stems with no `song` file, whose
+   * full mix is their sum — no file of the package, and never played (see
+   * {@link decodeChartPackageAudio}).
+   */
+  fullMixName: string | null;
   fullMixPcm: Float32Array;
   stems: AudioStemInput[];
   /** The format every buffer above is in. The rate is the package's own (see
@@ -55,31 +61,37 @@ export interface DecodedPackageAudio {
  * A chart package is not one mixed file plus separated stems: it is several
  * stems (song/guitar/rhythm/drums/...) that are ALL meant to play together,
  * and that is what `AudioManager` has always done with them. So the hook's
- * "full mix" here is the package's `song` file (its first file when it has
- * no `song`), and every remaining file is a `chart-file` stem beside it —
- * a summed mixdown PLUS those same stems would play the whole package
- * twice. Single-file packages are the same rule with an empty stem list.
+ * "full mix" here is the package's `song` file, and every remaining file is
+ * a `chart-file` stem beside it. Single-file packages are the same rule with
+ * an empty stem list: the one file is the full mix, whatever it is called.
+ *
+ * A package of stems with no `song` file has no file to draw as the song.
+ * Promoting one of them would make that stem alone the song's waveform and
+ * take it off the stem list — `vocals` would then never reach the lyrics
+ * row. Its full mix is the stems' sum instead, which draws and measures the
+ * song but never plays (`fullMixName` null): the stems play as themselves,
+ * and a sum played beside the stems it came from would double every one.
  *
  * Undecodable files are skipped with a warning rather than failing the load:
  * one bad stem never takes the editor down.
  *
- * Everything decodes at ONE rate, the native rate of the file that will
- * become the full mix — this audio is only ever played, drawn as a waveform
- * and padded back out, none of which cares what the rate is, and a decoder
- * asked for a rate the source isn't in resamples every sample on the way
- * out. On an album-length opus that implicit resample is several seconds of
- * load. The rate travels back in `meta` so the rest of the editor measures
- * against the audio it actually got. A package whose files disagree (an
- * opus full mix beside an mp3 stem) still lands on one rate, since the whole
- * package has to pad and mix as one set.
+ * Everything decodes at ONE rate, the native rate of the `song` file, or of
+ * the first file when there is none — this audio is only ever played, drawn
+ * as a waveform and padded back out, none of which cares what the rate is,
+ * and a decoder asked for a rate the source isn't in resamples every sample
+ * on the way out. On an album-length opus that implicit resample is several
+ * seconds of load. The rate travels back in `meta` so the rest of the editor
+ * measures against the audio it actually got. A package whose files disagree
+ * (an opus full mix beside an mp3 stem) still lands on one rate, since the
+ * whole package has to pad and mix as one set.
  */
 export async function decodeChartPackageAudio(
   files: Files,
 ): Promise<DecodedPackageAudio> {
-  // Chosen before anything decodes, so every file lands at the same rate.
-  // Which file leads is decided by name here and re-derived from the decoded
-  // set below; they only disagree when the `song` file fails to decode, and
-  // the fallback is then a correct-but-resampled decode, not a wrong one.
+  // Chosen before anything decodes, so every file lands at the same rate:
+  // the `song` file's, or the first file's when there is none. Should the
+  // `song` file then fail to decode, the rest were decoded at its rate —
+  // resampled, which is correct, just slower.
   const primary =
     files.find(file => getBasename(file.fileName) === 'song') ?? files[0];
   const sampleRate = primary
@@ -114,11 +126,17 @@ export async function decodeChartPackageAudio(
     throw new Error('Could not decode any of this project’s audio files');
   }
 
-  const songIndex = decoded.findIndex(entry => entry.name === 'song');
-  const [fullMix] = decoded.splice(songIndex === -1 ? 0 : songIndex, 1);
+  // The file drawn and measured as the song: the package's `song`, or its
+  // only file. "Only" counts the package, not what decoded: a `song` that
+  // fails beside one stem must not turn that stem into the song.
+  const songIndex =
+    files.length === 1 ? 0 : decoded.findIndex(entry => entry.name === 'song');
+  const [song] = songIndex === -1 ? [] : decoded.splice(songIndex, 1);
   return {
-    fullMixName: fullMix.name,
-    fullMixPcm: fullMix.pcm,
+    fullMixName: song?.name ?? null,
+    fullMixPcm:
+      song?.pcm ??
+      (await mixInterleavedYielding(decoded.map(entry => entry.pcm))),
     stems: decoded.map(entry => ({
       name: entry.name,
       pcm: entry.pcm,
@@ -128,15 +146,22 @@ export async function decodeChartPackageAudio(
   };
 }
 
+/** The package's own files, decoded: the full mix when it is one of them,
+ *  then every stem. */
+export function packageFiles(
+  pkg: DecodedPackageAudio,
+): {name: string; pcm: Float32Array}[] {
+  return pkg.fullMixName === null
+    ? pkg.stems
+    : [{name: pkg.fullMixName, pcm: pkg.fullMixPcm}, ...pkg.stems];
+}
+
 /** `AudioManager` folds every file whose name contains `drums` into one
  *  `drums` track, so a package that ships its own drums audio has no room
  *  for a separated `drums` stem: adding one would silently play under the
  *  package's fader and double the kit. */
 export function packageHasDrumsAudio(pkg: DecodedPackageAudio): boolean {
-  return (
-    pkg.fullMixName.includes(DRUMS_STEM) ||
-    pkg.stems.some(stem => stem.name.includes(DRUMS_STEM))
-  );
+  return packageFiles(pkg).some(file => file.name.includes(DRUMS_STEM));
 }
 
 /**
@@ -202,9 +227,10 @@ export const EXPORT_BLOCKED_MESSAGE =
  * a WebCodecs encoder for it, WAV otherwise — bigger, but a padded export
  * must never silently fall back to unpadded audio.
  *
- * Only the package's own audio is produced; a separated stem is a mixing
- * aid, not part of the chart. The stored audio at rest is never modified —
- * padding happens on the decoded copy.
+ * Only the package's own audio is produced: a separated stem is a mixing
+ * aid, not part of the chart, and a stems-only package's summed full mix is
+ * no file of it. The stored audio at rest is never modified — padding
+ * happens on the decoded copy.
  */
 export async function shiftPackageAudio(
   pkg: DecodedPackageAudio,
@@ -212,10 +238,7 @@ export async function shiftPackageAudio(
 ): Promise<AudioSource[]> {
   const {sampleRate, channels} = pkg.meta;
   const sources: AudioSource[] = [];
-  for (const {name, pcm} of [
-    {name: pkg.fullMixName, pcm: pkg.fullMixPcm},
-    ...pkg.stems,
-  ]) {
+  for (const {name, pcm} of packageFiles(pkg)) {
     const padded = shiftPcmStart(pcm, shiftSamples, channels);
     try {
       const opus = await encodePcmToOpus(padded, sampleRate, channels);
