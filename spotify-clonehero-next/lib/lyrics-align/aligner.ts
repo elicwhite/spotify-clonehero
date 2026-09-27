@@ -8,6 +8,7 @@
  */
 
 import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
+import {AlignFailureError} from './align-failure';
 
 export interface AlignedWord {
   text: string;
@@ -55,7 +56,7 @@ const progressSubscribers = new Set<AlignProgressFn>();
 
 /** Pending promise rejecters, so a dead worker fails callers instead of
  *  hanging them. */
-const pendingFailures = new Set<(err: Error) => void>();
+const pendingFailures = new Set<(err: AlignFailureError) => void>();
 
 function subscribeProgress(fn?: AlignProgressFn): () => void {
   if (!fn) return () => {};
@@ -80,8 +81,9 @@ function getWorker(): Worker {
     // error) never posts anything — without this, every pending promise
     // would hang forever with no way to retry.
     worker.addEventListener('error', (e: ErrorEvent) => {
-      const err = new Error(
+      const err = new AlignFailureError(
         `Alignment worker failed: ${e.message || 'failed to load'}`,
+        'worker-error',
       );
       worker?.terminate();
       worker = null;
@@ -119,7 +121,7 @@ export function init(onProgress?: AlignProgressFn): Promise<void> {
         } else if (msg.type === 'error') {
           settle();
           initPromise = null;
-          reject(new Error(msg.message));
+          reject(new AlignFailureError(msg.message, msg.reason));
         }
       };
 
@@ -139,6 +141,9 @@ export function init(onProgress?: AlignProgressFn): Promise<void> {
  * Lyrics are automatically syllabified using TeX hyphenation patterns.
  * Returns per-syllable timestamps (with joinNext markers) in addition to
  * word-level timestamps and karaoke display lines.
+ *
+ * A failure in the worker rejects with an {@link AlignFailureError}, whose
+ * `reason` names the stage that failed.
  */
 export async function alignVocals(
   vocals16k: Float32Array,
@@ -183,7 +188,7 @@ export async function alignVocals(
           });
         } else if (msg.type === 'error') {
           settle();
-          reject(new Error(msg.message));
+          reject(new AlignFailureError(msg.message, msg.reason));
         }
       };
 

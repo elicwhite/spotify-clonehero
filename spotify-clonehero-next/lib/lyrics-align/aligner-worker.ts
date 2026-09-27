@@ -16,13 +16,19 @@
  *   OUT: { type: "progress", message: string }
  *   OUT: { type: "result", lines, words, syllables, durationMs }
  *
- *   OUT: { type: "error", message: string }
+ *   OUT: { type: "error", message: string, reason: AlignFailureReason }
  */
 
 import * as ort from 'onnxruntime-web';
 import {isWebGpuFp16Available} from '@/lib/onnx/webgpu-capability';
 import {forcedAlign} from './viterbi';
 import {getCachedModel} from './model-cache';
+import {
+  AlignFailureError,
+  modelDownloadReason,
+  type AlignBackend,
+  type AlignFailureReason,
+} from './align-failure';
 import {MODEL_URLS} from './model-urls';
 import {syllabifyLyrics} from './syllabify';
 import {wav2vecFrames} from './frames';
@@ -77,6 +83,8 @@ let session: ort.InferenceSession | null = null;
 const label2idx: Record<string, number> = {};
 let modelBuffer: ArrayBuffer | null = null;
 let useWebGPU = false;
+/** The backend `session` was built on. Labels an inference failure. */
+let sessionBackend: AlignBackend = 'wasm';
 
 for (let i = 0; i < VOCAB.length; i++) {
   if (VOCAB[i]) label2idx[VOCAB[i]] = i;
@@ -102,10 +110,19 @@ type OutboundMessage =
        *  Used internally to escalate to tier-2; not shown to the user. */
       lowConfidence: boolean;
     }
-  | {type: 'error'; message: string};
+  | {type: 'error'; message: string; reason: AlignFailureReason};
 
 function post(msg: OutboundMessage) {
   self.postMessage(msg);
+}
+
+/** `err` labelled with `reason`, unless an inner stage labelled it first. */
+function labelled(err: unknown, reason: AlignFailureReason): AlignFailureError {
+  if (err instanceof AlignFailureError) return err;
+  return new AlignFailureError(
+    err instanceof Error ? err.message : String(err),
+    reason,
+  );
 }
 
 /** @param percent Optional 0..1 progress within the current activity. */
@@ -169,12 +186,16 @@ async function handleInit() {
   // Fall back to quantized model (works with WASM)
   useWebGPU = false;
   progress('Downloading alignment model (91 MB, int8/WASM)...');
-  modelBuffer = await getCachedModel(
-    WAV2VEC2_QUANTIZED_URL,
-    'wav2vec2-base-960h-quantized.onnx',
-    downloadProgress,
-    80_000_000, // real size ~95 MB
-  );
+  try {
+    modelBuffer = await getCachedModel(
+      WAV2VEC2_QUANTIZED_URL,
+      'wav2vec2-base-960h-quantized.onnx',
+      downloadProgress,
+      80_000_000, // real size ~95 MB
+    );
+  } catch (e) {
+    throw labelled(e, modelDownloadReason(e));
+  }
   progress('Model cached — will load when needed');
   post({type: 'initDone'});
 }
@@ -196,18 +217,23 @@ async function ensureSession() {
       executionProviders: [provider],
       graphOptimizationLevel: 'all',
     });
+    sessionBackend = provider;
     progress(`Alignment model ready (${provider})!`);
   } catch (e) {
-    if (provider === 'webgpu') {
-      progress('WebGPU failed, falling back to WASM...');
+    if (provider !== 'webgpu') throw labelled(e, 'session-wasm');
+    // The fp16 model is already the one in memory, so the fallback runs it
+    // on WASM.
+    progress('WebGPU failed, falling back to WASM...');
+    try {
       session = await ort.InferenceSession.create(modelBuffer, {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
       });
-      progress('Alignment model ready (wasm fallback)!');
-    } else {
-      throw e;
+    } catch (fallbackErr) {
+      throw labelled(fallbackErr, 'session-wasm-fp16');
     }
+    sessionBackend = 'wasm-fp16';
+    progress('Alignment model ready (wasm fallback)!');
   }
 }
 
@@ -488,7 +514,13 @@ async function handleAlign(vocals16k: Float32Array, lyrics: string) {
   // 1. CTC emissions
   progress('Running CTC model...');
   const t0 = performance.now();
-  const {logProbs, T, C} = await getEmissions(vocals16k);
+  let emissions: {logProbs: Float32Array; T: number; C: number};
+  try {
+    emissions = await getEmissions(vocals16k);
+  } catch (e) {
+    throw labelled(e, `inference-${sessionBackend}`);
+  }
+  const {logProbs, T, C} = emissions;
   const modelMs = performance.now() - t0;
   progress(
     `Emissions: ${T} frames x ${C} classes (${(modelMs / 1000).toFixed(1)}s)`,
@@ -752,7 +784,7 @@ self.onmessage = async (e: MessageEvent) => {
       await handleAlign(e.data.vocals16k, e.data.lyrics);
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    post({type: 'error', message});
+    const {message, reason} = labelled(err, 'alignment');
+    post({type: 'error', message, reason});
   }
 };
