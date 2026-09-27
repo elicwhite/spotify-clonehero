@@ -46,6 +46,7 @@ import {
 } from '@/lib/preview/audioManager';
 import CloneHeroRenderer from './CloneHeroRenderer';
 import PlaybackBar from './PlaybackBar';
+import {usePlaybackAnalytics} from './usePlaybackAnalytics';
 import {formatTimeMs} from './formatTime';
 import Image from 'next/image';
 import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
@@ -215,46 +216,7 @@ export default function Renderer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metadata.md5]);
 
-  // Track play/pause edges and emit a sheet_music_playback_session for each
-  // play→pause segment (covers most "time spent playing" usage). On unmount
-  // / page-hide while still playing, flush any in-flight segment.
-  const playStartRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (isPlaying) {
-      playStartRef.current = Date.now();
-      trackEvent({event: 'sheet_music_play'});
-      return;
-    }
-    if (playStartRef.current == null) return;
-    const seconds = (Date.now() - playStartRef.current) / 1000;
-    playStartRef.current = null;
-    trackEvent({event: 'sheet_music_pause'});
-    if (seconds >= 1) {
-      trackEvent({
-        event: 'sheet_music_playback_session',
-        playSeconds: Math.round(seconds),
-      });
-    }
-  }, [isPlaying]);
-
-  useEffect(() => {
-    function flush() {
-      if (playStartRef.current == null) return;
-      const seconds = (Date.now() - playStartRef.current) / 1000;
-      playStartRef.current = null;
-      if (seconds >= 1) {
-        trackEvent({
-          event: 'sheet_music_playback_session',
-          playSeconds: Math.round(seconds),
-        });
-      }
-    }
-    window.addEventListener('pagehide', flush);
-    return () => {
-      flush();
-      window.removeEventListener('pagehide', flush);
-    };
-  }, []);
+  usePlaybackAnalytics(audioManager, isPlaying);
 
   useEffect(() => {
     async function checkSaved() {

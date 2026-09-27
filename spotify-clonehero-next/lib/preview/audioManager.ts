@@ -578,6 +578,17 @@ export class AudioManager {
   }
 
   /**
+   * Seconds of output this manager's AudioContext has rendered. Unlike
+   * `currentTime`, this is not a song position: seeks, loops and tempo do not
+   * move it. It advances only while the context renders, so it stands still
+   * while paused, while the device sleeps and while the browser has frozen or
+   * interrupted the page. After `destroy()` it keeps its last value.
+   */
+  get renderedSeconds(): number {
+    return this.#context.currentTime;
+  }
+
+  /**
    * Raw (unsmoothed) playback position in seconds. Reads directly from
    * AudioContext.currentTime which updates at the hardware sample rate
    * and may jitter relative to requestAnimationFrame.

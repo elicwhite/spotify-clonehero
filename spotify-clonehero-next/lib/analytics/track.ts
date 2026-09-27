@@ -86,6 +86,8 @@ export type AnalyticsEvent =
   | {event: 'sheet_music_practice_section_saved'}
   | {event: 'sheet_music_favorited'}
   | {event: 'sheet_music_unfavorited'}
+  // `playSeconds` is the whole seconds of audio heard in one play-to-pause
+  // segment, read from the audio clock rather than the wall clock.
   | {event: 'sheet_music_playback_session'; playSeconds: number}
 
   // Add-lyrics
