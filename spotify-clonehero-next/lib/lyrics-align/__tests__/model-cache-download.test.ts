@@ -10,7 +10,10 @@
  * after the first read from cache instead of downloading.)
  */
 
-import {getCachedModel} from '@/lib/lyrics-align/model-cache';
+import {
+  getCachedModel,
+  ModelDownloadError,
+} from '@/lib/lyrics-align/model-cache';
 
 const MB = 1_000_000;
 const URL = 'https://example.com/model.onnx';
@@ -343,6 +346,21 @@ describe('getCachedModel when the host refuses this origin', () => {
     ]);
   });
 
+  test('a refused origin is origin-refused', async () => {
+    setPageHost('cloneherocharts.vercel.app');
+    mockCorsRefusal({reachable: true});
+
+    let err: unknown;
+    try {
+      await getCachedModel(URL, 'k', () => {}, MB);
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(ModelDownloadError);
+    expect((err as ModelDownloadError).failure).toBe('origin-refused');
+  });
+
   test('on the site itself, says to try later instead of sending the user away', async () => {
     setPageHost('musiccharts.tools');
     mockCorsRefusal({reachable: true});
@@ -359,5 +377,110 @@ describe('getCachedModel when the host refuses this origin', () => {
     await expect(getCachedModel(URL, 'k', () => {}, MB)).rejects.toThrow(
       /Couldn't reach the AI model server/,
     );
+  });
+});
+
+/**
+ * The failure kind is what telemetry reports for a download, because the
+ * message is user copy and the URL must never leave the page. Each test pins
+ * one kind to the condition that produces it.
+ */
+describe('getCachedModel failure kinds', () => {
+  async function failureOf(promise: Promise<unknown>): Promise<unknown> {
+    try {
+      await promise;
+    } catch (e) {
+      return e;
+    }
+    throw new Error('expected the download to fail');
+  }
+
+  test('a permanent HTTP error is http-refused', async () => {
+    mockFetch([{status: 403, chunks: []}]);
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, MB));
+
+    expect(err).toBeInstanceOf(ModelDownloadError);
+    expect((err as ModelDownloadError).failure).toBe('http-refused');
+  });
+
+  test('429 on every attempt is http-429', async () => {
+    const calls = mockFetch([{status: 429, chunks: []}]);
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, MB));
+
+    expect(calls).toHaveLength(4); // MAX_ATTEMPTS
+    expect((err as ModelDownloadError).failure).toBe('http-429');
+  });
+
+  test('5xx on every attempt is http-5xx', async () => {
+    mockFetch([{status: 503, chunks: []}]);
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, MB));
+
+    expect((err as ModelDownloadError).failure).toBe('http-5xx');
+  });
+
+  test('a fetch that never gets a response is network', async () => {
+    // What a blocked or unreachable host looks like from the page.
+    const fetchMock = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, MB));
+
+    // Every attempt the retry loop makes, then the no-cors probe, which
+    // also fails, so the host counts as unreachable.
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect((err as ModelDownloadError).failure).toBe('network');
+  });
+
+  test('a stream that keeps dropping after some bytes is network', async () => {
+    const full = modelBytes(3 * MB);
+    mockFetch([
+      {
+        headers: {'content-length': String(3 * MB)},
+        chunks: [full.slice(0, MB), 'error'],
+      },
+      {
+        status: 206,
+        headers: {'content-range': `bytes ${MB}-${3 * MB - 1}/${3 * MB}`},
+        chunks: ['error'],
+      },
+    ]);
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, 2 * MB));
+
+    expect((err as ModelDownloadError).failure).toBe('network');
+  });
+
+  test('a stream that keeps ending short is truncated', async () => {
+    const full = modelBytes(3 * MB);
+    mockFetch([
+      {
+        headers: {'content-length': String(3 * MB)},
+        chunks: [full.slice(0, MB)],
+      },
+      {
+        status: 206,
+        headers: {'content-range': `bytes ${MB}-${3 * MB - 1}/${3 * MB}`},
+        chunks: [],
+      },
+    ]);
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, 2 * MB));
+
+    expect((err as ModelDownloadError).failure).toBe('truncated');
+  });
+
+  test('an error page served with 200 is not-a-model', async () => {
+    const page = new Uint8Array(2 * MB).fill(0x20);
+    page.set(new TextEncoder().encode('<!doctype html>'), 0);
+    mockFetch([{headers: {'content-length': String(2 * MB)}, chunks: [page]}]);
+
+    const err = await failureOf(getCachedModel(URL, 'k', () => {}, MB));
+
+    expect((err as ModelDownloadError).failure).toBe('not-a-model');
   });
 });

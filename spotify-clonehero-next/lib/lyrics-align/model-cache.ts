@@ -191,11 +191,56 @@ async function removeCachedModel(cacheKey: string): Promise<void> {
   }
 }
 
-class ModelDownloadError extends Error {}
+/**
+ * Why a model download failed, from a closed set. The message names the
+ * failure for the user; this names it for telemetry, which must never carry
+ * a URL or a file name.
+ */
+export type ModelDownloadFailure =
+  /** A status a retry cannot change: a 4xx other than 429. */
+  | 'http-refused'
+  /** The last attempt was answered 429 Too Many Requests. */
+  | 'http-429'
+  /** The last attempt was answered with a 5xx. */
+  | 'http-5xx'
+  /** The last attempt got no response, or its stream dropped or stalled. */
+  | 'network'
+  /** No attempt got a response, but the host answers a no-cors request: its
+   *  CORS rules leave out this page's origin. */
+  | 'origin-refused'
+  /** Every attempt's stream ended cleanly, short of the advertised size. */
+  | 'truncated'
+  /** What arrived is not a model: too small, an error page, a placeholder. */
+  | 'not-a-model';
 
-/** Transient failure (network drop, stalled stream, 5xx) — the download
- *  loop retries these with an HTTP Range resume. */
-class RetryableDownloadError extends Error {}
+export class ModelDownloadError extends Error {
+  readonly failure: ModelDownloadFailure;
+
+  constructor(message: string, failure: ModelDownloadFailure) {
+    super(message);
+    this.failure = failure;
+  }
+}
+
+/** Transient failure (network drop, stalled stream, 5xx, 429) — the
+ *  download loop retries these with an HTTP Range resume. `status` is the
+ *  HTTP status that caused it, when a response was received. */
+class RetryableDownloadError extends Error {
+  readonly status: number | undefined;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** The failure a download reports when its last retryable attempt fails. */
+function exhaustedFailure(e: RetryableDownloadError): ModelDownloadFailure {
+  if (e.status === undefined) return 'network';
+  if (e.status === 429) return 'http-429';
+  if (e.status >= 500) return 'http-5xx';
+  return 'http-refused';
+}
 
 /**
  * `fetch` rejected with no response at all. A dropped connection does this,
@@ -290,17 +335,21 @@ async function downloadModel(
       } else if (response.status === 416) {
         // Our resume offset is no longer valid (file changed?) — start over.
         restart();
-        throw new RetryableDownloadError('server rejected resume range');
+        throw new RetryableDownloadError('server rejected resume range', 416);
       }
 
       if (!response.ok && response.status !== 206) {
         if (response.status >= 500 || response.status === 429) {
-          throw new RetryableDownloadError(`HTTP ${response.status}`);
+          throw new RetryableDownloadError(
+            `HTTP ${response.status}`,
+            response.status,
+          );
         }
         throw new ModelDownloadError(
           `Couldn't download the AI model (server responded ` +
             `HTTP ${response.status}). It may be temporarily unavailable or ` +
             `rate-limited — try again in a few minutes.`,
+          'http-refused',
         );
       }
 
@@ -359,7 +408,10 @@ async function downloadModel(
           receivedBytes === 0 &&
           (await answersWithoutCors(url))
         ) {
-          throw new ModelDownloadError(originRefusedMessage(url));
+          throw new ModelDownloadError(
+            originRefusedMessage(url),
+            'origin-refused',
+          );
         }
         throw new ModelDownloadError(
           receivedBytes === 0
@@ -369,6 +421,7 @@ async function downloadModel(
               `${(receivedBytes / 1e6).toFixed(0)}` +
               (totalBytes > 0 ? ` of ${(totalBytes / 1e6).toFixed(0)}` : '') +
               ` MB). Check your connection and reload to retry.`,
+          exhaustedFailure(e),
         );
       }
       log(
@@ -385,6 +438,7 @@ async function downloadModel(
           `${(receivedBytes / 1e6).toFixed(0)} of ` +
           `${(totalBytes / 1e6).toFixed(0)} MB). Check your connection ` +
           `and reload to retry.`,
+        'truncated',
       );
     }
     log(
@@ -404,7 +458,10 @@ async function downloadModel(
   try {
     assertLooksLikeModel(buffer, minBytes);
   } catch (e) {
-    throw new ModelDownloadError(e instanceof Error ? e.message : String(e));
+    throw new ModelDownloadError(
+      e instanceof Error ? e.message : String(e),
+      'not-a-model',
+    );
   }
   return buffer;
 }
