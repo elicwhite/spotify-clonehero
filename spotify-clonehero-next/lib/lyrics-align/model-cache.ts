@@ -11,6 +11,7 @@
  */
 
 import {getCacheDir, getCacheDirs} from '@/lib/browser-storage';
+import {getSiteUrl} from '@/lib/site-url';
 
 /** Directory inside OPFS every cached model file lives in. */
 const MODEL_CACHE_DIR = 'model-cache';
@@ -196,8 +197,19 @@ class ModelDownloadError extends Error {}
  *  loop retries these with an HTTP Range resume. */
 class RetryableDownloadError extends Error {}
 
+/**
+ * `fetch` rejected with no response at all. A dropped connection does this,
+ * and so does a host whose CORS rules leave out this page's origin: the
+ * browser withholds that response and reports a bare TypeError, so the two
+ * look the same until {@link answersWithoutCors} tells them apart.
+ */
+class NoResponseError extends RetryableDownloadError {}
+
 /** Abort a download whose stream delivers no bytes for this long. */
 const STALL_TIMEOUT_MS = 30_000;
+/** How long the no-CORS reachability probe may take before it counts as
+ *  unreachable. */
+const PROBE_TIMEOUT_MS = 10_000;
 /** Total connection attempts (first try + resumes) before giving up. */
 const MAX_ATTEMPTS = 4;
 
@@ -260,13 +272,10 @@ async function downloadModel(
       try {
         response = await fetch(url, {signal: controller.signal, headers});
       } catch (e) {
-        throw new RetryableDownloadError(
-          controller.signal.aborted
-            ? 'connection stalled'
-            : e instanceof Error
-              ? e.message
-              : String(e),
-        );
+        if (controller.signal.aborted) {
+          throw new RetryableDownloadError('connection stalled');
+        }
+        throw new NoResponseError(e instanceof Error ? e.message : String(e));
       }
 
       if (response.status === 200 && receivedBytes > 0) {
@@ -345,6 +354,13 @@ async function downloadModel(
     } catch (e) {
       if (!(e instanceof RetryableDownloadError)) throw e;
       if (attempt >= MAX_ATTEMPTS) {
+        if (
+          e instanceof NoResponseError &&
+          receivedBytes === 0 &&
+          (await answersWithoutCors(url))
+        ) {
+          throw new ModelDownloadError(originRefusedMessage(url));
+        }
         throw new ModelDownloadError(
           receivedBytes === 0
             ? "Couldn't reach the AI model server. Check your internet " +
@@ -391,6 +407,52 @@ async function downloadModel(
     throw new ModelDownloadError(e instanceof Error ? e.message : String(e));
   }
   return buffer;
+}
+
+/**
+ * Whether `url` answers a request the browser does not CORS-check. The
+ * response is opaque, so this learns only that the host is up. A download
+ * whose every `fetch` rejected while this resolves was refused by the host's
+ * CORS rules, not by the network.
+ *
+ * False for every failure, including a cross-origin isolation policy that
+ * blocks the opaque response: the caller then keeps its network message.
+ */
+async function answersWithoutCors(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    await fetch(url, {
+      method: 'HEAD',
+      mode: 'no-cors',
+      signal: controller.signal,
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The error for a model host whose CORS rules leave out the page's origin.
+ * Retrying cannot help, so it names the site where the download works
+ * instead. The site itself gets no such advice: a refusal there is a
+ * hosting fault the user cannot work around.
+ */
+function originRefusedMessage(url: string): string {
+  const pageHost = typeof location === 'undefined' ? null : location.host;
+  const siteHost = getSiteUrl().host;
+  const where = pageHost ? ` (${pageHost})` : '';
+  const advice =
+    pageHost === siteHost
+      ? 'Try again later.'
+      : `Open this tool at ${siteHost} and try again there.`;
+  return (
+    `The AI model server (${new URL(url).host}) does not allow downloads ` +
+    `from this address${where}. ${advice}`
+  );
 }
 
 async function writeToCache(

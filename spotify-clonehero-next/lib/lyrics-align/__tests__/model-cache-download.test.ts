@@ -273,3 +273,91 @@ describe('getCachedModel download resilience', () => {
     });
   });
 });
+
+describe('getCachedModel when the host refuses this origin', () => {
+  const originalLocation = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'location',
+  );
+  const originalSiteUrl = process.env['NEXT_PUBLIC_SITE_URL'];
+
+  function setPageHost(host: string) {
+    Object.defineProperty(globalThis, 'location', {
+      value: {host},
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  /** A browser's view of a host whose CORS rules leave out the page: every
+   *  CORS request rejects with a bare TypeError, and a no-cors request gets
+   *  an opaque response unless `reachable` is false. */
+  function mockCorsRefusal({reachable}: {reachable: boolean}) {
+    const modes: (RequestMode | undefined)[] = [];
+    global.fetch = jest.fn(
+      async (_url: RequestInfo | globalThis.URL, opts?: RequestInit) => {
+        modes.push(opts?.mode);
+        if (opts?.mode === 'no-cors' && reachable) {
+          return {ok: false, status: 0, type: 'opaque'} as Response;
+        }
+        throw new TypeError('Failed to fetch');
+      },
+    ) as unknown as typeof fetch;
+    return modes;
+  }
+
+  beforeEach(() => {
+    process.env['NEXT_PUBLIC_SITE_URL'] = 'https://musiccharts.tools';
+  });
+
+  afterEach(() => {
+    if (originalLocation) {
+      Object.defineProperty(globalThis, 'location', originalLocation);
+    } else {
+      delete (globalThis as {location?: unknown}).location;
+    }
+    if (originalSiteUrl === undefined) {
+      delete process.env['NEXT_PUBLIC_SITE_URL'];
+    } else {
+      process.env['NEXT_PUBLIC_SITE_URL'] = originalSiteUrl;
+    }
+  });
+
+  test('names the refused address and the site where the download works', async () => {
+    setPageHost('cloneherocharts.vercel.app');
+    const modes = mockCorsRefusal({reachable: true});
+
+    await expect(getCachedModel(URL, 'k', () => {}, MB)).rejects.toThrow(
+      'The AI model server (example.com) does not allow downloads from ' +
+        'this address (cloneherocharts.vercel.app). Open this tool at ' +
+        'musiccharts.tools and try again there.',
+    );
+    // Every attempt the retry loop makes (default CORS mode), then one
+    // no-cors probe.
+    expect(modes).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'no-cors',
+    ]);
+  });
+
+  test('on the site itself, says to try later instead of sending the user away', async () => {
+    setPageHost('musiccharts.tools');
+    mockCorsRefusal({reachable: true});
+
+    await expect(getCachedModel(URL, 'k', () => {}, MB)).rejects.toThrow(
+      /does not allow downloads from this address \(musiccharts\.tools\)\. Try again later\./,
+    );
+  });
+
+  test('keeps the network message when the host does not answer at all', async () => {
+    setPageHost('cloneherocharts.vercel.app');
+    mockCorsRefusal({reachable: false});
+
+    await expect(getCachedModel(URL, 'k', () => {}, MB)).rejects.toThrow(
+      /Couldn't reach the AI model server/,
+    );
+  });
+});
