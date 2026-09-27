@@ -1,5 +1,5 @@
 import {ImageResponse} from 'next/og';
-import {getMd5FromSlug} from '@/app/getMd5FromSlug';
+import {getMd5FromSlug} from '@/app/songSlug';
 import {searchAdvanced} from '@/lib/search-encore';
 
 import {OgEyebrow, OgFrame, OgSubtitle, OgTitle} from '@/lib/og/layout';

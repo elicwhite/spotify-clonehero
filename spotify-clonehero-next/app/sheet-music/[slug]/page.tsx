@@ -2,7 +2,7 @@ import {use} from 'react';
 import dynamic from 'next/dynamic';
 import type {Metadata} from 'next';
 
-import {getMd5FromSlug} from '@/app/getMd5FromSlug';
+import {getMd5FromSlug} from '@/app/songSlug';
 
 /*
 Pretty much all of the code that powers this page

@@ -1,7 +1,7 @@
 import {use} from 'react';
 import dynamic from 'next/dynamic';
 import type {Metadata} from 'next';
-import {getMd5FromSlug} from '@/app/getMd5FromSlug';
+import {getMd5FromSlug} from '@/app/songSlug';
 import {searchAdvanced} from '@/lib/search-encore';
 
 const ClientPage = dynamic(() => import('./ClientPage'));
