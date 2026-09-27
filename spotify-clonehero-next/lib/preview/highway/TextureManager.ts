@@ -228,20 +228,47 @@ export class AnimatedTexture {
     }
 
     const now = performance.now();
-    const elapsed = now - this.lastFrameTime;
-    const currentFrameDuration = this.frameDurations[this.frameIndex] || 100;
-
-    if (elapsed >= currentFrameDuration) {
-      this.frameIndex = (this.frameIndex + 1) % this.frameCount;
+    if (now - this.lastFrameTime >= this.frameDuration(this.frameIndex)) {
       this.lastFrameTime = now;
+      this.showFrame((this.frameIndex + 1) % this.frameCount);
+    }
+  }
 
-      // Synchronous frame update from pre-decoded cache
-      const frame = this.frameCache[this.frameIndex];
-      if (frame) {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.drawImage(frame, 0, 0);
-        this.texture.needsUpdate = true;
-      }
+  /**
+   * Shows the frame that plays `ms` into the looping animation, each frame
+   * held for the same duration `tick` holds it. Unlike `tick`, the result
+   * depends on `ms` alone, never on the wall clock or on earlier calls, so a
+   * renderer that draws frames out of order gets one picture per time.
+   */
+  seek(ms: number): void {
+    if (!this.isAnimated || this.disposed || this.frameCache.length === 0) {
+      return;
+    }
+
+    let loopMs = 0;
+    for (let i = 0; i < this.frameCount; i++) loopMs += this.frameDuration(i);
+    let offset = ((ms % loopMs) + loopMs) % loopMs;
+    let index = 0;
+    while (index < this.frameCount - 1 && offset >= this.frameDuration(index)) {
+      offset -= this.frameDuration(index);
+      index++;
+    }
+    if (index !== this.frameIndex) this.showFrame(index);
+  }
+
+  /** How long frame `index` is held, in ms (100 when the file doesn't say). */
+  private frameDuration(index: number): number {
+    return this.frameDurations[index] || 100;
+  }
+
+  /** Draws frame `index` from the pre-decoded cache, synchronously. */
+  private showFrame(index: number): void {
+    this.frameIndex = index;
+    const frame = this.frameCache[index];
+    if (frame) {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.drawImage(frame, 0, 0);
+      this.texture.needsUpdate = true;
     }
   }
 
@@ -285,6 +312,16 @@ export class AnimatedTextureManager {
   tick(): void {
     for (const texture of this.animatedTextures) {
       texture.tick();
+    }
+  }
+
+  /**
+   * Puts every looping texture on the frame it shows `ms` into its loop: the
+   * wall-clock-free counterpart of `tick`, for renderers that own their clock.
+   */
+  seek(ms: number): void {
+    for (const texture of this.animatedTextures) {
+      texture.seek(ms);
     }
   }
 

@@ -154,6 +154,15 @@ export interface HighwayStage {
   ): void;
   startRender(): void;
   /**
+   * Draw one frame at chart time `elapsedMs` synchronously, outside the
+   * animation loop, with every looping texture on the frame it shows
+   * `elapsedMs` into playback. The picture depends only on `elapsedMs` and the
+   * state pushed into the stage, so frames can be drawn in any order. For
+   * renderers that own their clock (the launch film); the editor does not
+   * call it.
+   */
+  renderFrame(elapsedMs: number): void;
+  /**
    * Subscribe to WebGL context loss. One context backs the whole strip, so a
    * lost context blanks every highway at once: the stage stops its loop and
    * calls every listener, and the editor answers by destroying this stage and
@@ -970,6 +979,12 @@ export function setupStage(
     wake();
   }
 
+  function renderFrame(elapsedMs: number): void {
+    if (destroyed || contextLost) return;
+    sharedTextures.seek(elapsedMs);
+    draw(elapsedMs);
+  }
+
   function onContextLost(listener: () => void): () => void {
     contextLostListeners.add(listener);
     return () => {
@@ -1014,6 +1029,7 @@ export function setupStage(
     setLyricsData,
     setTimingData,
     startRender,
+    renderFrame,
     onContextLost,
     destroy,
   };

@@ -244,6 +244,12 @@ export class SharedCellTextures {
     if (!this.disposed) this.manager.tick();
   }
 
+  /** Put every animated texture on the stage on the frame it shows `ms` into
+   *  its loop: the wall-clock-free counterpart of `tick`. */
+  seek(ms: number): void {
+    if (!this.disposed) this.manager.seek(ms);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
