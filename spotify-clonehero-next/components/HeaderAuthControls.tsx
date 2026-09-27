@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {usePathname, useSearchParams} from 'next/navigation';
 import {Button} from '@/components/ui/button';
 import {useAuth} from '@/lib/supabase/AuthProvider';
+import {loginHref} from '@/lib/supabase/login-href';
 import {cn} from '@/lib/utils';
 
 /**
@@ -25,8 +26,7 @@ export default function HeaderAuthControls({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const currentPathWithQuery = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-  const loginHref = `/auth/login?next=${encodeURIComponent(currentPathWithQuery)}`;
+  const href = loginHref(pathname, searchParams);
   const compact = variant === 'compact';
   const buttonClass = compact ? 'h-7 px-2 text-xs font-semibold' : undefined;
 
@@ -36,7 +36,7 @@ export default function HeaderAuthControls({
 
   if (!user) {
     return (
-      <Link href={loginHref}>
+      <Link href={href}>
         <Button variant="default" size="sm" className={cn('ml-2', buttonClass)}>
           Log In
         </Button>
