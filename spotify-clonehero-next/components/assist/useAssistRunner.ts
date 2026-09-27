@@ -28,6 +28,7 @@ import {
   type AssistRunStatus,
 } from '@/lib/assist/assist-store';
 import type {AssistTaskDef, AssistTaskKey} from '@/lib/assist/tasks/types';
+import {assistFailureReason} from '@/lib/assist/failure-reason';
 import {reportInfraError} from '@/lib/sentry/report-infra-error';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {
@@ -257,21 +258,33 @@ export function useAssistRunnerControls(): AssistRunnerControls {
             });
             const step = lastActiveStep ?? PLANNING_STEP;
             // The message stays on screen and out of analytics: it can name
-            // a file the user loaded.
-            track({
-              event: aborted ? 'assist_run_cancelled' : 'assist_run_failed',
-              ...dimensions,
-              durationMs: elapsedMs(),
-              step,
-            });
-            // A cancellation is the user's decision, so only a real failure
-            // is reported. The count says a run died; this says what killed
-            // it — a model download that never finished, a device out of
-            // room — which a count never can.
-            if (!aborted) {
+            // a file the user loaded. The reason is a closed set, so it can
+            // go out beside the step.
+            if (aborted) {
+              track({
+                event: 'assist_run_cancelled',
+                ...dimensions,
+                durationMs: elapsedMs(),
+                step,
+              });
+            } else {
+              const reason = assistFailureReason(e);
+              track({
+                event: 'assist_run_failed',
+                ...dimensions,
+                durationMs: elapsedMs(),
+                step,
+                ...(reason && {reason}),
+              });
+              // A cancellation is the user's decision, so only a real
+              // failure is reported. The count says a run died; this says
+              // what killed it — a model download that never finished, a
+              // device out of room — which a count never can.
               reportInfraError(e, {
-                summary: `assist run failed at ${step}`,
-                tags: {...dimensions, step},
+                summary: reason
+                  ? `assist run failed at ${step}: ${reason}`
+                  : `assist run failed at ${step}`,
+                tags: {...dimensions, step, ...(reason && {reason})},
               });
             }
             // An error keeps its message on screen until dismissed; a

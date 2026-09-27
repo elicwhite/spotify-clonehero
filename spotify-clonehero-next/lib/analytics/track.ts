@@ -1,5 +1,6 @@
 import {analyticsAllowed} from '@/lib/analytics/region';
 
+import type {AssistFailureReason} from '@/lib/assist/failure-reason';
 import type {AssistTaskKey} from '@/lib/assist/tasks/types';
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
 import type {PackageFormat} from '@/lib/chart-export';
@@ -129,11 +130,13 @@ export type AnalyticsEvent =
   | ({event: 'assist_run_completed'; durationMs: number} & AssistRunDimensions)
   // `step` is the planned step that was active when the run ended, which the
   // runner already tracks. The error message itself is never sent: it can
-  // contain a file name, and file names are user data.
+  // contain a file name, and file names are user data. `reason` is a closed
+  // set, present only when the task's error carries one.
   | ({
       event: 'assist_run_failed';
       durationMs: number;
       step: string;
+      reason?: AssistFailureReason;
     } & AssistRunDimensions)
   | ({
       event: 'assist_run_cancelled';

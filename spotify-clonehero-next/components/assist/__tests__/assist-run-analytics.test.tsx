@@ -17,6 +17,7 @@ import {act} from 'react';
 import {renderHook} from '@testing-library/react';
 import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import type {AnalyticsEvent} from '@/lib/analytics/track';
+import {AlignFailureError} from '@/lib/lyrics-align/align-failure';
 
 const trackMock = jest.fn();
 jest.mock('../../../lib/analytics/track', () => ({
@@ -191,6 +192,66 @@ test('a failed run is reported to Sentry, with the task and the step', async () 
       entrypoint: 'assist-card',
     },
   });
+});
+
+test('a failure that carries a reason reports it to analytics and Sentry', async () => {
+  const {task, fail, started} = controllableTask();
+  const {result} = renderHook(() => useAssistRunnerControls());
+
+  const error = new AlignFailureError(
+    'could not read /Users/someone/My Song.ogg',
+    'model-download-network',
+  );
+  let run!: Promise<string>;
+  act(() => {
+    run = result.current.start(task, {}, CONTEXT);
+  });
+  await act(async () => {
+    await started;
+  });
+  await act(async () => {
+    fail(error);
+    await run.catch(() => {});
+  });
+
+  // Two faults at one step must not look the same. The step is where the
+  // run died; the reason is what killed it.
+  const failed = eventsNamed('assist_run_failed');
+  expect(failed).toHaveLength(1);
+  expect(failed[0]).toMatchObject({
+    step: 'meter',
+    reason: 'model-download-network',
+  });
+  expect(JSON.stringify(failed[0])).not.toContain('My Song');
+  expect(reportMock).toHaveBeenCalledWith(error, {
+    summary: 'assist run failed at meter: model-download-network',
+    tags: {
+      task: 'generate-tempo-map',
+      step: 'meter',
+      origin: 'tempo',
+      entrypoint: 'assist-card',
+      reason: 'model-download-network',
+    },
+  });
+});
+
+test('a failure without a reason sends no reason field', async () => {
+  const {task, fail, started} = controllableTask();
+  const {result} = renderHook(() => useAssistRunnerControls());
+
+  let run!: Promise<string>;
+  act(() => {
+    run = result.current.start(task, {}, CONTEXT);
+  });
+  await act(async () => {
+    await started;
+  });
+  await act(async () => {
+    fail(new Error('no label'));
+    await run.catch(() => {});
+  });
+
+  expect(eventsNamed('assist_run_failed')[0]).not.toHaveProperty('reason');
 });
 
 test('a cancelled run is not reported to Sentry', async () => {
