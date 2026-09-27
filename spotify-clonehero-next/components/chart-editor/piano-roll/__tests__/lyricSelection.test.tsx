@@ -205,6 +205,21 @@ const LYRIC_240 = {x: 20, y: 32};
 const LYRIC_720 = {x: 60, y: 32};
 
 /**
+ * Drag the chip at tick 240 `dx` px to the right. The pointerdown is its own
+ * `act()`: it can select the chip, and the commit reads the selection back
+ * off `editStateRef`, which an effect syncs only at an `act()` boundary.
+ */
+function dragChipRight(canvas: HTMLCanvasElement, dx: number) {
+  act(() => {
+    fireAt(canvas, 'pointerdown', {x: LYRIC_240.x, y: LYRIC_240.y});
+  });
+  act(() => {
+    fireAt(canvas, 'pointermove', {x: LYRIC_240.x + dx, y: LYRIC_240.y});
+    fireAt(canvas, 'pointerup', {x: LYRIC_240.x + dx, y: LYRIC_240.y});
+  });
+}
+
+/**
  * Locate the exact hit-testable x for a note by scanning a window around an
  * approximate guess and reading back the selection — robust to the beat
  * grid's internal end-tick padding (which this test has no need to know)
@@ -575,7 +590,7 @@ describe('dragging the words of a fully-selected phrase moves the whole phrase',
    * everything in the row.
    */
   async function selectWholeRow() {
-    const {canvas, stateRef} = await mountPanel();
+    const {canvas, stateRef, dispatchRef} = await mountPanel();
     act(() => {
       fireAt(canvas, 'pointerdown', {x: 200, y: 32});
       fireAt(canvas, 'pointermove', {x: -10, y: 32});
@@ -583,19 +598,7 @@ describe('dragging the words of a fully-selected phrase moves the whole phrase',
     });
     expect(getSelectedIds(stateRef.current!, 'phrase-start').size).toBe(1);
     expect(getSelectedIds(stateRef.current!, 'phrase-end').size).toBe(1);
-    return {canvas, stateRef};
-  }
-
-  /** Drag a chip rightward far enough that a lyric clamped to the resting
-   *  phrase would visibly stop short of where it lands. */
-  function dragChipRight(canvas: HTMLCanvasElement, dx: number) {
-    act(() => {
-      fireAt(canvas, 'pointerdown', {x: LYRIC_240.x, y: LYRIC_240.y});
-    });
-    act(() => {
-      fireAt(canvas, 'pointermove', {x: LYRIC_240.x + dx, y: LYRIC_240.y});
-      fireAt(canvas, 'pointerup', {x: LYRIC_240.x + dx, y: LYRIC_240.y});
-    });
+    return {canvas, stateRef, dispatchRef};
   }
 
   it('translates the phrase and its syllables by one delta, keeping the length', async () => {
@@ -625,6 +628,45 @@ describe('dragging the words of a fully-selected phrase moves the whole phrase',
     expect([...getSelectedIds(stateRef.current!, 'phrase-end')]).toEqual([
       `vocals:${tick + length}`,
     ]);
+  });
+
+  it('puts the phrase-edge and lyric selection back when the drag is undone', async () => {
+    const {canvas, stateRef, dispatchRef} = await selectWholeRow();
+    const selected = () => ({
+      lyric: new Set(getSelectedIds(stateRef.current!, 'lyric')),
+      start: new Set(getSelectedIds(stateRef.current!, 'phrase-start')),
+      end: new Set(getSelectedIds(stateRef.current!, 'phrase-end')),
+    });
+    const before = selected();
+
+    dragChipRight(canvas, 40);
+    act(() => {
+      dispatchRef.current!({
+        type: 'UNDO',
+        chartDoc: stateRef.current!.undoEntries.at(-1)!.doc,
+      });
+    });
+
+    expect(phraseSpans(stateRef.current)).toEqual([{tick: 0, length: 960}]);
+    expect(selected()).toEqual(before);
+  });
+
+  it('carries co-selected notes with the phrase, still selected', async () => {
+    const {canvas, stateRef} = await selectWholeRow();
+    act(() => {
+      click(canvas, RED_NOTE.x, RED_NOTE.y, true);
+    });
+    const notesBefore = drumNoteIds(stateRef.current);
+
+    dragChipRight(canvas, 40);
+
+    const [{tick: delta}] = phraseSpans(stateRef.current);
+    expect(drumTicks(stateRef.current)).toEqual(
+      [0, 480 + delta, 960, 1440, 1920].sort((a, b) => a - b),
+    );
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(
+      added(notesBefore, drumNoteIds(stateRef.current)),
+    );
   });
 
   it('leaves the phrase alone when only one edge is selected — that is a resize', async () => {
@@ -795,5 +837,60 @@ describe('a drag keeps what it moved selected, under the new ids', () => {
     // dragged — not the one it replaced, which a Delete would then remove.
     expect(sectionTicks()).toEqual([0, 1920]);
     expect(selectedSections()).toEqual(new Set(['1920']));
+  });
+});
+
+describe('dragging a lyric chip carries the co-selected notes', () => {
+  // The chip's drag is not grid-snapped: the notes ride the chip's own
+  // delta, whatever 20px comes to, the way lyrics ride a note drag's delta.
+
+  async function selectRedNoteAndLyric() {
+    const mounted = await mountPanel();
+    act(() => {
+      click(mounted.canvas, RED_NOTE.x, RED_NOTE.y);
+    });
+    act(() => {
+      click(mounted.canvas, LYRIC_240.x, LYRIC_240.y, true);
+    });
+    return mounted;
+  }
+
+  it('moves the notes by the chip’s delta, and both stay selected under their new ids', async () => {
+    const {canvas, stateRef} = await selectRedNoteAndLyric();
+    const notesBefore = drumNoteIds(stateRef.current);
+    const lyricsBefore = lyricIds(stateRef.current);
+
+    dragChipRight(canvas, 20);
+
+    const delta = lyricTicks(stateRef.current).find(t => t !== 720)! - 240;
+    expect(delta).toBeGreaterThan(0);
+    expect(drumTicks(stateRef.current)).toEqual(
+      [0, 480 + delta, 960, 1440, 1920].sort((a, b) => a - b),
+    );
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(
+      added(notesBefore, drumNoteIds(stateRef.current)),
+    );
+    expect(getSelectedIds(stateRef.current!, 'lyric')).toEqual(
+      added(lyricsBefore, lyricIds(stateRef.current)),
+    );
+  });
+
+  it('undoes as one step and puts the old selection back', async () => {
+    const {canvas, stateRef, dispatchRef} = await selectRedNoteAndLyric();
+    const notesBefore = new Set(getSelectedIds(stateRef.current!, 'note'));
+    const lyricsBefore = new Set(getSelectedIds(stateRef.current!, 'lyric'));
+
+    dragChipRight(canvas, 20);
+    act(() => {
+      dispatchRef.current!({
+        type: 'UNDO',
+        chartDoc: stateRef.current!.undoEntries.at(-1)!.doc,
+      });
+    });
+
+    expect(drumTicks(stateRef.current)).toEqual([0, 480, 960, 1440, 1920]);
+    expect(lyricTicks(stateRef.current)).toEqual([240, 720]);
+    expect(getSelectedIds(stateRef.current!, 'note')).toEqual(notesBefore);
+    expect(getSelectedIds(stateRef.current!, 'lyric')).toEqual(lyricsBefore);
   });
 });

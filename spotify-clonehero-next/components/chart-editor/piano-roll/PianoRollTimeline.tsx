@@ -81,7 +81,6 @@ import {
   findTrackInParsedChart,
   synctrackFromChart,
   audioExtendedEndTick,
-  lyricId,
   parsePhraseId,
   phraseStartId,
   phraseEndId,
@@ -137,11 +136,9 @@ import {
   AddNoteCommand,
   AddTempoMarkerCommand,
   AddTimeSignatureCommand,
-  BatchCommand,
   DeleteNotesCommand,
   DeleteTempoMarkerCommand,
   MoveEntitiesCommand,
-  MovePhrasesCommand,
   MoveTempoMarkerCommand,
   CommitTempoCandidateCommand,
   RephaseDownbeatsCommand,
@@ -3465,110 +3462,23 @@ export default function PianoRollTimeline({
         }
       }
 
-      // Commit a lyric-chip drag (plan 0063 Part D §2): the same
-      // `MoveEntitiesCommand('lyric', ...)` the highway's marker drag issues,
-      // but the delta comes from the continuous (unsnapped) drag preview. When
-      // the drag started on a lyric that's part of a bigger selection (other
-      // lyrics via shift-click/marquee, and/or notes), everything selected
-      // rides along at the SAME tickDelta — each lyric independently clamped
-      // to its own phrase by `moveLyric`, matching single-chip drag semantics.
-      //
-      // A phrase with BOTH edges selected travels whole instead
-      // (`MovePhrasesCommand`), carrying its own lyrics; only lyrics outside
-      // those phrases still need a `lyric` move of their own.
+      // Commit a lyric-chip drag (plan 0063 Part D §2): the same drag of the
+      // selection as a note drag's, at the delta of the continuous
+      // (unsnapped) drag preview, and a phrase whose edges are both selected
+      // travels whole with its lyrics. The lyrics row belongs to no track, so
+      // the notes that ride along are the active track's, the ones Delete
+      // and Copy act on.
       if (mode === 'lyric' && lyricDragRef.current) {
         const drag = lyricDragRef.current;
         if (drag.moved && drag.currentTick !== drag.originalTick) {
-          const tickDelta = drag.currentTick - drag.originalTick;
           const st = editStateRef.current;
-          const scene = sceneRef.current;
-          const moving = drag.movingPhraseTicks;
-          const chipFor = (id: string) =>
-            scene?.lyricChips.find(c => c.id === id);
-          const ridesWithPhrase = (id: string) => {
-            const chip = chipFor(id);
-            return chip !== undefined && moving.has(chip.phraseMinTick);
-          };
-
-          const lyricIds = Array.from(getSelectedIds(st, 'lyric'));
-          const looseLyricIds = lyricIds.filter(id => !ridesWithPhrase(id));
-          const noteIds = Array.from(getSelectedIds(st, 'note'));
-          const cmds: EditCommand[] = [];
-          if (moving.size > 0) {
-            cmds.push(
-              new MovePhrasesCommand(
-                Array.from(moving),
-                tickDelta,
-                DEFAULT_VOCALS_PART,
-              ),
-            );
-          }
-          if (looseLyricIds.length > 0) {
-            cmds.push(
-              new MoveEntitiesCommand('lyric', looseLyricIds, tickDelta, 0),
-            );
-          }
-          if (noteIds.length > 0) {
-            cmds.push(
-              new MoveEntitiesCommand(
-                'note',
-                noteIds,
-                tickDelta,
-                0,
-                entityContextFromScope(st.activeScope),
-              ),
-            );
-          }
-          if (cmds.length === 1) {
-            executeCommand(cmds[0]);
-          } else if (cmds.length > 1) {
-            executeCommand(new BatchCommand(cmds));
-          }
-
-          // Re-derive each moved lyric's post-move id so the selection stays
-          // pinned to the moved chips instead of going stale: a chip riding
-          // its phrase keeps its place inside it, everything else lands
-          // where its own phrase's clamp (`moveLyric`) puts it.
-          const nextLyricIds = new Set<string>();
-          for (const id of lyricIds) {
-            const chip = chipFor(id);
-            if (!chip) continue;
-            const tick = moving.has(chip.phraseMinTick)
-              ? chip.tick + tickDelta
-              : Math.max(
-                  chip.phraseMinTick,
-                  Math.min(chip.phraseMaxTick, chip.tick + tickDelta),
-                );
-            nextLyricIds.add(lyricId(tick, DEFAULT_VOCALS_PART));
-          }
-          dispatch({type: 'SET_SELECTION', kind: 'lyric', ids: nextLyricIds});
-
-          // Phrase-edge ids are tick-keyed too, so a travelling phrase's
-          // edges need re-keying or the band loses its selection (and with
-          // it the ability to drag it again without re-selecting).
-          if (moving.size > 0 && scene) {
-            const nextStarts = new Set<string>();
-            const nextEnds = new Set<string>();
-            for (const band of scene.lyricBands) {
-              if (!moving.has(band.tick)) continue;
-              nextStarts.add(
-                phraseStartId(band.tick + tickDelta, DEFAULT_VOCALS_PART),
-              );
-              nextEnds.add(
-                phraseEndId(band.tickEnd + tickDelta, DEFAULT_VOCALS_PART),
-              );
-            }
-            dispatch({
-              type: 'SET_SELECTION',
-              kind: 'phrase-start',
-              ids: nextStarts,
-            });
-            dispatch({
-              type: 'SET_SELECTION',
-              kind: 'phrase-end',
-              ids: nextEnds,
-            });
-          }
+          const commit = selectionDragCommit(
+            st,
+            trackKeyFromScope(st.activeScope),
+            {tickDelta: drag.currentTick - drag.originalTick, laneDelta: 0},
+            drag.movingPhraseTicks,
+          );
+          if (commit) executeCommand(commit.command, commit.selection);
         }
       }
 

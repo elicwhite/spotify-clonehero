@@ -62,10 +62,13 @@ import {
   DEFAULT_VOCALS_PART,
   addLyric,
   deleteLyric,
+  lyricId,
   setLyricText,
   addPhrase,
   deletePhrase,
   movePhrases,
+  phraseEndId,
+  phraseStartId,
   getAudioAnchor,
   setAudioAnchor,
   recordSongStart,
@@ -2349,14 +2352,61 @@ export class MovePhrasesCommand implements EditCommand {
   }
 
   execute(doc: ChartDocument): ChartDocument {
+    const {doc: newDoc, delta} = this.run(doc);
+    return delta === 0 ? doc : newDoc;
+  }
+
+  /**
+   * The ids this command renames when it runs on `doc`, old to new, per
+   * kind: the edges and lyrics of the phrases it carries. Each id is
+   * `part:tick`, and all of them shift by the one delta the move applies —
+   * the requested one, clamped so that no phrase overlaps one that stays or
+   * runs past tick 0. When the phrases cannot move, each id maps to itself.
+   * Pure like `execute`: it moves a copy.
+   */
+  renamedIds(
+    doc: ChartDocument,
+  ): Record<'lyric' | 'phrase-start' | 'phrase-end', Map<string, string>> {
+    const {delta} = this.run(doc);
+    const moving = new Set(this.startTicks);
+    const phrases = (
+      doc.parsedChart.vocalTracks?.parts[this.partName]?.notePhrases ?? []
+    ).filter(phrase => moving.has(phrase.tick));
+    const shifted = (
+      idAt: (tick: number, partName: string) => string,
+      ticks: number[],
+    ) =>
+      new Map(
+        ticks.map(tick => [
+          idAt(tick, this.partName),
+          idAt(tick + delta, this.partName),
+        ]),
+      );
+    return {
+      lyric: shifted(
+        lyricId,
+        phrases.flatMap(phrase => phrase.lyrics.map(lyric => lyric.tick)),
+      ),
+      'phrase-start': shifted(
+        phraseStartId,
+        phrases.map(phrase => phrase.tick),
+      ),
+      'phrase-end': shifted(
+        phraseEndId,
+        phrases.map(phrase => phrase.tick + phrase.length),
+      ),
+    };
+  }
+
+  private run(doc: ChartDocument): {doc: ChartDocument; delta: number} {
     const newDoc = cloneDocFor('phrase-start', doc);
-    const applied = movePhrases(
+    const delta = movePhrases(
       newDoc,
       this.startTicks,
       this.tickDelta,
       this.partName,
     );
-    return applied === 0 ? doc : newDoc;
+    return {doc: newDoc, delta};
   }
 }
 
