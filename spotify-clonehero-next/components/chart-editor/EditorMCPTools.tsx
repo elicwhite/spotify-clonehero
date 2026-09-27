@@ -28,6 +28,7 @@ import {
   type FlagName,
 } from '@/lib/chart-editor-core/commands';
 import {
+  findNote,
   listNotes,
   typeToLane,
   drums4LaneSchema,
@@ -307,8 +308,12 @@ export default function EditorMCPTools() {
           required: ['tick', 'type'],
         },
         execute: async args => {
-          const schema =
-            selectActiveSchema(stateRef.current) ?? drums4LaneSchema;
+          const s = stateRef.current;
+          const trackKey = trackKeyFromScope(s.activeScope);
+          const track = selectActiveTrack(s);
+          const schema = selectActiveSchema(s);
+          if (!trackKey || !track || !schema)
+            return {content: [{type: 'text', text: 'Not editing a track'}]};
           const type = labelToType(schema, args['type'] as string);
           if (type === undefined) {
             return {
@@ -317,14 +322,22 @@ export default function EditorMCPTools() {
               ],
             };
           }
-          const id = `${args['tick']}:${type}`;
-          const trackKey = trackKeyFromScope(stateRef.current.activeScope);
-          const selectionId = trackKey
-            ? trackQualifiedNoteId(trackKey, id)
-            : id;
+          const tick = args['tick'] as number;
+          const note = findNote(track, tick, type);
+          if (!note) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `No ${typeToLabel(schema, type)} note at tick ${tick}`,
+                },
+              ],
+            };
+          }
+          const selectionId = trackQualifiedNoteId(trackKey, noteId(note));
           const add = (args['addToSelection'] as boolean) ?? false;
           const newIds = add
-            ? new Set(getSelectedIds(stateRef.current, 'note'))
+            ? new Set(getSelectedIds(s, 'note'))
             : new Set<string>();
           newIds.add(selectionId);
           dispatchRef.current({
