@@ -2,16 +2,13 @@ import {NextResponse} from 'next/server';
 // The client you created from the Server-Side Auth instructions
 import {createClient} from '@/lib/supabase/server';
 import storeSpotifyToken from '@/app/api/spotify/store-tokens/storeSpotifyToken';
+import {safeNextPath} from '@/lib/safe-next-path';
 
 export async function GET(request: Request) {
   const {searchParams, origin} = new URL(request.url);
   const code = searchParams.get('code');
-  // if "next" is in param, use it as the redirect URL
-  let next = searchParams.get('next') ?? '/';
-  if (!next.startsWith('/')) {
-    // if "next" is not a relative URL, use the default
-    next = '/';
-  }
+  // if "next" is a same-origin path, use it as the redirect URL
+  const next = safeNextPath(searchParams.get('next'), '/');
 
   const oauthError = searchParams.get('error');
   const oauthErrorCode = searchParams.get('error_code');

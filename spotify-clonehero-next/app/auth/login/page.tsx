@@ -1,5 +1,6 @@
 import {redirect} from 'next/navigation';
 import {createClient} from '@/lib/supabase/server';
+import {safeNextPath} from '@/lib/safe-next-path';
 import {LoginForm} from './LoginForm';
 
 export default async function LoginPage({
@@ -22,6 +23,5 @@ export default async function LoginPage({
 
   // User is already authenticated, redirect to next parameter or account page
   const params = await searchParams;
-  const nextUrl = params.next || '/account';
-  redirect(nextUrl);
+  redirect(safeNextPath(params.next, '/account'));
 }
