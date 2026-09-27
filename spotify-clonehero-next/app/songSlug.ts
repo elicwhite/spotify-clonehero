@@ -27,3 +27,26 @@ export function getMd5FromSlug(slug: string): null | string {
   }
   return possibleHash;
 }
+
+/**
+ * The song slug to redirect to when a chart path has more than one segment
+ * after the tool's prefix, or null when there is none.
+ *
+ * Two kinds of URL reach this:
+ *  - a link that has a raw `/` in a song or artist name
+ *    ("Night-Day/Night-<md5>"), which splits the slug;
+ *  - a URL pasted onto the end of itself
+ *    ("<slug>https:/musiccharts.tools/sheet-music/<slug>" — Next collapses the
+ *    `//` of the pasted scheme before routing).
+ *
+ * In both, the last segment ends in the md5, and the md5 is all the page
+ * reads. Takes the route params as Next passes them, percent-encoded, and
+ * returns the segment unchanged, so it is ready to go back into a path.
+ */
+export function findSongSlugInSegments(segments: string[]): null | string {
+  const last = segments.at(-1);
+  if (!last || getMd5FromSlug(last) == null) {
+    return null;
+  }
+  return last;
+}

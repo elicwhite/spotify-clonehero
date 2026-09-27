@@ -2,7 +2,11 @@ import {normalizeRepeatedSlashes} from 'next/dist/shared/lib/utils';
 
 import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
 import {getKaraokeUrl} from '@/app/karaoke/buildKaraokeUrl';
-import {buildSongSlug, getMd5FromSlug} from '@/app/songSlug';
+import {
+  buildSongSlug,
+  findSongSlugInSegments,
+  getMd5FromSlug,
+} from '@/app/songSlug';
 
 const ORIGIN = 'https://musiccharts.tools';
 const MD5 = '0123456789abcdef0123456789abcdef';
@@ -78,5 +82,36 @@ describe('getMd5FromSlug', () => {
   it('rejects a slug that does not end in an md5', () => {
     expect(getMd5FromSlug('Plain Song-Plain Band')).toBeNull();
     expect(getMd5FromSlug(`Plain Song-Plain Band-${MD5}https:`)).toBeNull();
+  });
+});
+
+describe('findSongSlugInSegments', () => {
+  it('finds the slug in a URL pasted onto the end of itself', () => {
+    const page = `${ORIGIN}${getSheetMusicUrl('Plain Band', 'Plain Song', MD5)}`;
+    const {segments} = routeSegments(`${page}${page}`);
+
+    expect(segments).toEqual([
+      'sheet-music',
+      `Plain%20Song-Plain%20Band-${MD5}https:`,
+      'musiccharts.tools',
+      'sheet-music',
+      `Plain%20Song-Plain%20Band-${MD5}`,
+    ]);
+    expect(findSongSlugInSegments(segments.slice(1))).toBe(
+      `Plain%20Song-Plain%20Band-${MD5}`,
+    );
+  });
+
+  it('finds the md5 in a slug that a raw slash split', () => {
+    const {segments} = routeSegments(`/sheet-music/Night-Up/Down-${MD5}`);
+
+    const songSlug = findSongSlugInSegments(segments.slice(1));
+    expect(songSlug).toBe(`Down-${MD5}`);
+    expect(getMd5FromSlug(songSlug!)).toBe(MD5);
+  });
+
+  it('finds nothing when the last segment has no md5', () => {
+    expect(findSongSlugInSegments([`Plain Song-${MD5}`, 'extra'])).toBeNull();
+    expect(findSongSlugInSegments([])).toBeNull();
   });
 });
