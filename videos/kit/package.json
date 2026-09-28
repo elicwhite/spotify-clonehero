@@ -1,0 +1,66 @@
+{
+  "name": "@musiccharts/video-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Building blocks for Music Charts Tools product videos, consumed as TypeScript source.",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./brand": "./src/brand/index.ts",
+    "./brand/endCardTiming": "./src/brand/endCardTiming.ts",
+    "./brand/stingMeta": "./src/brand/stingMeta.ts",
+    "./brand/tokens": "./src/brand/tokens.ts",
+    "./camera": "./src/camera/index.ts",
+    "./clock": "./src/clock/index.ts",
+    "./config": "./src/config/index.ts",
+    "./format": "./src/format/index.ts",
+    "./fx": "./src/fx/index.ts",
+    "./highway": "./src/highway/index.ts",
+    "./load": "./src/load/index.ts",
+    "./motion": "./src/motion/index.ts",
+    "./music": "./src/music/index.ts",
+    "./recorder": "./src/recorder/index.ts",
+    "./text": "./src/text/index.ts",
+    "./text/presets": "./src/text/presets.ts",
+    "./text/timing": "./src/text/timing.ts",
+    "./ui": "./src/ui/index.ts",
+    "./ui/slateTiming": "./src/ui/slateTiming.ts",
+    "./scripts/*": "./scripts/*"
+  },
+  "scripts": {
+    "postinstall": "node scripts/link-browser.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "peerDependencies": {
+    "@eliwhite/scan-chart": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "remotion": "catalog:",
+    "three": "catalog:"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "catalog:",
+    "@fontsource-variable/jetbrains-mono": "catalog:",
+    "@remotion/bundler": "catalog:",
+    "@remotion/cli": "catalog:",
+    "@remotion/fonts": "catalog:",
+    "@remotion/noise": "catalog:",
+    "@remotion/renderer": "catalog:",
+    "lucide-react": "catalog:",
+    "sharp": "catalog:"
+  },
+  "devDependencies": {
+    "@eliwhite/scan-chart": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/three": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "remotion": "catalog:",
+    "three": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

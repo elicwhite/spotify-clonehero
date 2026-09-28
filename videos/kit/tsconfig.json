@@ -1,0 +1,35 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // `paths` replaces the base's, so the app's tokens are mapped again. The
+    // kit's subpaths are mapped for the film template exactly as package.json
+    // exports them (test/package-exports.test.ts keeps the two equal), so the
+    // template cannot typecheck an import a film cannot resolve.
+    "paths": {
+      "@product/lib/og/*": ["../../spotify-clonehero-next/lib/og/*"],
+      "@musiccharts/video-kit/brand": ["./src/brand/index.ts"],
+      "@musiccharts/video-kit/brand/endCardTiming": [
+        "./src/brand/endCardTiming.ts"
+      ],
+      "@musiccharts/video-kit/brand/stingMeta": ["./src/brand/stingMeta.ts"],
+      "@musiccharts/video-kit/brand/tokens": ["./src/brand/tokens.ts"],
+      "@musiccharts/video-kit/camera": ["./src/camera/index.ts"],
+      "@musiccharts/video-kit/clock": ["./src/clock/index.ts"],
+      "@musiccharts/video-kit/config": ["./src/config/index.ts"],
+      "@musiccharts/video-kit/format": ["./src/format/index.ts"],
+      "@musiccharts/video-kit/fx": ["./src/fx/index.ts"],
+      "@musiccharts/video-kit/highway": ["./src/highway/index.ts"],
+      "@musiccharts/video-kit/load": ["./src/load/index.ts"],
+      "@musiccharts/video-kit/motion": ["./src/motion/index.ts"],
+      "@musiccharts/video-kit/music": ["./src/music/index.ts"],
+      "@musiccharts/video-kit/recorder": ["./src/recorder/index.ts"],
+      "@musiccharts/video-kit/text": ["./src/text/index.ts"],
+      "@musiccharts/video-kit/text/presets": ["./src/text/presets.ts"],
+      "@musiccharts/video-kit/text/timing": ["./src/text/timing.ts"],
+      "@musiccharts/video-kit/ui": ["./src/ui/index.ts"],
+      "@musiccharts/video-kit/ui/slateTiming": ["./src/ui/slateTiming.ts"],
+      "@musiccharts/video-kit/scripts/*": ["./scripts/*"]
+    }
+  },
+  "include": ["src", "scripts", "test", "blender", "template"]
+}

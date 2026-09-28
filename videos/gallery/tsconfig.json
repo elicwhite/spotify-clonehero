@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": ["src", "scripts", "remotion.config.ts", "productApp.config.ts"]
+}

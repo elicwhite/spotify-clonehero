@@ -1,0 +1,43 @@
+packages:
+  - kit
+  - gallery
+  - films/*
+
+# Same supply-chain policy as spotify-clonehero-next/pnpm-workspace.yaml:
+# never install a version published less than 7 days ago (10080 minutes),
+# and only let the native packages that need it run install scripts.
+minimumReleaseAge: 10080
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  # Pulled in through Remotion; its install script is not needed.
+  exifreader: false
+
+# scan-chart pulls one dependency from a git repository. The app installs
+# the same package; allow it here too.
+blockExoticSubdeps: false
+
+# One version of each shared dependency for the kit, the gallery and every
+# film. Packages reference these as `catalog:`.
+catalog:
+  '@eliwhite/scan-chart': 8.1.0-eliwhite.6
+  '@fontsource-variable/inter': 5.3.0
+  '@fontsource-variable/jetbrains-mono': 5.3.0
+  '@remotion/bundler': 4.0.526
+  '@remotion/cli': 4.0.526
+  '@remotion/fonts': 4.0.526
+  '@remotion/noise': 4.0.526
+  '@remotion/renderer': 4.0.526
+  '@types/node': 20.19.43
+  '@types/react': 19.2.14
+  '@types/react-dom': 19.2.3
+  '@types/three': ^0.160.0
+  lucide-react: 0.546.0
+  react: 19.2.6
+  react-dom: 19.2.6
+  remotion: 4.0.526
+  sharp: 0.34.5
+  three: 0.160.0
+  tsx: 4.23.15
+  typescript: ^6.0.3

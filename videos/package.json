@@ -1,0 +1,16 @@
+{
+  "name": "musiccharts-videos",
+  "private": true,
+  "description": "Product videos for Music Charts Tools: the shared video kit, its gallery, and one package per film.",
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "gallery": "pnpm --filter @musiccharts/video-gallery studio",
+    "new-film": "node --import tsx kit/scripts/new-film.ts",
+    "browser": "pnpm --filter @musiccharts/video-kit exec remotion browser ensure"
+  },
+  "devDependencies": {
+    "tsx": "catalog:"
+  }
+}
