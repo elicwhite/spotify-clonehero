@@ -1,7 +1,7 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
 import type {ParsedChart} from '../chorus-chart-processing';
-import {AudioManager} from '../audioManager';
+import type {AudioManager} from '../audioManager';
 import {
   schemaForTrack,
   drums4LaneSchema,
@@ -29,7 +29,7 @@ import {
   type HighwayClippingPlanes,
 } from './cell';
 import {toGlRect, type HighwayRect, type StageLayout} from './layout';
-import {computeHighwayCameraFit, HIGHWAY_CAMERA} from './cameraFit';
+import {createHighwayCamera, fitHighwayCamera} from './highwayCamera';
 import {RenderGate} from './renderGate';
 import type {Track} from './types';
 
@@ -71,7 +71,28 @@ const IDLE_POLL_MS = 120;
 export interface StageConfig {
   /** Which drum-tom art style to render: square (angular gem) or round. */
   tomStyle?: 'square' | 'round';
+  /**
+   * The device pixel ratio to render at. Default: the display's, capped at
+   * 2. A caller that renders offscreen (the video kit) picks its own.
+   */
+  pixelRatio?: number;
+  /**
+   * The loading manager every texture request goes through, including the
+   * animated WebP decoder's fetches (`resolveURL`). Default: three's
+   * `DefaultLoadingManager`. A caller that serves the art from elsewhere
+   * (the video kit) passes one with its own URL modifier.
+   */
+  loadingManager?: THREE.LoadingManager;
 }
+
+/** The members of the playback clock (the app's `AudioManager`) the stage reads. */
+export type StageClock = Pick<
+  AudioManager,
+  'chartTime' | 'delay' | 'chartDelay' | 'isPlaying' | 'isInitialized'
+>;
+
+/** What `setGridData` takes: the grid overlay's config minus what the stage supplies. */
+export type GridData = Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>;
 
 export interface AddHighwayOptions {
   /** `null` for scopes with no notes track (vocals/global). */
@@ -103,9 +124,7 @@ export interface StageHighwayHandle {
   setWaveformData(
     config: Omit<WaveformSurfaceConfig, 'highwayWidth' | 'highwaySpeed'>,
   ): Promise<void>;
-  setGridData(
-    config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>,
-  ): Promise<void>;
+  setGridData(config: GridData): Promise<void>;
   setHighwayMode(mode: HighwayMode): void;
 }
 
@@ -158,8 +177,9 @@ export interface HighwayStage {
    * animation loop, with every looping texture on the frame it shows
    * `elapsedMs` into playback. The picture depends only on `elapsedMs` and the
    * state pushed into the stage, so frames can be drawn in any order. For
-   * renderers that own their clock (the launch film); the editor does not
-   * call it.
+   * callers that own their clock (the video kit's ProductHighway); the editor
+   * does not call it. Unlike the loop, it throws: when the draw fails, and
+   * when the stage is destroyed or its WebGL context is lost.
    */
   renderFrame(elapsedMs: number): void;
   /**
@@ -195,7 +215,7 @@ interface StageContext {
    *  with. */
   textures: SharedCellTextures;
   /** The playback clock, read fresh every frame — see `setupStage`. */
-  getAudioManager: () => AudioManager | null;
+  getAudioManager: () => StageClock | null;
   /** Chart time minus audio delay, in ms. Shared by every highway. */
   getElapsedMs: () => number;
   /** The stage's tempo map, seeded into a highway as it finishes building. */
@@ -205,20 +225,6 @@ interface StageContext {
    * Cheap and coalescing -- see `RenderGate`.
    */
   wake: () => void;
-}
-
-function makeCamera(worldX: number): THREE.PerspectiveCamera {
-  const camera = new THREE.PerspectiveCamera(
-    HIGHWAY_CAMERA.fovDeg,
-    1 / 1,
-    0.01,
-    10,
-  );
-  camera.position.x = worldX;
-  camera.position.z = HIGHWAY_CAMERA.z;
-  camera.position.y = HIGHWAY_CAMERA.y;
-  camera.rotation.x = THREE.MathUtils.degToRad(HIGHWAY_CAMERA.pitchDeg);
-  return camera;
 }
 
 /**
@@ -305,7 +311,7 @@ class StageHighway implements StageHighwayHandle {
     const worldX = slot * HIGHWAY_ROOT_SPACING;
     const layerIndex = layerForSlot(slot);
     this.root = new HighwayRoot(worldX, layerIndex);
-    this.camera = makeCamera(worldX);
+    this.camera = createHighwayCamera(worldX);
     this.camera.layers.enable(0);
     this.camera.layers.enable(layerIndex);
     ctx.scene.add(this.root);
@@ -442,9 +448,7 @@ class StageHighway implements StageHighwayHandle {
     this.root.syncLayers();
   }
 
-  async setGridData(
-    config: Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>,
-  ): Promise<void> {
+  async setGridData(config: GridData): Promise<void> {
     await this.ready;
     if (this.disposed) return;
     if (this.gridOverlay) {
@@ -491,34 +495,14 @@ class StageHighway implements StageHighwayHandle {
   }
 
   /**
-   * Set this highway's viewport rect, the camera aspect that matches it, and
-   * the fit that keeps the whole highway inside that rect.
-   *
-   * `setViewOffset` overwrites `camera.aspect` with `fullWidth / fullHeight`,
-   * so the virtual frame is sized `aspect * 2` by `2`: it restates the aspect
-   * unchanged, and its 2-unit height makes `offsetY` read directly in NDC.
+   * Set this highway's viewport rect, and fit the camera to it so the whole
+   * highway stays inside (`fitHighwayCamera`).
    */
   setRect(rect: HighwayRect | null): void {
     this.rect = rect;
     this.ctx.wake();
     if (rect && rect.width > 0 && rect.height > 0) {
-      const aspect = rect.width / rect.height;
-      const fit = computeHighwayCameraFit({aspect, halfWidth: this.halfWidth});
-      this.camera.aspect = aspect;
-      this.camera.fov = fit.fovDeg;
-      if (fit.ndcShiftY !== 0) {
-        this.camera.setViewOffset(
-          aspect * 2,
-          2,
-          0,
-          fit.ndcShiftY,
-          aspect * 2,
-          2,
-        );
-      } else {
-        this.camera.clearViewOffset();
-      }
-      this.camera.updateProjectionMatrix();
+      fitHighwayCamera(this.camera, rect, this.halfWidth);
     }
   }
 
@@ -618,7 +602,7 @@ export function setupStage(
   chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement | null>,
   canvasHostRef: RefObject<HTMLDivElement | null>,
-  getAudioManager: () => AudioManager | null,
+  getAudioManager: () => StageClock | null,
   config: StageConfig = {},
 ): HighwayStage {
   const tomStyle = config.tomStyle ?? 'square';
@@ -631,7 +615,7 @@ export function setupStage(
   // identical in every viewport.
   scene.fog = new THREE.Fog(0x000000, 2.0, 2.5);
 
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = config.pixelRatio ?? Math.min(window.devicePixelRatio || 1, 2);
   const renderer = new THREE.WebGLRenderer({
     antialias: dpr < 2, // skip antialias on high-DPI screens where it's unnecessary
   });
@@ -646,7 +630,7 @@ export function setupStage(
   canvasHostRef.current?.children.item(0)?.remove();
   canvasHostRef.current?.appendChild(renderer.domElement);
 
-  const textureLoader = new THREE.TextureLoader();
+  const textureLoader = new THREE.TextureLoader(config.loadingManager);
   const clippingPlanes = createHighwayClippingPlanes();
 
   let canvasWidth = sizingRef.current?.offsetWidth ?? window.innerWidth;
@@ -713,6 +697,7 @@ export function setupStage(
       seedVocals?.notePhrases ?? [],
       canvasWidth,
       canvasHeight,
+      config.pixelRatio,
     );
   }
 
@@ -832,7 +817,7 @@ export function setupStage(
       canvasWidth = layout.canvas.width;
       canvasHeight = layout.canvas.height;
       renderer.setSize(canvasWidth, canvasHeight);
-      lyricsOverlay?.resize(canvasWidth, canvasHeight);
+      lyricsOverlay?.resize(canvasWidth, canvasHeight, config.pixelRatio);
     }
 
     const named = new Set<string>();
@@ -864,6 +849,7 @@ export function setupStage(
       vocalPhrases,
       canvasWidth,
       canvasHeight,
+      config.pixelRatio,
     );
   }
 
@@ -930,7 +916,8 @@ export function setupStage(
     }
   }
 
-  function draw(elapsedTime: number, isPlaying = false): void {
+  /** Draw one frame, throwing whatever the draw throws. */
+  function drawFrame(elapsedTime: number, isPlaying: boolean): void {
     try {
       // Animated textures advance during playback only, once for the stage
       // rather than once per pass -- every pass draws the same ones.
@@ -966,12 +953,19 @@ export function setupStage(
       if (overlay?.update(elapsedTime) === true) {
         renderer.render(overlay.scene, overlay.camera);
       }
+    } finally {
+      renderer.autoClear = true;
+    }
+  }
+
+  /** The animation loop's draw, which survives a bad frame. */
+  function draw(elapsedTime: number, isPlaying = false): void {
+    try {
+      drawFrame(elapsedTime, isPlaying);
     } catch (e) {
       // Log but don't stop the loop -- transient errors (e.g. a null material
       // during a texture swap) should not permanently kill the renderer.
       console.warn('Highway stage render error:', e);
-    } finally {
-      renderer.autoClear = true;
     }
   }
 
@@ -980,9 +974,12 @@ export function setupStage(
   }
 
   function renderFrame(elapsedMs: number): void {
-    if (destroyed || contextLost) return;
+    if (destroyed)
+      throw new Error('renderFrame: the highway stage is destroyed');
+    if (contextLost)
+      throw new Error('renderFrame: the highway stage lost its WebGL context');
     sharedTextures.seek(elapsedMs);
-    draw(elapsedMs);
+    drawFrame(elapsedMs, false);
   }
 
   function onContextLost(listener: () => void): () => void {

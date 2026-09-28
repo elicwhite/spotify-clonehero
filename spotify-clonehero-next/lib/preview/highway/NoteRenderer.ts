@@ -62,7 +62,7 @@ const KICK_SCALE = 0.045;
  * line; the extra half-kick compensates for transparent padding at the bottom
  * of the gem texture, which otherwise leaves the visible bottom on the line.
  */
-const GEM_ANCHOR_Y = KICK_SCALE / SCALE;
+export const GEM_ANCHOR_Y = KICK_SCALE / SCALE;
 
 // ---------------------------------------------------------------------------
 // NoteRenderer

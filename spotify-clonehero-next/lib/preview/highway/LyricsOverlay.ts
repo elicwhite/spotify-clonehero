@@ -34,7 +34,7 @@ const FONT_FAMILY =
   'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 /** Canvas height in CSS pixels. Fixed so text aspect ratio is preserved. */
-const CANVAS_CSS_HEIGHT = 120;
+export const CANVAS_CSS_HEIGHT = 120;
 
 // ---------------------------------------------------------------------------
 // LyricsState — pure state tracking (no Three.js, testable)
@@ -368,17 +368,19 @@ export class LyricsOverlay {
   private height: number;
   private dpr: number;
 
+  /** `pixelRatio`: the stage's device pixel ratio (default: the display's, capped at 2). */
   constructor(
     lyrics: {msTime: number; text: string; msLength?: number}[],
     vocalPhrases: {msTime: number; msLength: number}[],
     width: number,
     height: number,
+    pixelRatio?: number,
   ) {
     const lines = parseLyrics(lyrics, vocalPhrases);
     this.state = new LyricsState(lines);
     this.width = width;
     this.height = height;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = pixelRatio ?? Math.min(window.devicePixelRatio || 1, 2);
 
     this.camera = new THREE.OrthographicCamera(0, width, height, 0, -1, 1);
     this.scene = new THREE.Scene();
@@ -452,10 +454,10 @@ export class LyricsOverlay {
     return true;
   }
 
-  resize(width: number, height: number): void {
+  resize(width: number, height: number, pixelRatio?: number): void {
     this.width = width;
     this.height = height;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = pixelRatio ?? Math.min(window.devicePixelRatio || 1, 2);
 
     const ch = CANVAS_CSS_HEIGHT;
 

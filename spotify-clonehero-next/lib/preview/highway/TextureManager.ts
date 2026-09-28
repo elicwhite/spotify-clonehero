@@ -116,7 +116,9 @@ export class AnimatedTexture {
     }
 
     try {
-      const response = await fetch(url);
+      // Through the loader's manager, like every other texture request, so a
+      // URL modifier on it applies here too.
+      const response = await fetch(textureLoader.manager.resolveURL(url));
       if (!response.ok || !response.body) {
         throw new Error(`Failed to fetch ${url}`);
       }
@@ -509,7 +511,7 @@ async function loadAnimatedFrameTextures(
   let decoder: ImageDecoder | null = null;
   let textures: THREE.Texture[] = [];
   try {
-    const response = await fetch(url);
+    const response = await fetch(textureLoader.manager.resolveURL(url));
     if (!response.ok || !response.body) {
       throw new Error(`Failed to fetch ${url}`);
     }
