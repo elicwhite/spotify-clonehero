@@ -2,7 +2,7 @@
   "name": "spotify-clonehero",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.22.0",
+  "packageManager": "pnpm@12.4.2",
   "scripts": {
     "dev": "next dev",
     "dev:webpack": "next dev --webpack",
@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@eliwhite/parse-sng": "4.0.3-eliwhite.0",
-    "@eliwhite/scan-chart": "8.1.0-eliwhite.6",
+    "@eliwhite/scan-chart": "8.1.0-eliwhite.7",
     "@geomitron/midi-file": "1.2.5",
     "@mcp-b/global": "^2.2.0",
     "@next/third-parties": "16.2.9",
@@ -125,11 +125,5 @@
     "tailwindcss": "^3.3.5",
     "tsx": "^4.23.4",
     "typescript": "^6.0.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "19.2.14",
-      "@types/react-dom": "19.2.3"
-    }
   }
 }
