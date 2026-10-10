@@ -247,14 +247,20 @@ async function runForward(
 ): Promise<{logProbs: Float32Array; T: number; C: number}> {
   if (!session) throw new Error('Model not loaded');
 
+  // The fp16 model names its tensors `input`/`output`; the quantized
+  // fallback names them `input_values`/`logits`. Both take one waveform and
+  // return one emissions tensor, so the session says which name is which.
+  const [inputName] = session.inputNames;
+  const [outputName] = session.outputNames;
+
   const inputTensor = new ort.Tensor('float32', audio, [1, audio.length]);
   let results: ort.InferenceSession.OnnxValueMapType;
   try {
-    results = await session.run({input: inputTensor});
+    results = await session.run({[inputName]: inputTensor});
   } finally {
     inputTensor.dispose();
   }
-  const output = results['output'];
+  const output = results[outputName];
 
   const dims = output.dims as number[];
   const T = dims[1];
