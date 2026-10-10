@@ -24,6 +24,34 @@ export class FakeAudioBufferSource {
   removeEventListener() {}
 }
 
+/** A buffer source that actually delivers its `ended` event, so tests can
+ *  play a loop off the end of the audio instead of across its end marker. */
+export class EventfulSource {
+  buffer: unknown = null;
+  playbackRate = {
+    value: 1,
+    setValueAtTime(v: number) {
+      this.value = v;
+    },
+  };
+  #listeners = new Set<EventListener>();
+  connect() {}
+  disconnect() {}
+  start() {}
+  stop() {}
+  addEventListener(type: string, listener: EventListener) {
+    if (type === 'ended') this.#listeners.add(listener);
+  }
+  removeEventListener(_type: string, listener: EventListener) {
+    this.#listeners.delete(listener);
+  }
+  fireEnded() {
+    for (const listener of [...this.#listeners]) {
+      listener({currentTarget: this} as unknown as Event);
+    }
+  }
+}
+
 export class FakeGainNode {
   gain = new FakeAudioParam();
   /** The node(s) this gain is currently connected to, so tests can assert

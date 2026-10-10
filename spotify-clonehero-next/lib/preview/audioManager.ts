@@ -83,6 +83,9 @@ export class AudioManager {
   #tempoConfig: TempoConfig = {tempo: 1.0};
 
   #startedAt: number = -1;
+  // Where the song ran out, while the transport sits at its end. `null`
+  // whenever a position comes from the audio clock instead.
+  #heldAt: number | null = null;
   // What was the current time in ms when the song started
   // This is non zero when we seek our pause
   #trackOffset: number = 0;
@@ -405,6 +408,8 @@ export class AudioManager {
       throw new Error('Must provide percent or time');
     }
 
+    this.#heldAt = null;
+
     // Stop any existing smoothing loop (will restart after audio is playing)
     this.#stopSmoothingLoop();
 
@@ -594,6 +599,10 @@ export class AudioManager {
    * and may jitter relative to requestAnimationFrame.
    */
   get #rawCurrentTime(): number {
+    if (this.#heldAt !== null) {
+      return this.#heldAt;
+    }
+
     if (this.#startedAt < 0) {
       return 0;
     }
@@ -730,6 +739,8 @@ export class AudioManager {
    *   new position. The AudioContext is NOT resumed here.
    */
   async seekTo(timeSec: number) {
+    this.#heldAt = null;
+
     if (this.isPlaying) {
       return this.play({time: timeSec});
     }
@@ -783,6 +794,10 @@ export class AudioManager {
     });
 
     this.#isInitialized = false;
+    // `#rawCurrentTime` reads the audio clock for any started manager, and a
+    // song that has ended leaves the context running. Without this, the
+    // position would keep counting from the context's own uptime.
+    this.#startedAt = -1;
     // Clear tempo tracking variables when stopping
     this.#effectivePlayTime = 0;
     this.#lastTempoChangeRealTime = 0;
@@ -895,6 +910,11 @@ export class AudioManager {
     }
 
     this.stop();
+    // The song stays at its end. The context keeps running after the last
+    // sample, so stopping the clock is what keeps the playhead there and the
+    // transport reading "paused".
+    this.#heldAt = this.#duration;
+    this.#context.suspend().catch(() => {});
     this.#onSongEnded?.();
   }
 
