@@ -37,12 +37,38 @@ jest.mock('../queries', () => ({
   dismissRadarSong: jest.fn(async () => undefined),
 }));
 
+const mockSongsFolder = {name: 'Songs'} as FileSystemDirectoryHandle;
+const mockDownloadsFolder = {name: 'downloads'} as FileSystemDirectoryHandle;
+const mockGetCachedSongsFolder = jest.fn();
+const mockPickSongsFolder = jest.fn();
 jest.mock('../../../lib/local-songs-folder', () => ({
-  downloadSong: jest.fn(async () => ({
-    status: 'downloaded',
-    newParentDirectoryHandle: {},
-    fileName: 'chart.sng',
-  })),
+  downloadSong: jest.fn(
+    async (
+      _artist: string,
+      _song: string,
+      _charter: string,
+      _url: string,
+      destination: {kind: string},
+    ) =>
+      destination.kind === 'folder'
+        ? {
+            status: 'installed',
+            newParentDirectoryHandle: {},
+            fileName: 'chart.sng',
+          }
+        : {status: 'downloaded', fileName: 'chart.sng'},
+  ),
+  getCachedSongsDirectoryHandle: () => mockGetCachedSongsFolder(),
+  pickSongsDirectory: () => mockPickSongsFolder(),
+  getSongsDownloadFolder: async () => mockDownloadsFolder,
+}));
+
+const mockToastSuccess = jest.fn();
+jest.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: jest.fn(),
+  },
 }));
 
 jest.mock('../../../components/MusicPreviewButton', () => ({
@@ -170,6 +196,10 @@ const defaultPreviewProps = {
 beforeEach(() => {
   mockDownloadSong.mockClear();
   mockDismissRadarSong.mockClear();
+  mockToastSuccess.mockClear();
+  mockGetCachedSongsFolder.mockReset().mockResolvedValue(mockSongsFolder);
+  mockPickSongsFolder.mockReset().mockResolvedValue(null);
+  window.localStorage.clear();
   // jsdom has no File System Access API; most tests run as a browser with it.
   window.showDirectoryPicker = jest.fn() as typeof window.showDirectoryPicker;
 });
@@ -257,13 +287,15 @@ it('renders relevance order, expands chart variants, and installs a chart', asyn
     expect.any(String),
     expect.any(String),
     expect.any(String),
+    {kind: 'folder', folder: mockDownloadsFolder},
     expect.objectContaining({source: 'find_music'}),
   );
   await waitFor(() => expect(screen.getAllByText('Installed')).toHaveLength(2));
+  // Into a folder the user granted, nothing needs explaining.
+  expect(mockToastSuccess).not.toHaveBeenCalled();
 });
 
-it('returns an install action to idle when directory selection is canceled', async () => {
-  mockDownloadSong.mockResolvedValueOnce({status: 'canceled'});
+function renderAlpha() {
   render(
     <FindMusicTable
       view="music"
@@ -276,14 +308,124 @@ it('returns an install action to idle when directory selection is canceled', asy
       onClearFilters={jest.fn()}
     />,
   );
-
   fireEvent.click(screen.getByTestId('song-row'));
-  fireEvent.click(await screen.findByRole('button', {name: 'Install'}));
+}
+
+it('downloads, and says the browser is why, where there is no folder picker', async () => {
+  Reflect.deleteProperty(window, 'showDirectoryPicker');
+  renderAlpha();
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Download'}));
 
   await waitFor(() =>
-    expect(screen.getByRole('button', {name: 'Install'})).toBeEnabled(),
+    expect(screen.getByText('Downloaded')).toBeInTheDocument(),
   );
-  expect(screen.queryByRole('button', {name: 'Retry'})).not.toBeInTheDocument();
+  expect(mockDownloadSong).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    {kind: 'browser-download'},
+    expect.objectContaining({source: 'find_music'}),
+  );
+  expect(mockGetCachedSongsFolder).not.toHaveBeenCalled();
+  expect(mockToastSuccess).toHaveBeenCalledWith(
+    'Saved to your Downloads folder',
+    {
+      description:
+        'Your browser cannot save files into your Songs folder. The files go to your Downloads folder. Move each chart into your Songs folder, then scan again.',
+    },
+  );
+  expect(screen.getByTestId('chart-row')).not.toHaveTextContent('Installed');
+});
+
+it('asks once where to save when no Songs folder is set, and keeps "Just download"', async () => {
+  mockGetCachedSongsFolder.mockResolvedValue(null);
+  renderAlpha();
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Install'}));
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog).toHaveTextContent('Install charts into your Songs folder?');
+  fireEvent.click(within(dialog).getByRole('button', {name: 'Just download'}));
+
+  await waitFor(() =>
+    expect(screen.getByText('Downloaded')).toBeInTheDocument(),
+  );
+  expect(mockDownloadSong).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    {kind: 'browser-download'},
+    expect.anything(),
+  );
+  // The user chose this, so the browser is not blamed for it.
+  expect(mockToastSuccess).toHaveBeenCalledWith(
+    'Saved to your Downloads folder',
+    {
+      description:
+        'The files go to your Downloads folder. Move each chart into your Songs folder, then scan again.',
+    },
+  );
+  expect(window.localStorage.getItem('find-music:install-destination:v1')).toBe(
+    'download',
+  );
+});
+
+it('does not ask again after "Just download"', async () => {
+  mockGetCachedSongsFolder.mockResolvedValue(null);
+  window.localStorage.setItem('find-music:install-destination:v1', 'download');
+  renderAlpha();
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Download'}));
+
+  await waitFor(() =>
+    expect(screen.getByText('Downloaded')).toBeInTheDocument(),
+  );
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('installs into the folder picked from the dialog', async () => {
+  mockGetCachedSongsFolder.mockResolvedValue(null);
+  mockPickSongsFolder.mockResolvedValue(mockSongsFolder);
+  renderAlpha();
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Install'}));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(
+    within(dialog).getByRole('button', {name: 'Select Songs folder'}),
+  );
+
+  await waitFor(() =>
+    expect(screen.getByText('Installed')).toBeInTheDocument(),
+  );
+  expect(mockPickSongsFolder).toHaveBeenCalledTimes(1);
+  expect(mockDownloadSong).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+    {kind: 'folder', folder: mockDownloadsFolder},
+    expect.anything(),
+  );
+});
+
+it('downloads nothing when the dialog is closed', async () => {
+  mockGetCachedSongsFolder.mockResolvedValue(null);
+  renderAlpha();
+
+  fireEvent.click(await screen.findByRole('button', {name: 'Install'}));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.keyDown(dialog, {key: 'Escape'});
+
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  expect(mockDownloadSong).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', {name: 'Install'})).toBeEnabled();
+  expect(window.localStorage.getItem('find-music:install-destination:v1')).toBe(
+    null,
+  );
 });
 
 it('renders track-backed instruments with unavailable intensity beneath the song column', () => {

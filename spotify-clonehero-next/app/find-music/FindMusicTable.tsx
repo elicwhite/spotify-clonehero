@@ -29,12 +29,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
-import {toast} from 'sonner';
-import {downloadSong} from '@/lib/local-songs-folder';
-import {
-  NO_FOLDER_PICKER_MESSAGE,
-  supportsDirectoryPicker,
-} from '@/lib/file-access/capabilities';
 import MusicPreviewButton, {
   type MusicPreviewProvider,
 } from '@/components/MusicPreviewButton';
@@ -50,6 +44,7 @@ import {
   type RadarSong,
 } from './types';
 import {dismissRadarSong} from './queries';
+import {type ChartInstallState, useChartInstall} from './useChartInstall';
 import {
   applyMusicFilters,
   applyRadarFilters,
@@ -66,8 +61,6 @@ type MusicSort = {
 
 const PLAYS_SORT: MusicSort = {key: 'plays', direction: 'desc'};
 const SCORE_SORT: MusicSort = {key: 'score', direction: 'desc'};
-
-type DownloadState = 'idle' | 'downloading' | 'done' | 'error';
 
 export default function FindMusicTable({
   view,
@@ -104,9 +97,7 @@ export default function FindMusicTable({
     [music],
   );
   const sort = chosenSort ?? (historyLoaded ? PLAYS_SORT : SCORE_SORT);
-  const [downloadStates, setDownloadStates] = useState<
-    Record<string, DownloadState>
-  >({});
+  const chartInstall = useChartInstall();
   const {currentTrack, pause} = useContext(AudioContext);
 
   const rows = useMemo(() => {
@@ -154,33 +145,6 @@ export default function FindMusicTable({
     });
   }, []);
 
-  const install = useCallback(async (chart: FindMusicChart) => {
-    if (!supportsDirectoryPicker()) {
-      toast.error(NO_FOLDER_PICKER_MESSAGE);
-      return;
-    }
-    setDownloadStates(current => ({...current, [chart.md5]: 'downloading'}));
-    try {
-      const result = await downloadSong(
-        chart.artist,
-        chart.name,
-        chart.charter,
-        `https://files.enchor.us/${chart.md5}.sng`,
-        {asSng: true, source: 'find_music', md5: chart.md5},
-      );
-      if (result.status === 'canceled') {
-        setDownloadStates(current => ({...current, [chart.md5]: 'idle'}));
-        return;
-      }
-      setDownloadStates(current => ({...current, [chart.md5]: 'done'}));
-    } catch (error) {
-      console.error('Failed to install chart', error);
-      // An md5 says which chart without saying which song.
-      Sentry.captureException(error, {tags: {chart_md5: chart.md5}});
-      setDownloadStates(current => ({...current, [chart.md5]: 'error'}));
-    }
-  }, []);
-
   if (view === 'radar' && radarLoading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border bg-card p-10 text-center">
@@ -220,6 +184,7 @@ export default function FindMusicTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card shadow-sm">
+      {chartInstall.dialog}
       <div className="flex items-center border-b px-4 py-2 text-xs text-muted-foreground">
         <span>
           <b className="text-foreground">{rows.length.toLocaleString()}</b>{' '}
@@ -246,8 +211,7 @@ export default function FindMusicTable({
           onDismiss={dismiss}
           expanded={expanded}
           onToggle={toggleExpanded}
-          downloadStates={downloadStates}
-          onInstall={install}
+          chartInstall={chartInstall}
           spotifyPreviewEnabled={spotifyPreviewEnabled}
           appleMusicClient={appleMusicClient}
           preferredPreviewProvider={preferredPreviewProvider}
@@ -357,8 +321,7 @@ function VirtualRows({
   expanded,
   onToggle,
   onDismiss,
-  downloadStates,
-  onInstall,
+  chartInstall,
   spotifyPreviewEnabled,
   appleMusicClient,
   preferredPreviewProvider,
@@ -368,8 +331,7 @@ function VirtualRows({
   expanded: Set<string>;
   onToggle: (key: string) => void;
   onDismiss: (song: RadarSong, scope: 'song' | 'artist') => void;
-  downloadStates: Record<string, DownloadState>;
-  onInstall: (chart: FindMusicChart) => Promise<void>;
+  chartInstall: ReturnType<typeof useChartInstall>;
   spotifyPreviewEnabled: boolean;
   appleMusicClient: AppleMusicLibraryClient | null;
   preferredPreviewProvider: MusicPreviewProvider | undefined;
@@ -463,8 +425,10 @@ function VirtualRows({
                   chart={item.chart}
                   view={view}
                   listenEnabled={listenEnabled}
-                  downloadState={downloadStates[item.chart.md5] ?? 'idle'}
-                  onInstall={() => onInstall(item.chart)}
+                  installState={chartInstall.states[item.chart.md5] ?? 'idle'}
+                  saveMode={chartInstall.saveMode}
+                  downloadReason={chartInstall.downloadReason}
+                  onInstall={() => chartInstall.install(item.chart)}
                 />
               )}
             </div>
@@ -778,13 +742,17 @@ function ChartRow({
   chart,
   view,
   listenEnabled,
-  downloadState,
+  installState,
+  saveMode,
+  downloadReason,
   onInstall,
 }: {
   chart: FindMusicChart;
   view: FindMusicView;
   listenEnabled: boolean;
-  downloadState: DownloadState;
+  installState: ChartInstallState;
+  saveMode: 'install' | 'download';
+  downloadReason: string | null;
   onInstall: () => Promise<void>;
 }) {
   // The instrument badges flow under the columns that carry no per-chart value
@@ -836,29 +804,77 @@ function ChartRow({
         <span className="sr-only">Updated </span>
         {formatDate(chart.modifiedTime)}
       </span>
-      {chart.isInstalled || downloadState === 'done' ? (
-        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-          <Check className="mr-1 inline h-3 w-3" /> Installed
-        </span>
-      ) : (
-        <Button
-          size="xs"
-          variant={downloadState === 'error' ? 'destructive' : 'default'}
-          disabled={downloadState === 'downloading'}
-          onClick={event => {
-            event.stopPropagation();
-            void onInstall();
-          }}>
-          {downloadState === 'downloading' ? (
-            <RotateCw className="h-3 w-3 animate-spin" />
-          ) : (
-            <Download className="h-3 w-3" />
-          )}
-          {downloadState === 'error' ? 'Retry' : 'Install'}
-        </Button>
-      )}
+      <ChartInstallControl
+        installed={chart.isInstalled}
+        state={installState}
+        saveMode={saveMode}
+        downloadReason={downloadReason}
+        onInstall={onInstall}
+      />
       {view === 'radar' ? <span /> : null}
     </div>
+  );
+}
+
+function ChartInstallControl({
+  installed,
+  state,
+  saveMode,
+  downloadReason,
+  onInstall,
+}: {
+  installed: boolean;
+  state: ChartInstallState;
+  saveMode: 'install' | 'download';
+  downloadReason: string | null;
+  onInstall: () => Promise<void>;
+}) {
+  if (installed || state === 'installed') {
+    return (
+      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+        <Check className="mr-1 inline h-3 w-3" /> Installed
+      </span>
+    );
+  }
+  // Not "Installed": the file is in Downloads, and the next scan of the Songs
+  // folder is what says whether the user moved it there.
+  if (state === 'downloaded') {
+    return (
+      <span className="font-medium text-muted-foreground">
+        <Check className="mr-1 inline h-3 w-3" /> Downloaded
+      </span>
+    );
+  }
+
+  const button = (
+    <Button
+      size="xs"
+      variant={state === 'error' ? 'destructive' : 'default'}
+      disabled={state === 'working'}
+      onClick={event => {
+        event.stopPropagation();
+        void onInstall();
+      }}>
+      {state === 'working' ? (
+        <RotateCw className="h-3 w-3 animate-spin" />
+      ) : (
+        <Download className="h-3 w-3" />
+      )}
+      {state === 'error'
+        ? 'Retry'
+        : saveMode === 'download'
+          ? 'Download'
+          : 'Install'}
+    </Button>
+  );
+  if (downloadReason == null) return button;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent>{downloadReason}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

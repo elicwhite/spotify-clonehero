@@ -79,13 +79,14 @@ function setupSuccessfulDownload(options?: {cleanupError?: Error}) {
   };
 }
 
-function successfulDownloadOptions(folder: FileSystemDirectoryHandle) {
-  return {
-    folder,
-    asSng: true,
-    source: 'find_music' as const,
-    md5: 'chart-md5',
-  };
+const successfulDownloadOptions = {
+  asSng: true,
+  source: 'find_music' as const,
+  md5: 'chart-md5',
+};
+
+function intoFolder(folder: unknown) {
+  return {kind: 'folder', folder: folder as FileSystemDirectoryHandle} as const;
 }
 
 describe('downloadSong outcomes', () => {
@@ -96,16 +97,36 @@ describe('downloadSong outcomes', () => {
       configurable: true,
       value: mockFetch,
     });
-    jest.spyOn(window, 'alert').mockImplementation(() => {});
   });
 
-  it('returns cancellation before starting a request or emitting analytics', async () => {
-    Object.defineProperty(window, 'showDirectoryPicker', {
+  it('saves a browser download without writing to OPFS', async () => {
+    const getDirectory = jest.fn();
+    Object.defineProperty(navigator, 'storage', {
       configurable: true,
-      value: jest.fn(async () => {
-        throw new DOMException('The user aborted a request.', 'AbortError');
-      }),
+      value: {getDirectory},
     });
+    mockFetch.mockResolvedValue({ok: true, status: 200, body: {}});
+    // jsdom has no Response; the body only has to become a Blob.
+    Object.defineProperty(global, 'Response', {
+      configurable: true,
+      value: class {
+        async blob() {
+          return new Blob(['sng bytes']);
+        }
+      },
+    });
+    const createObjectURL = jest.fn(() => 'blob:chart');
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: jest.fn(),
+    });
+    const click = jest
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
 
     await expect(
       downloadSong(
@@ -113,11 +134,20 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
+        {kind: 'browser-download'},
+        successfulDownloadOptions,
       ),
-    ).resolves.toEqual({status: 'canceled'});
+    ).resolves.toEqual({status: 'downloaded', fileName: filename});
 
-    expect(mockFetch).not.toHaveBeenCalled();
-    expect(mockTrack).not.toHaveBeenCalled();
+    expect(getDirectory).not.toHaveBeenCalled();
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(mockTrack).toHaveBeenCalledWith({
+      event: 'chart_downloaded',
+      source: 'find_music',
+      format: 'sng',
+      destination: 'browser-download',
+      md5: 'chart-md5',
+    });
   });
 
   it('rejects an unsuccessful HTTP response', async () => {
@@ -129,9 +159,7 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
-        {
-          folder: {} as FileSystemDirectoryHandle,
-        },
+        intoFolder({}),
       ),
     ).rejects.toThrow('Chart download failed with HTTP 503');
 
@@ -147,9 +175,7 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
-        {
-          folder: {} as FileSystemDirectoryHandle,
-        },
+        intoFolder({}),
       ),
     ).rejects.toThrow('Chart download response did not include a body');
 
@@ -171,12 +197,11 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
-        successfulDownloadOptions(
-          destinationDirectory as unknown as FileSystemDirectoryHandle,
-        ),
+        intoFolder(destinationDirectory),
+        successfulDownloadOptions,
       ),
     ).resolves.toEqual({
-      status: 'downloaded',
+      status: 'installed',
       newParentDirectoryHandle: destinationDirectory,
       fileName: filename,
     });
@@ -187,6 +212,7 @@ describe('downloadSong outcomes', () => {
       event: 'chart_downloaded',
       source: 'find_music',
       format: 'sng',
+      destination: 'folder',
       md5: 'chart-md5',
     });
     expect(copyPipeTo.mock.invocationCallOrder[0]).toBeLessThan(
@@ -205,12 +231,11 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
-        successfulDownloadOptions(
-          destinationDirectory as unknown as FileSystemDirectoryHandle,
-        ),
+        intoFolder(destinationDirectory),
+        successfulDownloadOptions,
       ),
     ).resolves.toEqual({
-      status: 'downloaded',
+      status: 'installed',
       newParentDirectoryHandle: destinationDirectory,
       fileName: filename,
     });
@@ -239,12 +264,11 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
-        successfulDownloadOptions(
-          destinationDirectory as unknown as FileSystemDirectoryHandle,
-        ),
+        intoFolder(destinationDirectory),
+        successfulDownloadOptions,
       ),
     ).resolves.toEqual({
-      status: 'downloaded',
+      status: 'installed',
       newParentDirectoryHandle: destinationDirectory,
       fileName: filename,
     });
@@ -266,9 +290,8 @@ describe('downloadSong outcomes', () => {
         'Song',
         'Charter',
         'https://example.com/chart.sng',
-        successfulDownloadOptions(
-          destinationDirectory as unknown as FileSystemDirectoryHandle,
-        ),
+        intoFolder(destinationDirectory),
+        successfulDownloadOptions,
       ),
     ).rejects.toThrow('The file is locked');
 

@@ -3,6 +3,7 @@ import filenamify from 'filenamify/browser';
 
 import {track, type ChartDownloadSource} from '@/lib/analytics/track';
 import {writeFile} from '@/lib/fileSystemHelpers';
+import {downloadBlob} from '@/lib/download';
 import scanLocalCharts, {
   LocalChartScanIssue,
   SongAccumulator,
@@ -228,16 +229,14 @@ async function scanDirectoryForCharts(
   };
 }
 
-async function getDefaultDownloadDirectory(): Promise<FileSystemDirectoryHandle | null> {
-  const songsDirHandle = await tryGetSongsDirectoryHandle();
-  if (!songsDirHandle) {
-    return null;
-  }
-  const downloadsHandle = await songsDirHandle.getDirectoryHandle(
+/** The folder inside the Songs folder that installed charts go into. */
+export async function getSongsDownloadFolder(
+  songsFolder: FileSystemDirectoryHandle,
+): Promise<FileSystemDirectoryHandle> {
+  return await songsFolder.getDirectoryHandle(
     'musiccharts-dot-tools-downloads',
     {create: true},
   );
-  return downloadsHandle;
 }
 
 export async function getPreviewDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
@@ -400,32 +399,34 @@ async function clearStagedDownload(
   }
 }
 
+/**
+ * Where a chart download goes. The caller decides, because only the caller can
+ * ask the user: this function never prompts.
+ */
+export type ChartDestination =
+  | {kind: 'folder'; folder: FileSystemDirectoryHandle}
+  | {kind: 'browser-download'};
+
 export async function downloadSong(
   artist: string,
   song: string,
   charter: string,
   url: string,
+  destination: ChartDestination,
   options?: {
-    folder?: FileSystemDirectoryHandle;
     replaceExisting?: boolean;
     asSng?: boolean;
     source?: ChartDownloadSource;
     md5?: string;
   },
 ): Promise<
-  | {status: 'canceled'}
   | {
-      status: 'downloaded';
+      status: 'installed';
       newParentDirectoryHandle: FileSystemDirectoryHandle;
       fileName: string;
     }
+  | {status: 'downloaded'; fileName: string}
 > {
-  const downloadLocation =
-    options?.folder ?? (await getDefaultDownloadDirectory());
-  if (!downloadLocation) {
-    return {status: 'canceled'};
-  }
-
   const response = await fetch(url, {
     headers: {
       accept: '*/*',
@@ -450,6 +451,16 @@ export async function downloadSong(
     options?.asSng ? '.sng' : ''
   }`;
   const filename = filenamify(artistSongTitle, {replacement: ''});
+
+  if (destination.kind === 'browser-download') {
+    // A browser download has nothing to be atomic about, so it skips the OPFS
+    // staging copy, which would hold a second copy of a file that can reach
+    // hundreds of MB against the quota the catalog also uses.
+    downloadBlob(await new Response(body).blob(), filename);
+    trackChartDownload(destination, options);
+    return {status: 'downloaded', fileName: filename};
+  }
+  const downloadLocation = destination.folder;
 
   const backupRootDirHandle = await getBackupDirectory();
 
@@ -479,15 +490,23 @@ export async function downloadSong(
     console.warn(`Could not remove download backup ${filename}`, error);
   }
 
-  track({
-    event: 'chart_downloaded',
-    source: options?.source ?? 'unknown',
-    format: options?.asSng === false ? 'chart' : 'sng',
-    md5: options?.md5,
-  });
+  trackChartDownload(destination, options);
 
   console.log(`Finished downloading ${filename}`);
-  return {status: 'downloaded', ...result};
+  return {status: 'installed', ...result};
+}
+
+function trackChartDownload(
+  destination: ChartDestination,
+  options: {asSng?: boolean; source?: ChartDownloadSource; md5?: string} = {},
+) {
+  track({
+    event: 'chart_downloaded',
+    source: options.source ?? 'unknown',
+    format: options.asSng === false ? 'chart' : 'sng',
+    destination: destination.kind,
+    md5: options.md5,
+  });
 }
 
 async function downloadAsFolder(

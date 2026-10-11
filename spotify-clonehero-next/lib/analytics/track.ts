@@ -61,6 +61,7 @@ export type AnalyticsEvent =
       event: 'chart_downloaded';
       source: ChartDownloadSource;
       format: 'sng' | 'chart';
+      destination: 'folder' | 'browser-download';
       md5?: string | undefined;
     }
 
