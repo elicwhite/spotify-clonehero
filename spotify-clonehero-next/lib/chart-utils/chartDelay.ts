@@ -1,3 +1,5 @@
+import {scanIni} from '@eliwhite/scan-chart';
+
 /**
  * Compute the normalized chart delay in milliseconds from chart metadata.
  *
@@ -25,4 +27,20 @@ export function getChartDelayMs(
     return metadata.chart_offset;
   }
   return 0;
+}
+
+/**
+ * `parseChartFile` sees only the chart file, so the `delay` a song.ini sets
+ * never reaches the metadata it returns, and `getChartDelayMs` would fall back
+ * to the .chart `Offset` (or none). This reads `delay` from the folder's
+ * song.ini the way `parseChartAndIni` does and puts it on the parsed chart, so
+ * the chart delay matches what the chart editor applies to the same files.
+ */
+export function applyIniDelay<T extends {metadata: {delay?: number}}>(
+  chart: T,
+  files: {fileName: string; data: Uint8Array}[],
+): T {
+  const delay = scanIni(files).metadata?.delay;
+  if (delay !== undefined) chart.metadata.delay = delay;
+  return chart;
 }

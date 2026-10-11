@@ -20,8 +20,7 @@ import {
   findAudioFiles,
 } from '@/lib/preview/chorus-chart-processing';
 import {AudioManager} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import {hasIniName} from '@/lib/src-shared/utils';
+import {applyIniDelay, getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 
 import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
@@ -120,23 +119,10 @@ function findChartFile(files: Files): {
 function parseVariantChart(files: Files): ParsedChart {
   const {data, format} = findChartFile(files);
 
-  let iniDelay: number | undefined;
-  const iniFile = files.find(f => hasIniName(f.fileName));
-  if (iniFile) {
-    const iniText = new TextDecoder().decode(iniFile.data);
-    const delayMatch = iniText.match(/^\s*delay\s*=\s*(-?\d+)/im);
-    if (delayMatch) iniDelay = parseInt(delayMatch[1], 10);
-    if (iniDelay === undefined) {
-      const offsetMatch = iniText.match(/^\s*chart_offset\s*=\s*(-?[\d.]+)/im);
-      if (offsetMatch) iniDelay = Math.round(parseFloat(offsetMatch[1]) * 1000);
-    }
-  }
-
-  const modifiers = {
-    ...PRO_DRUMS_MODIFIERS,
-    ...(iniDelay !== undefined ? {delay: iniDelay} : {}),
-  };
-  return parseChartFile(data, format, modifiers);
+  return applyIniDelay(
+    parseChartFile(data, format, PRO_DRUMS_MODIFIERS),
+    files,
+  );
 }
 
 function buildMetadata(

@@ -17,7 +17,6 @@ import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import {readChart} from '@/lib/chart-edit';
 import {setupRenderer} from '@/lib/preview/highway';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
-import {hasIniName} from '@/lib/src-shared/utils';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
@@ -245,25 +244,7 @@ async function prepareChart(song: SongAccumulator): Promise<PreparedChart> {
   // Parse chart
   const {chartData, format} = findChartData(files);
 
-  // Extract delay from song.ini if present
-  const iniFile = files.find(f => hasIniName(f.fileName));
-  let iniDelay: number | undefined;
-  if (iniFile) {
-    const iniText = new TextDecoder().decode(iniFile.data);
-    const delayMatch = iniText.match(/^\s*delay\s*=\s*(-?\d+)/im);
-    if (delayMatch) iniDelay = parseInt(delayMatch[1], 10);
-    if (iniDelay === undefined) {
-      const offsetMatch = iniText.match(/^\s*chart_offset\s*=\s*(-?[\d.]+)/im);
-      if (offsetMatch) iniDelay = Math.round(parseFloat(offsetMatch[1]) * 1000);
-    }
-  }
-
-  const iniChartModifiers = Object.assign(
-    {...PRO_DRUMS_MODIFIERS},
-    iniDelay !== undefined ? {delay: iniDelay} : {},
-  );
-
-  const chart = parseChartFile(chartData, format, iniChartModifiers);
+  const chart = parseChartFile(chartData, format, PRO_DRUMS_MODIFIERS);
 
   // Find expert drums track, fallback to any drums track
   let track = chart.trackData.find(
