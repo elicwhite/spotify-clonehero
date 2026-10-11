@@ -173,7 +173,7 @@ used _only_ by the two editor load paths:
    Rationale for not reusing ini-wins: ini-wins is correct for **scanning a
    folder somebody else authored** — the game reads the ini, so the ini is the
    authority — and `readChart` keeps that behavior unchanged for every other
-   route (`/preview`, `/chart-review`, `/sheet-music`, `/add-lyrics`,
+   route (`/preview`, `/sheet-music`, `/add-lyrics`,
    `/tempo`, the chart pickers). It is wrong for **reloading a project we
    ourselves wrote**, where the ini is a lossy re-encoding of the same doc.
 

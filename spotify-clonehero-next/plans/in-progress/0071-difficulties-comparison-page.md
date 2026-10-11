@@ -44,8 +44,7 @@ pause / seek / speed), all locked to the same audio.
 - **v1 is comparison-only** — no reduced-chart export/download. (The
   reference plan's §5 UX section describes export; cut from v1 scope.)
 - **Input: file upload only** (chart file/folder/.sng/.zip via the existing
-  chart-picker), reusing the same picker pattern as `/tempo` and
-  `/chart-review`. No "load from open project" integration.
+  chart-picker), reusing the same picker pattern as `/tempo`. No "load from open project" integration.
 
 ## Source of truth (read in full before porting — do not re-derive from REAPER/Haskell)
 
@@ -644,7 +643,7 @@ Original spec below, for the full build:
 Every existing highway consumer (`lib/preview/highway/index.ts`
 `setupRenderer`) creates its own `THREE.WebGLRenderer` + canvas + independent
 `requestAnimationFrame` loop (confirmed: no shared-context pattern exists
-anywhere in this codebase today; `chart-review`'s preload queue tops out at
+anywhere in this codebase today; the deleted `/chart-review` page's preload queue (in git history) topped out at
 2 concurrent instances, only 1 ever animating). Browsers cap concurrent
 WebGL contexts around 8–16 — 10 fresh contexts on one page is unproven and
 risks context loss on weaker GPUs, plus 10× texture loads and 10 independent
@@ -669,7 +668,7 @@ cells: {chart, track, audioManager, config}[])`. Creates **one**
   (`prepTrack`'s scene-building, the per-frame `animation()` body) as
   functions `multiCell.ts` can call per cell, rather than duplicating that
   logic. Keep `setupRenderer`'s existing public API and behavior unchanged
-  for its ~6 existing callsites (sheet-music, chart-review, drum-transcription,
+  for its ~5 existing callsites (sheet-music, drum-transcription,
   tempo, drum-fills, add-lyrics) — this is additive, not a rewrite.
 - Texture loads (`getHighwayTexture`, note textures) can be cached/shared
   across cells that use the same instrument/tomStyle instead of loading 10×
@@ -715,7 +714,7 @@ cells: {chart, track, audioManager, config}[])`. Creates **one**
   closure variables — `waveformSurface`, `gridOverlay`, `overlayState`,
   `lyricsOverlay`, `highwayMode`, `classicHighwayMesh`, etc. — this is a
   real restructuring, not a thin wrapper) touches the shared entrypoint for
-  6 existing pages (sheet-music, chart-review, drum-transcription, tempo,
+  5 existing pages (sheet-music, drum-transcription, tempo,
   drum-fills, add-lyrics). After the refactor, manually verify (chrome-devtools
   MCP) that at least sheet-music and drum-transcription still load, animate,
   and have a clean console — this is an explicit acceptance item below, not
@@ -725,8 +724,9 @@ cells: {chart, track, audioManager, config}[])`. Creates **one**
   problem at 10-cell scale): 10 independent `setupRenderer` instances, each
   in its own small canvas, but only the currently-hovered/focused cell's
   `startRender()` runs a live animation loop (others render one static frame
-  at the current audio position on seek/pause, following `chart-review`'s
-  active/preloaded-but-not-animating pattern). Flag this fallback to Eli
+  at the current audio position on seek/pause, following the
+  active/preloaded-but-not-animating pattern of the deleted `/chart-review`
+  page; read it with `git log -p -- app/chart-review`). Flag this fallback to Eli
   before taking it — it's a materially different UX (only one cell moving
   at a time) from what was asked.
 

@@ -108,7 +108,6 @@ A fourth chart-package entry point, **click-only, no drop**, deliberately compac
 |---|---|---|
 | `app/sng/components/SngLanding.tsx:29` | `pickFiles({id:'sng-modify', types:[{accept:{'application/octet-stream':['.sng']}}]})` | Card button |
 | `app/sng/SngClient.tsx:37` | `showDirectoryPicker({id:'sng-convert-folder', mode:'readwrite'})` | Only **readwrite** picker in the app |
-| `app/chart-review/ChartReviewClient.tsx:495, 509` | `showDirectoryPicker` + `showOpenFilePicker` (`.tsv`) | Internal tool; persists handles in IndexedDB |
 | `lib/local-songs-folder/index.ts:16`, `app/drum-fills/hooks/useLibraryScan.ts:58` | `showDirectoryPicker` | Library/settings-level, not a per-task selector |
 | `app/drum-fills/components/MidiStatus.tsx:89` | hidden input `.yaml` | MIDI profile, not audio/chart |
 
@@ -389,7 +388,7 @@ Keeps its exact public API (`onAudioFile`, `onChartLoaded`, `disabled`, `childre
 | `StemsMixer`'s strip markup, keyboard handling, sequential multi-add | Sidebar constraints; the sequential loop exists for the name uniquifier. |
 | `ReplaceChartButton`'s click-only shape | Deliberately avoids a second dashed box next to a loaded chart. |
 | `LocalChartLoader`'s `requireDrums` / audio-presence checks | Chart *semantics*, one layer above file intake. |
-| `ChartReviewClient`, `SpotifyHistory`, `useLibraryScan`, `local-songs-folder` folder pickers | Library/settings-scoped, not per-task selection. Migrating them buys nothing and risks the persisted-handle logic. |
+| `SpotifyHistory`, `useLibraryScan`, `local-songs-folder` folder pickers | Library/settings-scoped, not per-task selection. Migrating them buys nothing and risks the persisted-handle logic. |
 | The `mode: 'readwrite'` SNG-converter picker | Exposed as `directoryMode` but left as the only caller; defaulting to `readwrite` would worsen the permission prompt everywhere. |
 
 ---
@@ -454,7 +453,6 @@ It has two consumers and, as far as this investigation found, no dedicated test.
 
 - Whether `/preview` and `/sheet-music`'s `<details>`-collapsed `LocalChartLoader` has any drag interaction issue when collapsed — not exercised.
 - Whether any e2e/browser test outside `__tests__/` drives these selectors.
-- `app/chart-review/ChartReviewClient.tsx`'s IndexedDB-persisted handles interact with picker ids in a way this plan leaves alone by design, but the interaction was not traced end to end.
 
 ### 5.9 Cost/benefit, honestly
 
@@ -473,7 +471,7 @@ A second agent, loaded with the Contrarian persona (`~/projects/drum-to-chart/.c
 **Strongest con**: §5.1 flags the wrong list as the dangerous one, and step 2 will ship a real export regression. `AudioDropZone` gates on `decodeAudioData` *after* the extension check (`AudioDropZone.tsx:53` → `:66`), so widening its list cannot admit an undecodable file — worst case is worse error copy. Meanwhile step 2 also repoints `lib/chart-export/transcode-audio.ts`'s `AUDIO_EXTENSIONS`, adding `wma`. That flips `.wma` from silent pass-through to `needsOpusTranscode → decodeAudio`, which throws in Chrome. The plan orders `AudioDropZone` last "because it's the risky one"; it's the safe one.
 
 **Risk flags**:
-- [evidence] §5.4 claims "eight distinct ids"; actual count is 11–12 (`clone-hero-songs` ×2, `chart-review-charts/-results`, `sng-convert-folder/-add-files/-add-folder/-modify`, `spotify-dump`, `add-lyrics-chart`, `chart-editor-add-stem`, default `chart-picker`) — plus `DifficultyGenerationFlow`'s *dynamic* `dropZoneId`, which "copy literally" doesn't cover.
+- [evidence] §5.4 claims "eight distinct ids"; actual count is 9–10 (`clone-hero-songs` ×2, `sng-convert-folder/-add-files/-add-folder/-modify`, `spotify-dump`, `add-lyrics-chart`, `chart-editor-add-stem`, default `chart-picker`) — plus `DifficultyGenerationFlow`'s *dynamic* `dropZoneId`, which "copy literally" doesn't cover.
 - [accessibility] `DropZoneShell.tsx:43` is a bare `<div>` with `onClick` — no `role`, `tabIndex`, or `aria-label`. §3.4's widened props add `variant`/`actions`/`clickable` and no a11y at all, so the gap is preserved across all 13. Worse, `DifficultyGenerationFlow.test.tsx:113` mocks it as `getByRole('button', {name:'drop chart'})` — a role the real component doesn't have, so the suite actively masks it. `StemsMixer` already proves the fix is ~4 lines.
 - [verification] Only three test files in the repo call `fireEvent.drop`, all synthetic `{dataTransfer:{files:[file]}}` — none touch `ChartDropZone`, `SectionDropZone`, or `AudioUploader`. jsdom has no `dataTransfer.items` or `getAsFileSystemHandle`, so the two mechanisms most likely to break (sync-capture-before-await, folder handles) are **unreachable by any test the plan proposes**, including §5.5's. Step 4 is a 6-site × 6-case manual matrix with no automation and no OS-level drag named.
 - [scope] Nothing named `Enter`/`Space` support as a shared concern in §2.1 despite §1.9 identifying it as unique.

@@ -58,7 +58,7 @@ opens the real database.
 (`app/find-music/queries.ts:263-273`), which `upsertLocalCharts`
 (`lib/local-db/local-charts/index.ts:50-60`) fills with artist, song, charter,
 `modified_time` and the `song.ini` data. `handleInfo` is read only by
-`/chart-review`, `lib/drum-fills` and `lib/sng/convert-folder-to-sng.ts`, none
+`lib/drum-fills` and `lib/sng/convert-folder-to-sng.ts`, neither
 of which is on the `/find-music` path. The table lives in OPFS SQLite, so one
 scan in Firefox keeps the flag across reloads, the same as in Chrome.
 
@@ -405,7 +405,7 @@ the test is a capability test.
 
 ## Not in scope
 
-`/chart-review`, `/drum-fills`, `/sng` and the folder-to-`.sng` converter all
+`/drum-fills`, `/sng` and the folder-to-`.sng` converter all
 depend on live handles for reading and writing user files. They keep
 `SupportedBrowserWarning` as it is.
 

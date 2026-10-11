@@ -619,7 +619,7 @@ express "this makes sound and has a fader", which is what a track is. The
 
 **Construction.** The click has no file, so it is built separately, opt-in:
 `new AudioManager(files, onSongEnded, {clickTrack: true})`. Opt-in because
-`AudioManager` has hosts with no click at all (`/preview`, `/chart-review`,
+`AudioManager` has hosts with no click at all (`/preview`,
 `/tempo-viewer`, `/add-lyrics`, drum-fills calibration) and giving them a
 `click` entry in `trackNames` would put a phantom Click row on any mixer they
 render and churn ~20 test fixtures for nothing. The flag is passed from exactly
