@@ -1,9 +1,16 @@
 import {
   EMPTY_FOLDER_MESSAGE,
-  NOT_A_FOLDER_MESSAGE,
   SELECT_SONG_FOLDER_MESSAGE,
-  readChartFileList,
+  readChartFolder,
 } from '../chart-package';
+import {folderSourceFromFileList} from '../../file-access/folderSource';
+
+/** A `webkitdirectory` selection read as a chart folder. */
+function readChartFileList(selection: File[]) {
+  const folder = folderSourceFromFileList(selection);
+  if (!folder) throw new Error('the selection has no folder');
+  return readChartFolder(folder);
+}
 
 /**
  * A file as an `<input type="file" webkitdirectory>` hands it back: named by
@@ -21,7 +28,7 @@ async function names(files: File[]) {
   return loaded.files.map(f => f.fileName).sort();
 }
 
-describe('readChartFileList', () => {
+describe('readChartFolder over a webkitdirectory selection', () => {
   it('reads the files of the selected folder', async () => {
     const loaded = await readChartFileList([
       directoryFile('Song Name/notes.chart'),
@@ -101,19 +108,6 @@ describe('readChartFileList', () => {
           directoryFile('Library/Charts/Song Name/notes.chart'),
         ]),
       ).rejects.toThrow(SELECT_SONG_FOLDER_MESSAGE);
-    });
-
-    it('when the browser reported no folder at all', async () => {
-      // A browser that ignores `webkitdirectory` returns plain files with an
-      // empty webkitRelativePath. Reading nothing out of them would surface as
-      // a chart parsing error, which is not what went wrong.
-      await expect(
-        readChartFileList([new File(['[Song]'], 'notes.chart')]),
-      ).rejects.toThrow(NOT_A_FOLDER_MESSAGE);
-    });
-
-    it('when the selection is empty', async () => {
-      await expect(readChartFileList([])).rejects.toThrow(EMPTY_FOLDER_MESSAGE);
     });
 
     it('when the folder holds only dotfiles', async () => {

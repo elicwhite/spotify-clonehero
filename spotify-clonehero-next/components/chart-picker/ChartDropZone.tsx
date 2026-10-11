@@ -7,13 +7,14 @@ import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import DropZoneShell, {OrDivider} from './DropZoneShell';
 import {
-  readChartDirectory,
   readChartFile,
-  readChartFileList,
+  readChartFolder,
   readDroppedChart,
   detectFormat,
   type LoadedFiles,
 } from '@/lib/chart-files/chart-package';
+import type {FolderSource} from '@/lib/file-access/folderSource';
+import {pickFolder} from '@/lib/file-access/pickFolder';
 
 const NOT_A_CHART_MESSAGE = 'Drop a chart folder, a .zip, or a .sng';
 
@@ -35,7 +36,6 @@ export default function ChartDropZone({
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
 
   /** Read a chart package, holding the zone inert until it lands. Every way in
    *  reports failure the same way: a toast saying what was wrong with what the
@@ -107,41 +107,20 @@ export default function ChartDropZone({
     [handleFile],
   );
 
+  // Nothing downstream needs a handle: the folder is read once and exports go
+  // out as downloads, so a file input does the job where there is no picker.
   const handlePickFolder = useCallback(async () => {
     if (disabled || isLoading) return;
 
-    // showDirectoryPicker is Chromium-only. Elsewhere a directory <input>
-    // reads the same folder; nothing downstream needs the handle, since the
-    // folder is read once and exports go out as downloads.
-    if (typeof window.showDirectoryPicker !== 'function') {
-      folderInputRef.current?.click();
-      return;
-    }
-
-    let dirHandle: FileSystemDirectoryHandle;
+    let folder: FolderSource | null;
     try {
-      dirHandle = await window.showDirectoryPicker({id});
+      folder = await pickFolder({id});
     } catch (e) {
-      // showDirectoryPicker rejects with AbortError when the user cancels.
-      if (e instanceof DOMException && e.name === 'AbortError') return;
       toast.error(e instanceof Error ? e.message : 'Failed to open the picker');
       return;
     }
-    await runLoad(() => readChartDirectory(dirHandle));
+    if (folder) await runLoad(() => readChartFolder(folder));
   }, [runLoad, disabled, isLoading, id]);
-
-  const handleFolderInput = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selection = Array.from(e.target.files ?? []);
-      // Reset so the same folder can be re-selected
-      e.target.value = '';
-      // A directory input reports a cancelled dialog as an empty selection.
-      if (selection.length === 0) return;
-
-      await runLoad(() => readChartFileList(selection));
-    },
-    [runLoad],
-  );
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -182,13 +161,6 @@ export default function ChartDropZone({
         <FolderOpen className="h-4 w-4 mr-2" />
         Select a chart folder
       </Button>
-      <input
-        ref={folderInputRef}
-        type="file"
-        webkitdirectory=""
-        onChange={handleFolderInput}
-        className="hidden"
-      />
     </div>
   );
 }

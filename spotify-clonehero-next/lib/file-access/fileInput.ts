@@ -19,9 +19,9 @@ export function chooseFiles(options: {
   const input = document.createElement('input');
   input.type = 'file';
   input.hidden = true;
-  if (options.directory) input.webkitdirectory = true;
+  if (options.directory) input.setAttribute('webkitdirectory', '');
   if (options.multiple) input.multiple = true;
-  if (options.accept) input.accept = options.accept.join(',');
+  if (options.accept?.length) input.accept = options.accept.join(',');
 
   const result = new Promise<File[] | null>(resolve => {
     input.addEventListener('change', () => {

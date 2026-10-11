@@ -1,6 +1,6 @@
 # 0159 — Read folders and save files in every browser, across the tools
 
-Status: todo
+Status: in-progress
 
 Depends on 0116 for `lib/file-access/capabilities.ts`
 (`supportsDirectoryPicker()`) and `components/file-access/DownloadFallbackNotice.tsx`.

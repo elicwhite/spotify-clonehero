@@ -20,12 +20,13 @@ import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
 import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
 import {
   detectFormat,
-  readChartDirectory,
+  readChartFolder,
   readSngFile,
   readZipFile,
   type LoadedFiles,
   type SourceFormat,
 } from '@/lib/chart-files/chart-package';
+import {pickFolder} from '@/lib/file-access/pickFolder';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import {track} from '@/lib/analytics/track';
@@ -596,16 +597,12 @@ function ReplaceChartButton({
   const handlePickFolder = useCallback(async () => {
     if (isLoading) return;
     try {
-      const dirHandle = await window.showDirectoryPicker({
-        id: 'add-lyrics-chart',
-      });
+      const folder = await pickFolder({id: 'add-lyrics-chart'});
+      if (!folder) return;
       setIsLoading(true);
-      const result = await readChartDirectory(dirHandle);
-      onLoaded(result);
+      onLoaded(await readChartFolder(folder));
     } catch (e) {
-      const err = e as DOMException;
-      if (err?.name === 'AbortError') return;
-      toast.error(err?.message ?? 'Failed to read directory');
+      toast.error(e instanceof Error ? e.message : 'Failed to read directory');
     } finally {
       setIsLoading(false);
     }

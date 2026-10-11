@@ -1,21 +1,19 @@
 'use client';
 
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useState} from 'react';
 import {Upload, FilePlus, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 import {
-  readChartDirectory,
-  readChartFileList,
+  readChartFolder,
   type LoadedFiles,
 } from '@/lib/chart-files/chart-package';
-import {
-  pickFiles,
-  readDroppedItems,
-  readFileList,
-} from '@/lib/chart-files/entries';
+import type {FolderSource} from '@/lib/file-access/folderSource';
+import {pickFolder} from '@/lib/file-access/pickFolder';
+import {readDroppedItems, readFileList} from '@/lib/chart-files/entries';
+import {pickFiles} from '@/lib/file-access/pickFiles';
 
 interface DropZoneProps {
   onAdd: (files: FileEntry[]) => void;
@@ -25,7 +23,6 @@ interface DropZoneProps {
 export default function DropZone({onAdd, disabled}: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isReading, setIsReading] = useState(false);
-  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const busy = disabled || isReading;
 
@@ -87,35 +84,15 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
   const handlePickFolder = useCallback(async () => {
     if (busy) return;
 
-    // showDirectoryPicker is Chromium-only; elsewhere a directory <input>
-    // reads the same folder.
-    if (typeof window.showDirectoryPicker !== 'function') {
-      folderInputRef.current?.click();
-      return;
-    }
-
-    let dirHandle: FileSystemDirectoryHandle;
+    let folder: FolderSource | null;
     try {
-      dirHandle = await window.showDirectoryPicker({id: 'sng-add-folder'});
+      folder = await pickFolder({id: 'sng-add-folder'});
     } catch (err) {
-      // showDirectoryPicker rejects with an AbortError DOMException on cancel.
-      if (err instanceof DOMException && err.name === 'AbortError') return;
       toast.error(err instanceof Error ? err.message : 'Failed to read folder');
       return;
     }
-    await addFolder(() => readChartDirectory(dirHandle));
+    if (folder) await addFolder(() => readChartFolder(folder));
   }, [busy, addFolder]);
-
-  const handleFolderInput = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selection = Array.from(e.target.files ?? []);
-      e.target.value = '';
-      // A directory input reports a cancelled dialog as an empty selection.
-      if (selection.length === 0) return;
-      await addFolder(() => readChartFileList(selection));
-    },
-    [addFolder],
-  );
 
   return (
     <div
@@ -160,13 +137,6 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
           <FolderOpen className="mr-2 h-4 w-4" />
           Add folder
         </Button>
-        <input
-          ref={folderInputRef}
-          type="file"
-          webkitdirectory=""
-          onChange={handleFolderInput}
-          className="hidden"
-        />
       </div>
     </div>
   );

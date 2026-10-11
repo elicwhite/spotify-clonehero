@@ -43,7 +43,7 @@ import {
   decodeAudio,
   interleaveAudioBuffer,
 } from '@/lib/drum-transcription/audio/decoder';
-import {pickFiles} from '@/lib/chart-files/entries';
+import {pickFiles} from '@/lib/file-access/pickFiles';
 import {cn} from '@/lib/utils';
 import type {AudioStem} from '../hooks/useShiftedAudio';
 import InstrumentIcon, {type IconableInstrument} from '../InstrumentIcon';

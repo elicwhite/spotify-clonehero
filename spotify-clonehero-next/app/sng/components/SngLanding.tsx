@@ -3,7 +3,7 @@
 import {useCallback} from 'react';
 import {FilePlus2, FolderInput, FolderCog} from 'lucide-react';
 import {toast} from 'sonner';
-import {pickFiles} from '@/lib/chart-files/entries';
+import {pickFiles} from '@/lib/file-access/pickFiles';
 import {Button} from '@/components/ui/button';
 import {
   Card,

@@ -3,9 +3,13 @@ import {
   EMPTY_FOLDER_MESSAGE,
   ONE_CHART_AT_A_TIME_MESSAGE,
   SELECT_SONG_FOLDER_MESSAGE,
-  readChartDirectory,
+  readChartFolder,
   readDroppedChart,
 } from '../chart-package';
+import {folderSourceFromHandle} from '../../file-access/folderSource';
+
+const readChartDirectory = (handle: FileSystemDirectoryHandle) =>
+  readChartFolder(folderSourceFromHandle(handle));
 
 // ---------------------------------------------------------------------------
 // Drag-and-drop fakes: the FileSystemEntry side of DataTransfer, which jsdom
@@ -208,7 +212,7 @@ describe('readDroppedChart', () => {
   });
 });
 
-describe('readChartDirectory', () => {
+describe('readChartFolder over a directory handle', () => {
   it('reads the files of the chosen folder', async () => {
     const loaded = await readChartDirectory(
       directoryHandle('Song Name', [

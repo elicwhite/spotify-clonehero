@@ -1,7 +1,7 @@
 /** @jest-environment jsdom */
 
 import {chooseFiles} from '../fileInput';
-import {pickFolder} from '../pickFolder';
+import {NOT_A_FOLDER_MESSAGE, pickFolder} from '../pickFolder';
 
 function lastInput() {
   const inputs = document.querySelectorAll('input[type="file"]');
@@ -33,7 +33,7 @@ describe('chooseFiles', () => {
 
     expect(click).toHaveBeenCalledTimes(1);
     const input = lastInput();
-    expect(input.webkitdirectory).toBe(true);
+    expect(input.hasAttribute('webkitdirectory')).toBe(true);
     expect(input.accept).toBe('.sng');
   });
 
@@ -75,6 +75,14 @@ describe('pickFolder', () => {
     expect(folder?.handle).toBeNull();
     const {files} = await folder!.list();
     expect(files.map(file => file.name)).toEqual(['Streaming.json']);
+  });
+
+  it('says so when the browser returns files instead of a folder', async () => {
+    const picked = pickFolder({id: 'test'});
+    // A browser that ignores webkitdirectory gives files with no path.
+    selectFiles(lastInput(), [new File([''], 'notes.chart')]);
+
+    await expect(picked).rejects.toThrow(NOT_A_FOLDER_MESSAGE);
   });
 
   it('uses the picker where there is one, and keeps its handle', async () => {

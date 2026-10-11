@@ -10,12 +10,7 @@ import {SngStream} from '@eliwhite/parse-sng';
 import type {SngHeader} from '@eliwhite/parse-sng';
 import {getExtension} from '@/lib/src-shared/utils';
 import {readDirectoryEntries} from './entries';
-import {
-  folderSourceFromFileList,
-  folderSourceFromHandle,
-  type FolderFile,
-  type FolderSource,
-} from '@/lib/file-access/folderSource';
+import type {FolderFile, FolderSource} from '@/lib/file-access/folderSource';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 export type SourceFormat = 'folder' | 'zip' | 'sng';
@@ -34,8 +29,6 @@ export interface LoadedFiles {
 // ---------------------------------------------------------------------------
 
 /** Thrown when a selection is not something a chart can be read out of. */
-export const NOT_A_FOLDER_MESSAGE =
-  'Your browser did not return a folder. Select a .zip or .sng file instead.';
 export const SELECT_SONG_FOLDER_MESSAGE =
   'Select the song’s own folder: the one with the chart file in it.';
 export const EMPTY_FOLDER_MESSAGE = 'That folder has no files in it.';
@@ -87,7 +80,9 @@ async function packageFrom(
  * instead surfaces to the user as a chart parsing error, which is not what
  * went wrong.
  */
-async function readFolder(source: FolderSource): Promise<LoadedFiles> {
+export async function readChartFolder(
+  source: FolderSource,
+): Promise<LoadedFiles> {
   const {files, subfolders} = await source.list();
 
   const ownFiles = visible(files);
@@ -103,13 +98,6 @@ async function readFolder(source: FolderSource): Promise<LoadedFiles> {
   // be the wrong one as the right one.
   if (inside.length === 0) throw new Error(SELECT_SONG_FOLDER_MESSAGE);
   return packageFrom(subfolder.name, inside);
-}
-
-/** Folder reader for a File System Access directory handle (Chromium). */
-export function readChartDirectory(
-  dirHandle: FileSystemDirectoryHandle,
-): Promise<LoadedFiles> {
-  return readFolder(folderSourceFromHandle(dirHandle));
 }
 
 /**
@@ -130,26 +118,8 @@ export async function readChartLocation({
   entry,
 }: ChartLocation): Promise<LoadedFiles> {
   return entry.kind === 'folder'
-    ? await readFolder(entry)
+    ? await readChartFolder(entry)
     : await readSngFile(await entry.file());
-}
-
-/**
- * Folder reader for browsers without the File System Access API, fed by an
- * `<input type="file" webkitdirectory>` selection.
- */
-export async function readChartFileList(
-  selection: File[],
-): Promise<LoadedFiles> {
-  const folder = folderSourceFromFileList(selection);
-  // Which is a different failure from an empty folder, and only the selection
-  // can tell them apart: by the time readFolder sees them, both are nothing.
-  if (folder == null) {
-    throw new Error(
-      selection.length > 0 ? NOT_A_FOLDER_MESSAGE : EMPTY_FOLDER_MESSAGE,
-    );
-  }
-  return await readFolder(folder);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +252,7 @@ export async function readDroppedChart(
   // something the user controls.
   if (folders.length > 1) throw new Error(ONE_CHART_AT_A_TIME_MESSAGE);
   if (folders.length === 1) {
-    return {kind: 'chart', loaded: await readFolder(folders[0])};
+    return {kind: 'chart', loaded: await readChartFolder(folders[0])};
   }
 
   if (!file) return {kind: 'nothing'};

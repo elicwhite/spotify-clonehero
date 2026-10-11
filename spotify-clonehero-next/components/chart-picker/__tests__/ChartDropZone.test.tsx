@@ -51,22 +51,35 @@ function stubDirectoryPicker() {
   return showDirectoryPicker;
 }
 
+let inputClick: jest.SpyInstance;
 beforeEach(() => {
   jest.clearAllMocks();
+  // jsdom opens no dialog; the input a click creates is driven directly.
+  inputClick = jest
+    .spyOn(HTMLInputElement.prototype, 'click')
+    .mockImplementation(() => {});
 });
 
 afterEach(() => {
+  inputClick.mockRestore();
+  document
+    .querySelectorAll('input[webkitdirectory]')
+    .forEach(input => input.remove());
   // @ts-expect-error — removing the optional picker between tests
   delete window.showDirectoryPicker;
 });
+
+/** Click the folder button where there is no picker, and get the input it opened. */
+function openFolderInput() {
+  fireEvent.click(folderButton());
+  return folderInput();
+}
 
 describe('ChartDropZone folder picking', () => {
   it('uses showDirectoryPicker where it exists', async () => {
     const showDirectoryPicker = stubDirectoryPicker();
     render(<ChartDropZone onLoaded={jest.fn()} id="test-picker" />);
 
-    const clicked = jest.fn();
-    folderInput().addEventListener('click', clicked);
     fireEvent.click(folderButton());
 
     await waitFor(() =>
@@ -74,24 +87,22 @@ describe('ChartDropZone folder picking', () => {
     );
     // The fallback is for browsers without the API, and must stay out of the
     // way of the ones that have it — two dialogs would open otherwise.
-    expect(clicked).not.toHaveBeenCalled();
+    expect(inputClick).not.toHaveBeenCalled();
   });
 
   it('falls back to a directory input where it does not', () => {
     render(<ChartDropZone onLoaded={jest.fn()} id="test-picker" />);
 
-    const clicked = jest.fn();
-    folderInput().addEventListener('click', clicked);
-    fireEvent.click(folderButton());
+    openFolderInput();
 
-    expect(clicked).toHaveBeenCalled();
+    expect(inputClick).toHaveBeenCalledTimes(1);
   });
 
   it('loads the chart a directory input selection points at', async () => {
     const onLoaded = jest.fn();
     render(<ChartDropZone onLoaded={onLoaded} id="test-picker" />);
 
-    selectFiles(folderInput(), [
+    selectFiles(openFolderInput(), [
       directoryFile('Song Name/notes.chart', '[Song]'),
       directoryFile('Song Name/song.ogg'),
     ]);
@@ -111,7 +122,7 @@ describe('ChartDropZone folder picking', () => {
     const onLoaded = jest.fn();
     render(<ChartDropZone onLoaded={onLoaded} id="test-picker" />);
 
-    selectFiles(folderInput(), [
+    selectFiles(openFolderInput(), [
       directoryFile('Charts/Song One/notes.chart'),
       directoryFile('Charts/Song Two/notes.chart'),
     ]);
@@ -130,7 +141,7 @@ describe('ChartDropZone folder picking', () => {
     const onLoaded = jest.fn();
     render(<ChartDropZone onLoaded={onLoaded} id="test-picker" />);
 
-    selectFiles(folderInput(), []);
+    fireEvent(openFolderInput(), new Event('cancel'));
 
     await waitFor(() =>
       expect(screen.queryByText(/reading files/i)).not.toBeInTheDocument(),
