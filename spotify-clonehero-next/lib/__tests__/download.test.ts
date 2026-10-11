@@ -33,13 +33,17 @@ describe('downloadBlob', () => {
     clickSpy.mockRestore();
   });
 
-  test('creates a URL from the blob, clicks once, and revokes it', () => {
+  test('creates a URL from the blob, clicks once, and revokes it after', () => {
+    jest.useFakeTimers();
     const blob = new Blob(['hello'], {type: 'text/plain'});
     downloadBlob(blob, 'file.txt');
 
     expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    jest.runAllTimers();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+    jest.useRealTimers();
   });
 
   test('sets the download name and href on the anchor and cleans it up', () => {

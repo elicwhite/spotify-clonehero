@@ -12,5 +12,7 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
+  // Revoked after the click has been handled: revoking at once can abort a
+  // large download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

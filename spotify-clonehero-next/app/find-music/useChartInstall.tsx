@@ -121,6 +121,9 @@ export function useChartInstall() {
           browserIsReason: true,
         });
       }
+      // Busy before the first await, so a second click cannot start a second
+      // install while the stored folder's permission is checked.
+      setStates(current => ({...current, [chart.md5]: 'working'}));
       const songsFolder = await getCachedSongsDirectoryHandle();
       if (songsFolder) {
         return await installTo(chart, {kind: 'songs-folder', songsFolder});
@@ -131,6 +134,7 @@ export function useChartInstall() {
           browserIsReason: false,
         });
       }
+      setStates(current => ({...current, [chart.md5]: 'idle'}));
       setAskingFor(chart);
     },
     [installTo],

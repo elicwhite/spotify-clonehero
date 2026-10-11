@@ -159,6 +159,14 @@ export default function SngFolderConverter({
     [parts],
   );
 
+  // Closing or reloading the tab would drop them too, so the browser asks.
+  useEffect(() => {
+    if (undownloaded === 0) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [undownloaded]);
+
   // Converted parts live only in this page, so leaving with some not yet
   // downloaded loses them.
   const leave = useCallback(() => {
