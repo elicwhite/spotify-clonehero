@@ -67,6 +67,17 @@ describe('picking a different Songs folder', () => {
     await expect(getCachedSongsDirectoryHandle()).resolves.toBe(picked);
   });
 
+  it('clears an earlier "Just download" when a folder is picked', async () => {
+    const {pickSongsDirectory} = await loadSongsFolder();
+    const choice = await import('@/lib/local-songs-folder/downloadChoice');
+    choice.setPrefersBrowserDownload(true);
+    pickerReturning(grantedHandle('Songs'));
+
+    await pickSongsDirectory();
+
+    expect(choice.prefersBrowserDownload()).toBe(false);
+  });
+
   it('reaches the picker with no dialog in between', async () => {
     // A dialog before the picker ends the transient user activation, and
     // Chrome then refuses `showDirectoryPicker` with a SecurityError.
@@ -81,7 +92,7 @@ describe('picking a different Songs folder', () => {
   });
 
   it('keeps the stored folder when the pick is cancelled', async () => {
-    const {pickSongsDirectory, scanSongsDirectory, set} =
+    const {pickSongsDirectory, scanSongsFolder, songsFolderFrom, set} =
       await loadSongsFolder();
     Object.defineProperty(window, 'showDirectoryPicker', {
       configurable: true,
@@ -91,7 +102,9 @@ describe('picking a different Songs folder', () => {
     });
 
     await expect(pickSongsDirectory()).resolves.toBeNull();
-    await expect(scanSongsDirectory(pickSongsDirectory)).resolves.toBeNull();
+    await expect(
+      scanSongsFolder(songsFolderFrom(pickSongsDirectory)),
+    ).resolves.toBeNull();
     expect(set).not.toHaveBeenCalled();
   });
 });

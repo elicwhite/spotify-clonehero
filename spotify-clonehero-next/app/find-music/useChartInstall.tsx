@@ -1,7 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useRef, useState, useSyncExternalStore} from 'react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {
@@ -26,6 +26,11 @@ import {
   getSongsDownloadFolder,
   pickSongsDirectory,
 } from '@/lib/local-songs-folder';
+import {
+  prefersBrowserDownload,
+  setPrefersBrowserDownload,
+  subscribeToDownloadChoice,
+} from '@/lib/local-songs-folder/downloadChoice';
 import {SONGS_FOLDER_DOWNLOAD_COPY} from './songsFolderCopy';
 import type {FindMusicChart} from './types';
 
@@ -36,31 +41,11 @@ export type ChartInstallState =
   | 'downloaded'
   | 'error';
 
-const DOWNLOAD_CHOICE_KEY = 'find-music:install-destination:v1';
-
 type Destination =
   | {kind: 'songs-folder'; songsFolder: FileSystemDirectoryHandle}
   | {kind: 'browser-download'; browserIsReason: boolean};
 
-function readDownloadChoice(): boolean {
-  try {
-    return window.localStorage.getItem(DOWNLOAD_CHOICE_KEY) === 'download';
-  } catch {
-    return false;
-  }
-}
-
-function writeDownloadChoice(prefersDownload: boolean) {
-  try {
-    if (prefersDownload) {
-      window.localStorage.setItem(DOWNLOAD_CHOICE_KEY, 'download');
-    } else {
-      window.localStorage.removeItem(DOWNLOAD_CHOICE_KEY);
-    }
-  } catch {
-    // Without storage the dialog asks again next visit, which is harmless.
-  }
-}
+const serverPrefersDownload = () => false;
 
 /**
  * Installing a chart from the table: where it goes, the dialog that asks when
@@ -73,42 +58,20 @@ function writeDownloadChoice(prefersDownload: boolean) {
  * | Picker, "Just download" chosen     | Download. No prompt.         |
  * | Picker, nothing chosen yet         | Dialog asks.                 |
  *
- * A granted Songs folder wins over a stored "Just download": the user picked
- * a folder after making that choice.
+ * Picking a Songs folder clears a stored "Just download"
+ * (`pickSongsDirectory` does it), so the two can never disagree.
  */
 export function useChartInstall() {
   const canPickFolders = useSupportsDirectoryPicker();
-  const [prefersDownload, setPrefersDownload] = useState(
-    () => typeof window !== 'undefined' && readDownloadChoice(),
+  const prefersDownload = useSyncExternalStore(
+    subscribeToDownloadChoice,
+    prefersBrowserDownload,
+    serverPrefersDownload,
   );
   const [states, setStates] = useState<Record<string, ChartInstallState>>({});
-  const [asking, setAsking] = useState(false);
-  const answerRef = useRef<((destination: Destination | null) => void) | null>(
-    null,
-  );
+  // The chart whose Install opened the dialog. The dialog is open while set.
+  const [askingFor, setAskingFor] = useState<FindMusicChart | null>(null);
   const explainedRef = useRef(false);
-
-  const answer = useCallback((destination: Destination | null) => {
-    answerRef.current?.(destination);
-    answerRef.current = null;
-    setAsking(false);
-  }, []);
-
-  const chooseDestination =
-    useCallback(async (): Promise<Destination | null> => {
-      if (!supportsDirectoryPicker()) {
-        return {kind: 'browser-download', browserIsReason: true};
-      }
-      const songsFolder = await getCachedSongsDirectoryHandle();
-      if (songsFolder) return {kind: 'songs-folder', songsFolder};
-      if (readDownloadChoice()) {
-        return {kind: 'browser-download', browserIsReason: false};
-      }
-      return await new Promise<Destination | null>(resolve => {
-        answerRef.current = resolve;
-        setAsking(true);
-      });
-    }, []);
 
   const announceDownload = useCallback((browserIsReason: boolean) => {
     const copy = {...SONGS_FOLDER_DOWNLOAD_COPY, browserIsReason};
@@ -122,15 +85,8 @@ export function useChartInstall() {
     toast.success('Saved to your Downloads folder', {description});
   }, []);
 
-  const install = useCallback(
-    async (chart: FindMusicChart) => {
-      const destination = await chooseDestination();
-      if (destination == null) return;
-      if (destination.kind === 'songs-folder' && readDownloadChoice()) {
-        writeDownloadChoice(false);
-        setPrefersDownload(false);
-      }
-
+  const installTo = useCallback(
+    async (chart: FindMusicChart, destination: Destination) => {
       setStates(current => ({...current, [chart.md5]: 'working'}));
       try {
         const result = await downloadSong(
@@ -144,7 +100,7 @@ export function useChartInstall() {
                 folder: await getSongsDownloadFolder(destination.songsFolder),
               }
             : {kind: 'browser-download'},
-          {asSng: true, source: 'find_music', md5: chart.md5},
+          {source: 'find_music', md5: chart.md5},
         );
         setStates(current => ({...current, [chart.md5]: result.status}));
         if (destination.kind === 'browser-download') {
@@ -157,33 +113,63 @@ export function useChartInstall() {
         setStates(current => ({...current, [chart.md5]: 'error'}));
       }
     },
-    [announceDownload, chooseDestination],
+    [announceDownload],
+  );
+
+  const install = useCallback(
+    async (chart: FindMusicChart) => {
+      if (!supportsDirectoryPicker()) {
+        return await installTo(chart, {
+          kind: 'browser-download',
+          browserIsReason: true,
+        });
+      }
+      const songsFolder = await getCachedSongsDirectoryHandle();
+      if (songsFolder) {
+        return await installTo(chart, {kind: 'songs-folder', songsFolder});
+      }
+      if (prefersBrowserDownload()) {
+        return await installTo(chart, {
+          kind: 'browser-download',
+          browserIsReason: false,
+        });
+      }
+      setAskingFor(chart);
+    },
+    [installTo],
   );
 
   const selectSongsFolder = useCallback(() => {
+    const chart = askingFor;
+    setAskingFor(null);
+    if (chart == null) return;
     // Called straight from the click: the picker needs the user's gesture.
     pickSongsDirectory().then(
-      songsFolder =>
-        answer(songsFolder ? {kind: 'songs-folder', songsFolder} : null),
+      songsFolder => {
+        if (songsFolder) {
+          void installTo(chart, {kind: 'songs-folder', songsFolder});
+        }
+      },
       (error: unknown) => {
-        answer(null);
         toast.error(error instanceof Error ? error.message : String(error));
         Sentry.captureException(error);
       },
     );
-  }, [answer]);
+  }, [askingFor, installTo]);
 
   const justDownload = useCallback(() => {
-    writeDownloadChoice(true);
-    setPrefersDownload(true);
-    answer({kind: 'browser-download', browserIsReason: false});
-  }, [answer]);
+    const chart = askingFor;
+    setAskingFor(null);
+    if (chart == null) return;
+    setPrefersBrowserDownload(true);
+    void installTo(chart, {kind: 'browser-download', browserIsReason: false});
+  }, [askingFor, installTo]);
 
   const dialog = (
     <Dialog
-      open={asking}
+      open={askingFor != null}
       onOpenChange={open => {
-        if (!open) answer(null);
+        if (!open) setAskingFor(null);
       }}>
       <DialogContent>
         <DialogHeader>
@@ -214,7 +200,7 @@ export function useChartInstall() {
     install,
     states,
     dialog,
-    /** What the button does when clicked, as far as the page can tell now. */
+    /** What the button does when clicked. */
     saveMode:
       !canPickFolders || prefersDownload
         ? ('download' as const)

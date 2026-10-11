@@ -147,9 +147,9 @@ const mockGrantedScan = jest.fn(
 const mockChosenFolderScan = jest.fn(
   async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
 );
-const mockChooseFiles = jest.fn();
-jest.mock('../../../lib/file-access/fileInput', () => ({
-  chooseFiles: (options: unknown) => mockChooseFiles(options),
+const mockPickFolder = jest.fn();
+jest.mock('../../../lib/file-access/pickFolder', () => ({
+  pickFolder: (options: unknown) => mockPickFolder(options),
 }));
 jest.mock('../../../lib/local-songs-folder', () => {
   const tryGetSongsDirectoryHandle = async () => null;
@@ -159,20 +159,19 @@ jest.mock('../../../lib/local-songs-folder', () => {
     tryGetSongsDirectoryHandle,
     pickSongsDirectory,
     getGrantedSongsDirectoryHandle,
-    scanSongsDirectory: (
-      getHandle: () => Promise<FileSystemDirectoryHandle | null>,
+    // The handle getters pass through unchanged, so the scan can tell them
+    // apart by identity.
+    songsFolderFrom: (getHandle: unknown) => getHandle,
+    scanSongsFolder: async (
+      getFolder: () => Promise<unknown>,
       onProgress?: (count: number) => void,
     ) => {
-      if (getHandle === pickSongsDirectory) return mockPickedScan(onProgress);
-      if (getHandle === getGrantedSongsDirectoryHandle)
+      if (getFolder === pickSongsDirectory) return mockPickedScan(onProgress);
+      if (getFolder === getGrantedSongsDirectoryHandle)
         return mockGrantedScan(onProgress);
-      return mockStoredOrPickedScan(onProgress);
-    },
-    scanSelectedSongsFolder: async (
-      getFiles: () => Promise<File[] | null>,
-      onProgress?: (count: number) => void,
-    ) => {
-      await getFiles();
+      if (getFolder === tryGetSongsDirectoryHandle)
+        return mockStoredOrPickedScan(onProgress);
+      await getFolder();
       return mockChosenFolderScan(onProgress);
     },
     getLocalScanWarning: (issueCount: number) =>
@@ -205,6 +204,7 @@ jest.mock('../FindMusicSidebar', () => ({
     onRefreshAppleMusic,
     onRefreshChorus,
     onConnectSpotify,
+    onScanLocal,
     onPickLocalFolder,
   }: {
     musicCount: number;
@@ -220,7 +220,8 @@ jest.mock('../FindMusicSidebar', () => ({
     onRefreshAppleMusic: () => void;
     onRefreshChorus: () => void;
     onConnectSpotify: () => void;
-    onPickLocalFolder: () => void;
+    onScanLocal: () => void;
+    onPickLocalFolder?: () => void;
   }) => (
     <aside
       data-testid="sidebar"
@@ -257,9 +258,14 @@ jest.mock('../FindMusicSidebar', () => ({
       <button type="button" onClick={onRefreshChorus}>
         Rescan Chorus test
       </button>
-      <button type="button" onClick={onPickLocalFolder}>
-        Choose a different folder test
+      <button type="button" onClick={onScanLocal}>
+        Scan local test
       </button>
+      {onPickLocalFolder ? (
+        <button type="button" onClick={onPickLocalFolder}>
+          Choose a different folder test
+        </button>
+      ) : null}
     </aside>
   ),
 }));
@@ -1131,13 +1137,14 @@ it('scans a Songs folder picked through a file input where there is no picker', 
 
   render(<FindMusicClient />);
   expect(await screen.findByTestId('music-table')).toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole('button', {name: 'Choose a different folder test'}),
-  );
+  // No kept folder, so nothing to change.
+  expect(
+    screen.queryByRole('button', {name: 'Choose a different folder test'}),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Scan local test'}));
 
   await waitFor(() => expect(mockChosenFolderScan).toHaveBeenCalledTimes(1));
-  expect(mockChooseFiles).toHaveBeenCalledWith({directory: true});
-  expect(mockPickedScan).not.toHaveBeenCalled();
+  expect(mockPickFolder).toHaveBeenCalledWith({id: 'clone-hero-songs'});
   expect(mockStoredOrPickedScan).not.toHaveBeenCalled();
 });
 

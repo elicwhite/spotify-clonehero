@@ -5,6 +5,7 @@
 import '@testing-library/jest-dom';
 import {drumTypes} from '@eliwhite/scan-chart';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -53,7 +54,6 @@ jest.mock('../../../lib/local-songs-folder', () => ({
       destination.kind === 'folder'
         ? {
             status: 'installed',
-            newParentDirectoryHandle: {},
             fileName: 'chart.sng',
           }
         : {status: 'downloaded', fileName: 'chart.sng'},
@@ -108,6 +108,7 @@ jest.mock('../../../components/MusicPreviewButton', () => ({
 }));
 
 import {downloadSong} from '../../../lib/local-songs-folder';
+import {setPrefersBrowserDownload} from '../../../lib/local-songs-folder/downloadChoice';
 
 const mockDismissRadarSong = dismissRadarSong as jest.MockedFunction<
   typeof dismissRadarSong
@@ -367,14 +368,14 @@ it('asks once where to save when no Songs folder is set, and keeps "Just downloa
         'The files go to your Downloads folder. Move each chart into your Songs folder, then scan again.',
     },
   );
-  expect(window.localStorage.getItem('find-music:install-destination:v1')).toBe(
+  expect(window.localStorage.getItem('songs-folder:prefers-download:v1')).toBe(
     'download',
   );
 });
 
 it('does not ask again after "Just download"', async () => {
   mockGetCachedSongsFolder.mockResolvedValue(null);
-  window.localStorage.setItem('find-music:install-destination:v1', 'download');
+  window.localStorage.setItem('songs-folder:prefers-download:v1', 'download');
   renderAlpha();
 
   fireEvent.click(await screen.findByRole('button', {name: 'Download'}));
@@ -383,6 +384,20 @@ it('does not ask again after "Just download"', async () => {
     expect(screen.getByText('Downloaded')).toBeInTheDocument(),
   );
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('reads "Install" again once a Songs folder replaces "Just download"', async () => {
+  mockGetCachedSongsFolder.mockResolvedValue(null);
+  setPrefersBrowserDownload(true);
+  renderAlpha();
+  expect(
+    await screen.findByRole('button', {name: 'Download'}),
+  ).toBeInTheDocument();
+
+  // What pickSongsDirectory does when the user picks a folder from the card.
+  act(() => setPrefersBrowserDownload(false));
+
+  expect(screen.getByRole('button', {name: 'Install'})).toBeInTheDocument();
 });
 
 it('installs into the folder picked from the dialog', async () => {
@@ -423,7 +438,7 @@ it('downloads nothing when the dialog is closed', async () => {
   );
   expect(mockDownloadSong).not.toHaveBeenCalled();
   expect(screen.getByRole('button', {name: 'Install'})).toBeEnabled();
-  expect(window.localStorage.getItem('find-music:install-destination:v1')).toBe(
+  expect(window.localStorage.getItem('songs-folder:prefers-download:v1')).toBe(
     null,
   );
 });

@@ -8,7 +8,8 @@
  */
 
 import pMap from 'p-map';
-import {readChartDirectory} from '@/lib/chart-files/chart-package';
+import {readChartLocation} from '@/lib/chart-files/chart-package';
+import type {FolderSource} from '@/lib/file-access/folderSource';
 import {exportAsSng} from '@/lib/chart-export';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 
@@ -22,7 +23,10 @@ const CONVERT_CONCURRENCY = 12;
  * directory to write the new file into.
  */
 export type ConvertibleChart = SongAccumulator & {
-  handleInfo: {parentDir: FileSystemDirectoryHandle; fileName: string};
+  location: {
+    parent: FolderSource & {handle: FileSystemDirectoryHandle};
+    entry: FolderSource;
+  };
 };
 
 /**
@@ -37,8 +41,8 @@ export function selectChartFoldersToConvert(
 ): ConvertibleChart[] {
   return charts.filter(
     (chart): chart is ConvertibleChart =>
-      'parentDir' in chart.handleInfo &&
-      !chart.handleInfo.fileName.toLowerCase().endsWith('.sng'),
+      chart.location.parent?.handle != null &&
+      chart.location.entry.kind === 'folder',
   );
 }
 
@@ -58,14 +62,13 @@ export function sngFileNameForFolder(folderName: string): string {
 export async function convertChartFolderToSng(
   chart: ConvertibleChart,
 ): Promise<void> {
-  const {parentDir, fileName} = chart.handleInfo;
+  const {parent, entry} = chart.location;
 
-  const folderHandle = await parentDir.getDirectoryHandle(fileName);
-  const {files} = await readChartDirectory(folderHandle);
+  const {files} = await readChartLocation(chart.location);
   const sngBytes = exportAsSng(files);
 
-  const sngHandle = await parentDir.getFileHandle(
-    sngFileNameForFolder(fileName),
+  const sngHandle = await parent.handle.getFileHandle(
+    sngFileNameForFolder(entry.name),
     {create: true},
   );
   const writable = await sngHandle.createWritable();
@@ -114,7 +117,7 @@ export async function convertChartFolders(
       } catch (e) {
         failed++;
         console.error(
-          `Failed to convert ${chart.handleInfo.fileName} to .sng`,
+          `Failed to convert ${chart.location.entry.name} to .sng`,
           e,
         );
       }

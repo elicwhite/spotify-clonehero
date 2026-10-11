@@ -155,9 +155,11 @@ describe('scanLocalCharts issues', () => {
     ).resolves.toEqual({issues: []});
     expect(accumulator).toHaveLength(1);
     expect(accumulator[0].song).toBe('Root Song');
-    expect(accumulator[0].handleInfo).toEqual({
-      dirHandle: picked,
-      fileName: 'Artist - Song (Charter)',
+    expect(accumulator[0].location.parent).toBeNull();
+    expect(accumulator[0].location.entry).toMatchObject({
+      kind: 'folder',
+      name: 'Artist - Song (Charter)',
+      handle: picked,
     });
   });
 

@@ -27,3 +27,14 @@ export function useSupportsDirectoryPicker(): boolean {
     getServerSupport,
   );
 }
+
+/**
+ * A folder or file picker that closed without a choice: the user cancelled,
+ * or the user or the browser refused it. Neither is a failure to report.
+ */
+export function isPickerCancel(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'AbortError' || error.name === 'NotAllowedError')
+  );
+}

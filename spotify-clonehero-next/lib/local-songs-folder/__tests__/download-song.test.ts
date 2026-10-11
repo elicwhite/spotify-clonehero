@@ -80,7 +80,6 @@ function setupSuccessfulDownload(options?: {cleanupError?: Error}) {
 }
 
 const successfulDownloadOptions = {
-  asSng: true,
   source: 'find_music' as const,
   md5: 'chart-md5',
 };
@@ -202,7 +201,6 @@ describe('downloadSong outcomes', () => {
       ),
     ).resolves.toEqual({
       status: 'installed',
-      newParentDirectoryHandle: destinationDirectory,
       fileName: filename,
     });
 
@@ -236,7 +234,6 @@ describe('downloadSong outcomes', () => {
       ),
     ).resolves.toEqual({
       status: 'installed',
-      newParentDirectoryHandle: destinationDirectory,
       fileName: filename,
     });
 
@@ -269,7 +266,6 @@ describe('downloadSong outcomes', () => {
       ),
     ).resolves.toEqual({
       status: 'installed',
-      newParentDirectoryHandle: destinationDirectory,
       fileName: filename,
     });
   });

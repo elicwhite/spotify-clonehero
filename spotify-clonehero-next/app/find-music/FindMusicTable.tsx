@@ -148,6 +148,7 @@ export default function FindMusicTable({
   if (view === 'radar' && radarLoading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border bg-card p-10 text-center">
+        {chartInstall.dialog}
         <div>
           <RotateCw className="mx-auto mb-3 h-5 w-5 animate-spin text-primary" />
           <h2 className="font-semibold">
@@ -164,6 +165,7 @@ export default function FindMusicTable({
   if (rows.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed bg-card p-10 text-center">
+        {chartInstall.dialog}
         <div>
           <h2 className="font-semibold">
             {view === 'radar'

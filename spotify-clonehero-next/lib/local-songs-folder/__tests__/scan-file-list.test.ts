@@ -55,31 +55,31 @@ describe('scanLocalCharts over a file input selection', () => {
 
     expect(issues).toEqual([]);
     expect(
-      charts.map(({artist, song, handleInfo}) => ({
+      charts.map(({artist, song, location: {parent, entry}}) => ({
         artist,
         song,
-        fileName: handleInfo.fileName,
-        hasSelection: 'selection' in handleInfo,
+        at: `${parent?.name}/${entry.name}`,
+        writable: parent?.handle != null,
       })),
     ).toEqual(
       expect.arrayContaining([
         {
           artist: 'Band',
           song: 'Song',
-          fileName: 'Band - Song',
-          hasSelection: true,
+          at: 'Songs/Band - Song',
+          writable: false,
         },
         {
           artist: 'Other',
           song: 'Deep',
-          fileName: 'Other - Deep',
-          hasSelection: true,
+          at: 'Pack/Other - Deep',
+          writable: false,
         },
         {
           artist: 'Sng Band',
           song: 'Packed',
-          fileName: 'Packed.sng',
-          hasSelection: true,
+          at: 'Songs/Packed.sng',
+          writable: false,
         },
       ]),
     );

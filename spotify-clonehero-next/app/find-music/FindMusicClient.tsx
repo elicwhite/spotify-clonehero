@@ -29,12 +29,12 @@ import {
   getGrantedSongsDirectoryHandle,
   getLocalScanWarning,
   pickSongsDirectory,
-  scanSelectedSongsFolder,
-  scanSongsDirectory,
+  scanSongsFolder,
+  songsFolderFrom,
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
-import {chooseFiles} from '@/lib/file-access/fileInput';
-import {supportsDirectoryPicker} from '@/lib/file-access/capabilities';
+import type {FolderSource} from '@/lib/file-access/folderSource';
+import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
 import {pickFolder} from '@/lib/file-access/pickFolder';
 import {Button} from '@/components/ui/button';
 import {
@@ -74,16 +74,11 @@ import {
 
 type Snapshot = {music: FindMusicSong[]; radar: RadarSong[]};
 
-type LocalScan = (
-  onProgress: (count: number) => void,
-) => ReturnType<typeof scanSongsDirectory>;
-
 /**
- * The Songs folder scan where there is no folder picker. The folder comes from
- * a file input and is not kept, so every rescan asks for it again.
+ * The Songs folder where there is no folder picker: a file input reads it, and
+ * nothing is kept, so every rescan asks for it again.
  */
-const scanChosenSongsFolder: LocalScan = onProgress =>
-  scanSelectedSongsFolder(() => chooseFiles({directory: true}), onProgress);
+const chooseSongsFolder = () => pickFolder({id: 'clone-hero-songs'});
 type CatalogState = 'opening' | 'refreshing' | 'ready' | 'degraded';
 
 const EMPTY_STATS: FindMusicStats = {
@@ -197,6 +192,10 @@ export default function FindMusicClient() {
     sourceAccessEnabledRef.current = true;
     setSourceAccessEnabled(true);
   }, []);
+
+  // Whether this browser can keep a Songs folder and write into it. Decided
+  // here once; the cards only show what follows from it.
+  const localFolderKept = useSupportsDirectoryPicker();
 
   const activateSourceAccess = useCallback(() => {
     clearFindMusicActivation(window.sessionStorage);
@@ -544,9 +543,12 @@ export default function FindMusicClient() {
   // picker. Whichever it is, a null result means the user has no folder to scan
   // and the card returns to its derived status.
   const runScan = useCallback(
-    async (scan: LocalScan, {announceFailure}: {announceFailure: boolean}) => {
+    async (
+      getFolder: () => Promise<FolderSource | null>,
+      {announceFailure}: {announceFailure: boolean},
+    ) => {
       try {
-        const result = await scan(count => {
+        const result = await scanSongsFolder(getFolder, count => {
           setLocalStatus({
             phase: 'loading',
             summary: `Scanning… ${count.toLocaleString()} charts found`,
@@ -586,10 +588,10 @@ export default function FindMusicClient() {
   );
 
   const runRequestedScan = useCallback(
-    async (scan: LocalScan) => {
+    async (getFolder: () => Promise<FolderSource | null>) => {
       activateSourceAccess();
       setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
-      await runScan(scan, {announceFailure: true});
+      await runScan(getFolder, {announceFailure: true});
     },
     [activateSourceAccess, runScan],
   );
@@ -597,23 +599,18 @@ export default function FindMusicClient() {
   const runLocalScan = useCallback(
     () =>
       runRequestedScan(
-        supportsDirectoryPicker()
-          ? onProgress =>
-              scanSongsDirectory(tryGetSongsDirectoryHandle, onProgress)
-          : scanChosenSongsFolder,
+        localFolderKept
+          ? songsFolderFrom(tryGetSongsDirectoryHandle)
+          : chooseSongsFolder,
       ),
-    [runRequestedScan],
+    [localFolderKept, runRequestedScan],
   );
 
   // Rescanning reuses the stored folder and never asks for another one, so a
-  // user who moved their library needs a way to say so.
+  // user who moved their library needs a way to say so. Without a kept folder
+  // every scan asks, so there is nothing to change.
   const runPickLocalFolder = useCallback(
-    () =>
-      runRequestedScan(
-        supportsDirectoryPicker()
-          ? onProgress => scanSongsDirectory(pickSongsDirectory, onProgress)
-          : scanChosenSongsFolder,
-      ),
+    () => runRequestedScan(songsFolderFrom(pickSongsDirectory)),
     [runRequestedScan],
   );
 
@@ -623,11 +620,9 @@ export default function FindMusicClient() {
   // folder is stored or its permission has lapsed, which is what makes this
   // safe outside a user gesture.
   const rescanStoredFolder = useCallback(async () => {
-    await runScan(
-      onProgress =>
-        scanSongsDirectory(getGrantedSongsDirectoryHandle, onProgress),
-      {announceFailure: false},
-    );
+    await runScan(songsFolderFrom(getGrantedSongsDirectoryHandle), {
+      announceFailure: false,
+    });
   }, [runScan]);
 
   useEffect(() => {
@@ -765,8 +760,9 @@ export default function FindMusicClient() {
     onRefreshHistory: runHistoryRefresh,
     onRefreshSpotifyLibrary: runLibraryRefresh,
     onRefreshAppleMusic: appleMusicActions.refresh,
+    localFolderKept,
     onScanLocal: runLocalScan,
-    onPickLocalFolder: runPickLocalFolder,
+    onPickLocalFolder: localFolderKept ? runPickLocalFolder : undefined,
     onRefreshChorus: loadCatalog,
   };
 

@@ -25,12 +25,13 @@ jest.mock('../../local-db/local-charts', () => ({
 jest.mock('../../analytics/track', () => ({track: jest.fn()}));
 
 import {
-  scanSongsDirectory,
+  scanSongsFolder,
+  songsFolderFrom,
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
 
 const scanWithPickerFallback = () =>
-  scanSongsDirectory(tryGetSongsDirectoryHandle);
+  scanSongsFolder(songsFolderFrom(tryGetSongsDirectoryHandle));
 
 describe('partial local chart scan persistence', () => {
   beforeEach(() => {

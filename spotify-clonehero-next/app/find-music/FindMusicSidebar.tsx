@@ -35,7 +35,6 @@ import {
   type FindMusicView,
   type SourceStatus,
 } from './types';
-import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
 import {FIND_MUSIC_PATH, FIND_MUSIC_RECOMMENDATIONS_PATH} from './routes';
 import {NoFolderPickerNotice} from './songsFolderCopy';
 
@@ -55,7 +54,10 @@ export interface FindMusicSidebarProps {
   onRefreshSpotifyLibrary: () => void;
   onRefreshAppleMusic: () => void;
   onScanLocal: () => void;
-  onPickLocalFolder: () => void;
+  /** Absent where the browser cannot keep a Songs folder to change. */
+  onPickLocalFolder?: (() => void) | undefined;
+  /** Whether the browser keeps the Songs folder and can write into it. */
+  localFolderKept: boolean;
   onRefreshChorus: () => void;
   onConnectSpotify: () => void;
   onConnectAppleMusic: () => void;
@@ -258,6 +260,7 @@ export default function FindMusicSidebar({
   onRefreshAppleMusic,
   onScanLocal,
   onPickLocalFolder,
+  localFolderKept,
   onRefreshChorus,
   onConnectSpotify,
   onConnectAppleMusic,
@@ -275,7 +278,6 @@ export default function FindMusicSidebar({
   const showExclusionInput =
     addingExclusion || filters.exclusionDraft.trim().length > 0;
   const activeFilters = activeFilterCount(filters);
-  const canKeepFolder = useSupportsDirectoryPicker();
   const spotifyConnected = authenticated && hasSpotify;
   const tasteSourceConnected =
     spotifyLibraryStatus.phase === 'ready' ||
@@ -618,13 +620,13 @@ export default function FindMusicSidebar({
             </SourceGlyph>
           }
           status={localStatus}
-          description={canKeepFolder ? undefined : <NoFolderPickerNotice />}
+          description={localFolderKept ? undefined : <NoFolderPickerNotice />}
           actionLabel={
             localStatus.phase === 'idle'
               ? 'Pick Songs folder…'
               : localStatus.phase === 'error'
                 ? 'Try again'
-                : canKeepFolder
+                : localFolderKept
                   ? 'Rescan'
                   : 'Pick folder again…'
           }
@@ -632,10 +634,9 @@ export default function FindMusicSidebar({
           primaryAction={localStatus.phase === 'idle'}
           // The folder name is not shown: the File System Access API gives no
           // path, and a bare folder name does not say which folder it is.
-          // Without a kept folder every scan picks one, so there is nothing
-          // to change.
+          // Without a kept folder there is no folder to change, and no handler.
           overflowAction={
-            localStatus.phase === 'idle' || !canKeepFolder
+            localStatus.phase === 'idle' || !onPickLocalFolder
               ? undefined
               : {
                   label: 'Choose a different folder…',

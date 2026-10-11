@@ -14,10 +14,12 @@ function folder(
   subfolders: FolderSource[] = [],
 ): FolderSource {
   return {
+    kind: 'folder',
     name,
     handle: null,
     list: async () => ({
       files: files.map(file => ({
+        kind: 'file' as const,
         name: file.name,
         file: async () => ({text: async () => file.text ?? ''}) as File,
       })),

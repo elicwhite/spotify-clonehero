@@ -11,12 +11,13 @@ jest.mock('../../local-db/local-charts', () => ({
 }));
 
 import {
-  scanSongsDirectory,
+  scanSongsFolder,
+  songsFolderFrom,
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
 
 const scanWithPickerFallback = () =>
-  scanSongsDirectory(tryGetSongsDirectoryHandle);
+  scanSongsFolder(songsFolderFrom(tryGetSongsDirectoryHandle));
 
 describe('local chart scan cancellation', () => {
   it('returns cancellation instead of throwing an error', async () => {

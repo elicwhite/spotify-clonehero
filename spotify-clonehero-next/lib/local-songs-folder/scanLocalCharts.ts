@@ -2,7 +2,7 @@ import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
-import type {ChartHandleInfo} from '@/lib/chart-files/chart-package';
+import type {ChartLocation} from '@/lib/chart-files/chart-package';
 import type {FolderFile, FolderSource} from '@/lib/file-access/folderSource';
 
 // Caps concurrent FS ops across the whole recursive scan. Without a shared
@@ -30,7 +30,7 @@ export type SongAccumulator = {
   genre: string;
   data: SongIniData;
   file: string; // This will throw if you access it
-  handleInfo: ChartHandleInfo;
+  location: ChartLocation;
 };
 
 export type LocalChartScanIssue = {
@@ -57,22 +57,17 @@ export default async function scanLocalCharts(
   const path = folder.name;
 
   // The user may pick one chart's own folder rather than a folder of charts.
-  // Such a chart has no parent handle, so it addresses its own files.
+  // Such a chart has no parent.
   if (songIni) {
     const {songIniData, songIniMTime} = await readSongIniData(
       songIni,
       path,
       issues,
     );
-    pushChart(
-      accumulator,
-      callbackPerSong,
-      songIniData,
-      songIniMTime,
-      folder.handle
-        ? {dirHandle: folder.handle, fileName: folder.name}
-        : {selection: folder, fileName: folder.name},
-    );
+    pushChart(accumulator, callbackPerSong, songIniData, songIniMTime, {
+      parent: null,
+      entry: folder,
+    });
   }
 
   await Promise.all([
@@ -116,19 +111,6 @@ function partitionEntries({
     sngFiles: files.filter(file => file.name.toLowerCase().endsWith('.sng')),
     songIni: files.find(file => file.name === 'song.ini') ?? null,
   };
-}
-
-/**
- * How a chart found inside `parent` is addressed again: through the parent's
- * handle when there is one, otherwise through the entry itself.
- */
-function childChartInfo(
-  parent: FolderSource,
-  entry: FolderSource | FolderFile,
-): ChartHandleInfo {
-  return parent.handle
-    ? {parentDir: parent.handle, fileName: entry.name}
-    : {selection: entry, fileName: entry.name};
 }
 
 /** A chart folder's metadata, or nulls when the `song.ini` cannot be used. */
@@ -179,7 +161,7 @@ function pushChart(
   callbackPerSong: () => void,
   songIniData: SongIniData | null,
   modifiedTime: number,
-  handleInfo: ChartHandleInfo,
+  location: ChartLocation,
 ) {
   if (songIniData == null || (!songIniData.name && !songIniData.artist)) {
     return;
@@ -192,7 +174,7 @@ function pushChart(
     charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
     genre: removeStyleTags(songIniData.genre ?? ''),
     data: convertValues(songIniData),
-    handleInfo,
+    location,
     file: '',
   };
   Object.defineProperty(chart, 'file', {
@@ -262,7 +244,7 @@ async function scanLocalChartsDirectory(
     callbackPerSong,
     result.songIniData,
     result.songIniMTime,
-    childChartInfo(parentFolder, currentFolder),
+    {parent: parentFolder, entry: currentFolder},
   );
 
   // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
@@ -344,7 +326,7 @@ async function scanLocalSngFileInner(
     callbackPerSong,
     metadata as unknown as SongIniData,
     file.lastModified,
-    childChartInfo(parentFolder, sngFile),
+    {parent: parentFolder, entry: sngFile},
   );
 }
 

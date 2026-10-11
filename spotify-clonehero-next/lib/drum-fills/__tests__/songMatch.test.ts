@@ -1,13 +1,13 @@
 import {matchSong, type EnumeratedSong} from '../practice/songMatch';
 
 function song(
-  parentDir: string,
-  fileName: string,
+  parent: string,
+  name: string,
   meta: {song: string; artist: string; charter: string},
 ): EnumeratedSong {
   return {
     ...meta,
-    handleInfo: {parentDir: {name: parentDir}, fileName},
+    location: {parent: {name: parent}, entry: {name}},
   };
 }
 

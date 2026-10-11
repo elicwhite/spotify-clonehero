@@ -28,7 +28,6 @@ import {
 import {Progress} from '@/components/ui/progress';
 import {cn} from '@/lib/utils';
 
-import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
 import {NoFolderPickerNotice} from './songsFolderCopy';
 import type {CardOverflowAction, SourceStatus} from './types';
 
@@ -49,7 +48,10 @@ export interface FindMusicWelcomeProps {
   onRefreshSpotifyLibrary: () => void;
   onRefreshAppleMusic: () => void;
   onScanLocal: () => void;
-  onPickLocalFolder: () => void;
+  /** Absent where the browser cannot keep a Songs folder to change. */
+  onPickLocalFolder?: (() => void) | undefined;
+  /** Whether the browser keeps the Songs folder and can write into it. */
+  localFolderKept: boolean;
   onRefreshChorus: () => void;
 }
 
@@ -249,6 +251,7 @@ export default function FindMusicWelcome({
   onRefreshAppleMusic,
   onScanLocal,
   onPickLocalFolder,
+  localFolderKept,
   onRefreshChorus,
 }: FindMusicWelcomeProps) {
   const spotifyConnected = authenticated && hasSpotify;
@@ -273,13 +276,12 @@ export default function FindMusicWelcome({
       : historyStatus.phase === 'error'
         ? 'Try again'
         : 'Refresh history';
-  const canKeepFolder = useSupportsDirectoryPicker();
   const localAction =
     localStatus.phase === 'idle'
       ? 'Choose Songs folder'
       : localStatus.phase === 'error'
         ? 'Try again'
-        : canKeepFolder
+        : localFolderKept
           ? 'Rescan folder'
           : 'Choose folder again';
 
@@ -397,7 +399,7 @@ export default function FindMusicWelcome({
           <SetupCard
             name="Local Songs Folder"
             description={
-              canKeepFolder ? (
+              localFolderKept ? (
                 'Choose your Clone Hero or YARG Songs folder to install charts directly and filter out songs you already have.'
               ) : (
                 <>
@@ -417,10 +419,9 @@ export default function FindMusicWelcome({
             onAction={onScanLocal}
             // The folder name is not shown: the File System Access API gives
             // no path, and a bare folder name does not say which folder it is.
-            // Without a kept folder every scan picks one, so there is nothing
-            // to change.
+            // Without a kept folder there is no folder to change, and no handler.
             overflowAction={
-              localStatus.phase === 'idle' || !canKeepFolder
+              localStatus.phase === 'idle' || !onPickLocalFolder
                 ? undefined
                 : {
                     label: 'Choose a different folder…',

@@ -36,17 +36,13 @@ function props(
     onRefreshAppleMusic: jest.fn(),
     onScanLocal: jest.fn(),
     onPickLocalFolder: jest.fn(),
+    localFolderKept: true,
     onRefreshChorus: jest.fn(),
     ...overrides,
   };
 }
 
 describe('FindMusicWelcome', () => {
-  beforeEach(() => {
-    // jsdom has no File System Access API; most tests run as a browser with it.
-    window.showDirectoryPicker = jest.fn() as typeof window.showDirectoryPicker;
-  });
-
   it('provides a private, local first-run path and explains both outcomes', () => {
     render(<FindMusicWelcome {...props()} />);
 
@@ -233,9 +229,10 @@ describe('FindMusicWelcome', () => {
   });
 
   it('says what the browser cannot do where there is no folder picker', () => {
-    Reflect.deleteProperty(window, 'showDirectoryPicker');
     const scanned = props({
       localStatus: {phase: 'ready', summary: '86 installed charts'},
+      localFolderKept: false,
+      onPickLocalFolder: undefined,
     });
     render(<FindMusicWelcome {...scanned} />);
 

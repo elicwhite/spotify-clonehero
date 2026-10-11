@@ -19,7 +19,7 @@ export function browserReasonSentence(folder: string): string {
   return `Your browser cannot save files into ${folder}.`;
 }
 
-export const DOWNLOADS_SENTENCE = 'The files go to your Downloads folder.';
+const DOWNLOADS_SENTENCE = 'The files go to your Downloads folder.';
 
 /** The notice as one string, for a toast. */
 export function downloadFallbackText({
@@ -36,13 +36,12 @@ export function downloadFallbackText({
     .join(' ');
 }
 
+/** A block of phrasing content, so it can sit inside a card's paragraph. */
 export default function DownloadFallbackNotice({
   className,
   ...copy
 }: DownloadFallbackCopy & {className?: string}) {
   return (
-    <p className={cn('text-muted-foreground', className)}>
-      {downloadFallbackText(copy)}
-    </p>
+    <span className={cn('block', className)}>{downloadFallbackText(copy)}</span>
   );
 }

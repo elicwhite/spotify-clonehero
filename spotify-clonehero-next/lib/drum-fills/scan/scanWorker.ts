@@ -21,7 +21,7 @@ import type {File as ChartFile} from '@eliwhite/scan-chart';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {readChartHandle} from '@/lib/chart-files/chart-package';
+import {readChartLocation} from '@/lib/chart-files/chart-package';
 import {folderSourceFromHandle} from '@/lib/file-access/folderSource';
 import {libraryPathOf} from '../practice/songMatch';
 
@@ -157,6 +157,6 @@ async function processSong(song: SongAccumulator): Promise<ScannedFill[]> {
  * .sng files are handled by the shared `lib/chart-files` helpers.
  */
 async function readSongChartFiles(song: SongAccumulator): Promise<ChartFile[]> {
-  const loaded = await readChartHandle(song.handleInfo);
+  const loaded = await readChartLocation(song.location);
   return loaded.files.filter(f => WANTED_FILES.has(f.fileName.toLowerCase()));
 }

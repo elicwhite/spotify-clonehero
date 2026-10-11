@@ -1,4 +1,4 @@
-import {downloadFallbackText} from '@/components/file-access/DownloadFallbackNotice';
+import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNotice';
 
 /** The download notice's words on this page. */
 export const SONGS_FOLDER_DOWNLOAD_COPY = {
@@ -18,12 +18,11 @@ export function NoFolderPickerNotice() {
   return (
     <>
       <span className="block">{PICK_AGAIN}</span>
-      <span className="mt-1 block">
-        {downloadFallbackText({
-          ...SONGS_FOLDER_DOWNLOAD_COPY,
-          browserIsReason: true,
-        })}
-      </span>
+      <DownloadFallbackNotice
+        className="mt-1"
+        {...SONGS_FOLDER_DOWNLOAD_COPY}
+        browserIsReason
+      />
     </>
   );
 }

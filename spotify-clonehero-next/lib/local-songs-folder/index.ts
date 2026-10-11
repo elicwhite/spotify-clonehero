@@ -3,8 +3,9 @@ import filenamify from 'filenamify/browser';
 
 import {track, type ChartDownloadSource} from '@/lib/analytics/track';
 import {downloadBlob} from '@/lib/download';
+import {isPickerCancel} from '@/lib/file-access/capabilities';
+import {setPrefersBrowserDownload} from './downloadChoice';
 import {
-  folderSourceFromFileList,
   folderSourceFromHandle,
   type FolderSource,
 } from '@/lib/file-access/folderSource';
@@ -13,7 +14,6 @@ import scanLocalCharts, {
   SongAccumulator,
 } from './scanLocalCharts';
 import {coalesceProgress} from './scan-progress';
-import {SngStream} from '@eliwhite/parse-sng';
 import {upsertLocalCharts} from '@/lib/local-db/local-charts';
 
 let currentSongDirectoryCache: FileSystemDirectoryHandle | undefined;
@@ -33,17 +33,15 @@ export async function pickSongsDirectory(): Promise<FileSystemDirectoryHandle | 
       mode: 'readwrite',
     });
   } catch (error) {
-    if (
-      error instanceof DOMException &&
-      (error.name === 'AbortError' || error.name === 'NotAllowedError')
-    ) {
-      return null;
-    }
+    if (isPickerCancel(error)) return null;
     throw error;
   }
 
   await set('songsDirectoryHandle', handle);
   currentSongDirectoryCache = handle;
+  // A folder picked now answers where charts go, over an earlier
+  // "Just download".
+  setPrefersBrowserDownload(false);
 
   return handle;
 }
@@ -141,42 +139,34 @@ export function getLocalScanWarning(issueCount: number) {
 }
 
 /**
- * Scan whichever Songs folder `getHandle` produces. The caller chooses how far
+ * Scan whichever Songs folder `getFolder` produces. The caller chooses how far
  * the app may go to get one — `tryGetSongsDirectoryHandle` falls back to the
  * picker, `pickSongsDirectory` insists on it, `getGrantedSongsDirectoryHandle`
- * refuses to prompt at all — and every one of them answers null rather than
+ * refuses to prompt at all, and `pickFolder` asks through a file input where
+ * there is no picker — and every one of them answers null rather than
  * throwing when there is no folder to scan, so a null result here means "no
  * scan happened", never "the scan failed".
  */
-export async function scanSongsDirectory(
-  getHandle: () => Promise<FileSystemDirectoryHandle | null>,
+export async function scanSongsFolder(
+  getFolder: () => Promise<FolderSource | null>,
   onProgress: (count: number) => void = () => {},
 ): Promise<InstalledChartsResponse | null> {
-  const handle = await getHandle();
-  if (!handle) {
-    return null;
-  }
-
-  return await scanInstalledCharts(folderSourceFromHandle(handle), onProgress);
-}
-
-/**
- * The same scan over a Songs folder picked through a file input, where there
- * is no folder picker. Nothing is kept to scan again, so every rescan picks
- * the folder again; the results persist like any other scan's. A selection
- * with no folder in it is not a Songs folder, so it scans nothing.
- */
-export async function scanSelectedSongsFolder(
-  getFiles: () => Promise<File[] | null>,
-  onProgress: (count: number) => void = () => {},
-): Promise<InstalledChartsResponse | null> {
-  const files = await getFiles();
-  const folder = files && folderSourceFromFileList(files);
+  const folder = await getFolder();
   if (!folder) {
     return null;
   }
 
   return await scanInstalledCharts(folder, onProgress);
+}
+
+/** A Songs folder handle getter, as the folder getter `scanSongsFolder` takes. */
+export function songsFolderFrom(
+  getHandle: () => Promise<FileSystemDirectoryHandle | null>,
+): () => Promise<FolderSource | null> {
+  return async () => {
+    const handle = await getHandle();
+    return handle && folderSourceFromHandle(handle);
+  };
 }
 
 export async function scanInstalledCharts(
@@ -272,121 +262,15 @@ async function getBackupDirectory() {
   return backupDirHandle;
 }
 
-async function getFileOrDirectoryHandle(
-  parentHandle: FileSystemDirectoryHandle,
-  name: string,
-): Promise<null | FileSystemFileHandle | FileSystemDirectoryHandle> {
-  try {
-    return await parentHandle.getFileHandle(name, {
-      create: false,
-    });
-  } catch {
-    // It might be a directory
-  }
-
-  try {
-    return await parentHandle.getDirectoryHandle(name, {
-      create: false,
-    });
-  } catch {
-    // it doesn't exist
-  }
-
-  return null;
-}
-
-async function moveToFolder(
-  parentDirectoryHandle: FileSystemDirectoryHandle,
-  fileOrFolderName: string,
+/** Copy a staged file into `toFolder`, replacing a file of the same name. */
+async function copyIntoFolder(
+  fromFolder: FileSystemDirectoryHandle,
+  fileName: string,
   toFolder: FileSystemDirectoryHandle,
-): Promise<{
-  newParentDirectoryHandle: FileSystemDirectoryHandle;
-  fileName: string;
-}> {
-  const handle = await getFileOrDirectoryHandle(
-    parentDirectoryHandle,
-    fileOrFolderName,
-  );
-  if (handle == null) {
-    throw new Error('File or folder does not exist');
-  }
-
-  if (handle.kind === 'file') {
-    if (await fileExists(toFolder, handle.name)) {
-      await toFolder.removeEntry(handle.name, {recursive: true});
-    }
-    const newFileHandle = await toFolder.getFileHandle(handle.name, {
-      create: true,
-    });
-    const writableStream = await newFileHandle.createWritable();
-    const readableStream = await handle.getFile();
-    await readableStream.stream().pipeTo(writableStream);
-
-    return {
-      newParentDirectoryHandle: toFolder,
-      fileName: handle.name,
-    };
-  } else if (handle.kind === 'directory') {
-    if (await fileExists(toFolder, handle.name)) {
-      await toFolder.removeEntry(handle.name, {recursive: true});
-    }
-
-    const destDirHandle = await toFolder.getDirectoryHandle(handle.name, {
-      create: true,
-    });
-
-    // If there are .crswap files, wait for them to be gone
-    // It seems like await should do this, but it doesn't
-    // It feels like I /must/ be missing an await somewhere, possibly in parse-sng
-    const start = Date.now();
-    do {
-      let hasSwap = false;
-
-      for await (const entry of handle.values()) {
-        if (entry.name.includes('.crswap')) {
-          hasSwap = true;
-          break;
-        }
-      }
-
-      if (hasSwap) {
-        await sleep(100);
-      } else {
-        break;
-      }
-    } while (Date.now() - start < 10 * 1000);
-
-    for await (const entry of handle.values()) {
-      await moveToFolder(handle, entry.name, destDirHandle);
-    }
-
-    return {
-      newParentDirectoryHandle: toFolder,
-      fileName: destDirHandle.name,
-    };
-  }
-
-  throw new Error('Unknown handle type');
-}
-
-async function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function fileExists(
-  parentHandle: FileSystemDirectoryHandle,
-  name: string,
 ) {
-  try {
-    await parentHandle.getDirectoryHandle(name, {
-      create: false,
-    });
-
-    return true;
-  } catch {
-    // Can't get it without creating, doesn't exist.
-    return false;
-  }
+  const source = await (await fromFolder.getFileHandle(fileName)).getFile();
+  const target = await toFolder.getFileHandle(fileName, {create: true});
+  await source.stream().pipeTo(await target.createWritable());
 }
 
 /**
@@ -395,7 +279,7 @@ async function fileExists(
  *
  * A staged entry that will not go away is the real reason the download cannot
  * start, so it is reported as itself. It says nothing about the destination:
- * `moveToFolder` replaces a chart that is already installed.
+ * `copyIntoFolder` replaces a chart that is already installed.
  */
 async function clearStagedDownload(
   stagingDirHandle: FileSystemDirectoryHandle,
@@ -420,24 +304,16 @@ export type ChartDestination =
   | {kind: 'folder'; folder: FileSystemDirectoryHandle}
   | {kind: 'browser-download'};
 
+/** Download a chart as a `.sng` to where `destination` says. */
 export async function downloadSong(
   artist: string,
   song: string,
   charter: string,
   url: string,
   destination: ChartDestination,
-  options?: {
-    replaceExisting?: boolean;
-    asSng?: boolean;
-    source?: ChartDownloadSource;
-    md5?: string;
-  },
+  options: {source?: ChartDownloadSource; md5?: string} = {},
 ): Promise<
-  | {
-      status: 'installed';
-      newParentDirectoryHandle: FileSystemDirectoryHandle;
-      fileName: string;
-    }
+  | {status: 'installed'; fileName: string}
   | {status: 'downloaded'; fileName: string}
 > {
   const response = await fetch(url, {
@@ -460,104 +336,50 @@ export async function downloadSong(
   if (body == null) {
     throw new Error('Chart download response did not include a body');
   }
-  const artistSongTitle = `${artist} - ${song} (${charter})${
-    options?.asSng ? '.sng' : ''
-  }`;
-  const filename = filenamify(artistSongTitle, {replacement: ''});
+  const fileName = filenamify(`${artist} - ${song} (${charter}).sng`, {
+    replacement: '',
+  });
 
   if (destination.kind === 'browser-download') {
     // A browser download has nothing to be atomic about, so it skips the OPFS
     // staging copy, which would hold a second copy of a file that can reach
     // hundreds of MB against the quota the catalog also uses.
-    downloadBlob(await new Response(body).blob(), filename);
+    downloadBlob(await new Response(body).blob(), fileName);
     trackChartDownload(destination, options);
-    return {status: 'downloaded', fileName: filename};
+    return {status: 'downloaded', fileName};
   }
-  const downloadLocation = destination.folder;
 
+  // Download into backups, and only on success copy it over to destination.
   const backupRootDirHandle = await getBackupDirectory();
-
-  await clearStagedDownload(backupRootDirHandle, filename);
-
-  // Download into backups, and only on success copy it over to destination
-  if (options?.asSng) {
-    await downloadAsSng(backupRootDirHandle, filename, body);
-  } else {
-    await downloadAsFolder(backupRootDirHandle, filename, body);
-  }
-  if (options?.replaceExisting) {
-    await downloadLocation.removeEntry(filename, {recursive: true});
-  }
-
-  const result = await moveToFolder(
-    backupRootDirHandle,
-    filename,
-    downloadLocation,
-  );
+  await clearStagedDownload(backupRootDirHandle, fileName);
+  await downloadAsSng(backupRootDirHandle, fileName, body);
+  await copyIntoFolder(backupRootDirHandle, fileName, destination.folder);
 
   // Installation commits when the destination copy succeeds. A stale backup
   // is safe to leave behind because the next attempt removes it before writing.
   try {
-    await backupRootDirHandle.removeEntry(filename, {recursive: true});
+    await backupRootDirHandle.removeEntry(fileName, {recursive: true});
   } catch (error) {
-    console.warn(`Could not remove download backup ${filename}`, error);
+    console.warn(`Could not remove download backup ${fileName}`, error);
   }
 
   trackChartDownload(destination, options);
 
-  console.log(`Finished downloading ${filename}`);
-  return {status: 'installed', ...result};
+  console.log(`Finished downloading ${fileName}`);
+  return {status: 'installed', fileName};
 }
 
 function trackChartDownload(
   destination: ChartDestination,
-  options: {asSng?: boolean; source?: ChartDownloadSource; md5?: string} = {},
+  options: {source?: ChartDownloadSource; md5?: string},
 ) {
   track({
     event: 'chart_downloaded',
     source: options.source ?? 'unknown',
-    format: options.asSng === false ? 'chart' : 'sng',
+    format: 'sng',
     destination: destination.kind,
     md5: options.md5,
   });
-}
-
-async function downloadAsFolder(
-  folderHandle: FileSystemDirectoryHandle,
-  filename: string,
-  stream: ReadableStream,
-) {
-  try {
-    const songDirHandle = await folderHandle.getDirectoryHandle(filename, {
-      create: true,
-    });
-    await new Promise((resolve, reject) => {
-      const sngStream = new SngStream(stream, {generateSongIni: true});
-      sngStream.on('file', async (file, stream, nextFile) => {
-        const fileHandle = await songDirHandle.getFileHandle(file, {
-          create: true,
-        });
-        const writableStream = await fileHandle.createWritable();
-        await stream.pipeTo(writableStream);
-
-        if (nextFile) {
-          nextFile();
-        } else {
-          resolve('downloaded');
-        }
-      });
-
-      sngStream.on('error', error => {
-        reject(error);
-      });
-
-      sngStream.start();
-    });
-  } catch (error) {
-    console.error(error);
-    await folderHandle.removeEntry(filename, {recursive: true});
-    throw error;
-  }
 }
 
 async function downloadAsSng(

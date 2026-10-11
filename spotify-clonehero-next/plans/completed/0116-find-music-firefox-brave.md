@@ -1,6 +1,6 @@
 # 0116 — /find-music in Firefox and Brave
 
-Status: in-progress
+Status: completed
 
 > Revised after a contrarian review. The first draft had a wrong
 > `createWritable` table, proposed a `FileEntry[]` Spotify import that would
@@ -508,6 +508,65 @@ Safari is not a target. Its OPFS lacks `createWritable()` until far later than
 - Manual: Firefox and Brave, full pass — connect Spotify, scan, reload, check
   the installed flag, download a chart. Chrome regression pass: install with a
   granted folder must still be prompt-free.
+
+## As built (2026-10-10)
+
+Where the code differs from the phases above:
+
+- **The hook is `useChartInstall`** (`app/find-music/useChartInstall.tsx`),
+  not `useChartInstallDestination`. It owns the destination choice, the
+  dialog and the per-chart button states, which moved out of
+  `FindMusicTable`. The chart that opened the dialog is held in state, not
+  in a promise.
+- **"Just download" lives in `lib/local-songs-folder/downloadChoice.ts`**,
+  beside the stored Songs folder, and `pickSongsDirectory` clears it. The
+  button label reads it through `useSyncExternalStore`, so a folder picked
+  later turns every "Download" back into "Install" at once.
+- **`downloadSong` takes `{kind: 'folder', folder}` or
+  `{kind: 'browser-download'}`** and returns `installed` or `downloaded`. It
+  always writes a `.sng`: the folder-unpacking and replace modes had no
+  caller and are gone. `getSongsDownloadFolder` makes the
+  `musiccharts-dot-tools-downloads` folder inside a Songs folder.
+- **The toast** is titled "Saved to your Downloads folder". The first
+  download on the page shows the whole notice. Later downloads show only the
+  reason sentence (no picker) or only the action ("Just download").
+- **There is no `ScanSource` type, and no `ChartHandleInfo`.** `FolderSource`
+  moved to `lib/file-access/folderSource.ts`, gained `kind` and `handle`, and
+  its files give a `File` on request. `scanLocalCharts` takes a
+  `FolderSource` and records each chart as a `ChartLocation`,
+  `{parent, entry}`. `readChartLocation` reads any of them; only the
+  folder-to-`.sng` converter needs `parent.handle`, and it narrows on it.
+- **One scan entry point**, `scanSongsFolder(getFolder)`. The handle getters
+  go through `songsFolderFrom`; without a picker the folder comes from
+  `pickFolder`. `FindMusicClient` decides once whether the folder is kept and
+  passes `localFolderKept` and an optional `onPickLocalFolder` to the cards.
+- **`pickFolder`** (`lib/file-access/pickFolder.ts`) is the read-only folder
+  chooser: picker where there is one, `webkitdirectory` input elsewhere. The
+  Spotify history import uses it. Plan 0159 Phase 2 reuses it.
+
+Verified in real browsers against the dev server, with a small fixture
+history export and Songs folder:
+
+- **Brave 151** (no picker), over CDP. The folder inputs got real
+  directories through the DevTools file chooser. Import, scan, reload
+  (flag kept), Download, tooltip and toast all worked.
+- **Firefox 154** (no picker), over WebDriver BiDi. BiDi's `input.setFiles`
+  refuses directories, so the folder was handed over as the `File` list a
+  `webkitdirectory` input produces. Everything after the dialog was the real
+  page code. Import, scan, Download (4.8 MB `.sng` saved) and toast all
+  worked.
+- **Chrome 154** (picker), with `showDirectoryPicker` answering with OPFS
+  folders. The dialog, "Select Songs folder" (installed into the folder),
+  and "Just download" (toast without the browser reason) all worked.
+
+Known and left as is:
+
+- Chromium browsers show their own "Upload N files to this site?" prompt for
+  a `webkitdirectory` input. It says "upload" although nothing leaves the
+  browser. The page cannot change it. Brave users see it; Chrome users
+  never reach that input.
+- Picking a Songs folder from the install dialog does not scan it. The
+  stored folder is scanned on the next visit, or with Rescan.
 
 ## Open questions
 

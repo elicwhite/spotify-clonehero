@@ -113,41 +113,25 @@ export function readChartDirectory(
 }
 
 /**
- * Where a scanned chart lives, and how its files are opened again.
+ * Where a scanned chart is: the folder or `.sng` file itself, and the folder
+ * the scan found it in. `parent` is null for the folder the user picked, which
+ * the scan reports as a chart when it is one song's own folder.
  *
- * A chart found inside the scanned library is addressed by its parent folder
- * and its own name, so it can also be written back beside its siblings. The
- * folder the user picks has no parent handle the File System Access API can
- * supply, so a chart that *is* that folder carries the folder handle instead
- * and cannot be written next to anything. A chart from a file input has no
- * handle at all, only its own folder or `.sng` file: it can be read again, but
- * never written.
+ * Only a chart whose parent has a handle can be written beside, which is what
+ * the folder-to-`.sng` converter needs. Everything else only reads it.
  */
-export type ChartHandleInfo =
-  | {parentDir: FileSystemDirectoryHandle; fileName: string}
-  | {dirHandle: FileSystemDirectoryHandle; fileName: string}
-  | {selection: FolderSource | FolderFile; fileName: string};
+export interface ChartLocation {
+  parent: FolderSource | null;
+  entry: FolderSource | FolderFile;
+}
 
 /** Read every file of a chart the scanner found, folder or `.sng`. */
-export async function readChartHandle(
-  info: ChartHandleInfo,
-): Promise<LoadedFiles> {
-  if ('selection' in info) {
-    const {selection} = info;
-    return 'list' in selection
-      ? await readFolder(selection)
-      : await readSngFile(await selection.file());
-  }
-  if ('dirHandle' in info) {
-    return await readChartDirectory(info.dirHandle);
-  }
-  if (info.fileName.toLowerCase().endsWith('.sng')) {
-    const fileHandle = await info.parentDir.getFileHandle(info.fileName);
-    return await readSngFile(await fileHandle.getFile());
-  }
-  return await readChartDirectory(
-    await info.parentDir.getDirectoryHandle(info.fileName),
-  );
+export async function readChartLocation({
+  entry,
+}: ChartLocation): Promise<LoadedFiles> {
+  return entry.kind === 'folder'
+    ? await readFolder(entry)
+    : await readSngFile(await entry.file());
 }
 
 /**
@@ -325,6 +309,7 @@ function droppedFolders(dataTransfer: DataTransfer): FolderSource[] {
 /** A dropped directory entry as a folder source. */
 function entrySource(directory: FileSystemDirectoryEntry): FolderSource {
   return {
+    kind: 'folder',
     name: directory.name,
     handle: null,
     list: async () => {
@@ -333,6 +318,7 @@ function entrySource(directory: FileSystemDirectoryEntry): FolderSource {
         files: children
           .filter((child): child is FileSystemFileEntry => child.isFile)
           .map(child => ({
+            kind: 'file' as const,
             name: child.name,
             file: () =>
               new Promise<File>((resolve, reject) =>

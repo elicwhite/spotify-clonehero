@@ -58,6 +58,7 @@ function makeProps(
     onRefreshAppleMusic: jest.fn(),
     onScanLocal: jest.fn(),
     onPickLocalFolder: jest.fn(),
+    localFolderKept: true,
     onRefreshChorus: jest.fn(),
     onConnectSpotify: jest.fn(),
     onConnectAppleMusic: jest.fn(),
@@ -73,11 +74,6 @@ function makeProps(
 }
 
 describe('FindMusicSidebar', () => {
-  beforeEach(() => {
-    // jsdom has no File System Access API; most tests run as a browser with it.
-    window.showDirectoryPicker = jest.fn() as typeof window.showDirectoryPicker;
-  });
-
   it('switches between Your music and Recommendations and displays their counts', () => {
     const onViewChange = jest.fn();
     render(<FindMusicSidebar {...makeProps({onViewChange})} />);
@@ -535,13 +531,14 @@ describe('FindMusicSidebar', () => {
   });
 
   it('says what the browser cannot do where there is no folder picker', () => {
-    Reflect.deleteProperty(window, 'showDirectoryPicker');
     const onScanLocal = jest.fn();
     render(
       <FindMusicSidebar
         {...makeProps({
           onScanLocal,
           localStatus: {phase: 'ready', summary: '86 installed charts'},
+          localFolderKept: false,
+          onPickLocalFolder: undefined,
         })}
       />,
     );

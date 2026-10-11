@@ -1,4 +1,4 @@
-import {supportsDirectoryPicker} from './capabilities';
+import {isPickerCancel, supportsDirectoryPicker} from './capabilities';
 import {chooseFiles} from './fileInput';
 import {
   folderSourceFromFileList,
@@ -30,13 +30,7 @@ export async function pickFolder(options: {
       await window.showDirectoryPicker({id: options.id}),
     );
   } catch (error) {
-    // A cancel, or a picker the user or the browser refused.
-    if (
-      error instanceof DOMException &&
-      (error.name === 'AbortError' || error.name === 'NotAllowedError')
-    ) {
-      return null;
-    }
+    if (isPickerCancel(error)) return null;
     throw error;
   }
 }

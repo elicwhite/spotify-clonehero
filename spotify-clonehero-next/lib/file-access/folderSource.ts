@@ -3,6 +3,7 @@
  * it, so listing a library folder never touches the audio in it.
  */
 export interface FolderFile {
+  kind: 'file';
   name: string;
   file: () => Promise<File>;
 }
@@ -11,13 +12,14 @@ export interface FolderFile {
  * A folder, however it was picked. Every source can list its immediate
  * children — a directory handle by iterating it, a dropped entry through its
  * reader, a `webkitdirectory` selection by grouping paths — and that is all
- * `readFolder` and the library scanner need.
+ * `readChartFolder` and the library scanner need.
  *
  * `list` is called only when the folder's contents are actually needed, so a
  * library folder of hundreds of songs is never enumerated past the level that
  * shows it is not one song.
  */
 export interface FolderSource {
+  kind: 'folder';
   name: string;
   /**
    * The File System Access handle behind the folder, or null for a drop or a
@@ -32,6 +34,7 @@ export function folderSourceFromHandle(
   handle: FileSystemDirectoryHandle,
 ): FolderSource {
   return {
+    kind: 'folder',
     name: handle.name,
     handle,
     list: async () => {
@@ -40,7 +43,7 @@ export function folderSourceFromHandle(
       for await (const [name, child] of handle.entries()) {
         if (child.kind === 'file') {
           const fileHandle = child as FileSystemFileHandle;
-          files.push({name, file: () => fileHandle.getFile()});
+          files.push({kind: 'file', name, file: () => fileHandle.getFile()});
         } else {
           subfolders.push(
             folderSourceFromHandle(child as FileSystemDirectoryHandle),
@@ -60,6 +63,7 @@ interface PathNode {
 
 function pathNodeSource(name: string, node: PathNode): FolderSource {
   return {
+    kind: 'folder',
     name,
     handle: null,
     list: async () => ({
@@ -103,6 +107,7 @@ export function folderSourceFromFileList(
       node = child;
     }
     node.files.push({
+      kind: 'file',
       name: segments[segments.length - 1],
       file: async () => file,
     });

@@ -7,8 +7,20 @@ import {
 } from '../convert-folder-to-sng';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 
-/** Build a minimal SongAccumulator-shaped entry for selection tests. */
-function chart(fileName: string): ConvertibleChart {
+const noFiles = async () => ({files: [], subfolders: []});
+
+/**
+ * Build a minimal SongAccumulator-shaped entry for selection tests: a folder
+ * chart, or a `.sng` file chart when the name says so, as the scanner reports
+ * them.
+ */
+function chart(
+  name: string,
+  parentHandle: FileSystemDirectoryHandle | null = {} as FileSystemDirectoryHandle,
+): ConvertibleChart {
+  const entry = name.toLowerCase().endsWith('.sng')
+    ? {kind: 'file' as const, name, file: async () => new File([], name)}
+    : {kind: 'folder' as const, name, handle: null, list: noFiles};
   return {
     artist: 'Artist',
     song: 'Song',
@@ -17,10 +29,14 @@ function chart(fileName: string): ConvertibleChart {
     genre: '',
     data: {name: 'Song', artist: 'Artist', charter: ''},
     file: '',
-    handleInfo: {
-      // Only fileName is read by selectChartFoldersToConvert.
-      parentDir: {} as FileSystemDirectoryHandle,
-      fileName,
+    location: {
+      parent: {
+        kind: 'folder',
+        name: 'Songs',
+        handle: parentHandle,
+        list: noFiles,
+      },
+      entry,
     },
   } as ConvertibleChart;
 }
@@ -33,15 +49,21 @@ describe('selectChartFoldersToConvert', () => {
       chart('Another Folder'),
     ];
     expect(
-      selectChartFoldersToConvert(charts).map(c => c.handleInfo.fileName),
+      selectChartFoldersToConvert(charts).map(c => c.location.entry.name),
     ).toEqual(['Artist - Song (Charter)', 'Another Folder']);
   });
 
   test('matches the .sng extension case-insensitively', () => {
     const charts = [chart('LOUD.SNG'), chart('quiet.Sng'), chart('folder')];
     expect(
-      selectChartFoldersToConvert(charts).map(c => c.handleInfo.fileName),
+      selectChartFoldersToConvert(charts).map(c => c.location.entry.name),
     ).toEqual(['folder']);
+  });
+
+  test('drops a chart whose folder has no handle to write beside it', () => {
+    expect(selectChartFoldersToConvert([chart('Picked Folder', null)])).toEqual(
+      [],
+    );
   });
 
   test('returns an empty list when every chart is already a .sng', () => {
@@ -73,7 +95,7 @@ describe('convertChartFolders', () => {
   test('isolates failures: one bad chart does not abort the rest', async () => {
     const charts = [chart('ok-1'), chart('boom'), chart('ok-2')];
     const convert = jest.fn(async (c: SongAccumulator) => {
-      if (c.handleInfo.fileName === 'boom') throw new Error('nope');
+      if (c.location.entry.name === 'boom') throw new Error('nope');
     });
     // Keep the expected console.error noise out of the test output.
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
