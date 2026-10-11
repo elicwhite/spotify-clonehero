@@ -6,8 +6,9 @@ import {cn} from '@/lib/utils';
  * every tool explains it the same way; a tool supplies only what it needs to
  * add, such as that the files come in a .zip.
  */
-export const DOWNLOAD_FALLBACK_TEXT =
-  'Your browser is missing features required to save files into your selected folder. They will be saved to your Downloads folder.';
+export function downloadFallbackText(folder = 'your selected folder'): string {
+  return `Your browser is missing features required to save files into ${folder}. They will be saved to your Downloads folder.`;
+}
 
 /** A block of phrasing content, so it can sit inside a card's paragraph. */
 export default function DownloadFallbackNotice({
@@ -20,7 +21,7 @@ export default function DownloadFallbackNotice({
 }) {
   return (
     <span className={cn('block', className)}>
-      {extra ? `${DOWNLOAD_FALLBACK_TEXT} ${extra}` : DOWNLOAD_FALLBACK_TEXT}
+      {extra ? `${downloadFallbackText()} ${extra}` : downloadFallbackText()}
     </span>
   );
 }

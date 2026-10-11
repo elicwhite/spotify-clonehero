@@ -334,7 +334,7 @@ it('downloads, and says the browser is why, where there is no folder picker', as
     'Saved to your Downloads folder',
     {
       description:
-        'Your browser is missing features required to save files into your selected folder. They will be saved to your Downloads folder.',
+        'Your browser is missing features required to save files into your Songs folder. They will be saved to your Downloads folder.',
     },
   );
   expect(screen.getByTestId('chart-row')).not.toHaveTextContent('Installed');

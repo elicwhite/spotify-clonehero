@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {DOWNLOAD_FALLBACK_TEXT} from '@/components/file-access/DownloadFallbackNotice';
+import {downloadFallbackText} from '@/components/file-access/DownloadFallbackNotice';
 import {
   supportsDirectoryPicker,
   useSupportsDirectoryPicker,
@@ -75,7 +75,7 @@ export function useChartInstall() {
     if (browserIsReason && !explainedRef.current) {
       explainedRef.current = true;
       toast.success('Saved to your Downloads folder', {
-        description: DOWNLOAD_FALLBACK_TEXT,
+        description: downloadFallbackText('your Songs folder'),
       });
       return;
     }
@@ -199,6 +199,8 @@ export function useChartInstall() {
         ? ('download' as const)
         : ('install' as const),
     /** Why a chart downloads, when the browser is the reason. */
-    downloadReason: canPickFolders ? null : DOWNLOAD_FALLBACK_TEXT,
+    downloadReason: canPickFolders
+      ? null
+      : downloadFallbackText('your Songs folder'),
   };
 }

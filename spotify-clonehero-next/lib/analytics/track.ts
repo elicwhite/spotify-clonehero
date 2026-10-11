@@ -54,14 +54,22 @@ export type ChartDownloadSource =
   | 'karaoke'
   | 'unknown';
 
+/**
+ * How the browser lets the page reach the user's folders: the File System
+ * Access picker, or only a file input (Firefox, Brave). GA's own Browser
+ * dimension says which browser; this says what it could do.
+ */
+export type FolderAccess = 'picker' | 'file-input';
+
 export type AnalyticsEvent =
   // Library scan / downloads
-  | {event: 'charts_scanned'; value: number}
+  | {event: 'charts_scanned'; value: number; folder_access: FolderAccess}
   | {
       event: 'chart_downloaded';
       source: ChartDownloadSource;
       format: 'sng' | 'chart';
       destination: 'folder' | 'browser-download';
+      folder_access: FolderAccess;
       md5?: string | undefined;
     }
 

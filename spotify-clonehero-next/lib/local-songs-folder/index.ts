@@ -3,7 +3,10 @@ import filenamify from 'filenamify/browser';
 
 import {track, type ChartDownloadSource} from '@/lib/analytics/track';
 import {downloadBlob} from '@/lib/download';
-import {isPickerCancel} from '@/lib/file-access/capabilities';
+import {
+  isPickerCancel,
+  supportsDirectoryPicker,
+} from '@/lib/file-access/capabilities';
 import {setPrefersBrowserDownload} from './downloadChoice';
 import {
   folderSourceFromHandle,
@@ -184,6 +187,7 @@ export async function scanInstalledCharts(
 
   track({
     event: 'charts_scanned',
+    folder_access: folder.handle ? 'picker' : 'file-input',
     value: installedCharts.length,
   });
 
@@ -378,6 +382,7 @@ function trackChartDownload(
     source: options.source ?? 'unknown',
     format: 'sng',
     destination: destination.kind,
+    folder_access: supportsDirectoryPicker() ? 'picker' : 'file-input',
     md5: options.md5,
   });
 }

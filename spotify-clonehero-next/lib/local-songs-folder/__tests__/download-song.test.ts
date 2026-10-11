@@ -145,6 +145,7 @@ describe('downloadSong outcomes', () => {
       source: 'find_music',
       format: 'sng',
       destination: 'browser-download',
+      folder_access: 'file-input',
       md5: 'chart-md5',
     });
   });
@@ -182,6 +183,10 @@ describe('downloadSong outcomes', () => {
   });
 
   it('emits download analytics only after the chart is installed', async () => {
+    Object.defineProperty(window, 'showDirectoryPicker', {
+      configurable: true,
+      value: jest.fn(),
+    });
     const {
       backupWritable,
       copyPipeTo,
@@ -211,6 +216,7 @@ describe('downloadSong outcomes', () => {
       source: 'find_music',
       format: 'sng',
       destination: 'folder',
+      folder_access: 'picker',
       md5: 'chart-md5',
     });
     expect(copyPipeTo.mock.invocationCallOrder[0]).toBeLessThan(
