@@ -9,7 +9,10 @@
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {readChartHandle} from '@/lib/chart-files/chart-package';
+import {
+  folderSourceFromHandle,
+  readChartHandle,
+} from '@/lib/chart-files/chart-package';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {matchSong, type SongRef} from './songMatch';
 
@@ -28,7 +31,11 @@ export async function locateAndLoadSong(
   ref: SongRef,
 ): Promise<{song: SongAccumulator; files: Files} | null> {
   const songs: SongAccumulator[] = [];
-  await scanLocalCharts(directoryHandle, songs, () => {});
+  await scanLocalCharts(
+    folderSourceFromHandle(directoryHandle),
+    songs,
+    () => {},
+  );
   const match = matchSong(songs, ref);
   if (!match) return null;
   const files = await readAllSongFiles(match);

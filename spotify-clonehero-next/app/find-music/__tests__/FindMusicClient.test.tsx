@@ -144,6 +144,13 @@ const mockPickedScan = jest.fn(
 const mockGrantedScan = jest.fn(
   async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
 );
+const mockChosenFolderScan = jest.fn(
+  async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
+);
+const mockChooseFiles = jest.fn();
+jest.mock('../../../lib/file-access/fileInput', () => ({
+  chooseFiles: (options: unknown) => mockChooseFiles(options),
+}));
 jest.mock('../../../lib/local-songs-folder', () => {
   const tryGetSongsDirectoryHandle = async () => null;
   const pickSongsDirectory = async () => null;
@@ -160,6 +167,13 @@ jest.mock('../../../lib/local-songs-folder', () => {
       if (getHandle === getGrantedSongsDirectoryHandle)
         return mockGrantedScan(onProgress);
       return mockStoredOrPickedScan(onProgress);
+    },
+    scanSelectedSongsFolder: async (
+      getFiles: () => Promise<File[] | null>,
+      onProgress?: (count: number) => void,
+    ) => {
+      await getFiles();
+      return mockChosenFolderScan(onProgress);
     },
     getLocalScanWarning: (issueCount: number) =>
       `${issueCount} locations skipped`,
@@ -1107,6 +1121,23 @@ it('always picks a folder when the user asks to change it', async () => {
 
   await waitFor(() => expect(mockPickedScan).toHaveBeenCalledTimes(1));
   // Never the stored folder: that is what the card's Rescan already does.
+  expect(mockStoredOrPickedScan).not.toHaveBeenCalled();
+});
+
+it('scans a Songs folder picked through a file input where there is no picker', async () => {
+  Reflect.deleteProperty(window, 'showDirectoryPicker');
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+  mockChosenFolderScan.mockResolvedValue(completeScan());
+
+  render(<FindMusicClient />);
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole('button', {name: 'Choose a different folder test'}),
+  );
+
+  await waitFor(() => expect(mockChosenFolderScan).toHaveBeenCalledTimes(1));
+  expect(mockChooseFiles).toHaveBeenCalledWith({directory: true});
+  expect(mockPickedScan).not.toHaveBeenCalled();
   expect(mockStoredOrPickedScan).not.toHaveBeenCalled();
 });
 

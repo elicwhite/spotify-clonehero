@@ -35,7 +35,9 @@ import {
   type FindMusicView,
   type SourceStatus,
 } from './types';
+import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
 import {FIND_MUSIC_PATH, FIND_MUSIC_RECOMMENDATIONS_PATH} from './routes';
+import {NoFolderPickerNotice} from './songsFolderCopy';
 
 export interface FindMusicSidebarProps {
   variant?: 'responsive' | 'drawer';
@@ -273,6 +275,7 @@ export default function FindMusicSidebar({
   const showExclusionInput =
     addingExclusion || filters.exclusionDraft.trim().length > 0;
   const activeFilters = activeFilterCount(filters);
+  const canKeepFolder = useSupportsDirectoryPicker();
   const spotifyConnected = authenticated && hasSpotify;
   const tasteSourceConnected =
     spotifyLibraryStatus.phase === 'ready' ||
@@ -615,19 +618,24 @@ export default function FindMusicSidebar({
             </SourceGlyph>
           }
           status={localStatus}
+          description={canKeepFolder ? undefined : <NoFolderPickerNotice />}
           actionLabel={
             localStatus.phase === 'idle'
               ? 'Pick Songs folder…'
               : localStatus.phase === 'error'
                 ? 'Try again'
-                : 'Rescan'
+                : canKeepFolder
+                  ? 'Rescan'
+                  : 'Pick folder again…'
           }
           onAction={onScanLocal}
           primaryAction={localStatus.phase === 'idle'}
           // The folder name is not shown: the File System Access API gives no
           // path, and a bare folder name does not say which folder it is.
+          // Without a kept folder every scan picks one, so there is nothing
+          // to change.
           overflowAction={
-            localStatus.phase === 'idle'
+            localStatus.phase === 'idle' || !canKeepFolder
               ? undefined
               : {
                   label: 'Choose a different folder…',

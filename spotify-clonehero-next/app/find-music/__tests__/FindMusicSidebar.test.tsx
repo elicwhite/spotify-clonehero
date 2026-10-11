@@ -73,6 +73,11 @@ function makeProps(
 }
 
 describe('FindMusicSidebar', () => {
+  beforeEach(() => {
+    // jsdom has no File System Access API; most tests run as a browser with it.
+    window.showDirectoryPicker = jest.fn() as typeof window.showDirectoryPicker;
+  });
+
   it('switches between Your music and Recommendations and displays their counts', () => {
     const onViewChange = jest.fn();
     render(<FindMusicSidebar {...makeProps({onViewChange})} />);
@@ -527,5 +532,33 @@ describe('FindMusicSidebar', () => {
       screen.getByRole('menuitem', {name: 'Choose a different folder…'}),
     );
     expect(onPickLocalFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what the browser cannot do where there is no folder picker', () => {
+    Reflect.deleteProperty(window, 'showDirectoryPicker');
+    const onScanLocal = jest.fn();
+    render(
+      <FindMusicSidebar
+        {...makeProps({
+          onScanLocal,
+          localStatus: {phase: 'ready', summary: '86 installed charts'},
+        })}
+      />,
+    );
+
+    const card = screen.getByTestId('source-local');
+    expect(card).toHaveTextContent(
+      'Your browser cannot keep access to this folder. Pick the folder again for each scan.',
+    );
+    expect(card).toHaveTextContent(
+      'Your browser cannot save files into your Songs folder.',
+    );
+    expect(
+      within(card).queryByRole('button', {name: 'Local Songs Folder actions'}),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(card).getByRole('button', {name: 'Pick folder again…'}),
+    );
+    expect(onScanLocal).toHaveBeenCalledTimes(1);
   });
 });

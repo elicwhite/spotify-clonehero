@@ -2,21 +2,16 @@ import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
-import type {ChartHandleInfo} from '@/lib/chart-files/chart-package';
+import type {
+  ChartHandleInfo,
+  FolderFile,
+  FolderSource,
+} from '@/lib/chart-files/chart-package';
 
 // Caps concurrent FS ops across the whole recursive scan. Without a shared
 // limit, Promise.all at every level would multiply with depth and exhaust
 // file handles on large libraries.
 const SCAN_CONCURRENCY = 32;
-
-type EntryHandle = FileSystemDirectoryHandle | FileSystemFileHandle;
-
-async function listEntries(
-  dir: FileSystemDirectoryHandle,
-): Promise<Array<[string, EntryHandle]>> {
-  const iter = await dir.entries();
-  return await Array.fromAsync(iter);
-}
 
 export type SongIniData = {
   name: string;
@@ -52,36 +47,41 @@ export type LocalChartScanResult = {
 };
 
 export default async function scanLocalCharts(
-  directoryHandle: FileSystemDirectoryHandle,
+  folder: FolderSource,
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
 ): Promise<LocalChartScanResult> {
   const limit = pLimit(SCAN_CONCURRENCY);
   // A root that cannot be listed is a failed scan, not a skipped chart, so
   // this listing is the one that is allowed to reject.
-  const entries = await listEntries(directoryHandle);
+  const listing = await folder.list();
   const issues: LocalChartScanIssue[] = [];
-  const {subdirs, sngFiles, songIniHandle} = partitionEntries(entries);
-  const path = directoryHandle.name;
+  const {subdirs, sngFiles, songIni} = partitionEntries(listing);
+  const path = folder.name;
 
   // The user may pick one chart's own folder rather than a folder of charts.
   // Such a chart has no parent handle, so it addresses its own files.
-  if (songIniHandle) {
+  if (songIni) {
     const {songIniData, songIniMTime} = await readSongIniData(
-      songIniHandle,
+      songIni,
       path,
       issues,
     );
-    pushChart(accumulator, callbackPerSong, songIniData, songIniMTime, {
-      dirHandle: directoryHandle,
-      fileName: directoryHandle.name,
-    });
+    pushChart(
+      accumulator,
+      callbackPerSong,
+      songIniData,
+      songIniMTime,
+      folder.handle
+        ? {dirHandle: folder.handle, fileName: folder.name}
+        : {selection: folder, fileName: folder.name},
+    );
   }
 
   await Promise.all([
     ...subdirs.map(sub =>
       scanLocalChartsDirectory(
-        directoryHandle,
+        folder,
         sub,
         accumulator,
         callbackPerSong,
@@ -92,7 +92,7 @@ export default async function scanLocalCharts(
     ),
     ...sngFiles.map(sng =>
       scanLocalSngFile(
-        directoryHandle,
+        folder,
         sng,
         accumulator,
         callbackPerSong,
@@ -106,34 +106,43 @@ export default async function scanLocalCharts(
   return {issues};
 }
 
-/** The three things a scan cares about among a directory's entries. */
-function partitionEntries(entries: Array<[string, EntryHandle]>) {
-  const subdirs: FileSystemDirectoryHandle[] = [];
-  const sngFiles: FileSystemFileHandle[] = [];
-  let songIniHandle: FileSystemFileHandle | null = null;
+/** The three things a scan cares about among a folder's entries. */
+function partitionEntries({
+  files,
+  subfolders,
+}: {
+  files: FolderFile[];
+  subfolders: FolderSource[];
+}) {
+  return {
+    subdirs: subfolders,
+    sngFiles: files.filter(file => file.name.toLowerCase().endsWith('.sng')),
+    songIni: files.find(file => file.name === 'song.ini') ?? null,
+  };
+}
 
-  for (const [, subHandle] of entries) {
-    if (subHandle.kind === 'directory') {
-      subdirs.push(subHandle);
-    } else if (subHandle.name.toLowerCase().endsWith('.sng')) {
-      sngFiles.push(subHandle);
-    } else if (subHandle.name === 'song.ini') {
-      songIniHandle = subHandle;
-    }
-  }
-
-  return {subdirs, sngFiles, songIniHandle};
+/**
+ * How a chart found inside `parent` is addressed again: through the parent's
+ * handle when there is one, otherwise through the entry itself.
+ */
+function childChartInfo(
+  parent: FolderSource,
+  entry: FolderSource | FolderFile,
+): ChartHandleInfo {
+  return parent.handle
+    ? {parentDir: parent.handle, fileName: entry.name}
+    : {selection: entry, fileName: entry.name};
 }
 
 /** A chart folder's metadata, or nulls when the `song.ini` cannot be used. */
 async function readSongIniData(
-  songIniHandle: FileSystemFileHandle,
+  songIni: FolderFile,
   path: string,
   issues: LocalChartScanIssue[],
 ): Promise<{songIniData: SongIniData | null; songIniMTime: number}> {
   let file: File;
   try {
-    file = await songIniHandle.getFile();
+    file = await songIni.file();
   } catch (error) {
     reportScanIssue(
       issues,
@@ -201,8 +210,8 @@ function pushChart(
 }
 
 async function scanLocalChartsDirectory(
-  parentDirectoryHandle: FileSystemDirectoryHandle,
-  currentDirectoryHandle: FileSystemDirectoryHandle,
+  parentFolder: FolderSource,
+  currentFolder: FolderSource,
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
   limit: LimitFunction,
@@ -218,16 +227,16 @@ async function scanLocalChartsDirectory(
   // Recursion + .sng scanning happens OUTSIDE this slot — we release before
   // awaiting children so deep trees can't deadlock.
   type LeafResult = {
-    subdirs: FileSystemDirectoryHandle[];
-    sngFiles: FileSystemFileHandle[];
+    subdirs: FolderSource[];
+    sngFiles: FolderFile[];
     songIniData: SongIniData | null;
     songIniMTime: number;
   } | null;
 
   const result: LeafResult = await limit(async () => {
-    let entries: Array<[string, EntryHandle]>;
+    let listing: Awaited<ReturnType<FolderSource['list']>>;
     try {
-      entries = await listEntries(currentDirectoryHandle);
+      listing = await currentFolder.list();
     } catch (e) {
       reportScanIssue(
         issues,
@@ -239,9 +248,9 @@ async function scanLocalChartsDirectory(
       return null;
     }
 
-    const {subdirs, sngFiles, songIniHandle} = partitionEntries(entries);
-    const {songIniData, songIniMTime} = songIniHandle
-      ? await readSongIniData(songIniHandle, path, issues)
+    const {subdirs, sngFiles, songIni} = partitionEntries(listing);
+    const {songIniData, songIniMTime} = songIni
+      ? await readSongIniData(songIni, path, issues)
       : {songIniData: null, songIniMTime: 0};
 
     return {subdirs, sngFiles, songIniData, songIniMTime};
@@ -256,14 +265,14 @@ async function scanLocalChartsDirectory(
     callbackPerSong,
     result.songIniData,
     result.songIniMTime,
-    {parentDir: parentDirectoryHandle, fileName: currentDirectoryHandle.name},
+    childChartInfo(parentFolder, currentFolder),
   );
 
   // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
   await Promise.all([
     ...result.subdirs.map(sub =>
       scanLocalChartsDirectory(
-        currentDirectoryHandle,
+        currentFolder,
         sub,
         accumulator,
         callbackPerSong,
@@ -274,7 +283,7 @@ async function scanLocalChartsDirectory(
     ),
     ...result.sngFiles.map(sng =>
       scanLocalSngFile(
-        currentDirectoryHandle,
+        currentFolder,
         sng,
         accumulator,
         callbackPerSong,
@@ -287,8 +296,8 @@ async function scanLocalChartsDirectory(
 }
 
 async function scanLocalSngFile(
-  parentDirectoryHandle: FileSystemDirectoryHandle,
-  fileHandle: FileSystemFileHandle,
+  parentFolder: FolderSource,
+  sngFile: FolderFile,
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
   limit: LimitFunction,
@@ -297,8 +306,8 @@ async function scanLocalSngFile(
 ) {
   await limit(() =>
     scanLocalSngFileInner(
-      parentDirectoryHandle,
-      fileHandle,
+      parentFolder,
+      sngFile,
       accumulator,
       callbackPerSong,
       path,
@@ -308,14 +317,14 @@ async function scanLocalSngFile(
 }
 
 async function scanLocalSngFileInner(
-  parentDirectoryHandle: FileSystemDirectoryHandle,
-  fileHandle: FileSystemFileHandle,
+  parentFolder: FolderSource,
+  sngFile: FolderFile,
   accumulator: SongAccumulator[],
   callbackPerSong: () => void,
   path: string,
   issues: LocalChartScanIssue[],
 ) {
-  const file = await fileHandle.getFile();
+  const file = await sngFile.file();
   let metadata: {[key: string]: string};
 
   try {
@@ -338,7 +347,7 @@ async function scanLocalSngFileInner(
     callbackPerSong,
     metadata as unknown as SongIniData,
     file.lastModified,
-    {parentDir: parentDirectoryHandle, fileName: fileHandle.name},
+    childChartInfo(parentFolder, sngFile),
   );
 }
 

@@ -29,9 +29,11 @@ import {
   getGrantedSongsDirectoryHandle,
   getLocalScanWarning,
   pickSongsDirectory,
+  scanSelectedSongsFolder,
   scanSongsDirectory,
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
+import {chooseFiles} from '@/lib/file-access/fileInput';
 import {
   NO_FOLDER_PICKER_MESSAGE,
   supportsDirectoryPicker,
@@ -73,6 +75,17 @@ import {
 } from './types';
 
 type Snapshot = {music: FindMusicSong[]; radar: RadarSong[]};
+
+type LocalScan = (
+  onProgress: (count: number) => void,
+) => ReturnType<typeof scanSongsDirectory>;
+
+/**
+ * The Songs folder scan where there is no folder picker. The folder comes from
+ * a file input and is not kept, so every rescan asks for it again.
+ */
+const scanChosenSongsFolder: LocalScan = onProgress =>
+  scanSelectedSongsFolder(() => chooseFiles({directory: true}), onProgress);
 type CatalogState = 'opening' | 'refreshing' | 'ready' | 'degraded';
 
 const EMPTY_STATS: FindMusicStats = {
@@ -533,15 +546,13 @@ export default function FindMusicClient() {
   ]);
 
   // `getHandle` decides how the folder is obtained: reuse the stored one, or
-  // insist on the picker. Whichever it is, a null handle means the user has no
-  // folder to scan and the card returns to its derived status.
+  // insist on the picker, or ask through a file input where there is no
+  // picker. Whichever it is, a null result means the user has no folder to scan
+  // and the card returns to its derived status.
   const runScan = useCallback(
-    async (
-      getHandle: () => Promise<FileSystemDirectoryHandle | null>,
-      {announceFailure}: {announceFailure: boolean},
-    ) => {
+    async (scan: LocalScan, {announceFailure}: {announceFailure: boolean}) => {
       try {
-        const result = await scanSongsDirectory(getHandle, count => {
+        const result = await scan(count => {
           setLocalStatus({
             phase: 'loading',
             summary: `Scanning… ${count.toLocaleString()} charts found`,
@@ -581,27 +592,34 @@ export default function FindMusicClient() {
   );
 
   const runRequestedScan = useCallback(
-    async (getHandle: () => Promise<FileSystemDirectoryHandle | null>) => {
-      if (!supportsDirectoryPicker()) {
-        toast.error(NO_FOLDER_PICKER_MESSAGE);
-        return;
-      }
+    async (scan: LocalScan) => {
       activateSourceAccess();
       setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
-      await runScan(getHandle, {announceFailure: true});
+      await runScan(scan, {announceFailure: true});
     },
     [activateSourceAccess, runScan],
   );
 
   const runLocalScan = useCallback(
-    () => runRequestedScan(tryGetSongsDirectoryHandle),
+    () =>
+      runRequestedScan(
+        supportsDirectoryPicker()
+          ? onProgress =>
+              scanSongsDirectory(tryGetSongsDirectoryHandle, onProgress)
+          : scanChosenSongsFolder,
+      ),
     [runRequestedScan],
   );
 
   // Rescanning reuses the stored folder and never asks for another one, so a
   // user who moved their library needs a way to say so.
   const runPickLocalFolder = useCallback(
-    () => runRequestedScan(pickSongsDirectory),
+    () =>
+      runRequestedScan(
+        supportsDirectoryPicker()
+          ? onProgress => scanSongsDirectory(pickSongsDirectory, onProgress)
+          : scanChosenSongsFolder,
+      ),
     [runRequestedScan],
   );
 
@@ -611,7 +629,11 @@ export default function FindMusicClient() {
   // folder is stored or its permission has lapsed, which is what makes this
   // safe outside a user gesture.
   const rescanStoredFolder = useCallback(async () => {
-    await runScan(getGrantedSongsDirectoryHandle, {announceFailure: false});
+    await runScan(
+      onProgress =>
+        scanSongsDirectory(getGrantedSongsDirectoryHandle, onProgress),
+      {announceFailure: false},
+    );
   }, [runScan]);
 
   useEffect(() => {

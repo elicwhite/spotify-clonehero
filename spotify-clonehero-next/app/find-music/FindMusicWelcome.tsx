@@ -28,6 +28,8 @@ import {
 import {Progress} from '@/components/ui/progress';
 import {cn} from '@/lib/utils';
 
+import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
+import {NoFolderPickerNotice} from './songsFolderCopy';
 import type {CardOverflowAction, SourceStatus} from './types';
 
 export interface FindMusicWelcomeProps {
@@ -271,12 +273,15 @@ export default function FindMusicWelcome({
       : historyStatus.phase === 'error'
         ? 'Try again'
         : 'Refresh history';
+  const canKeepFolder = useSupportsDirectoryPicker();
   const localAction =
     localStatus.phase === 'idle'
       ? 'Choose Songs folder'
       : localStatus.phase === 'error'
         ? 'Try again'
-        : 'Rescan folder';
+        : canKeepFolder
+          ? 'Rescan folder'
+          : 'Choose folder again';
 
   return (
     <section
@@ -391,15 +396,31 @@ export default function FindMusicWelcome({
           </div>
           <SetupCard
             name="Local Songs Folder"
-            description="Choose your Clone Hero or YARG Songs folder to install charts directly and filter out songs you already have."
+            description={
+              canKeepFolder ? (
+                'Choose your Clone Hero or YARG Songs folder to install charts directly and filter out songs you already have.'
+              ) : (
+                <>
+                  <span className="block">
+                    Choose your Clone Hero or YARG Songs folder to filter out
+                    songs you already have.
+                  </span>
+                  <span className="mt-2 block">
+                    <NoFolderPickerNotice />
+                  </span>
+                </>
+              )
+            }
             icon={<FolderOpen />}
             status={localStatus}
             actionLabel={localAction}
             onAction={onScanLocal}
             // The folder name is not shown: the File System Access API gives
             // no path, and a bare folder name does not say which folder it is.
+            // Without a kept folder every scan picks one, so there is nothing
+            // to change.
             overflowAction={
-              localStatus.phase === 'idle'
+              localStatus.phase === 'idle' || !canKeepFolder
                 ? undefined
                 : {
                     label: 'Choose a different folder…',

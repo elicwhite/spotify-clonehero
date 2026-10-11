@@ -26,6 +26,7 @@ import {
   getSongsDownloadFolder,
   pickSongsDirectory,
 } from '@/lib/local-songs-folder';
+import {SONGS_FOLDER_DOWNLOAD_COPY} from './songsFolderCopy';
 import type {FindMusicChart} from './types';
 
 export type ChartInstallState =
@@ -34,12 +35,6 @@ export type ChartInstallState =
   | 'installed'
   | 'downloaded'
   | 'error';
-
-/** The download notice's words on this page. */
-export const SONGS_FOLDER_DOWNLOAD_COPY = {
-  folder: 'your Songs folder',
-  action: 'Move each chart into your Songs folder, then scan again.',
-} as const;
 
 const DOWNLOAD_CHOICE_KEY = 'find-music:install-destination:v1';
 

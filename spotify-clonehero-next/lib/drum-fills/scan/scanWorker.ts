@@ -21,7 +21,10 @@ import type {File as ChartFile} from '@eliwhite/scan-chart';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {readChartHandle} from '@/lib/chart-files/chart-package';
+import {
+  folderSourceFromHandle,
+  readChartHandle,
+} from '@/lib/chart-files/chart-package';
 import {libraryPathOf} from '../practice/songMatch';
 
 import {detectFillsForChart} from './detectForChart';
@@ -70,7 +73,11 @@ async function runScan(
   // Phase 1: enumerate songs (cheap: only reads song.ini / .sng headers).
   const songs: SongAccumulator[] = [];
   try {
-    await scanLocalCharts(directoryHandle, songs, () => {});
+    await scanLocalCharts(
+      folderSourceFromHandle(directoryHandle),
+      songs,
+      () => {},
+    );
   } catch (err) {
     post({type: 'error', message: errorMessage(err)});
     return;

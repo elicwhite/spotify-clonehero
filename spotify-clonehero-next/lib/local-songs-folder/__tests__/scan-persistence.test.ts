@@ -7,7 +7,6 @@ const mockUpsertLocalCharts = jest.fn<
   Promise<void>,
   [unknown[], {pruneMissing: boolean}]
 >(async () => undefined);
-const mockWriteFile = jest.fn();
 const mockSongsDirectory = {kind: 'directory', name: 'Songs'};
 
 jest.mock('idb-keyval', () => ({
@@ -22,9 +21,6 @@ jest.mock('../scanLocalCharts', () => ({
 jest.mock('../../local-db/local-charts', () => ({
   upsertLocalCharts: (charts: unknown[], options: {pruneMissing: boolean}) =>
     mockUpsertLocalCharts(charts, options),
-}));
-jest.mock('../../fileSystemHelpers', () => ({
-  writeFile: (...args: unknown[]) => mockWriteFile(...args),
 }));
 jest.mock('../../analytics/track', () => ({track: jest.fn()}));
 
@@ -48,17 +44,12 @@ describe('partial local chart scan persistence', () => {
   });
 
   it('upserts discoveries without pruning or replacing the complete cache', async () => {
-    const root = {getFileHandle: jest.fn()};
     const chart = {artist: 'Artist', song: 'Song', charter: 'Charter'};
     const issue = {
       kind: 'directory',
       path: 'Songs/Inaccessible',
       message: 'Could not list chart directory Songs/Inaccessible',
     };
-    Object.defineProperty(navigator, 'storage', {
-      configurable: true,
-      value: {getDirectory: jest.fn(async () => root)},
-    });
     localStorage.setItem('lastScannedInstalledCharts', 'existing-scan');
     mockScanLocalCharts.mockImplementation(
       async (_handle: unknown, accumulator: unknown[]) => {
@@ -77,26 +68,20 @@ describe('partial local chart scan persistence', () => {
     expect(mockUpsertLocalCharts).toHaveBeenCalledWith([chart], {
       pruneMissing: false,
     });
-    expect(root.getFileHandle).not.toHaveBeenCalled();
-    expect(mockWriteFile).not.toHaveBeenCalled();
     expect(localStorage.getItem('lastScannedInstalledCharts')).toBe(
       'existing-scan',
     );
   });
 
-  it('publishes a complete scan only after its cache write finishes', async () => {
-    let finishWrite!: () => void;
-    const pendingWrite = new Promise<void>(resolve => {
-      finishWrite = resolve;
-    });
-    const root = {getFileHandle: jest.fn(async () => ({name: 'cache'}))};
-    Object.defineProperty(navigator, 'storage', {
-      configurable: true,
-      value: {getDirectory: jest.fn(async () => root)},
-    });
+  it('publishes a complete scan only after its charts are saved', async () => {
+    let finishUpsert!: () => void;
+    mockUpsertLocalCharts.mockReturnValue(
+      new Promise<void>(resolve => {
+        finishUpsert = resolve;
+      }),
+    );
     localStorage.setItem('lastScannedInstalledCharts', 'existing-scan');
     mockScanLocalCharts.mockResolvedValue({issues: []});
-    mockWriteFile.mockReturnValue(pendingWrite);
 
     let settled = false;
     const scanPromise = scanWithPickerFallback().then(result => {
@@ -104,13 +89,13 @@ describe('partial local chart scan persistence', () => {
       return result;
     });
 
-    await waitFor(() => expect(mockWriteFile).toHaveBeenCalled());
+    await waitFor(() => expect(mockUpsertLocalCharts).toHaveBeenCalled());
     expect(settled).toBe(false);
     expect(localStorage.getItem('lastScannedInstalledCharts')).toBe(
       'existing-scan',
     );
 
-    finishWrite();
+    finishUpsert();
     const result = await scanPromise;
 
     expect(result?.status).toBe('complete');
@@ -118,22 +103,6 @@ describe('partial local chart scan persistence', () => {
       pruneMissing: true,
     });
     expect(localStorage.getItem('lastScannedInstalledCharts')).not.toBe(
-      'existing-scan',
-    );
-  });
-
-  it('rejects a failed cache write without publishing its timestamp', async () => {
-    const root = {getFileHandle: jest.fn(async () => ({name: 'cache'}))};
-    Object.defineProperty(navigator, 'storage', {
-      configurable: true,
-      value: {getDirectory: jest.fn(async () => root)},
-    });
-    localStorage.setItem('lastScannedInstalledCharts', 'existing-scan');
-    mockScanLocalCharts.mockResolvedValue({issues: []});
-    mockWriteFile.mockRejectedValue(new Error('OPFS write failed'));
-
-    await expect(scanWithPickerFallback()).rejects.toThrow('OPFS write failed');
-    expect(localStorage.getItem('lastScannedInstalledCharts')).toBe(
       'existing-scan',
     );
   });

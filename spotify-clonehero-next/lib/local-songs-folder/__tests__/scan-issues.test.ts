@@ -13,6 +13,7 @@ jest.mock('@eliwhite/parse-sng', () => ({
 }));
 
 import scanLocalCharts, {type SongAccumulator} from '../scanLocalCharts';
+import {folderSourceFromHandle} from '../../chart-files/chart-package';
 
 function entries(
   values: Array<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>,
@@ -43,7 +44,11 @@ describe('scanLocalCharts issues', () => {
       name: 'Songs',
       entries: jest.fn(() => entries([['Inaccessible', inaccessible]])),
     } as unknown as FileSystemDirectoryHandle;
-    const result = await scanLocalCharts(songs, [], jest.fn());
+    const result = await scanLocalCharts(
+      folderSourceFromHandle(songs),
+      [],
+      jest.fn(),
+    );
 
     expect(result).toEqual({
       issues: [
@@ -81,7 +86,9 @@ describe('scanLocalCharts issues', () => {
       entries: jest.fn(() => entries([['Broken Chart', chart]])),
     } as unknown as FileSystemDirectoryHandle;
 
-    await expect(scanLocalCharts(songs, [], jest.fn())).resolves.toEqual({
+    await expect(
+      scanLocalCharts(folderSourceFromHandle(songs), [], jest.fn()),
+    ).resolves.toEqual({
       issues: [
         {
           kind: 'song-ini',
@@ -108,7 +115,9 @@ describe('scanLocalCharts issues', () => {
       entries: jest.fn(() => entries([['Broken.sng', sng]])),
     } as unknown as FileSystemDirectoryHandle;
 
-    await expect(scanLocalCharts(songs, [], jest.fn())).resolves.toEqual({
+    await expect(
+      scanLocalCharts(folderSourceFromHandle(songs), [], jest.fn()),
+    ).resolves.toEqual({
       issues: [
         {
           kind: 'sng',
@@ -142,7 +151,7 @@ describe('scanLocalCharts issues', () => {
 
     const accumulator: SongAccumulator[] = [];
     await expect(
-      scanLocalCharts(picked, accumulator, jest.fn()),
+      scanLocalCharts(folderSourceFromHandle(picked), accumulator, jest.fn()),
     ).resolves.toEqual({issues: []});
     expect(accumulator).toHaveLength(1);
     expect(accumulator[0].song).toBe('Root Song');
@@ -161,8 +170,8 @@ describe('scanLocalCharts issues', () => {
       }),
     } as unknown as FileSystemDirectoryHandle;
 
-    await expect(scanLocalCharts(songs, [], jest.fn())).rejects.toThrow(
-      'root disconnected',
-    );
+    await expect(
+      scanLocalCharts(folderSourceFromHandle(songs), [], jest.fn()),
+    ).rejects.toThrow('root disconnected');
   });
 });

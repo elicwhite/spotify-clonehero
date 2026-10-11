@@ -2,8 +2,12 @@ import {get, set} from 'idb-keyval';
 import filenamify from 'filenamify/browser';
 
 import {track, type ChartDownloadSource} from '@/lib/analytics/track';
-import {writeFile} from '@/lib/fileSystemHelpers';
 import {downloadBlob} from '@/lib/download';
+import {
+  folderSourceFromFileList,
+  folderSourceFromHandle,
+  type FolderSource,
+} from '@/lib/chart-files/chart-package';
 import scanLocalCharts, {
   LocalChartScanIssue,
   SongAccumulator,
@@ -153,21 +157,37 @@ export async function scanSongsDirectory(
     return null;
   }
 
-  return await scanInstalledCharts(handle, onProgress);
+  return await scanInstalledCharts(folderSourceFromHandle(handle), onProgress);
+}
+
+/**
+ * The same scan over a Songs folder picked through a file input, where there
+ * is no folder picker. Nothing is kept to scan again, so every rescan picks
+ * the folder again; the results persist like any other scan's. An empty
+ * selection is not a Songs folder, so it scans nothing.
+ */
+export async function scanSelectedSongsFolder(
+  getFiles: () => Promise<File[] | null>,
+  onProgress: (count: number) => void = () => {},
+): Promise<InstalledChartsResponse | null> {
+  const files = await getFiles();
+  if (!files || files.length === 0) {
+    return null;
+  }
+
+  return await scanInstalledCharts(folderSourceFromFileList(files), onProgress);
 }
 
 export async function scanInstalledCharts(
-  handle: FileSystemDirectoryHandle,
+  folder: FolderSource,
   onProgress: (count: number) => void = () => {},
 ): Promise<InstalledChartsResponse> {
-  const root = await navigator.storage.getDirectory();
-
   // Coalesce per-chart progress ticks so the caller's React setState doesn't
   // re-render ~15k times during a full library scan.
   const progress = coalesceProgress(onProgress);
 
   const {lastScanned, installedCharts, issues, status} =
-    await scanDirectoryForCharts(progress.bump, handle);
+    await scanDirectoryForCharts(progress.bump, folder);
 
   progress.flush();
 
@@ -181,14 +201,6 @@ export async function scanInstalledCharts(
   });
 
   if (status === 'complete') {
-    const installedChartsCacheHandle = await root.getFileHandle(
-      'installedCharts.json',
-      {create: true},
-    );
-    await writeFile(
-      installedChartsCacheHandle,
-      JSON.stringify(installedCharts),
-    );
     localStorage.setItem(
       'lastScannedInstalledCharts',
       lastScanned.getTime().toString(),
@@ -204,12 +216,12 @@ export async function scanInstalledCharts(
 
 async function scanDirectoryForCharts(
   callbackPerSong: () => void = () => {},
-  directoryHandle: FileSystemDirectoryHandle,
+  folder: FolderSource,
 ): Promise<InstalledChartsResponse> {
   const beforeScan = Date.now();
   const installedCharts: SongAccumulator[] = [];
   const {issues} = await scanLocalCharts(
-    directoryHandle,
+    folder,
     installedCharts,
     callbackPerSong,
   );

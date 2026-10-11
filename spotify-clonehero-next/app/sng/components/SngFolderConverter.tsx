@@ -9,6 +9,7 @@ import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {coalesceProgress} from '@/lib/local-songs-folder/scan-progress';
+import {folderSourceFromHandle} from '@/lib/chart-files/chart-package';
 import {
   convertChartFolders,
   selectChartFoldersToConvert,
@@ -45,7 +46,11 @@ export default function SngFolderConverter({
       const progress = coalesceProgress(found =>
         setPhase({status: 'scanning', found}),
       );
-      await scanLocalCharts(dirHandle, accumulator, progress.bump);
+      await scanLocalCharts(
+        folderSourceFromHandle(dirHandle),
+        accumulator,
+        progress.bump,
+      );
       progress.flush();
 
       const toConvert = selectChartFoldersToConvert(accumulator);
