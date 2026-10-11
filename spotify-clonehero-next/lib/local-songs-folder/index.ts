@@ -7,7 +7,7 @@ import {
   folderSourceFromFileList,
   folderSourceFromHandle,
   type FolderSource,
-} from '@/lib/chart-files/chart-package';
+} from '@/lib/file-access/folderSource';
 import scanLocalCharts, {
   LocalChartScanIssue,
   SongAccumulator,
@@ -163,19 +163,20 @@ export async function scanSongsDirectory(
 /**
  * The same scan over a Songs folder picked through a file input, where there
  * is no folder picker. Nothing is kept to scan again, so every rescan picks
- * the folder again; the results persist like any other scan's. An empty
- * selection is not a Songs folder, so it scans nothing.
+ * the folder again; the results persist like any other scan's. A selection
+ * with no folder in it is not a Songs folder, so it scans nothing.
  */
 export async function scanSelectedSongsFolder(
   getFiles: () => Promise<File[] | null>,
   onProgress: (count: number) => void = () => {},
 ): Promise<InstalledChartsResponse | null> {
   const files = await getFiles();
-  if (!files || files.length === 0) {
+  const folder = files && folderSourceFromFileList(files);
+  if (!folder) {
     return null;
   }
 
-  return await scanInstalledCharts(folderSourceFromFileList(files), onProgress);
+  return await scanInstalledCharts(folder, onProgress);
 }
 
 export async function scanInstalledCharts(

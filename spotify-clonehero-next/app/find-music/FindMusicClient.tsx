@@ -34,10 +34,8 @@ import {
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
 import {chooseFiles} from '@/lib/file-access/fileInput';
-import {
-  NO_FOLDER_PICKER_MESSAGE,
-  supportsDirectoryPicker,
-} from '@/lib/file-access/capabilities';
+import {supportsDirectoryPicker} from '@/lib/file-access/capabilities';
+import {pickFolder} from '@/lib/file-access/pickFolder';
 import {Button} from '@/components/ui/button';
 import {
   Sheet,
@@ -460,19 +458,19 @@ export default function FindMusicClient() {
   }, [activateSourceAccessForNavigation, supabase, user, view]);
 
   const runHistoryRefresh = useCallback(async () => {
-    if (!supportsDirectoryPicker()) {
-      toast.error(NO_FOLDER_PICKER_MESSAGE);
-      return;
-    }
     activateSourceAccess();
     setHistoryStatus({
       phase: 'loading',
       summary: 'Waiting for history folder…',
     });
     try {
-      const handle = await window.showDirectoryPicker({id: 'spotify-dump'});
+      const folder = await pickFolder({id: 'spotify-dump'});
+      if (folder == null) {
+        setHistoryStatus(null);
+        return;
+      }
       setHistoryStatus({phase: 'loading', summary: 'Reading Spotify history…'});
-      const historyResult = await tryProcessSpotifyDump(handle);
+      const historyResult = await tryProcessSpotifyDump(folder);
       if (historyResult.status === 'invalid-selection') {
         setHistoryStatus({
           phase: 'error',
@@ -494,10 +492,6 @@ export default function FindMusicClient() {
       });
       await refreshSnapshot();
     } catch (error) {
-      if (isPickerCancel(error)) {
-        setHistoryStatus(null);
-        return;
-      }
       const message = error instanceof Error ? error.message : String(error);
       setHistoryStatus({
         phase: 'error',
@@ -932,13 +926,6 @@ export default function FindMusicClient() {
         </section>
       </div>
     </div>
-  );
-}
-
-function isPickerCancel(error: unknown) {
-  return (
-    error instanceof DOMException &&
-    (error.name === 'AbortError' || error.name === 'NotAllowedError')
   );
 }
 

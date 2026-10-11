@@ -9,10 +9,7 @@ jest.mock('@eliwhite/parse-sng', () => ({
 }));
 
 import scanLocalCharts, {type SongAccumulator} from '../scanLocalCharts';
-import {
-  folderSourceFromFileList,
-  NOT_A_FOLDER_MESSAGE,
-} from '../../chart-files/chart-package';
+import {folderSourceFromFileList} from '../../file-access/folderSource';
 
 /** What a `webkitdirectory` input hands back for one file. */
 function selected(path: string, contents = '') {
@@ -51,7 +48,7 @@ describe('scanLocalCharts over a file input selection', () => {
         selected('Songs/Band - Song/notes.chart'),
         nestedIni,
         packed,
-      ]),
+      ])!,
       charts,
       jest.fn(),
     );
@@ -93,12 +90,10 @@ describe('scanLocalCharts over a file input selection', () => {
     expect(audio.stream).not.toHaveBeenCalled();
   });
 
-  it('refuses a selection that the browser gave no folder for', () => {
+  it('finds no folder in a selection that the browser gave no folder for', () => {
     const loose = selected('song.ini');
     Object.defineProperty(loose, 'webkitRelativePath', {value: ''});
 
-    expect(() => folderSourceFromFileList([loose])).toThrow(
-      NOT_A_FOLDER_MESSAGE,
-    );
+    expect(folderSourceFromFileList([loose])).toBeNull();
   });
 });

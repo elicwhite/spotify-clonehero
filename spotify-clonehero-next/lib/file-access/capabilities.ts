@@ -27,6 +27,3 @@ export function useSupportsDirectoryPicker(): boolean {
     getServerSupport,
   );
 }
-
-/** What a control that needs the picker says where there is none. */
-export const NO_FOLDER_PICKER_MESSAGE = 'Your browser cannot open folders.';

@@ -2,11 +2,8 @@ import pLimit, {type LimitFunction} from 'p-limit';
 import {parse} from '@/lib/ini-parser';
 import {readSongIni} from '@eliwhite/parse-sng';
 import {removeStyleTags} from '@/lib/ui-utils';
-import type {
-  ChartHandleInfo,
-  FolderFile,
-  FolderSource,
-} from '@/lib/chart-files/chart-package';
+import type {ChartHandleInfo} from '@/lib/chart-files/chart-package';
+import type {FolderFile, FolderSource} from '@/lib/file-access/folderSource';
 
 // Caps concurrent FS ops across the whole recursive scan. Without a shared
 // limit, Promise.all at every level would multiply with depth and exhaust

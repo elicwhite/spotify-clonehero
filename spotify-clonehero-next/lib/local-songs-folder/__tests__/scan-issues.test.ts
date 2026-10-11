@@ -13,7 +13,7 @@ jest.mock('@eliwhite/parse-sng', () => ({
 }));
 
 import scanLocalCharts, {type SongAccumulator} from '../scanLocalCharts';
-import {folderSourceFromHandle} from '../../chart-files/chart-package';
+import {folderSourceFromHandle} from '../../file-access/folderSource';
 
 function entries(
   values: Array<[string, FileSystemDirectoryHandle | FileSystemFileHandle]>,

@@ -10,6 +10,12 @@ import {SngStream} from '@eliwhite/parse-sng';
 import type {SngHeader} from '@eliwhite/parse-sng';
 import {getExtension} from '@/lib/src-shared/utils';
 import {readDirectoryEntries} from './entries';
+import {
+  folderSourceFromFileList,
+  folderSourceFromHandle,
+  type FolderFile,
+  type FolderSource,
+} from '@/lib/file-access/folderSource';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 export type SourceFormat = 'folder' | 'zip' | 'sng';
@@ -35,35 +41,6 @@ export const SELECT_SONG_FOLDER_MESSAGE =
 export const EMPTY_FOLDER_MESSAGE = 'That folder has no files in it.';
 export const ONE_CHART_AT_A_TIME_MESSAGE =
   'Drop one chart at a time: a single folder, .zip or .sng.';
-
-/**
- * A file inside a folder. Its `File` is opened only when something asks for
- * it, so listing a library folder never touches the audio in it.
- */
-export interface FolderFile {
-  name: string;
-  file: () => Promise<File>;
-}
-
-/**
- * A folder, however it was picked. Every source can list its immediate
- * children — a directory handle by iterating it, a dropped entry through its
- * reader, a `webkitdirectory` selection by grouping paths — and that is all
- * `readFolder` and the library scanner need.
- *
- * `list` is called only when the folder's contents are actually needed, so a
- * library folder of hundreds of songs is never enumerated past the level that
- * shows it is not one song.
- */
-export interface FolderSource {
-  name: string;
-  /**
-   * The File System Access handle behind the folder, or null for a drop or a
-   * file input. Only a handle can be written into or kept for a later visit.
-   */
-  handle: FileSystemDirectoryHandle | null;
-  list: () => Promise<{files: FolderFile[]; subfolders: FolderSource[]}>;
-}
 
 async function readBytes(file: FolderFile): Promise<Uint8Array> {
   return new Uint8Array(await (await file.file()).arrayBuffer());
@@ -128,31 +105,6 @@ async function readFolder(source: FolderSource): Promise<LoadedFiles> {
   return packageFrom(subfolder.name, inside);
 }
 
-/** A File System Access directory handle as a folder source (Chromium). */
-export function folderSourceFromHandle(
-  handle: FileSystemDirectoryHandle,
-): FolderSource {
-  return {
-    name: handle.name,
-    handle,
-    list: async () => {
-      const files: FolderFile[] = [];
-      const subfolders: FolderSource[] = [];
-      for await (const [name, child] of handle.entries()) {
-        if (child.kind === 'file') {
-          const fileHandle = child as FileSystemFileHandle;
-          files.push({name, file: () => fileHandle.getFile()});
-        } else {
-          subfolders.push(
-            folderSourceFromHandle(child as FileSystemDirectoryHandle),
-          );
-        }
-      }
-      return {files, subfolders};
-    },
-  };
-}
-
 /** Folder reader for a File System Access directory handle (Chromium). */
 export function readChartDirectory(
   dirHandle: FileSystemDirectoryHandle,
@@ -198,67 +150,6 @@ export async function readChartHandle(
   );
 }
 
-/** One folder of a `webkitdirectory` selection, grouped from the paths. */
-interface PathNode {
-  files: FolderFile[];
-  folders: Map<string, PathNode>;
-}
-
-function pathNodeSource(name: string, node: PathNode): FolderSource {
-  return {
-    name,
-    handle: null,
-    list: async () => ({
-      files: node.files,
-      subfolders: Array.from(node.folders, ([childName, child]) =>
-        pathNodeSource(childName, child),
-      ),
-    }),
-  };
-}
-
-/**
- * A `webkitdirectory` selection as a folder source. That input hands back
- * every file in the tree at once, each carrying its path below the chosen
- * folder in `webkitRelativePath`, so the tree is regrouped from those paths in
- * one pass. A whole Songs folder can be 184,000 files, so nothing here may
- * walk the list once per folder.
- */
-export function folderSourceFromFileList(selection: File[]): FolderSource {
-  const root: PathNode = {files: [], folders: new Map()};
-  let rootName: string | null = null;
-
-  for (const file of selection) {
-    const segments = (file.webkitRelativePath ?? '').split('/');
-    // A path of one segment is a file the browser reported no folder for.
-    if (segments.length < 2) continue;
-    rootName ??= segments[0];
-
-    let node = root;
-    for (const segment of segments.slice(1, -1)) {
-      let child = node.folders.get(segment);
-      if (!child) {
-        child = {files: [], folders: new Map()};
-        node.folders.set(segment, child);
-      }
-      node = child;
-    }
-    node.files.push({
-      name: segments[segments.length - 1],
-      file: async () => file,
-    });
-  }
-
-  // Which is a different failure from an empty folder, and only this adapter
-  // can tell them apart: by the time a reader sees them, both are nothing.
-  if (rootName == null) {
-    throw new Error(
-      selection.length > 0 ? NOT_A_FOLDER_MESSAGE : EMPTY_FOLDER_MESSAGE,
-    );
-  }
-  return pathNodeSource(rootName, root);
-}
-
 /**
  * Folder reader for browsers without the File System Access API, fed by an
  * `<input type="file" webkitdirectory>` selection.
@@ -266,7 +157,15 @@ export function folderSourceFromFileList(selection: File[]): FolderSource {
 export async function readChartFileList(
   selection: File[],
 ): Promise<LoadedFiles> {
-  return await readFolder(folderSourceFromFileList(selection));
+  const folder = folderSourceFromFileList(selection);
+  // Which is a different failure from an empty folder, and only the selection
+  // can tell them apart: by the time readFolder sees them, both are nothing.
+  if (folder == null) {
+    throw new Error(
+      selection.length > 0 ? NOT_A_FOLDER_MESSAGE : EMPTY_FOLDER_MESSAGE,
+    );
+  }
+  return await readFolder(folder);
 }
 
 // ---------------------------------------------------------------------------

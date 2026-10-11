@@ -9,10 +9,8 @@
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {
-  folderSourceFromHandle,
-  readChartHandle,
-} from '@/lib/chart-files/chart-package';
+import {readChartHandle} from '@/lib/chart-files/chart-package';
+import {folderSourceFromHandle} from '@/lib/file-access/folderSource';
 import type {Files} from '@/lib/preview/chorus-chart-processing';
 import {matchSong, type SongRef} from './songMatch';
 

@@ -21,10 +21,8 @@ import type {File as ChartFile} from '@eliwhite/scan-chart';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
-import {
-  folderSourceFromHandle,
-  readChartHandle,
-} from '@/lib/chart-files/chart-package';
+import {readChartHandle} from '@/lib/chart-files/chart-package';
+import {folderSourceFromHandle} from '@/lib/file-access/folderSource';
 import {libraryPathOf} from '../practice/songMatch';
 
 import {detectFillsForChart} from './detectForChart';

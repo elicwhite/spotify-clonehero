@@ -1,4 +1,4 @@
-import {readJsonFile} from '@/lib/fileSystemHelpers';
+import type {FolderSource} from '@/lib/file-access/folderSource';
 import {upsertSpotifyHistory} from '@/lib/local-db/spotify-history';
 import {getLocalDb} from '@/lib/local-db/client';
 
@@ -40,10 +40,10 @@ export async function discardLegacyHistoryDumpCache() {
 }
 
 export async function tryProcessSpotifyDump(
-  spotifyDataHandle: FileSystemDirectoryHandle,
+  spotifyDataFolder: FolderSource,
 ): Promise<SpotifyHistoryImportResult> {
   try {
-    const results = await getAllSpotifyPlays(spotifyDataHandle);
+    const results = await getAllSpotifyPlays(spotifyDataFolder);
     const {plays: artistTrackPlays, stats} =
       createPlaysMapOfSpotifyData(results);
 
@@ -60,16 +60,19 @@ export async function tryProcessSpotifyDump(
   }
 }
 
-async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
+async function getAllSpotifyPlays(folder: FolderSource) {
+  const {files, subfolders} = await folder.list();
+  if (subfolders.length > 0) {
+    throw new SpotifyHistorySelectionError(
+      `Spotify History: Did not expect to see subfolders. Found folder ${subfolders[0].name}. Are you sure you selected your Spotify Extended Streaming History?`,
+    );
+  }
+
   let hasPdf = false;
   const results = [];
-  for await (const entry of handle.values()) {
-    if (entry.kind !== 'file') {
-      throw new SpotifyHistorySelectionError(
-        `Spotify History: Did not expect to see subfolders. Found folder ${entry.name}. Are you sure you selected your Spotify Extended Streaming History?`,
-      );
-    }
-
+  // One file at a time, so only one file's text is held at once: an export
+  // can be 200 MB of JSON.
+  for (const entry of files) {
     if (entry.name.endsWith('.pdf') && entry.name.startsWith('ReadMeFirst')) {
       hasPdf = true;
       continue;
@@ -83,7 +86,7 @@ async function getAllSpotifyPlays(handle: FileSystemDirectoryHandle) {
       //   throw new Error('Select the folder with your Spotify streaming history.');
     }
 
-    const json = await readJsonFile(entry);
+    const json = JSON.parse(await (await entry.file()).text());
     if (Array.isArray(json)) {
       results.push(...json);
     } else {
