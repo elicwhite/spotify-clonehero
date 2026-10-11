@@ -71,6 +71,8 @@ table are `fetch` and Supabase only.
 2. A chart installs into the Songs folder where the browser allows it, and
    downloads as a normal file where it does not.
 3. The installed flag is as accurate as the last scan, in every browser.
+4. A user whose charts go to Downloads knows that their browser is the
+   reason, and knows what to do with the file.
 
 Outcome 3 is deliberately weaker than "the installed flag works". A browser
 download lands in the OS Downloads folder, not in the scanned Songs folder, so
@@ -80,15 +82,71 @@ file the user may never move.
 
 ## Capability model
 
-One module, `lib/local-songs-folder/capabilities.ts`, exports one function:
+One module, `lib/file-access/capabilities.ts`, exports one function:
 
 ```ts
 export function supportsDirectoryPicker(): boolean;
 ```
 
 It is a feature test, never a browser test. Every branch below reads it.
-`SupportedBrowserWarning` keeps its current meaning for the tools that really
-need the picker; `/find-music` stops using it.
+`/find-music` is the only user of `SupportedBrowserWarning`, so Phase 1
+deletes `app/SupportedBrowserWarning.tsx` and its `jest.mock` in
+`app/find-music/__tests__/FindMusicClient.test.tsx`.
+
+The module is app-wide, not under `lib/local-songs-folder/`, because plan
+0159 uses the same test and the same notice on `/sng` and `/add-lyrics`.
+
+## The download notice
+
+When a file goes to Downloads because the browser cannot save into a picked
+folder, the user must know two things: the browser is the reason, and the
+file needs to be moved. One shared component,
+`components/file-access/DownloadFallbackNotice.tsx`, says it. The component
+owns the sentence that gives the reason; each tool gives only the folder and
+the action:
+
+```ts
+interface DownloadFallbackNoticeProps {
+  /** Where the file could not go, e.g. "your Songs folder". */
+  folder: string;
+  /** What the user does with the file, e.g. "Move each chart into your Songs folder, then scan again." */
+  action: string;
+  /** False when the user chose to download. The reason sentence is then left out. */
+  browserIsReason: boolean;
+}
+```
+
+It renders "Your browser cannot save files into {folder}. The files go to
+your Downloads folder. {action}" The reason sentence is fixed in the
+component, so no tool can change it. On `/find-music`:
+
+> Your browser cannot save files into your Songs folder. The files go to
+> your Downloads folder. Move each chart into your Songs folder, then scan
+> again.
+
+Rules for the copy:
+
+- Say "your browser". The user must not think the site or their folder is
+  the fault.
+- Do not name the user's browser. The test is a capability test, and the
+  page does not know which browser it is in.
+- Do not say "Chrome-based". Brave is Chrome-based and fails the test.
+- Say where the file goes and what to do with it, every time.
+
+Where it shows:
+
+| Place | What |
+| --- | --- |
+| Local-library card | The full notice, always visible when the picker is missing. |
+| Install button | Label "Download" in place of "Install". Tooltip: the first sentence of the notice. |
+| After each download | Toast: "Saved to Downloads. Your browser cannot save into your Songs folder." |
+| First download in a session | The full notice in the toast, not the short one. |
+
+In a browser that has the picker, the browser is never the reason, so the
+reason sentence never shows there. A Chrome user who picks "Just download" in
+the Phase 2 dialog still gets a file in Downloads, so the toast after each
+download shows the notice with `browserIsReason: false`: the Downloads
+sentence and the action, with no reason sentence.
 
 ## Phase 0 — Measurements before anything is committed
 
@@ -257,12 +315,11 @@ These are not separable.
 (`AbortError` / `NotAllowedError`) — a `TypeError` is rethrown. Without the
 guards, a Firefox user who clicks:
 
-- **"Pick Songs folder…"** (`FindMusicSidebar.tsx:617`) gets a native
-  `alert('Select your Songs directory')` (`index.ts:51`), then a toast reading
+- **"Pick Songs folder…"** (`FindMusicSidebar.tsx:620`) gets a toast reading
   `window.showDirectoryPicker is not a function`, then a
-  `Sentry.captureException` (`FindMusicClient.tsx:547-561`).
+  `Sentry.captureException` (`FindMusicClient.tsx:563-574`).
 - **Install** (`FindMusicTable.tsx:152-158`) reaches
-  `getDefaultDownloadDirectory` (`index.ts:236-237`) and the same path, with a
+  `getDefaultDownloadDirectory` (`index.ts:231-233`) and the same path, with a
   `chart_md5` tag on the Sentry event.
 
 That trades an honest warning for unbounded Sentry noise. `runHistoryRefresh`
@@ -272,7 +329,7 @@ other two need.
 Ship the Phase 5 copy for these two cards in this phase as well.
 
 Done when: Firefox loads `/find-music`, connects Spotify, browses the catalog,
-and produces no Sentry event and no `alert()` from any control on the page.
+and produces no Sentry event from any control on the page.
 
 ## Phase 2 — Install falls back to a download
 
@@ -280,17 +337,16 @@ and produces no Sentry event and no `alert()` from any control on the page.
 the artifact is one file.
 
 **Destination resolution lives in the caller, not in `lib/`.** `downloadSong`
-is a plain async function with no React dependency, which is exactly why
-`promptForSongsDirectory` uses a synchronous `alert()` (`index.ts:51`). A
-promise-returning React dialog cannot be reached from there without dragging
-Radix into `lib/`. So:
+is a plain async function with no React dependency. A promise-returning React
+dialog cannot be reached from there without dragging Radix into `lib/`. So:
 
 - `downloadSong` gains a required `destination` of `'songs-folder'` (with the
   handle supplied) or `'browser-download'`. It never prompts and never calls
   `tryGetSongsDirectoryHandle`. `getDefaultDownloadDirectory` (`:235`) stops
   calling it too.
 - A new hook, `useChartInstallDestination` in `app/find-music/`, owns the
-  resolution and the dialog, and holds the session flag.
+  resolution and the dialog, and reads and writes the stored "Just download"
+  choice.
 
 Resolution:
 
@@ -300,8 +356,12 @@ Resolution:
 | Picker support, folder already granted | Install to the folder. No prompt. |
 | Picker support, no folder yet | Dialog: **Select Songs folder** or **Just download**. |
 
-"Just download" is remembered for the session only, so the offer to install
-comes back on the next visit.
+"Just download" is remembered permanently in `localStorage` (repo owner's
+call, 2026-10-10). The dialog does not come back. The choice applies only
+while no Songs folder is set: a user who later picks a folder from the
+local-library card installs into it with no prompt. The local-library card
+keeps its "Pick Songs folder" action, so the folder feature stays
+reachable.
 
 **`'browser-download'` skips OPFS entirely.** Do not reuse the
 `backups/` staging write. Chorus `.sng` files reach hundreds of MB; staging
@@ -314,7 +374,12 @@ download has nothing to be atomic about.
 
 Keep the `track()` call and add the destination to the event.
 
-Done when: Firefox downloads a `.sng` from the table with no OPFS write;
+Show the download notice (see "The download notice") on every download in a
+browser with no picker. This is the point where the user first sees a file go
+somewhere they did not expect, so the reason must come with it.
+
+Done when: Firefox downloads a `.sng` from the table with no OPFS write and
+shows the notice;
 Chrome with no folder selected shows the two-way dialog; Chrome with a granted
 folder installs with no prompt, as it does today.
 
@@ -339,10 +404,13 @@ typed the same (`:42`). A virtual tree cannot satisfy that interface, and
 `lib/sng/convert-folder-to-sng.ts:50`, all of which call methods it does not
 have. A comment is not a guard.
 
-Instead: declare a structural `ScanSource` type covering exactly the surface
-above, widen `scanLocalCharts` to take it, and make `handleInfo.parentDir` a
-union that those three consumers must narrow. The compiler then reports the
-three sites rather than a user reporting them.
+Instead: export `FolderSource` from `lib/chart-files/chart-package.ts` and
+extend its `FolderFile` with a lazy `file(): Promise<File>`, which supplies
+`text()`, `stream()` and `lastModified`. Widen `scanLocalCharts` to take a
+`FolderSource`, and make `handleInfo.parentDir` a union that those three
+consumers must narrow. The compiler then reports the three sites rather than
+a user reporting them. Plan 0159 uses the same type for every folder path, so
+there is one folder type, not two.
 
 Build the tree lazily from `FileList` — keep the `File` objects, do not read
 their bytes up front.
@@ -394,20 +462,26 @@ the specific error rather than a generic one.
 
 ## Phase 5 — Say what the browser can do
 
-Most of this copy ships in Phase 1. What remains: in a browser with no picker,
-the local-library card offers the folder input and states that a re-scan needs
-the folder again, and the install button reads "Download" in place of
-"Install", with a "Downloaded" terminal state that does not claim the chart is
-installed.
+Most of this copy ships in Phase 1 and Phase 2. What remains: in a browser with
+no picker, the local-library card shows the download notice, offers the folder
+input, and states that a re-scan needs the folder again:
 
-Copy stays in Simplified Technical English and does not name browsers, since
-the test is a capability test.
+> Your browser cannot keep access to this folder. Pick it again to scan again.
+
+The install button reads "Download" in place of "Install", with a
+"Downloaded" terminal state that does not claim the chart is installed.
+
+All copy follows the rules in "The download notice": Simplified Technical
+English, "your browser" as the reason, no browser names.
 
 ## Not in scope
 
-`/drum-fills`, `/sng` and the folder-to-`.sng` converter all
-depend on live handles for reading and writing user files. They keep
-`SupportedBrowserWarning` as it is.
+`/drum-fills` keeps its own capability gate: it needs a Songs folder it can
+keep across visits, and Web MIDI.
+
+`/sng` and `/add-lyrics` get the same read-a-folder and
+download fallback in plan 0159, with the same notice. This plan builds the
+shared capability module and notice component first.
 
 Safari is not a target. Its OPFS lacks `createWritable()` until far later than
 15.2, and `lib/fileSystemHelpers.ts:7` depends on it.
@@ -428,6 +502,9 @@ Safari is not a target. Its OPFS lacks `createWritable()` until far later than
   rejection and the missing-`ReadMeFirst.pdf` rejection.
 - Component: `FindMusicTable` install button label and terminal state under
   both capability states.
+- Component: `DownloadFallbackNotice` shows the reason sentence when the
+  picker is missing, and leaves it out after "Just download" while it still
+  shows the Downloads sentence and the action.
 - Manual: Firefox and Brave, full pass — connect Spotify, scan, reload, check
   the installed flag, download a chart. Chrome regression pass: install with a
   granted folder must still be prompt-free.
@@ -436,9 +513,8 @@ Safari is not a target. Its OPFS lacks `createWritable()` until far later than
 
 1. ~~Does anything still read `installedCharts.json`?~~ Answered: no. Phase 3
    deletes the write.
-2. Should "Just download" be remembered longer than the session? A persisted
-   choice removes a prompt but hides the folder feature from a user who
-   dismissed it once.
+2. ~~Should "Just download" be remembered longer than the session?~~
+   Answered (2026-10-10): yes, permanently. See Phase 2.
 3. ~~Is a drag-and-drop folder source needed instead?~~ Answered: no.
    `webkitdirectory` enumerates a 184,157-file library in every target browser
    without trouble, so the `webkitGetAsEntry()` fallback is not required.
