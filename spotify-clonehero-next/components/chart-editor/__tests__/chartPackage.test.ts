@@ -77,7 +77,7 @@ if (typeof Blob.prototype.arrayBuffer !== 'function') {
 
 function chartDoc(offsetSeconds = 0): ChartDocument {
   const parsed = createEmptyChart({bpm: 120, resolution: 480});
-  parsed.metadata.chart_offset = offsetSeconds;
+  parsed.metadata.chart_offset = offsetSeconds * 1000;
   return {parsedChart: parsed, assets: []};
 }
 

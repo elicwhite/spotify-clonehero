@@ -407,10 +407,10 @@ describe('DifficultyGenerationFlow', () => {
 
   it("plays the chart's audio in sync: the chart delay is applied and the metronome click stem is registered", async () => {
     const doc = drumsChartDoc();
-    // A chart whose audio leads its notes by 1.25s (`[Song] Offset`, in
-    // seconds). Playback that ignored it would run the highway against
-    // audio shifted by that much.
-    doc.parsedChart.metadata.chart_offset = 1.25;
+    // A chart whose audio leads its notes by 1.25s (`[Song] Offset`, which
+    // scan-chart reports in ms). Playback that ignored it would run the
+    // highway against audio shifted by that much.
+    doc.parsedChart.metadata.chart_offset = 1250;
     nextLoaded = loadedFilesFor(doc);
     renderFlow('drums');
 
