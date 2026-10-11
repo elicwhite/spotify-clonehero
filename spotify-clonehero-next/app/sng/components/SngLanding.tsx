@@ -106,9 +106,7 @@ export default function SngLanding({
               {canWriteFolders ? null : (
                 <DownloadFallbackNotice
                   className="mt-2"
-                  folder="the folder you pick"
-                  action="They come in a .zip. Unzip it into that folder."
-                  browserIsReason
+                  extra="They will come in a .zip."
                 />
               )}
             </CardDescription>

@@ -12,10 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  browserReasonSentence,
-  downloadFallbackText,
-} from '@/components/file-access/DownloadFallbackNotice';
+import {DOWNLOAD_FALLBACK_TEXT} from '@/components/file-access/DownloadFallbackNotice';
 import {
   supportsDirectoryPicker,
   useSupportsDirectoryPicker,
@@ -31,7 +28,6 @@ import {
   setPrefersBrowserDownload,
   subscribeToDownloadChoice,
 } from '@/lib/local-songs-folder/downloadChoice';
-import {SONGS_FOLDER_DOWNLOAD_COPY} from './songsFolderCopy';
 import type {FindMusicChart} from './types';
 
 export type ChartInstallState =
@@ -55,10 +51,10 @@ const serverPrefersDownload = () => false;
  * | ---------------------------------- | ---------------------------- |
  * | No folder picker                   | Download. No prompt.         |
  * | Picker, Songs folder granted       | Install. No prompt.          |
- * | Picker, "Just download" chosen     | Download. No prompt.         |
+ * | Picker, "Download" chosen     | Download. No prompt.         |
  * | Picker, nothing chosen yet         | Dialog asks.                 |
  *
- * Picking a Songs folder clears a stored "Just download"
+ * Picking a Songs folder clears a stored "Download"
  * (`pickSongsDirectory` does it), so the two can never disagree.
  */
 export function useChartInstall() {
@@ -73,16 +69,17 @@ export function useChartInstall() {
   const [askingFor, setAskingFor] = useState<FindMusicChart | null>(null);
   const explainedRef = useRef(false);
 
+  // The browser's reason once per page; after that, and when the user chose
+  // to download, only where the file went.
   const announceDownload = useCallback((browserIsReason: boolean) => {
-    const copy = {...SONGS_FOLDER_DOWNLOAD_COPY, browserIsReason};
-    // The whole notice once; after that, only the part that still matters.
-    const description = explainedRef.current
-      ? browserIsReason
-        ? browserReasonSentence(copy.folder)
-        : copy.action
-      : downloadFallbackText(copy);
-    explainedRef.current = true;
-    toast.success('Saved to your Downloads folder', {description});
+    if (browserIsReason && !explainedRef.current) {
+      explainedRef.current = true;
+      toast.success('Saved to your Downloads folder', {
+        description: DOWNLOAD_FALLBACK_TEXT,
+      });
+      return;
+    }
+    toast.success('Saved to your Downloads folder');
   }, []);
 
   const installTo = useCallback(
@@ -175,18 +172,14 @@ export function useChartInstall() {
         <DialogHeader>
           <DialogTitle>Install charts into your Songs folder?</DialogTitle>
           <DialogDescription>
-            Select your Clone Hero or YARG Songs folder, and charts install into
-            it directly. Or download each chart to your Downloads folder and
-            move it yourself.
+            Select your Songs folder to install charts automatically. Otherwise
+            you can download charts to your Downloads folder and move them
+            yourself.
           </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          This choice is kept. To install into a folder later, pick your Songs
-          folder on the Local Songs Folder card.
-        </p>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={justDownload}>
-            Just download
+            Download
           </Button>
           <Button type="button" onClick={selectSongsFolder}>
             Select Songs folder
@@ -206,8 +199,6 @@ export function useChartInstall() {
         ? ('download' as const)
         : ('install' as const),
     /** Why a chart downloads, when the browser is the reason. */
-    downloadReason: canPickFolders
-      ? null
-      : browserReasonSentence(SONGS_FOLDER_DOWNLOAD_COPY.folder),
+    downloadReason: canPickFolders ? null : DOWNLOAD_FALLBACK_TEXT,
   };
 }

@@ -545,10 +545,7 @@ describe('FindMusicSidebar', () => {
 
     const card = screen.getByTestId('source-local');
     expect(card).toHaveTextContent(
-      'Your browser cannot keep access to this folder. Pick the folder again for each scan.',
-    );
-    expect(card).toHaveTextContent(
-      'Your browser cannot save files into your Songs folder.',
+      'Your browser requires choosing this folder for each scan, and cannot save directly to it. Consider using Chrome.',
     );
     expect(
       within(card).queryByRole('button', {name: 'Local Songs Folder actions'}),

@@ -1,28 +1,11 @@
-import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNotice';
-
-/** The download notice's words on this page. */
-export const SONGS_FOLDER_DOWNLOAD_COPY = {
-  folder: 'your Songs folder',
-  action: 'Move each chart into your Songs folder, then scan again.',
-} as const;
-
-const PICK_AGAIN =
-  'Your browser cannot keep access to this folder. Pick the folder again for each scan.';
-
 /**
  * What the Local Songs Folder card says in a browser with no folder picker:
- * why a rescan asks for the folder again, and why charts download instead of
+ * why every scan asks for the folder, and why charts download instead of
  * installing.
  */
+export const NO_FOLDER_PICKER_TEXT =
+  'Your browser requires choosing this folder for each scan, and cannot save directly to it. Consider using Chrome.';
+
 export function NoFolderPickerNotice() {
-  return (
-    <>
-      <span className="block">{PICK_AGAIN}</span>
-      <DownloadFallbackNotice
-        className="mt-1"
-        {...SONGS_FOLDER_DOWNLOAD_COPY}
-        browserIsReason
-      />
-    </>
-  );
+  return <span className="block">{NO_FOLDER_PICKER_TEXT}</span>;
 }

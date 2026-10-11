@@ -67,7 +67,7 @@ describe('picking a different Songs folder', () => {
     await expect(getCachedSongsDirectoryHandle()).resolves.toBe(picked);
   });
 
-  it('clears an earlier "Just download" when a folder is picked', async () => {
+  it('clears an earlier "Download" when a folder is picked', async () => {
     const {pickSongsDirectory} = await loadSongsFolder();
     const choice = await import('@/lib/local-songs-folder/downloadChoice');
     choice.setPrefersBrowserDownload(true);

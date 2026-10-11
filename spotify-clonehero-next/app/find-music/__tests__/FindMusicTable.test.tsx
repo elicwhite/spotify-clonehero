@@ -334,20 +334,20 @@ it('downloads, and says the browser is why, where there is no folder picker', as
     'Saved to your Downloads folder',
     {
       description:
-        'Your browser cannot save files into your Songs folder. The files go to your Downloads folder. Move each chart into your Songs folder, then scan again.',
+        'Your browser is missing features required to save files into your selected folder. They will be saved to your Downloads folder.',
     },
   );
   expect(screen.getByTestId('chart-row')).not.toHaveTextContent('Installed');
 });
 
-it('asks once where to save when no Songs folder is set, and keeps "Just download"', async () => {
+it('asks once where to save when no Songs folder is set, and keeps "Download"', async () => {
   mockGetCachedSongsFolder.mockResolvedValue(null);
   renderAlpha();
 
   fireEvent.click(await screen.findByRole('button', {name: 'Install'}));
   const dialog = await screen.findByRole('dialog');
   expect(dialog).toHaveTextContent('Install charts into your Songs folder?');
-  fireEvent.click(within(dialog).getByRole('button', {name: 'Just download'}));
+  fireEvent.click(within(dialog).getByRole('button', {name: 'Download'}));
 
   await waitFor(() =>
     expect(screen.getByText('Downloaded')).toBeInTheDocument(),
@@ -363,17 +363,13 @@ it('asks once where to save when no Songs folder is set, and keeps "Just downloa
   // The user chose this, so the browser is not blamed for it.
   expect(mockToastSuccess).toHaveBeenCalledWith(
     'Saved to your Downloads folder',
-    {
-      description:
-        'The files go to your Downloads folder. Move each chart into your Songs folder, then scan again.',
-    },
   );
   expect(window.localStorage.getItem('songs-folder:prefers-download:v1')).toBe(
     'download',
   );
 });
 
-it('does not ask again after "Just download"', async () => {
+it('does not ask again after "Download"', async () => {
   mockGetCachedSongsFolder.mockResolvedValue(null);
   window.localStorage.setItem('songs-folder:prefers-download:v1', 'download');
   renderAlpha();
@@ -386,7 +382,7 @@ it('does not ask again after "Just download"', async () => {
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
-it('reads "Install" again once a Songs folder replaces "Just download"', async () => {
+it('reads "Install" again once a Songs folder replaces "Download"', async () => {
   mockGetCachedSongsFolder.mockResolvedValue(null);
   setPrefersBrowserDownload(true);
   renderAlpha();

@@ -192,13 +192,7 @@ export default function SngFolderConverter({
           {zipping ? (
             <DownloadFallbackNotice
               className="mb-4 text-sm text-muted-foreground"
-              folder="the folder you picked"
-              action={
-                parts.length > 1
-                  ? 'Unzip each part into that folder.'
-                  : 'Unzip it into that folder.'
-              }
-              browserIsReason
+              extra="Unzip them into the folder you selected."
             />
           ) : null}
           <ConverterStatus
@@ -228,9 +222,9 @@ export default function SngFolderConverter({
             <AlertDialogTitle>Leave without downloading?</AlertDialogTitle>
             <AlertDialogDescription>
               {undownloaded === 1
-                ? 'One .zip is not downloaded yet.'
-                : `${undownloaded} .zip parts are not downloaded yet.`}{' '}
-              If you leave, the converted files are lost.
+                ? 'One .zip has not been downloaded.'
+                : `${undownloaded} .zip parts have not been downloaded.`}{' '}
+              If you leave, they will be lost.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

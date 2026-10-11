@@ -238,10 +238,7 @@ describe('FindMusicWelcome', () => {
 
     const card = screen.getByTestId('welcome-local-songs-folder');
     expect(card).toHaveTextContent(
-      'Your browser cannot keep access to this folder. Pick the folder again for each scan.',
-    );
-    expect(card).toHaveTextContent(
-      'Your browser cannot save files into your Songs folder. The files go to your Downloads folder.',
+      'Your browser requires choosing this folder for each scan, and cannot save directly to it. Consider using Chrome.',
     );
     expect(card).not.toHaveTextContent('install charts directly');
     expect(

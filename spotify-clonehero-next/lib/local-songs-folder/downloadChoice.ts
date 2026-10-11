@@ -1,5 +1,5 @@
 /**
- * Whether the user chose "Just download" over picking a Songs folder. It lives
+ * Whether the user chose "Download" over picking a Songs folder. It lives
  * beside the stored Songs folder because the two answer one question, where a
  * chart goes: picking a folder clears it.
  *

@@ -40,7 +40,7 @@ export async function pickSongsDirectory(): Promise<FileSystemDirectoryHandle | 
   await set('songsDirectoryHandle', handle);
   currentSongDirectoryCache = handle;
   // A folder picked now answers where charts go, over an earlier
-  // "Just download".
+  // "Download".
   setPrefersBrowserDownload(false);
 
   return handle;

@@ -6,7 +6,8 @@ import {
   type FolderSource,
 } from './folderSource';
 
-export const NOT_A_FOLDER_MESSAGE = 'Your browser did not return a folder.';
+export const NOT_A_FOLDER_MESSAGE =
+  'Your browser is missing features required to open a folder.';
 
 /**
  * Ask the user for a folder, in any browser: the folder picker where
