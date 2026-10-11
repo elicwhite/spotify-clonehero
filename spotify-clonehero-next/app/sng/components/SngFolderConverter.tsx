@@ -1,10 +1,26 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, CheckCircle2, Download, FolderCog} from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  Download,
+  FolderCog,
+} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
@@ -14,9 +30,10 @@ import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNot
 import {downloadBlob} from '@/lib/download';
 import {
   convertChartFolders,
-  packageChartAsSng,
+  saveIntoFolder,
+  saveIntoZip,
   selectChartFoldersToConvert,
-  sngZipPath,
+  type SaveSng,
 } from '@/lib/sng/convert-folder-to-sng';
 import {PartedZip} from '@/lib/sng/partedZip';
 import {formatBytes} from '@/lib/sng/file-utils';
@@ -37,6 +54,20 @@ type Phase =
 // first ETA isn't NaN/Infinity.
 const DEFAULT_MS_PER_CHART = 750;
 
+/** What the progress block says the converter is doing with each .sng. */
+interface SavingWords {
+  title: string;
+  verb: string;
+}
+const WRITING: SavingWords = {title: 'Writing .sng files…', verb: 'written'};
+const PACKING: SavingWords = {title: 'Packing .sng files…', verb: 'packed'};
+
+/** A finished .zip part. Its Blob is let go once it is downloaded. */
+interface ZipPart {
+  blob: Blob | null;
+  size: number;
+}
+
 export default function SngFolderConverter({
   folder,
   onBack,
@@ -45,7 +76,9 @@ export default function SngFolderConverter({
   // A folder from a file input has no handle to write beside each chart, so
   // the .sng files are collected into .zip parts for the user to download.
   const zipping = folder.handle == null;
-  const [parts, setParts] = useState<Blob[]>([]);
+  const [parts, setParts] = useState<ZipPart[]>([]);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const undownloaded = parts.filter(part => part.blob != null).length;
   // Guards against the effect running twice in React 18 strict mode.
   const startedRef = useRef(false);
 
@@ -76,30 +109,30 @@ export default function SngFolderConverter({
       });
 
       const startTime = new Date();
-      const zip = zipping
-        ? new PartedZip(part => setParts(current => [...current, part]))
-        : null;
-      const {written, failed} = await convertChartFolders(toConvert, {
-        ...(zip && {
-          convert: async chart =>
-            zip.add(sngZipPath(chart), await packageChartAsSng(chart)),
-        }),
-        onProgress: ({written, failed}) => {
-          setPhase({
-            status: 'converting',
-            written,
-            total,
-            etaMs: calculateTimeRemaining(
-              startTime,
+      const target = saveTarget(folder, blob =>
+        setParts(current => [...current, {blob, size: blob.size}]),
+      );
+      const {written, failed} = await convertChartFolders(
+        toConvert,
+        target.save,
+        {
+          onProgress: ({written, failed}) => {
+            setPhase({
+              status: 'converting',
+              written,
               total,
-              written + failed,
-              DEFAULT_MS_PER_CHART,
-            ),
-          });
+              etaMs: calculateTimeRemaining(
+                startTime,
+                total,
+                written + failed,
+                DEFAULT_MS_PER_CHART,
+              ),
+            });
+          },
         },
-      });
+      );
 
-      zip?.finish();
+      target.finish();
       setPhase({status: 'done', written, failed, skipped});
       if (failed > 0) {
         toast.error(
@@ -112,7 +145,26 @@ export default function SngFolderConverter({
         message: e instanceof Error ? e.message : 'Failed to convert folder',
       });
     }
-  }, [folder, zipping]);
+  }, [folder]);
+
+  const downloadPart = useCallback(
+    (index: number, fileName: string) => {
+      const blob = parts[index]?.blob;
+      if (!blob) return;
+      downloadBlob(blob, fileName);
+      setParts(current =>
+        current.map((part, i) => (i === index ? {...part, blob: null} : part)),
+      );
+    },
+    [parts],
+  );
+
+  // Converted parts live only in this page, so leaving with some not yet
+  // downloaded loses them.
+  const leave = useCallback(() => {
+    if (undownloaded > 0) setConfirmingLeave(true);
+    else onBack();
+  }, [onBack, undownloaded]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -123,7 +175,7 @@ export default function SngFolderConverter({
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-8">
       <div className="mb-4">
-        <Button variant="ghost" size="sm" onClick={onBack}>
+        <Button variant="ghost" size="sm" onClick={leave}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
@@ -152,24 +204,59 @@ export default function SngFolderConverter({
           <ConverterStatus
             phase={phase}
             dirName={folder.name}
-            zipping={zipping}
+            saving={zipping ? PACKING : WRITING}
           />
           {parts.length > 0 ? (
             <ZipParts
               parts={parts}
               folderName={folder.name}
               complete={phase.status === 'done'}
+              onDownload={downloadPart}
             />
           ) : null}
           {(phase.status === 'done' || phase.status === 'error') && (
             <div className="mt-6 flex justify-end">
-              <Button onClick={onBack}>Done</Button>
+              <Button onClick={leave}>Done</Button>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={confirmingLeave} onOpenChange={setConfirmingLeave}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave without downloading?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {undownloaded === 1
+                ? 'One .zip is not downloaded yet.'
+                : `${undownloaded} .zip parts are not downloaded yet.`}{' '}
+              If you leave, the converted files are lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction onClick={onBack}>Leave</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
+}
+
+/**
+ * Where converted .sng files go: beside their folders when the picked folder
+ * has a handle to write through, into .zip parts for download when it does
+ * not.
+ */
+function saveTarget(
+  folder: FolderSource,
+  onPart: (part: Blob) => void,
+): {save: SaveSng; finish: () => void} {
+  if (folder.handle) {
+    return {save: saveIntoFolder(folder.handle), finish: () => {}};
+  }
+  const zip = new PartedZip(onPart);
+  return {save: saveIntoZip(zip), finish: () => zip.finish()};
 }
 
 /**
@@ -180,26 +267,35 @@ function ZipParts({
   parts,
   folderName,
   complete,
+  onDownload,
 }: {
-  parts: Blob[];
+  parts: ZipPart[];
   folderName: string;
   complete: boolean;
+  onDownload: (index: number, fileName: string) => void;
 }) {
   const single = complete && parts.length === 1;
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       {parts.map((part, index) => {
-        const label = single ? 'Download .zip' : `Download part ${index + 1}`;
+        const name = single ? '.zip' : `part ${index + 1}`;
         const fileName = single
           ? `${folderName} (sng).zip`
           : `${folderName} (sng part ${index + 1}).zip`;
+        const downloaded = part.blob == null;
         return (
           <Button
             key={index}
             variant="outline"
-            onClick={() => downloadBlob(part, fileName)}>
-            <Download className="mr-2 h-4 w-4" />
-            {label} ({formatBytes(part.size)})
+            disabled={downloaded}
+            onClick={() => onDownload(index, fileName)}>
+            {downloaded ? (
+              <Check className="mr-2 h-4 w-4" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {downloaded ? `Downloaded ${name}` : `Download ${name}`} (
+            {formatBytes(part.size)})
           </Button>
         );
       })}
@@ -210,11 +306,11 @@ function ZipParts({
 function ConverterStatus({
   phase,
   dirName,
-  zipping,
+  saving,
 }: {
   phase: Phase;
   dirName: string;
-  zipping: boolean;
+  saving: SavingWords;
 }) {
   if (phase.status === 'scanning') {
     return (
@@ -230,8 +326,8 @@ function ConverterStatus({
     return (
       <div className="space-y-3">
         <StatusBlock
-          title={zipping ? 'Packing .sng files…' : 'Writing .sng files…'}
-          primary={`${phase.written} / ${phase.total} .sngs ${zipping ? 'packed' : 'written'}`}
+          title={saving.title}
+          primary={`${phase.written} / ${phase.total} .sngs ${saving.verb}`}
           secondary={formatTimeRemaining(phase.etaMs)}
         />
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">

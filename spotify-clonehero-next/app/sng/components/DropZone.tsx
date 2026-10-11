@@ -6,11 +6,7 @@ import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
-import {
-  readChartFolder,
-  type LoadedFiles,
-} from '@/lib/chart-files/chart-package';
-import type {FolderSource} from '@/lib/file-access/folderSource';
+import {readChartFolder} from '@/lib/chart-files/chart-package';
 import {pickFolder} from '@/lib/file-access/pickFolder';
 import {readDroppedItems, readFileList} from '@/lib/chart-files/entries';
 import {pickFiles} from '@/lib/file-access/pickFiles';
@@ -65,34 +61,19 @@ export default function DropZone({onAdd, disabled}: DropZoneProps) {
     }
   }, [busy, onAdd]);
 
-  const addFolder = useCallback(
-    async (read: () => Promise<LoadedFiles>) => {
-      setIsReading(true);
-      try {
-        onAdd((await read()).files);
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : 'Failed to read folder',
-        );
-      } finally {
-        setIsReading(false);
-      }
-    },
-    [onAdd],
-  );
-
   const handlePickFolder = useCallback(async () => {
     if (busy) return;
-
-    let folder: FolderSource | null;
     try {
-      folder = await pickFolder({id: 'sng-add-folder'});
+      const folder = await pickFolder({id: 'sng-add-folder'});
+      if (!folder) return;
+      setIsReading(true);
+      onAdd((await readChartFolder(folder)).files);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to read folder');
-      return;
+    } finally {
+      setIsReading(false);
     }
-    if (folder) await addFolder(() => readChartFolder(folder));
-  }, [busy, addFolder]);
+  }, [busy, onAdd]);
 
   return (
     <div

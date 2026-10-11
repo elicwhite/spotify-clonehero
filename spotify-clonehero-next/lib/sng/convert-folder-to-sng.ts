@@ -1,19 +1,23 @@
 /**
  * Batch conversion of on-disk chart folders to `.sng` files.
  *
- * `scanLocalCharts` surfaces every chart in a picked directory — both folder
- * charts and existing `.sng` files. This module picks out the folder charts and
- * packages each with `exportAsSng`. Where the folder came with a handle, each
- * `<folderName>.sng` is written next to the folder it came from; where it came
- * from a file input, the caller collects them into a `.zip` instead, at the
- * same paths.
+ * `scanLocalCharts` surfaces every chart in a picked folder — both folder
+ * charts and existing `.sng` files. This module picks out the folder charts,
+ * packages each with `exportAsSng`, and hands each `<folderName>.sng` to a
+ * saver: one that writes it next to its folder through the picked folder's
+ * handle, or one that adds it to a `.zip` at the same path where there is no
+ * handle to write through.
  */
 
 import pMap from 'p-map';
-import {readChartLocation} from '@/lib/chart-files/chart-package';
+import {
+  readChartLocation,
+  type ChartLocation,
+} from '@/lib/chart-files/chart-package';
 import type {FolderSource} from '@/lib/file-access/folderSource';
 import {exportAsSng} from '@/lib/chart-export';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
+import type {PartedZip} from './partedZip';
 
 // Chart folders converted in parallel. Bounded because each task buffers a whole
 // chart's files plus its packaged .sng in memory at once; the gain over serial
@@ -22,8 +26,14 @@ const CONVERT_CONCURRENCY = 12;
 
 /** A chart the converter can package: a folder inside the picked folder. */
 export type ConvertibleChart = SongAccumulator & {
-  location: {parent: FolderSource; entry: FolderSource; path: string};
+  location: ChartLocation & {parent: FolderSource; entry: FolderSource};
 };
+
+/** Where one converted chart's `.sng` goes. */
+export type SaveSng = (
+  chart: ConvertibleChart,
+  sng: Uint8Array,
+) => void | Promise<void>;
 
 /**
  * Filter a scan result down to the charts that can be converted to `.sng`.
@@ -41,52 +51,38 @@ export function selectChartFoldersToConvert(
   );
 }
 
-/** The `.sng` file name a chart folder converts to. */
-export function sngFileNameForFolder(folderName: string): string {
-  return `${folderName}.sng`;
-}
-
-/** Read a chart folder's files and package them as one `.sng`. */
-export async function packageChartAsSng(
-  chart: ConvertibleChart,
-): Promise<Uint8Array> {
-  const {files} = await readChartLocation(chart.location);
-  return exportAsSng(files);
-}
-
 /**
- * Where a chart's `.sng` goes inside a `.zip` of the picked folder: next to
- * the chart's folder, so unzipping into the picked folder puts it where
- * `convertChartFolderToSng` would have written it.
+ * Where a chart's `.sng` goes, relative to the picked folder: next to the
+ * chart's own folder.
  */
-export function sngZipPath(chart: ConvertibleChart): string {
+export function sngPathFor(chart: ConvertibleChart): string {
   const [, ...below] = chart.location.path.split('/');
-  return sngFileNameForFolder(below.join('/'));
+  return `${below.join('/')}.sng`;
 }
 
 /**
- * Convert a single folder chart to a `.sng` and write it next to the folder,
- * overwriting any existing file of that name. The folder the scan started
- * from must have been picked with `readwrite` permission.
+ * Write each `.sng` into the picked folder at `sngPathFor`, overwriting any
+ * file of that name. The folder must have been picked with `readwrite`.
  */
-export async function convertChartFolderToSng(
-  chart: ConvertibleChart,
-): Promise<void> {
-  const {parent, entry} = chart.location;
-  // Every chart of one scan has a handle, or none does, and the caller only
-  // asks for this when the picked folder had one.
-  if (parent.handle == null) {
-    throw new Error(`No folder handle to write ${entry.name}.sng beside`);
-  }
+export function saveIntoFolder(root: FileSystemDirectoryHandle): SaveSng {
+  return async (chart, sng) => {
+    const segments = sngPathFor(chart).split('/');
+    let folder = root;
+    for (const name of segments.slice(0, -1)) {
+      folder = await folder.getDirectoryHandle(name);
+    }
+    const file = await folder.getFileHandle(segments[segments.length - 1], {
+      create: true,
+    });
+    const writable = await file.createWritable();
+    await writable.write(sng as Uint8Array<ArrayBuffer>);
+    await writable.close();
+  };
+}
 
-  const sngBytes = await packageChartAsSng(chart);
-  const sngHandle = await parent.handle.getFileHandle(
-    sngFileNameForFolder(entry.name),
-    {create: true},
-  );
-  const writable = await sngHandle.createWritable();
-  await writable.write(sngBytes as Uint8Array<ArrayBuffer>);
-  await writable.close();
+/** Add each `.sng` to a `.zip` at `sngPathFor`, for unzipping into the folder. */
+export function saveIntoZip(zip: PartedZip): SaveSng {
+  return (chart, sng) => zip.add(sngPathFor(chart), sng);
 }
 
 export interface ConvertFoldersProgress {
@@ -96,7 +92,8 @@ export interface ConvertFoldersProgress {
 }
 
 /**
- * Convert many chart folders to `.sng` with bounded parallelism.
+ * Convert many chart folders to `.sng` with bounded parallelism, handing each
+ * one to `save`.
  *
  * Each folder is converted independently, so a single chart's failure is
  * counted and reported but never aborts the rest. `onProgress` fires after every
@@ -104,18 +101,13 @@ export interface ConvertFoldersProgress {
  */
 export async function convertChartFolders(
   charts: ConvertibleChart[],
+  save: SaveSng,
   options: {
     concurrency?: number;
     onProgress?: (progress: ConvertFoldersProgress) => void;
-    // Seam for tests to drive the orchestration without touching the file system.
-    convert?: (chart: ConvertibleChart) => Promise<void>;
   } = {},
 ): Promise<{written: number; failed: number}> {
-  const {
-    concurrency = CONVERT_CONCURRENCY,
-    onProgress,
-    convert = convertChartFolderToSng,
-  } = options;
+  const {concurrency = CONVERT_CONCURRENCY, onProgress} = options;
 
   const total = charts.length;
   let written = 0;
@@ -125,7 +117,8 @@ export async function convertChartFolders(
     charts,
     async chart => {
       try {
-        await convert(chart);
+        const {files} = await readChartLocation(chart.location);
+        await save(chart, exportAsSng(files));
         written++;
       } catch (e) {
         failed++;

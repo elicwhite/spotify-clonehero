@@ -13,7 +13,6 @@ import {
   detectFormat,
   type LoadedFiles,
 } from '@/lib/chart-files/chart-package';
-import type {FolderSource} from '@/lib/file-access/folderSource';
 import {pickFolder} from '@/lib/file-access/pickFolder';
 
 const NOT_A_CHART_MESSAGE = 'Drop a chart folder, a .zip, or a .sng';
@@ -111,15 +110,12 @@ export default function ChartDropZone({
   // out as downloads, so a file input does the job where there is no picker.
   const handlePickFolder = useCallback(async () => {
     if (disabled || isLoading) return;
-
-    let folder: FolderSource | null;
     try {
-      folder = await pickFolder({id});
+      const folder = await pickFolder({id});
+      if (folder) await runLoad(() => readChartFolder(folder));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to open the picker');
-      return;
     }
-    if (folder) await runLoad(() => readChartFolder(folder));
   }, [runLoad, disabled, isLoading, id]);
 
   return (

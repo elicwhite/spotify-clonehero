@@ -11,10 +11,10 @@
  * back, each with its path below that folder in `webkitRelativePath`.
  */
 export function chooseFiles(options: {
-  directory?: boolean;
-  multiple?: boolean;
+  directory?: boolean | undefined;
+  multiple?: boolean | undefined;
   /** File extensions only, such as ".sng": a MIME type would let more in. */
-  accept?: string[];
+  accept?: string[] | undefined;
 }): Promise<File[] | null> {
   const input = document.createElement('input');
   input.type = 'file';

@@ -1,6 +1,6 @@
 # 0159 — Read folders and save files in every browser, across the tools
 
-Status: in-progress
+Status: completed
 
 Depends on 0116 for `lib/file-access/capabilities.ts`
 (`supportsDirectoryPicker()`) and `components/file-access/DownloadFallbackNotice.tsx`.
@@ -149,6 +149,42 @@ with three `.sng` files at the right paths, with the notice shown.
   browser with the picker.
 - Manual: Firefox and Brave, each control in the table above. Chrome
   regression: every control still uses the picker.
+
+## As built (2026-10-10)
+
+- **`pickFiles` moved to `lib/file-access/pickFiles.ts`**, beside
+  `pickFolder`. Its fallback builds `accept` from extensions only.
+- **The third copy of the picker branch was not the debug page.**
+  `app/debug/chart-scan` keeps its picker check: what it diagnoses is the
+  File System Access handle itself. The copies were `ChartDropZone` and the
+  `/sng` `DropZone`, and both now use `pickFolder` + `readChartFolder`, as
+  does `/add-lyrics` "Choose new chart". `readChartDirectory` and
+  `readChartFileList` are gone. `pickFolder` rejects with "Your browser did
+  not return a folder." when a browser ignores `webkitdirectory`.
+- **`/sng` "Convert folder"** asks through `pickFolder({mode: 'readwrite'})`.
+  `convertChartFolders(charts, save)` packages each chart and hands the bytes
+  to a saver. `saveIntoFolder(root)` writes through the picked folder's
+  handle; `saveIntoZip(zip)` adds to a `PartedZip` (`lib/sng/partedZip.ts`):
+  fflate `Zip` with `ZipPassThrough`, 1 GB parts (fflate writes no ZIP64, so
+  a part must stay under 4 GiB), each file's bytes moved into a `Blob` as
+  soon as they are written. Both savers place a chart at `sngPathFor`, from
+  `ChartLocation.path`, so unzipping into the picked folder puts each `.sng`
+  where the folder path writes it.
+- **Parts on the page**: one Download button per finished part; a part's
+  `Blob` is released once it is downloaded, and "Back" or "Done" asks before
+  leaving parts that are not downloaded.
+- **No worker for the zip.** The files are stored, not deflated, so the zip
+  adds only a CRC32 pass, and reading and packaging each chart already ran
+  on the main thread in this page. Move both to a worker if a large library
+  shows the page stalling.
+- **The 1 GB part size is not measured.** Open question 1 stands.
+
+Verified in Firefox 154 (BiDi; folder handed over as a
+`webkitRelativePath` list) and Chrome 154 (OPFS stand-in for the picker)
+against the dev server: the landing notice, conversion to a `.zip` with the
+right paths (unzipped and listed), conversion beside the folders with a
+`readwrite` handle, and "Modify SNG" opening an input that accepts only
+`.sng`.
 
 ## Open questions
 

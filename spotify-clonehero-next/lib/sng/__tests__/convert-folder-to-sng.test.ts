@@ -2,13 +2,24 @@ import {describe, test, expect, jest} from '@jest/globals';
 import {
   convertChartFolders,
   selectChartFoldersToConvert,
-  sngFileNameForFolder,
-  sngZipPath,
+  saveIntoFolder,
+  sngPathFor,
   type ConvertibleChart,
 } from '../convert-folder-to-sng';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
 
 const noFiles = async () => ({files: [], subfolders: []});
+/** A chart folder with one chart file in it, enough to package. */
+const oneChart = async () => ({
+  files: [
+    {
+      kind: 'file' as const,
+      name: 'notes.chart',
+      file: async () => new File(['[Song]'], 'notes.chart'),
+    },
+  ],
+  subfolders: [],
+});
 
 /**
  * Build a minimal SongAccumulator-shaped entry for selection tests: a folder
@@ -18,7 +29,7 @@ const noFiles = async () => ({files: [], subfolders: []});
 function chart(name: string, path = `Songs/${name}`): ConvertibleChart {
   const entry = name.toLowerCase().endsWith('.sng')
     ? {kind: 'file' as const, name, file: async () => new File([], name)}
-    : {kind: 'folder' as const, name, handle: null, list: noFiles};
+    : {kind: 'folder' as const, name, handle: null, list: oneChart};
   return {
     artist: 'Artist',
     song: 'Song',
@@ -70,46 +81,65 @@ describe('selectChartFoldersToConvert', () => {
   });
 });
 
-describe('sngZipPath', () => {
+describe('sngPathFor', () => {
   test('puts the .sng beside its folder, below the picked folder', () => {
     expect(
-      sngZipPath(chart('Song (Charter)', 'Songs/Pack/Song (Charter)')),
+      sngPathFor(chart('Song (Charter)', 'Songs/Pack/Song (Charter)')),
     ).toBe('Pack/Song (Charter).sng');
-    expect(sngZipPath(chart('Top'))).toBe('Top.sng');
+    expect(sngPathFor(chart('Top'))).toBe('Top.sng');
   });
 });
 
-describe('sngFileNameForFolder', () => {
-  test('appends the .sng extension to the folder name', () => {
-    expect(sngFileNameForFolder('Artist - Song (Charter)')).toBe(
-      'Artist - Song (Charter).sng',
+describe('saveIntoFolder', () => {
+  test('writes the .sng at its path below the picked folder', async () => {
+    const written: Array<{path: string; data: unknown}> = [];
+    const folder = (path: string): FileSystemDirectoryHandle =>
+      ({
+        getDirectoryHandle: async (name: string) => folder(`${path}${name}/`),
+        getFileHandle: async (name: string) => ({
+          createWritable: async () => ({
+            write: async (data: unknown) => {
+              written.push({path: `${path}${name}`, data});
+            },
+            close: async () => {},
+          }),
+        }),
+      }) as unknown as FileSystemDirectoryHandle;
+    const sng = new Uint8Array([1, 2, 3]);
+
+    await saveIntoFolder(folder(''))(
+      chart('Song (Charter)', 'Songs/Pack/Song (Charter)'),
+      sng,
     );
+
+    expect(written).toEqual([{path: 'Pack/Song (Charter).sng', data: sng}]);
   });
 });
 
 describe('convertChartFolders', () => {
   test('converts every chart and reports the totals', async () => {
     const charts = [chart('a'), chart('b'), chart('c')];
-    const convert = jest.fn(async () => {});
+    const save = jest.fn(async () => {});
 
-    const result = await convertChartFolders(charts, {convert});
+    const result = await convertChartFolders(charts, save);
 
-    expect(convert).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenCalledWith(charts[0], expect.any(Uint8Array));
     expect(result).toEqual({written: 3, failed: 0});
   });
 
   test('isolates failures: one bad chart does not abort the rest', async () => {
     const charts = [chart('ok-1'), chart('boom'), chart('ok-2')];
-    const convert = jest.fn(async (c: SongAccumulator) => {
+    const save = jest.fn(async (c: SongAccumulator) => {
       if (c.location.entry.name === 'boom') throw new Error('nope');
     });
     // Keep the expected console.error noise out of the test output.
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    const result = await convertChartFolders(charts, {convert});
+    const result = await convertChartFolders(charts, save);
 
     expect(result).toEqual({written: 2, failed: 1});
-    expect(convert).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenCalledTimes(3);
     errSpy.mockRestore();
   });
 
@@ -118,9 +148,8 @@ describe('convertChartFolders', () => {
     const progress: Array<{written: number; failed: number; total: number}> =
       [];
 
-    await convertChartFolders(charts, {
+    await convertChartFolders(charts, async () => {}, {
       concurrency: 1, // deterministic ordering for the assertion
-      convert: async () => {},
       onProgress: p => progress.push(p),
     });
 
@@ -135,16 +164,16 @@ describe('convertChartFolders', () => {
     const charts = Array.from({length: 10}, (_, i) => chart(`c${i}`));
     let inFlight = 0;
     let maxInFlight = 0;
-    const convert = jest.fn(async () => {
+    const save = jest.fn(async () => {
       inFlight++;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await Promise.resolve();
       inFlight--;
     });
 
-    await convertChartFolders(charts, {concurrency: 3, convert});
+    await convertChartFolders(charts, save, {concurrency: 3});
 
     expect(maxInFlight).toBeLessThanOrEqual(3);
-    expect(convert).toHaveBeenCalledTimes(10);
+    expect(save).toHaveBeenCalledTimes(10);
   });
 });

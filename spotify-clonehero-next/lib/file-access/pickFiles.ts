@@ -1,4 +1,4 @@
-import {isPickerCancel} from './capabilities';
+import {isPickerCancel, supportsFilePicker} from './capabilities';
 import {chooseFiles} from './fileInput';
 
 // The File System Access API's own option type (from wicg-file-system-access),
@@ -16,9 +16,9 @@ type PickFilesOptions = OpenFilePickerOptions & {id: string};
 export async function pickFiles(
   options: PickFilesOptions,
 ): Promise<File[] | null> {
-  if (typeof window.showOpenFilePicker !== 'function') {
+  if (!supportsFilePicker()) {
     return await chooseFiles({
-      multiple: options.multiple ?? false,
+      multiple: options.multiple,
       accept: acceptedExtensions(options.types),
     });
   }

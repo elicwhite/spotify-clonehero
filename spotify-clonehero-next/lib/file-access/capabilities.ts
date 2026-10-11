@@ -13,6 +13,14 @@ export function supportsDirectoryPicker(): boolean {
   );
 }
 
+/** Whether this browser has the File System Access file picker. */
+export function supportsFilePicker(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.showOpenFilePicker === 'function'
+  );
+}
+
 // The picker cannot appear or disappear while the page is open, so there is
 // nothing to subscribe to. The server renders as if it is there, which keeps a
 // Chromium page from flashing the fallback before hydration.
