@@ -3,6 +3,7 @@ import {
   convertChartFolders,
   selectChartFoldersToConvert,
   sngFileNameForFolder,
+  sngZipPath,
   type ConvertibleChart,
 } from '../convert-folder-to-sng';
 import type {SongAccumulator} from '@/lib/local-songs-folder/scanLocalCharts';
@@ -14,10 +15,7 @@ const noFiles = async () => ({files: [], subfolders: []});
  * chart, or a `.sng` file chart when the name says so, as the scanner reports
  * them.
  */
-function chart(
-  name: string,
-  parentHandle: FileSystemDirectoryHandle | null = {} as FileSystemDirectoryHandle,
-): ConvertibleChart {
+function chart(name: string, path = `Songs/${name}`): ConvertibleChart {
   const entry = name.toLowerCase().endsWith('.sng')
     ? {kind: 'file' as const, name, file: async () => new File([], name)}
     : {kind: 'folder' as const, name, handle: null, list: noFiles};
@@ -30,13 +28,9 @@ function chart(
     data: {name: 'Song', artist: 'Artist', charter: ''},
     file: '',
     location: {
-      parent: {
-        kind: 'folder',
-        name: 'Songs',
-        handle: parentHandle,
-        list: noFiles,
-      },
+      parent: {kind: 'folder', name: 'Songs', handle: null, list: noFiles},
       entry,
+      path,
     },
   } as ConvertibleChart;
 }
@@ -60,16 +54,28 @@ describe('selectChartFoldersToConvert', () => {
     ).toEqual(['folder']);
   });
 
-  test('drops a chart whose folder has no handle to write beside it', () => {
-    expect(selectChartFoldersToConvert([chart('Picked Folder', null)])).toEqual(
-      [],
-    );
+  test('drops the picked folder itself, which has nothing to sit beside', () => {
+    const folder = chart('Picked Folder');
+    const picked: SongAccumulator = {
+      ...folder,
+      location: {...folder.location, parent: null},
+    };
+    expect(selectChartFoldersToConvert([picked])).toEqual([]);
   });
 
   test('returns an empty list when every chart is already a .sng', () => {
     expect(
       selectChartFoldersToConvert([chart('a.sng'), chart('b.sng')]),
     ).toEqual([]);
+  });
+});
+
+describe('sngZipPath', () => {
+  test('puts the .sng beside its folder, below the picked folder', () => {
+    expect(
+      sngZipPath(chart('Song (Charter)', 'Songs/Pack/Song (Charter)')),
+    ).toBe('Pack/Song (Charter).sng');
+    expect(sngZipPath(chart('Top'))).toBe('Top.sng');
   });
 });
 

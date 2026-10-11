@@ -67,6 +67,7 @@ export default async function scanLocalCharts(
     pushChart(accumulator, callbackPerSong, songIniData, songIniMTime, {
       parent: null,
       entry: folder,
+      path,
     });
   }
 
@@ -244,7 +245,7 @@ async function scanLocalChartsDirectory(
     callbackPerSong,
     result.songIniData,
     result.songIniMTime,
-    {parent: parentFolder, entry: currentFolder},
+    {parent: parentFolder, entry: currentFolder, path},
   );
 
   // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
@@ -326,7 +327,7 @@ async function scanLocalSngFileInner(
     callbackPerSong,
     metadata as unknown as SongIniData,
     file.lastModified,
-    {parent: parentFolder, entry: sngFile},
+    {parent: parentFolder, entry: sngFile, path},
   );
 }
 

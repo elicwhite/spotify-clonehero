@@ -111,6 +111,8 @@ export async function readChartFolder(
 export interface ChartLocation {
   parent: FolderSource | null;
   entry: FolderSource | FolderFile;
+  /** From the scanned folder down, starting with that folder's own name. */
+  path: string;
 }
 
 /** Read every file of a chart the scanner found, folder or `.sng`. */

@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, CheckCircle2, FolderCog} from 'lucide-react';
+import {ArrowLeft, CheckCircle2, Download, FolderCog} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
@@ -9,15 +9,21 @@ import scanLocalCharts, {
   type SongAccumulator,
 } from '@/lib/local-songs-folder/scanLocalCharts';
 import {coalesceProgress} from '@/lib/local-songs-folder/scan-progress';
-import {folderSourceFromHandle} from '@/lib/file-access/folderSource';
+import type {FolderSource} from '@/lib/file-access/folderSource';
+import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNotice';
+import {downloadBlob} from '@/lib/download';
 import {
   convertChartFolders,
+  packageChartAsSng,
   selectChartFoldersToConvert,
+  sngZipPath,
 } from '@/lib/sng/convert-folder-to-sng';
+import {PartedZip} from '@/lib/sng/partedZip';
+import {formatBytes} from '@/lib/sng/file-utils';
 import {calculateTimeRemaining, formatTimeRemaining} from '@/lib/ui-utils';
 
 interface SngFolderConverterProps {
-  dirHandle: FileSystemDirectoryHandle;
+  folder: FolderSource;
   onBack: () => void;
 }
 
@@ -32,10 +38,14 @@ type Phase =
 const DEFAULT_MS_PER_CHART = 750;
 
 export default function SngFolderConverter({
-  dirHandle,
+  folder,
   onBack,
 }: SngFolderConverterProps) {
   const [phase, setPhase] = useState<Phase>({status: 'scanning', found: 0});
+  // A folder from a file input has no handle to write beside each chart, so
+  // the .sng files are collected into .zip parts for the user to download.
+  const zipping = folder.handle == null;
+  const [parts, setParts] = useState<Blob[]>([]);
   // Guards against the effect running twice in React 18 strict mode.
   const startedRef = useRef(false);
 
@@ -46,11 +56,7 @@ export default function SngFolderConverter({
       const progress = coalesceProgress(found =>
         setPhase({status: 'scanning', found}),
       );
-      await scanLocalCharts(
-        folderSourceFromHandle(dirHandle),
-        accumulator,
-        progress.bump,
-      );
+      await scanLocalCharts(folder, accumulator, progress.bump);
       progress.flush();
 
       const toConvert = selectChartFoldersToConvert(accumulator);
@@ -70,7 +76,14 @@ export default function SngFolderConverter({
       });
 
       const startTime = new Date();
+      const zip = zipping
+        ? new PartedZip(part => setParts(current => [...current, part]))
+        : null;
       const {written, failed} = await convertChartFolders(toConvert, {
+        ...(zip && {
+          convert: async chart =>
+            zip.add(sngZipPath(chart), await packageChartAsSng(chart)),
+        }),
         onProgress: ({written, failed}) => {
           setPhase({
             status: 'converting',
@@ -86,6 +99,7 @@ export default function SngFolderConverter({
         },
       });
 
+      zip?.finish();
       setPhase({status: 'done', written, failed, skipped});
       if (failed > 0) {
         toast.error(
@@ -98,7 +112,7 @@ export default function SngFolderConverter({
         message: e instanceof Error ? e.message : 'Failed to convert folder',
       });
     }
-  }, [dirHandle]);
+  }, [folder, zipping]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -123,7 +137,30 @@ export default function SngFolderConverter({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ConverterStatus phase={phase} dirName={dirHandle.name} />
+          {zipping ? (
+            <DownloadFallbackNotice
+              className="mb-4 text-sm text-muted-foreground"
+              folder="the folder you picked"
+              action={
+                parts.length > 1
+                  ? 'Unzip each part into that folder.'
+                  : 'Unzip it into that folder.'
+              }
+              browserIsReason
+            />
+          ) : null}
+          <ConverterStatus
+            phase={phase}
+            dirName={folder.name}
+            zipping={zipping}
+          />
+          {parts.length > 0 ? (
+            <ZipParts
+              parts={parts}
+              folderName={folder.name}
+              complete={phase.status === 'done'}
+            />
+          ) : null}
           {(phase.status === 'done' || phase.status === 'error') && (
             <div className="mt-6 flex justify-end">
               <Button onClick={onBack}>Done</Button>
@@ -135,7 +172,50 @@ export default function SngFolderConverter({
   );
 }
 
-function ConverterStatus({phase, dirName}: {phase: Phase; dirName: string}) {
+/**
+ * One download button per finished part. Each download is its own click:
+ * browsers block a page that starts several downloads by itself.
+ */
+function ZipParts({
+  parts,
+  folderName,
+  complete,
+}: {
+  parts: Blob[];
+  folderName: string;
+  complete: boolean;
+}) {
+  const single = complete && parts.length === 1;
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {parts.map((part, index) => {
+        const label = single ? 'Download .zip' : `Download part ${index + 1}`;
+        const fileName = single
+          ? `${folderName} (sng).zip`
+          : `${folderName} (sng part ${index + 1}).zip`;
+        return (
+          <Button
+            key={index}
+            variant="outline"
+            onClick={() => downloadBlob(part, fileName)}>
+            <Download className="mr-2 h-4 w-4" />
+            {label} ({formatBytes(part.size)})
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConverterStatus({
+  phase,
+  dirName,
+  zipping,
+}: {
+  phase: Phase;
+  dirName: string;
+  zipping: boolean;
+}) {
   if (phase.status === 'scanning') {
     return (
       <StatusBlock
@@ -150,8 +230,8 @@ function ConverterStatus({phase, dirName}: {phase: Phase; dirName: string}) {
     return (
       <div className="space-y-3">
         <StatusBlock
-          title="Writing .sng files…"
-          primary={`${phase.written} / ${phase.total} .sngs written`}
+          title={zipping ? 'Packing .sng files…' : 'Writing .sng files…'}
+          primary={`${phase.written} / ${phase.total} .sngs ${zipping ? 'packed' : 'written'}`}
           secondary={formatTimeRemaining(phase.etaMs)}
         />
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">

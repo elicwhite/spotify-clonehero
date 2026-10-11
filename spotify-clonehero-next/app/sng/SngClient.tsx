@@ -4,6 +4,8 @@ import {useCallback, useState} from 'react';
 import {toast} from 'sonner';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 import {readSngFile} from '@/lib/chart-files/chart-package';
+import type {FolderSource} from '@/lib/file-access/folderSource';
+import {pickFolder} from '@/lib/file-access/pickFolder';
 import {exportAsSng, exportAsZip} from '@/lib/chart-export';
 import {downloadBlob} from '@/lib/download';
 import {mergeByName} from '@/lib/sng/file-utils';
@@ -26,25 +28,21 @@ export default function SngClient() {
   // Name of the opened .sng (Modify flow). Null when building from scratch, in
   // which case the download name is derived from the chart metadata.
   const [openedSngName, setOpenedSngName] = useState<string | null>(null);
-  // Directory being batch-converted to .sng (Convert Folder flow).
-  const [convertDir, setConvertDir] =
-    useState<FileSystemDirectoryHandle | null>(null);
+  // Folder being batch-converted to .sng (Convert Folder flow).
+  const [convertFolder, setConvertFolder] = useState<FolderSource | null>(null);
 
   const startConvert = useCallback(async () => {
-    let dirHandle: FileSystemDirectoryHandle;
+    let folder: FolderSource | null;
     try {
-      // readwrite so the .sng files can be written back next to each chart.
-      dirHandle = await window.showDirectoryPicker({
-        id: 'sng-convert-folder',
-        mode: 'readwrite',
-      });
+      // readwrite so the .sng files can be written back next to each chart,
+      // where the browser can do that at all.
+      folder = await pickFolder({id: 'sng-convert-folder', mode: 'readwrite'});
     } catch (err) {
-      // showDirectoryPicker rejects with AbortError when the user cancels.
-      if (err instanceof DOMException && err.name === 'AbortError') return;
       toast.error(err instanceof Error ? err.message : 'Failed to open folder');
       return;
     }
-    setConvertDir(dirHandle);
+    if (!folder) return;
+    setConvertFolder(folder);
     setMode('convert');
   }, []);
 
@@ -69,7 +67,7 @@ export default function SngClient() {
     setMode('landing');
     setFiles([]);
     setOpenedSngName(null);
-    setConvertDir(null);
+    setConvertFolder(null);
   }, []);
 
   const addEntries = useCallback((entries: FileEntry[]) => {
@@ -135,8 +133,8 @@ export default function SngClient() {
     );
   }
 
-  if (mode === 'convert' && convertDir) {
-    return <SngFolderConverter dirHandle={convertDir} onBack={goBack} />;
+  if (mode === 'convert' && convertFolder) {
+    return <SngFolderConverter folder={convertFolder} onBack={goBack} />;
   }
 
   return (

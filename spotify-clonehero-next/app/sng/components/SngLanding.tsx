@@ -4,6 +4,8 @@ import {useCallback} from 'react';
 import {FilePlus2, FolderInput, FolderCog} from 'lucide-react';
 import {toast} from 'sonner';
 import {pickFiles} from '@/lib/file-access/pickFiles';
+import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
+import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNotice';
 import {Button} from '@/components/ui/button';
 import {
   Card,
@@ -24,6 +26,7 @@ export default function SngLanding({
   onPickSng,
   onConvertFolder,
 }: SngLandingProps) {
+  const canWriteFolders = useSupportsDirectoryPicker();
   const handleModify = useCallback(async () => {
     try {
       const files = await pickFiles({
@@ -97,9 +100,17 @@ export default function SngLanding({
               Convert Folder to SNG
             </CardTitle>
             <CardDescription>
-              Convert a folder of charts to .sng Every chart inside is converted
-              to a <code>.sng</code> saved next to it. Existing{' '}
+              Convert a folder of charts to .sng. Every chart inside is
+              converted to a <code>.sng</code> saved next to it. Existing{' '}
               <code>.sng</code> files are left as they are.
+              {canWriteFolders ? null : (
+                <DownloadFallbackNotice
+                  className="mt-2"
+                  folder="the folder you pick"
+                  action="They come in a .zip. Unzip it into that folder."
+                  browserIsReason
+                />
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
