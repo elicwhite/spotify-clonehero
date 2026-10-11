@@ -170,6 +170,8 @@ const defaultPreviewProps = {
 beforeEach(() => {
   mockDownloadSong.mockClear();
   mockDismissRadarSong.mockClear();
+  // jsdom has no File System Access API; most tests run as a browser with it.
+  window.showDirectoryPicker = jest.fn() as typeof window.showDirectoryPicker;
 });
 
 it('renders relevance order, expands chart variants, and installs a chart', async () => {

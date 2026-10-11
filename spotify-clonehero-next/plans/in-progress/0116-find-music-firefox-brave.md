@@ -1,6 +1,6 @@
 # 0116 — /find-music in Firefox and Brave
 
-Status: todo
+Status: in-progress
 
 > Revised after a contrarian review. The first draft had a wrong
 > `createWritable` table, proposed a `FileEntry[]` Spotify import that would

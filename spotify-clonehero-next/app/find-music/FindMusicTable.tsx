@@ -29,7 +29,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {cn} from '@/lib/utils';
+import {toast} from 'sonner';
 import {downloadSong} from '@/lib/local-songs-folder';
+import {
+  NO_FOLDER_PICKER_MESSAGE,
+  supportsDirectoryPicker,
+} from '@/lib/file-access/capabilities';
 import MusicPreviewButton, {
   type MusicPreviewProvider,
 } from '@/components/MusicPreviewButton';
@@ -150,6 +155,10 @@ export default function FindMusicTable({
   }, []);
 
   const install = useCallback(async (chart: FindMusicChart) => {
+    if (!supportsDirectoryPicker()) {
+      toast.error(NO_FOLDER_PICKER_MESSAGE);
+      return;
+    }
     setDownloadStates(current => ({...current, [chart.md5]: 'downloading'}));
     try {
       const result = await downloadSong(

@@ -6,7 +6,6 @@ import Link from 'next/link';
 import {usePathname} from 'next/navigation';
 import {toast} from 'sonner';
 import type {User} from '@supabase/supabase-js';
-import SupportedBrowserWarning from '../SupportedBrowserWarning';
 import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
 import {createClient} from '@/lib/supabase/client';
 import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
@@ -33,6 +32,10 @@ import {
   scanSongsDirectory,
   tryGetSongsDirectoryHandle,
 } from '@/lib/local-songs-folder';
+import {
+  NO_FOLDER_PICKER_MESSAGE,
+  supportsDirectoryPicker,
+} from '@/lib/file-access/capabilities';
 import {Button} from '@/components/ui/button';
 import {
   Sheet,
@@ -444,8 +447,8 @@ export default function FindMusicClient() {
   }, [activateSourceAccessForNavigation, supabase, user, view]);
 
   const runHistoryRefresh = useCallback(async () => {
-    if (!('showDirectoryPicker' in window)) {
-      toast.error('This browser cannot open local folders');
+    if (!supportsDirectoryPicker()) {
+      toast.error(NO_FOLDER_PICKER_MESSAGE);
       return;
     }
     activateSourceAccess();
@@ -579,6 +582,10 @@ export default function FindMusicClient() {
 
   const runRequestedScan = useCallback(
     async (getHandle: () => Promise<FileSystemDirectoryHandle | null>) => {
+      if (!supportsDirectoryPicker()) {
+        toast.error(NO_FOLDER_PICKER_MESSAGE);
+        return;
+      }
       activateSourceAccess();
       setLocalStatus({phase: 'loading', summary: 'Waiting for Songs folder…'});
       await runScan(getHandle, {announceFailure: true});
@@ -747,164 +754,162 @@ export default function FindMusicClient() {
     onRefreshChorus: loadCatalog,
   };
 
+  // `pt-12 sm:pt-0` is a page-specific mobile affordance, not a gutter
+  // workaround: it clears the floating account control on small screens. The
+  // outer gutter is `SiteMain`'s to give or withhold, and this route is
+  // registered there as full-bleed.
   return (
-    <SupportedBrowserWarning>
-      {/* `pt-12 sm:pt-0` is a page-specific mobile affordance, not a gutter
-          workaround: it clears the floating account control on small
-          screens. The outer gutter is `SiteMain`'s to give or withhold, and
-          this route is registered there as full-bleed. */}
-      <div
-        data-testid="find-music-page"
-        className="flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
-        <header className="border-b px-3 py-3 md:px-5">
-          <div className="flex items-center gap-2.5">
-            <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="-ml-1 h-8 w-8 shrink-0 lg:hidden"
-                  aria-label="Open filters and sources">
-                  <Menu className="h-5 w-5" aria-hidden="true" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="w-[min(92vw,340px)] gap-0 overflow-hidden p-0 sm:max-w-[340px]">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Find music controls</SheetTitle>
-                  <SheetDescription>
-                    Browse results, filter songs, and connect music sources.
-                  </SheetDescription>
-                </SheetHeader>
-                <FindMusicSidebar
-                  {...sourceProps}
-                  variant="drawer"
-                  view={view}
-                  onViewChange={closeMobileSidebar}
-                  filters={filters}
-                  onFiltersChange={setFilters}
-                  onClearFilters={clearFilters}
-                  musicCount={committed.music.length}
-                  radarCount={committed.radar.length}
-                />
-              </SheetContent>
-            </Sheet>
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h1 className="text-base font-semibold tracking-tight">
-                Find charts for music you love
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Matches your listening data against Chorus.
-              </p>
-            </div>
-          </div>
-        </header>
-        <div
-          data-testid="find-music-layout"
-          className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[292px_minmax(0,1fr)]">
-          <div
-            data-testid="find-music-desktop-sidebar"
-            className="hidden min-h-0 lg:block">
-            <FindMusicSidebar
-              {...sourceProps}
-              view={view}
-              onViewChange={closeMobileSidebar}
-              filters={filters}
-              onFiltersChange={setFilters}
-              onClearFilters={clearFilters}
-              musicCount={committed.music.length}
-              radarCount={committed.radar.length}
-            />
-          </div>
-          <section
-            aria-label="Find music results"
-            data-testid="find-music-results"
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4 md:p-5">
-            {initializing || catalogState === 'refreshing' ? (
-              <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border bg-card p-8">
-                <div className="text-center">
-                  <Sparkles className="mx-auto mb-3 h-6 w-6 animate-pulse text-primary" />
-                  <p className="font-medium">
-                    {initializing
-                      ? 'Opening your local music index'
-                      : chorusError
-                        ? 'Could not refresh your Chorus index'
-                        : 'Refreshing your Chorus index'}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {initializing
-                      ? 'Reading the shared OPFS SQLite database…'
-                      : (chorusError ??
-                        'Updating chart metadata before showing your matches…')}
-                  </p>
-                </div>
-              </div>
-            ) : catalogState === 'degraded' ? (
-              <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border border-destructive/40 bg-card p-8">
-                <div className="text-center">
-                  <Sparkles className="mx-auto mb-3 h-6 w-6 text-destructive" />
-                  <p className="font-medium">
-                    {databaseUnavailable
-                      ? 'This browser cannot open its song library'
-                      : 'Your Chorus index needs a refresh'}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {databaseUnavailable
-                      ? 'The database this page keeps in your browser is in a state it cannot repair, so no source can load. Resetting it clears the stored song library — not your charts, your audio or your Songs folder — and it fills again on the next visit.'
-                      : 'The stored catalog could not be updated, so its instrument metadata is being kept hidden until the refresh succeeds.'}
-                  </p>
-                  {/* Without this the card says only that something failed.
-                      Diagnosing the first report of one cost a Discord thread
-                      and a screenshot of the reporter's console. */}
-                  {chorusError ? (
-                    <p className="mt-2 text-sm break-words text-destructive">
-                      {chorusError}
-                    </p>
-                  ) : null}
-                  {databaseUnavailable ? (
-                    // Straight to the row that holds the reset. Retrying is
-                    // what a user does instead when offered it, and this
-                    // failure answers every retry the same way.
-                    <Button asChild type="button" className="mt-4">
-                      <Link href={LOCAL_DB_RESET_PATH}>
-                        Reset the song library
-                      </Link>
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      className="mt-4"
-                      onClick={() => void loadCatalog()}>
-                      Try again
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ) : committed.music.length === 0 &&
-              stats.historySongs === 0 &&
-              stats.libraryTracks === 0 ? (
-              <FindMusicWelcome {...sourceProps} />
-            ) : (
-              <FindMusicTable
+    <div
+      data-testid="find-music-page"
+      className="flex min-h-0 w-full flex-1 flex-col overflow-hidden pt-12 sm:pt-0">
+      <header className="border-b px-3 py-3 md:px-5">
+        <div className="flex items-center gap-2.5">
+          <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="-ml-1 h-8 w-8 shrink-0 lg:hidden"
+                aria-label="Open filters and sources">
+                <Menu className="h-5 w-5" aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent
+              side="left"
+              className="w-[min(92vw,340px)] gap-0 overflow-hidden p-0 sm:max-w-[340px]">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Find music controls</SheetTitle>
+                <SheetDescription>
+                  Browse results, filter songs, and connect music sources.
+                </SheetDescription>
+              </SheetHeader>
+              <FindMusicSidebar
+                {...sourceProps}
+                variant="drawer"
                 view={view}
-                music={committed.music}
-                radar={committed.radar}
+                onViewChange={closeMobileSidebar}
                 filters={filters}
-                radarLoading={view === 'radar' && busy}
-                spotifyPreviewEnabled={spotifyPreviewAvailable}
-                appleMusicClient={appleMusicSource.client}
-                preferredPreviewProvider={
-                  appleMusicSource.preferredPreviewProvider
-                }
+                onFiltersChange={setFilters}
                 onClearFilters={clearFilters}
+                musicCount={committed.music.length}
+                radarCount={committed.radar.length}
               />
-            )}
-          </section>
+            </SheetContent>
+          </Sheet>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="text-base font-semibold tracking-tight">
+              Find charts for music you love
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Matches your listening data against Chorus.
+            </p>
+          </div>
         </div>
+      </header>
+      <div
+        data-testid="find-music-layout"
+        className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[292px_minmax(0,1fr)]">
+        <div
+          data-testid="find-music-desktop-sidebar"
+          className="hidden min-h-0 lg:block">
+          <FindMusicSidebar
+            {...sourceProps}
+            view={view}
+            onViewChange={closeMobileSidebar}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onClearFilters={clearFilters}
+            musicCount={committed.music.length}
+            radarCount={committed.radar.length}
+          />
+        </div>
+        <section
+          aria-label="Find music results"
+          data-testid="find-music-results"
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4 md:p-5">
+          {initializing || catalogState === 'refreshing' ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border bg-card p-8">
+              <div className="text-center">
+                <Sparkles className="mx-auto mb-3 h-6 w-6 animate-pulse text-primary" />
+                <p className="font-medium">
+                  {initializing
+                    ? 'Opening your local music index'
+                    : chorusError
+                      ? 'Could not refresh your Chorus index'
+                      : 'Refreshing your Chorus index'}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {initializing
+                    ? 'Reading the shared OPFS SQLite database…'
+                    : (chorusError ??
+                      'Updating chart metadata before showing your matches…')}
+                </p>
+              </div>
+            </div>
+          ) : catalogState === 'degraded' ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border border-destructive/40 bg-card p-8">
+              <div className="text-center">
+                <Sparkles className="mx-auto mb-3 h-6 w-6 text-destructive" />
+                <p className="font-medium">
+                  {databaseUnavailable
+                    ? 'This browser cannot open its song library'
+                    : 'Your Chorus index needs a refresh'}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {databaseUnavailable
+                    ? 'The database this page keeps in your browser is in a state it cannot repair, so no source can load. Resetting it clears the stored song library — not your charts, your audio or your Songs folder — and it fills again on the next visit.'
+                    : 'The stored catalog could not be updated, so its instrument metadata is being kept hidden until the refresh succeeds.'}
+                </p>
+                {/* Without this the card says only that something failed.
+                    Diagnosing the first report of one cost a Discord thread
+                    and a screenshot of the reporter's console. */}
+                {chorusError ? (
+                  <p className="mt-2 text-sm break-words text-destructive">
+                    {chorusError}
+                  </p>
+                ) : null}
+                {databaseUnavailable ? (
+                  // Straight to the row that holds the reset. Retrying is
+                  // what a user does instead when offered it, and this
+                  // failure answers every retry the same way.
+                  <Button asChild type="button" className="mt-4">
+                    <Link href={LOCAL_DB_RESET_PATH}>
+                      Reset the song library
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    className="mt-4"
+                    onClick={() => void loadCatalog()}>
+                    Try again
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : committed.music.length === 0 &&
+            stats.historySongs === 0 &&
+            stats.libraryTracks === 0 ? (
+            <FindMusicWelcome {...sourceProps} />
+          ) : (
+            <FindMusicTable
+              view={view}
+              music={committed.music}
+              radar={committed.radar}
+              filters={filters}
+              radarLoading={view === 'radar' && busy}
+              spotifyPreviewEnabled={spotifyPreviewAvailable}
+              appleMusicClient={appleMusicSource.client}
+              preferredPreviewProvider={
+                appleMusicSource.preferredPreviewProvider
+              }
+              onClearFilters={clearFilters}
+            />
+          )}
+        </section>
       </div>
-    </SupportedBrowserWarning>
+    </div>
   );
 }
 

@@ -32,11 +32,6 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
 }));
 
-jest.mock('../../SupportedBrowserWarning', () => ({
-  __esModule: true,
-  default: ({children}: {children: React.ReactNode}) => <>{children}</>,
-}));
-
 type MockAuthUser = {identities?: Array<{provider: string}>} | null;
 const mockGetUser = jest.fn(
   async (): Promise<{data: {user: MockAuthUser}}> => ({data: {user: null}}),
@@ -361,6 +356,18 @@ beforeEach(() => {
   mockGetRadarSongs.mockResolvedValue([]);
   mockRefreshChorus.mockImplementation(async () => []);
   releaseRefresh = () => {};
+  // jsdom has no File System Access API; most tests run as a browser with it.
+  window.showDirectoryPicker = jest.fn() as typeof window.showDirectoryPicker;
+});
+
+it('opens the page in a browser with no folder picker', async () => {
+  Reflect.deleteProperty(window, 'showDirectoryPicker');
+  mockGetFindMusicSongs.mockResolvedValue([song('alpha', 'Alpha')]);
+
+  render(<FindMusicClient />);
+
+  expect(await screen.findByTestId('music-table')).toBeInTheDocument();
+  expect(screen.getByTestId('find-music-page')).toBeInTheDocument();
 });
 
 it('tells the user to try again later when Chorus is unavailable', async () => {
