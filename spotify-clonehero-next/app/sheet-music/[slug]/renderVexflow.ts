@@ -54,6 +54,8 @@ const MIN_STAVE_WIDTH = 250;
 const MAX_STAVE_WIDTH = 600;
 const MAX_STAVES_PER_ROW = 4;
 const MIN_STAVES_PER_ROW = 1;
+/** Space kept clear between a measure's last note and its bar line. */
+const MEASURE_TRAILING_PAD = 20;
 
 const NOTE_COLOR_MAP: {[key: string]: string} = {
   'e/4': '#ff793f', // orange
@@ -146,11 +148,23 @@ export function renderMusic(
     Math.floor(width / stavePerRow) - 1,
   );
 
+  const layout = layoutMeasures(
+    measures.map((measure, index) =>
+      requiredMeasureWidth(
+        measure,
+        index > 0 ? measures[index - 1] : undefined,
+      ),
+    ),
+    staveWidth / zoom,
+    stavePerRow,
+  );
+  const rowCount = layout.length > 0 ? layout[layout.length - 1].row + 1 : 0;
+
   renderer.resize(
     // This doesn't include zoom because the width is scaled already
-    width - 1, //staveWidth * stavePerRow + 10,
+    width - 1,
     // The height is scaled so that it doesn't crop the height of the sheet
-    (Math.ceil(measures.length / stavePerRow) * lineHeight + 50) * zoom,
+    (rowCount * lineHeight + 50) * zoom,
   );
 
   // Anchor SVG content to the top-left during any transient size
@@ -276,7 +290,7 @@ export function renderMusic(
 
         // Calculate current text end position in pixels
         // Estimate content width (typically about 70-80% of stave width after clefs, margins, etc.)
-        const estimatedContentWidth = staveWidth * 0.75;
+        const estimatedContentWidth = layout[measureIndex].width * zoom * 0.75;
         const currentEndX =
           combinedPosition * estimatedContentWidth + currentPixelWidth / 2;
 
@@ -324,9 +338,9 @@ export function renderMusic(
       context,
       measure,
       index,
-      ((index % stavePerRow) * staveWidth) / zoom,
-      Math.floor(index / stavePerRow) * lineHeight,
-      staveWidth / zoom,
+      layout[index].x,
+      layout[index].row * lineHeight,
+      layout[index].width,
       zoom,
       index === measures.length - 1,
       showBarNumbers,
@@ -346,6 +360,100 @@ export function renderMusic(
       noteMarkers,
     };
   });
+}
+
+export interface MeasureSlot {
+  row: number;
+  x: number;
+  width: number;
+}
+
+/**
+ * Places measures in rows of at most `perRow`, each `slotWidth` wide unless
+ * its content needs more. A measure that does not fit in the row goes to the
+ * next row, and each full row is stretched to fill `perRow * slotWidth`. A
+ * short last row keeps its natural widths. Widths are in unzoomed units.
+ */
+export function layoutMeasures(
+  requiredWidths: number[],
+  slotWidth: number,
+  perRow: number,
+): MeasureSlot[] {
+  const rowWidth = slotWidth * perRow;
+  const widths = requiredWidths.map(required =>
+    Math.min(rowWidth, Math.max(slotWidth, required)),
+  );
+  const rows: number[][] = [];
+  let current: number[] = [];
+  let used = 0;
+
+  widths.forEach((width, index) => {
+    if (
+      current.length > 0 &&
+      (current.length >= perRow || used + width > rowWidth + 1e-6)
+    ) {
+      rows.push(current);
+      current = [];
+      used = 0;
+    }
+
+    current.push(index);
+    used += width;
+  });
+
+  if (current.length > 0) {
+    rows.push(current);
+  }
+
+  const slots: MeasureSlot[] = [];
+
+  rows.forEach((indices, row) => {
+    const natural = indices.reduce((sum, index) => sum + widths[index], 0);
+    const isShortLastRow = row === rows.length - 1 && indices.length < perRow;
+    const scale = isShortLastRow ? 1 : rowWidth / natural;
+    let x = 0;
+
+    indices.forEach(index => {
+      const width = widths[index] * scale;
+
+      slots[index] = {row, x, width};
+      x += width;
+    });
+  });
+
+  return slots;
+}
+
+/**
+ * The narrowest stave that fits this measure's header (clef, time signature)
+ * and notes without crowding, in unzoomed units.
+ */
+function requiredMeasureWidth(
+  measure: Measure,
+  previousMeasure: Measure | undefined,
+): number {
+  const stave = new Stave(0, 0, MAX_STAVE_WIDTH);
+
+  if (measure.hasClef) {
+    stave.addClef('percussion');
+  }
+  if (measure.sigChange) {
+    stave.addTimeSignature(
+      `${measure.timeSig.numerator}/${measure.timeSig.denominator}`,
+    );
+  }
+
+  const headerOffset = stave.getNoteStartX() - stave.getX();
+  const {voice} = buildVoice(measure, previousMeasure, false, false);
+  const minNoteWidth = new Formatter()
+    .joinVoices([voice])
+    .preCalculateMinTotalWidth([voice]);
+
+  return (
+    headerOffset +
+    (Number.isFinite(minNoteWidth) ? minNoteWidth : 0) +
+    MEASURE_TRAILING_PAD
+  );
 }
 
 export function createConsolidatedTimePositionMap(
@@ -540,27 +648,18 @@ function renderMeasure(
     flag: 'measure-start',
   });
 
-  // Check if this measure is a repeat of the previous measure (excluding rest-only measures)
-  const isRepeat =
-    previousMeasure &&
-    measureRenderKey(measure) === measureRenderKey(previousMeasure) &&
-    !measureIsOnlyRests(measure) &&
-    !measureIsOnlyRests(previousMeasure);
+  const built = buildVoice(measure, previousMeasure, enableColors, shouldMute);
+  const headerOffset = stave.getNoteStartX() - stave.getX();
 
-  if (isRepeat) {
-    // Render repeat symbol instead of notes using VexFlow's RepeatNote
-    const repeatSymbol = new RepeatNote('1');
+  new Formatter()
+    .joinVoices([built.voice])
+    .format(
+      [built.voice],
+      Math.max(1, staveWidth - headerOffset - MEASURE_TRAILING_PAD),
+    );
+  built.voice.draw(context, stave);
 
-    const voice = new Voice({
-      num_beats: measure.timeSig.numerator,
-      beat_value: measure.timeSig.denominator,
-    })
-      .setStrict(false)
-      .addTickables([repeatSymbol]);
-
-    new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
-    voice.draw(context, stave);
-
+  if (built.kind === 'repeat') {
     timePositionMap.push({
       ms: measure.endMs,
       x: stave.getTieEndX() * zoom,
@@ -571,7 +670,107 @@ function renderMeasure(
     return stave;
   }
 
-  // Original note rendering logic
+  const {notes, beams, tuplets: drawableTuplets} = built;
+
+  // `notes` is built 1:1 from `measure.notes`, so the shared index pairs each
+  // drawn StaveNote with its source note.
+  notes.forEach((staveNote, index) => {
+    if (staveNote.isRest()) {
+      return;
+    }
+
+    const source = measure.notes[index];
+
+    timePositionMap.push({
+      ms: source.ms,
+      x: staveNote.getNoteHeadBeginX() * zoom,
+      y: stave.getY() * zoom,
+      flag: 'note',
+    });
+
+    // Per-notehead markers for the drum-fills practice overlay. getYs()
+    // returns one y per notehead (top→bottom, matching the key order); pair
+    // each with its source fill-note id. x is the notehead's centre.
+    if (noteMarkers) {
+      const ys = staveNote.getYs();
+      const headX = staveNote.getNoteHeadBeginX();
+      const headWidth = staveNote.getNoteHeadEndX() - headX;
+      const centreX = headX + headWidth / 2;
+      const pushMarker = (id: string | null, y: number) => {
+        if (id != null) {
+          noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
+        }
+      };
+
+      source.noteIds.forEach((id, i) =>
+        pushMarker(id, ys[i] ?? ys[ys.length - 1] ?? stave.getY()),
+      );
+      // Flam grace notes carry their own ids; anchor their markers to the
+      // main notehead so their feedback dot lands on the flam it belongs to.
+      source.graceNoteIds
+        ?.flat()
+        .forEach(id => pushMarker(id, ys[0] ?? stave.getY()));
+    }
+  });
+
+  timePositionMap.push({
+    ms: measure.endMs,
+    x: stave.getTieEndX() * zoom,
+    y: stave.getY() * zoom,
+    flag: 'measure-end',
+  });
+
+  beams.forEach(b => {
+    b.setContext(context).draw();
+  });
+
+  drawableTuplets.forEach(tuplet => {
+    tuplet.setContext(context).draw();
+  });
+
+  drawAccents(context, stave, measure, notes, enableColors, shouldMute);
+
+  return stave;
+}
+
+type BuiltVoice =
+  | {kind: 'repeat'; voice: Voice}
+  | {
+      kind: 'notes';
+      voice: Voice;
+      notes: StaveNote[];
+      beams: Beam[];
+      tuplets: Tuplet[];
+    };
+
+/**
+ * The measure's VexFlow voice, not yet formatted or drawn. A measure that
+ * draws the same as the one before it (and is not all rests) becomes a
+ * repeat sign.
+ */
+function buildVoice(
+  measure: Measure,
+  previousMeasure: Measure | undefined,
+  enableColors: boolean,
+  shouldMute: boolean,
+): BuiltVoice {
+  const isRepeat =
+    previousMeasure &&
+    measureRenderKey(measure) === measureRenderKey(previousMeasure) &&
+    !measureIsOnlyRests(measure) &&
+    !measureIsOnlyRests(previousMeasure);
+
+  if (isRepeat) {
+    const voice = new Voice({
+      num_beats: measure.timeSig.numerator,
+      beat_value: measure.timeSig.denominator,
+    })
+      .setStrict(false)
+      .addTickables([new RepeatNote('1')]);
+
+    return {kind: 'repeat', voice};
+  }
+
   const tupletGroups = new Map<number, StaveNote[]>();
 
   const notes = measure.notes.map(note => {
@@ -668,69 +867,7 @@ function renderMeasure(
       : {}),
   });
 
-  new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
-
-  voice.draw(context, stave);
-
-  // `notes` is built 1:1 from `measure.notes`, so the shared index pairs each
-  // drawn StaveNote with its source note.
-  notes.forEach((staveNote, index) => {
-    if (staveNote.isRest()) {
-      return;
-    }
-
-    const source = measure.notes[index];
-
-    timePositionMap.push({
-      ms: source.ms,
-      x: staveNote.getNoteHeadBeginX() * zoom,
-      y: stave.getY() * zoom,
-      flag: 'note',
-    });
-
-    // Per-notehead markers for the drum-fills practice overlay. getYs()
-    // returns one y per notehead (top→bottom, matching the key order); pair
-    // each with its source fill-note id. x is the notehead's centre.
-    if (noteMarkers) {
-      const ys = staveNote.getYs();
-      const headX = staveNote.getNoteHeadBeginX();
-      const headWidth = staveNote.getNoteHeadEndX() - headX;
-      const centreX = headX + headWidth / 2;
-      const pushMarker = (id: string | null, y: number) => {
-        if (id != null) {
-          noteMarkers.push({noteId: id, x: centreX * zoom, y: y * zoom});
-        }
-      };
-
-      source.noteIds.forEach((id, i) =>
-        pushMarker(id, ys[i] ?? ys[ys.length - 1] ?? stave.getY()),
-      );
-      // Flam grace notes carry their own ids; anchor their markers to the
-      // main notehead so their feedback dot lands on the flam it belongs to.
-      source.graceNoteIds
-        ?.flat()
-        .forEach(id => pushMarker(id, ys[0] ?? stave.getY()));
-    }
-  });
-
-  timePositionMap.push({
-    ms: measure.endMs,
-    x: stave.getTieEndX() * zoom,
-    y: stave.getY() * zoom,
-    flag: 'measure-end',
-  });
-
-  beams.forEach(b => {
-    b.setContext(context).draw();
-  });
-
-  drawableTuplets.forEach(tuplet => {
-    tuplet.setContext(context).draw();
-  });
-
-  drawAccents(context, stave, measure, notes, enableColors, shouldMute);
-
-  return stave;
+  return {kind: 'notes', voice, notes, beams, tuplets: drawableTuplets};
 }
 
 function drawAccentGlyph(
