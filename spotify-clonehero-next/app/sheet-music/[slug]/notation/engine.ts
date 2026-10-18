@@ -92,6 +92,9 @@ const W_VAR = 1.0;
 const W_EVT = 0.5;
 const W_SPLIT = 0.5;
 const LAMBDA = 35;
+// A tuplet that moves hits is worse than a binary grid that moves them the
+// same amount, so its distortion counts this many times over.
+const TUPLET_DISTORTION_WEIGHT = 3;
 const KEY_LETTERS = ['c', 'd', 'e', 'f', 'g', 'a', 'b'];
 
 function keyPitch(key: string) {
@@ -253,7 +256,10 @@ function candidateCost(candidate: Candidate, beatTicks: number): number {
     ? candidate.dispSum / candidate.onsetCount / beatTicks
     : 0;
 
-  return candidate.complexity + LAMBDA * distortion;
+  const distortionWeight =
+    candidate.tuplets.length > 0 ? LAMBDA * TUPLET_DISTORTION_WEIGHT : LAMBDA;
+
+  return candidate.complexity + distortionWeight * distortion;
 }
 
 function restFill(startTick: number, fraction: number): Candidate {
