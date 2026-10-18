@@ -187,6 +187,46 @@ describe('measure creation', () => {
     ]);
   });
 
+  it('starts the new meter on its own tick after a mid-measure change', () => {
+    // 6/4 bars are 1152 ticks; the 4/4 change lands two beats into bar 2.
+    const measures = parse({
+      timeSignatures: [
+        {tick: 0, numerator: 6, denominator: 4},
+        {tick: 1536, numerator: 4, denominator: 4},
+      ],
+      groups: [group(0, SNARE), group(1536, KICK), group(2304, KICK)],
+    });
+
+    expect(measures.map(m => [m.startTick, m.endTick])).toEqual([
+      [0, 1152],
+      [1152, 1536],
+      [1536, 2304],
+      [2304, 3072],
+    ]);
+    expect(measures[2].timeSig.numerator).toBe(4);
+    expect(measures[2].sigChange).toBe(true);
+    expect(measures[2].notes[0]).toMatchObject({tick: 1536, isRest: false});
+    expect(measures[3].notes[0]).toMatchObject({tick: 2304, isRest: false});
+  });
+
+  it('writes a cut-short measure in full but ends its beats at the change', () => {
+    const measures = parse({
+      timeSignatures: [
+        {tick: 0, numerator: 6, denominator: 4},
+        {tick: 1536, numerator: 4, denominator: 4},
+      ],
+      groups: [group(0, SNARE), group(1152, SNARE), group(1536, KICK)],
+    });
+    const cutShort = measures[1];
+
+    expect(measureFilledFraction(cutShort)).toBeCloseTo(6 / 4);
+    expect(cutShort.beats).toEqual([
+      {startTick: 1152, endTick: 1344},
+      {startTick: 1344, endTick: 1536},
+    ]);
+    expect(cutShort.endMs).toBeLessThanOrEqual(measures[2].startMs);
+  });
+
   it('handles a compound 6/8 meter', () => {
     const measures = parse({
       resolution: 192,

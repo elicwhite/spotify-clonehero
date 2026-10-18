@@ -153,15 +153,20 @@ class Parser {
     sigs.forEach((timeSig, index) => {
       const meter = makeMeter(timeSig.numerator, timeSig.denominator, this.ppq);
       const measureTicks = meter.beatsPerMeasure * meter.beatTicks;
-      const sectionTicks =
-        (sigs[index + 1]?.tick ?? this.endOfTrackTicks) - timeSig.tick;
+      const nextSigTick = sigs[index + 1]?.tick;
+      const sectionTicks = (nextSigTick ?? this.endOfTrackTicks) - timeSig.tick;
       const numberOfMeasures = Math.max(
         0,
         Math.ceil(sectionTicks / measureTicks - 1e-9),
       );
 
       for (let measure = 0; measure < numberOfMeasures; measure += 1) {
-        const endTick = startTick + measureTicks;
+        // A sig change that lands mid-measure cuts this measure short: it is
+        // still written as a full measure, but it only lasts until the change.
+        const endTick = Math.min(
+          startTick + measureTicks,
+          nextSigTick ?? Infinity,
+        );
 
         this.measures.push({
           timeSig,
@@ -178,11 +183,19 @@ class Parser {
             .fill(null)
             .map((_, beatIndex) => ({
               startTick: startTick + beatIndex * meter.beatTicks,
-              endTick: startTick + (beatIndex + 1) * meter.beatTicks,
-            })),
+              endTick: Math.min(
+                startTick + (beatIndex + 1) * meter.beatTicks,
+                endTick,
+              ),
+            }))
+            .filter(beat => beat.startTick < endTick),
         });
         startTick += measureTicks;
       }
+
+      // Start the next section on its sig's tick, so a mid-measure change does
+      // not shift every later bar line.
+      startTick = nextSigTick ?? startTick;
     });
   }
 
@@ -220,7 +233,7 @@ class Parser {
       measure.notes = mergeMeasureRests(
         notes,
         measure.startTick,
-        measure.endTick - measure.startTick,
+        meter.beatsPerMeasure * meter.beatTicks,
         this.ppq,
         meter.beatsPerMeasure % 2 === 0,
       );
