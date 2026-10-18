@@ -393,6 +393,21 @@ describe('rhythm notation', () => {
     expect(ticks).toContain(160);
     expect(ticks).toContain(176);
   });
+
+  it('keeps a partially filled sextuplet on its grid instead of snapping to sixteenths', () => {
+    const measures = parse({
+      groups: [
+        group(0, SNARE),
+        group(64, SNARE),
+        group(96, SNARE),
+        group(128, SNARE),
+      ],
+    });
+    const measure = measures[0];
+
+    expect(nonRest(measure).map(n => n.tick)).toEqual([0, 64, 96, 128]);
+    expect(measure.tuplets.some(t => t.numNotes === 6)).toBe(true);
+  });
 });
 
 describe('coincidence resolution', () => {

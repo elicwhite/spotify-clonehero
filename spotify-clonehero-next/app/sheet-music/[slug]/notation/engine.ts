@@ -420,7 +420,11 @@ function notateSpan(
     // Only use a quintuplet/septuplet when the onsets actually fill it; a prime
     // tuplet held loosely (e.g. 6 even notes forced into a 7:4) is a misfit that
     // should decompose or use a binary grid instead.
-    if (info.tuplet && divisions >= 5 && onsets.length < divisions) {
+    if (
+      info.tuplet &&
+      (divisions === 5 || divisions === 7) &&
+      onsets.length < divisions
+    ) {
       return;
     }
 
