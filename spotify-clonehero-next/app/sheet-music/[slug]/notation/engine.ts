@@ -91,7 +91,7 @@ const W_FINE = 2.0;
 const W_VAR = 1.0;
 const W_EVT = 0.5;
 const W_SPLIT = 0.5;
-const LAMBDA = 15;
+const LAMBDA = 35;
 const KEY_LETTERS = ['c', 'd', 'e', 'f', 'g', 'a', 'b'];
 
 function keyPitch(key: string) {

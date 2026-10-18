@@ -383,6 +383,16 @@ describe('rhythm notation', () => {
     expect(measure.notes[0].isRest).toBe(true);
     expect(measure.notes[0].tick).toBe(0);
   });
+
+  it('places thirty-second-triplet onsets exactly without displacing them', () => {
+    const measures = parse({
+      groups: [group(0, SNARE), group(160, SNARE), group(176, SNARE)],
+    });
+    const ticks = nonRest(measures[0]).map(n => n.tick);
+
+    expect(ticks).toContain(160);
+    expect(ticks).toContain(176);
+  });
 });
 
 describe('coincidence resolution', () => {
