@@ -171,9 +171,16 @@ function resolveCluster(cluster: Onset[]): Onset {
     return cluster[0];
   }
 
-  const occurrences = cluster.flatMap(onset =>
-    onset.heads.map(head => ({tick: onset.tick, head})),
-  );
+  // Grace chords an onset already carries come just before it, in order.
+  const occurrences = cluster.flatMap(onset => [
+    ...(onset.graceChords ?? []).flatMap((chord, index, chords) =>
+      chord.map(head => ({
+        tick: onset.tick - (chords.length - index) * 1e-3,
+        head,
+      })),
+    ),
+    ...onset.heads.map(head => ({tick: onset.tick, head})),
+  ]);
   // For each drum, its latest occurrence is the main hit; earlier repeats of the
   // same drum become grace notes.
   const lastTickByKey = new Map<string, number>();
@@ -274,6 +281,35 @@ function restFill(startTick: number, fraction: number): Candidate {
   };
 }
 
+/**
+ * The span's onsets written as one note at its start: a chord, with earlier
+ * repeats of a drum as grace notes. Used when no grid and no split can give
+ * each onset its own slot, which happens when two onsets sit in neighbouring
+ * finest-grid slots inside a span too short to hold both. Every onset counts
+ * toward the displacement, so this only wins when nothing else can.
+ */
+function mergedFill(
+  onsets: Onset[],
+  startTick: number,
+  fraction: number,
+): Candidate {
+  const merged = resolveCluster(onsets);
+  const named = namedDuration(fraction) ?? {duration: 'q', dots: 0};
+  const tick = Math.round(startTick);
+  const events = [hitNote(merged, tick, named.duration, named.dots)];
+
+  return {
+    events,
+    tuplets: [],
+    complexity: complexityOf(events),
+    dispSum: onsets.reduce(
+      (sum, onset) => sum + Math.abs(onset.tick - tick),
+      0,
+    ),
+    onsetCount: onsets.length,
+  };
+}
+
 function hitNote(
   onset: Onset,
   tick: number,
@@ -367,6 +403,10 @@ function buildGrid(
     );
   });
 
+  if (events.filter(event => !event.isRest).length !== onsets.length) {
+    return null;
+  }
+
   const tuplets: TupletMeta[] = [];
 
   if (info.tuplet && events.length > 1) {
@@ -394,8 +434,9 @@ function buildGrid(
 /**
  * Best notation of one span: try every whole-span grid the meter offers, plus a
  * recursive split into halves, and keep the lowest-cost candidate. Completeness
- * is structural — every candidate gives each onset its own slot, so a note is
- * never dropped regardless of which candidate wins.
+ * is structural — every candidate writes every onset (in its own slot, or
+ * merged into one chord by mergedFill), so a note is never dropped regardless
+ * of which candidate wins.
  */
 function notateSpan(
   onsets: Onset[],
@@ -493,21 +534,7 @@ function notateSpan(
   }
 
   if (candidates.length === 0) {
-    // Unreachable in practice: the resolver guarantees the finest grid separates
-    // every onset. Fall back to it regardless of the spacing floor.
-    const finest = Math.max(...Object.keys(divisors).map(Number));
-
-    return (
-      buildGrid(
-        onsets,
-        startTick,
-        durationTicks,
-        fraction,
-        finest,
-        divisors[finest],
-        nextId,
-      ) ?? restFill(startTick, fraction)
-    );
+    return mergedFill(onsets, startTick, fraction);
   }
 
   return candidates.reduce((best, candidate) =>

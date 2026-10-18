@@ -482,6 +482,34 @@ describe('coincidence resolution', () => {
 
     expect(hitKeys(measures)).toEqual(['c/5', 'c/5', 'f/4', 'f/4']);
   });
+
+  // From a real chart: a kick and a hi-hat 20 ticks apart (at 960 ticks per
+  // beat) land in neighbouring 64th slots. Once a span is split down to one
+  // 64th, no grid can hold both, and the notation once dropped them.
+  it('keeps two hits in neighbouring 64th slots that no short span can hold', () => {
+    const measures = parse({
+      resolution: 960,
+      groups: [group(2006, KICK), group(2026, HIHAT)],
+    });
+
+    expect(hitKeys(measures)).toEqual(['f/4', 'g/5/x2']);
+  });
+
+  it('keeps every hit of a beat full of near-coincident hits', () => {
+    const groups = [
+      group(1930, SNARE),
+      group(1948, KICK),
+      group(1966, HIHAT),
+      group(2006, KICK),
+      group(2026, HIHAT),
+      group(2041, SNARE),
+    ];
+    const measures = parse({resolution: 960, groups});
+
+    expect(hitKeys(measures)).toEqual(
+      ['c/5', 'c/5', 'f/4', 'f/4', 'g/5/x2', 'g/5/x2'].sort(),
+    );
+  });
 });
 
 describe('dynamics', () => {
