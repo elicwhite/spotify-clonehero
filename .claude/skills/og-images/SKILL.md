@@ -1,12 +1,12 @@
 ---
 name: og-images
-description: Build and edit Open Graph / social card images for Music Charts Tools routes using the shared frame and tokens in lib/og (OgFrame, OgBrandRow, OgTitle, OgSubtitle, OgPanel, OgEyebrow, createToolOgImage, OG_TYPE, OG_COLORS, OG_LANES). Use this whenever adding a new route's opengraph-image.tsx, editing an existing social card, changing a card's title size, background, brand color, or lane colors, or debugging a card that renders wrong or blank. Also use it whenever writing next/og ImageResponse code in this repo, since Satori only supports a subset of CSS and raw hex or font sizes at the call site will fail a test.
+description: Build and edit Open Graph / social card images for Music Charts Tools routes using the shared frame and tokens in packages/core/src/og (OgFrame, OgBrandRow, OgTitle, OgSubtitle, OgPanel, OgEyebrow, createToolOgImage, OG_TYPE, OG_COLORS, OG_LANES). Use this whenever adding a new route's opengraph-image.tsx, editing an existing social card, changing a card's title size, background, brand color, or lane colors, or debugging a card that renders wrong or blank. Also use it whenever writing next/og ImageResponse code in this repo, since Satori only supports a subset of CSS and raw hex or font sizes at the call site will fail a test.
 ---
 
 # OG images
 
 Every route's social card is generated at request time by `next/og`. The frame,
-palette, and type scale live in `lib/og/`; a route file supplies only its own
+palette, and type scale live in `packages/core/src/og/`; a route file supplies only its own
 illustration, copy, and `alt`.
 
 Before this was consolidated there were two competing "brand backgrounds", five
@@ -20,8 +20,8 @@ that came back.
 panel:
 
 ```tsx
-import {createToolOgImage} from '@/lib/og/tool-og-image';
-import {OG_SIZE} from '@/lib/og/tokens';
+import {createToolOgImage} from '@musiccharts/core/og/tool-og-image';
+import {OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Turn a song into a draft drum chart';
 export const size = OG_SIZE;
@@ -52,8 +52,8 @@ import {
   OgPanel,
   OgSubtitle,
   OgTitle,
-} from '@/lib/og/layout';
-import {OG_SIZE} from '@/lib/og/tokens';
+} from '@musiccharts/core/og/layout';
+import {OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Spotify Chart Finder';
 export const size = OG_SIZE;
@@ -115,7 +115,7 @@ because Satori renders outside the DOM and cannot read CSS custom properties.
 OG cards are always dark, so the dark block is the one that governs.
 
 A test parses the stylesheet and pins both `OG_LANES` and
-`lib/landing/lanes.ts`'s `LANE_FALLBACKS` to it. **Change the colors in
+`packages/core/src/landing/lanes.ts`'s `LANE_FALLBACKS` to it. **Change the colors in
 `globals.css` and the test tells you which copies to update** — do not edit the
 constants alone.
 
@@ -131,7 +131,7 @@ Then look at the PNG. A card that renders blank or with collapsed layout is
 almost always a missing `display: flex`.
 
 ```bash
-pnpm jest lib/og
+pnpm jest packages/core/src/og
 ```
 
 checks that every route exports `OG_SIZE` as `size`, a non-empty `alt`,

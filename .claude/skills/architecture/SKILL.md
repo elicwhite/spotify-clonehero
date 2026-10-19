@@ -14,13 +14,13 @@ browser; there is no application backend beyond Supabase auth.
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Framework       | Next.js 16 (App Router) + React 19 + TypeScript (strict)                                                                                    |
 | Package manager | pnpm — 7-day `minimumReleaseAge`; dependency build scripts blocked by default, allowlisted in `pnpm-workspace.yaml` `onlyBuiltDependencies` |
-| Styling         | Tailwind CSS + shadcn/ui (Radix primitives in `components/ui/`)                                                                             |
+| Styling         | Tailwind CSS + shadcn/ui (Radix primitives in `packages/core/src/components/ui/`)                                                           |
 | State           | React `useState` / `useReducer` / context. No state library.                                                                                |
 | Database        | SQLocal (SQLite in OPFS) + Kysely                                                                                                           |
-| Charts          | `@eliwhite/scan-chart` (parse + write `.chart`/`.mid`), `parse-sng` (parse `.sng`); edit helpers in `lib/chart-edit/`                       |
-| 3D preview      | THREE.js highway renderer — `lib/preview/highway/`                                                                                          |
-| Audio           | `AudioManager` (`lib/preview/audioManager.ts`) — Web Audio API, multiple stems, speed control                                               |
-| Notation        | VexFlow (`lib/sheet-music/SheetMusic.tsx`)                                                                                                  |
+| Charts          | `@eliwhite/scan-chart` (parse + write `.chart`/`.mid`), `parse-sng` (parse `.sng`); edit helpers in `packages/core/src/chart-edit/`         |
+| 3D preview      | THREE.js highway renderer — `packages/core/src/preview/highway/`                                                                            |
+| Audio           | `AudioManager` (`packages/core/src/preview/audioManager.ts`) — Web Audio API, multiple stems, speed control                                 |
+| Notation        | VexFlow (`packages/core/src/sheet-music/SheetMusic.tsx`)                                                                                    |
 | Testing         | Jest                                                                                                                                        |
 | Auth            | Supabase                                                                                                                                    |
 

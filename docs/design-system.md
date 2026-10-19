@@ -31,26 +31,26 @@ page.
 
 ## 1. Marketing / landing pages
 
-Compose in this order. Everything lives in `components/landing/`.
+Compose in this order. Everything lives in `packages/core/src/components/landing/`.
 
-| Reach for | When | Notes |
-| --- | --- | --- |
-| `LandingPage` | The root of any page in this shell | Owns the measure (`max-w-4xl`), the section rhythm (`space-y-12`), the `.landing-lanes` colour scope, and the `TooltipProvider`. The provider is not optional: §6 requires every number to reach its own source, and `StatChip`/`StatCell` need a provider ancestor to do it. |
-| `LandingHero` | The first screenful | `{eyebrow, title, lede, trust?, illustration?, caption?}`. `title` is a `ReactNode` because titles carry content-bearing typography (`/drum-transcription` uses a non-breaking hyphen so "first-pass" cannot split). `trust` is optional: a tool page always has trust facts, a position page like `/why` does not. |
-| `ToolEntrySection` | The working entry screen | Carries `START_SECTION_ID`. A tool page opens the tool, so this sits above the explanation. |
-| `LandingSection` | Every other section | Title over a hairline rule, optional intro, optional body. |
-| `ComparisonTable` | Measuring against other tools | See variants below. |
-| `StepFlow` | An ordered pipeline of steps | |
-| `TrustLine` | The plain trust facts | Stated, never decorated. |
-| `Eyebrow` | The mono label above a heading | The "measurement voice": labels, numbers, provenance. |
-| `StatChip` / `InlineStat` / `StatCell` | Any measured figure | Chip, in-sentence, and table-cell sizes of the same thing. All three surface provenance. |
-| `ScrollToStartCta` | The closing call to action | Scrolls to `START_SECTION_ID`. Caller supplies only the verb. |
-| `ExternalLink` | Naming a third-party project | One definition, enforced by test. |
-| `SectionDropZone` | A file drop target inside a section | `onAudioFile` is optional; a chart-only tool omits it and audio drops get a chart-only rejection toast. |
-| `ToolEntryCard` | The card the tool's entry controls sit in | `{description?, footnote?, children}`. Owns `w-full` and the header/no-header padding; the four tool pages hand-built and drifted on this shape before it existed. |
-| `CardGrid` / `CardGridCell` | The hairline card grid (`gap-px` cells on `bg-border`) | Container string is owned here, enforced by test. Cells default to `p-5`; `StepFlow` uses the documented denser `gap-2 p-4` variant. |
-| `LandingProse` | A body paragraph inside a `LandingSection` | Same measure and `text-sm sm:text-base` ramp as the section intro, so body prose never renders a step smaller than the intro above it. |
-| `heroCanvasFrameClass` | The frame a hero illustration canvas draws inside | Height is the one knob: `'standard'` (`h-32 sm:h-40`) for one horizontal band, `'tall'` (`h-36 sm:h-44`) for stacked lanes. Owned string, enforced by test. |
+| Reach for                              | When                                                   | Notes                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LandingPage`                          | The root of any page in this shell                     | Owns the measure (`max-w-4xl`), the section rhythm (`space-y-12`), the `.landing-lanes` colour scope, and the `TooltipProvider`. The provider is not optional: §6 requires every number to reach its own source, and `StatChip`/`StatCell` need a provider ancestor to do it.                                       |
+| `LandingHero`                          | The first screenful                                    | `{eyebrow, title, lede, trust?, illustration?, caption?}`. `title` is a `ReactNode` because titles carry content-bearing typography (`/drum-transcription` uses a non-breaking hyphen so "first-pass" cannot split). `trust` is optional: a tool page always has trust facts, a position page like `/why` does not. |
+| `ToolEntrySection`                     | The working entry screen                               | Carries `START_SECTION_ID`. A tool page opens the tool, so this sits above the explanation.                                                                                                                                                                                                                         |
+| `LandingSection`                       | Every other section                                    | Title over a hairline rule, optional intro, optional body.                                                                                                                                                                                                                                                          |
+| `ComparisonTable`                      | Measuring against other tools                          | See variants below.                                                                                                                                                                                                                                                                                                 |
+| `StepFlow`                             | An ordered pipeline of steps                           |                                                                                                                                                                                                                                                                                                                     |
+| `TrustLine`                            | The plain trust facts                                  | Stated, never decorated.                                                                                                                                                                                                                                                                                            |
+| `Eyebrow`                              | The mono label above a heading                         | The "measurement voice": labels, numbers, provenance.                                                                                                                                                                                                                                                               |
+| `StatChip` / `InlineStat` / `StatCell` | Any measured figure                                    | Chip, in-sentence, and table-cell sizes of the same thing. All three surface provenance.                                                                                                                                                                                                                            |
+| `ScrollToStartCta`                     | The closing call to action                             | Scrolls to `START_SECTION_ID`. Caller supplies only the verb.                                                                                                                                                                                                                                                       |
+| `ExternalLink`                         | Naming a third-party project                           | One definition, enforced by test.                                                                                                                                                                                                                                                                                   |
+| `SectionDropZone`                      | A file drop target inside a section                    | `onAudioFile` is optional; a chart-only tool omits it and audio drops get a chart-only rejection toast.                                                                                                                                                                                                             |
+| `ToolEntryCard`                        | The card the tool's entry controls sit in              | `{description?, footnote?, children}`. Owns `w-full` and the header/no-header padding; the four tool pages hand-built and drifted on this shape before it existed.                                                                                                                                                  |
+| `CardGrid` / `CardGridCell`            | The hairline card grid (`gap-px` cells on `bg-border`) | Container string is owned here, enforced by test. Cells default to `p-5`; `StepFlow` uses the documented denser `gap-2 p-4` variant.                                                                                                                                                                                |
+| `LandingProse`                         | A body paragraph inside a `LandingSection`             | Same measure and `text-sm sm:text-base` ramp as the section intro, so body prose never renders a step smaller than the intro above it.                                                                                                                                                                              |
+| `heroCanvasFrameClass`                 | The frame a hero illustration canvas draws inside      | Height is the one knob: `'standard'` (`h-32 sm:h-40`) for one horizontal band, `'tall'` (`h-36 sm:h-44`) for stacked lanes. Owned string, enforced by test.                                                                                                                                                         |
 
 ### Documented variants
 
@@ -70,7 +70,7 @@ Compose in this order. Everything lives in `components/landing/`.
   `as="dt"` puts it on a definition list's terms (the difficulty pages' rule
   rows) without re-typing the metrics.
 - **Destructive treatments.** A failure that is the screen's current subject
-  gets `DestructiveNotice` (`components/DestructiveNotice.tsx`), the tinted
+  gets `DestructiveNotice` (`packages/core/src/components/DestructiveNotice.tsx`), the tinted
   callout panel with a title and a recovery action. A one-line supplementary
   error stays a plain `text-destructive` paragraph. The entry screens still
   disagree about which of the two a rejected chart package deserves; that
@@ -96,28 +96,28 @@ Compose in this order. Everything lives in `components/landing/`.
 
 ## 2. Open Graph images
 
-`lib/og/` is the only place a brand colour, gradient, or type size is written
+`packages/core/src/og/` is the only place a brand colour, gradient, or type size is written
 down for social cards. A route file contributes its own illustration, copy,
 and `alt`, and nothing else.
 
-| Reach for | Purpose |
-| --- | --- |
-| `lib/og/tokens.ts` | `OG_SIZE`, `OG_COLORS`, `OG_LANES`, `OG_TYPE`. |
-| `OgFrame` | The card root: background, padding, font stack. `center` for brand-only cards. |
-| `OgBrandRow` | The brand line, with an optional per-tool label on the right. |
-| `OgEyebrow` | A wide-tracked label on its own. |
-| `OgTitle` / `OgSubtitle` | Named type-scale steps, never raw sizes. |
-| `OgPanel` | The translucent bordered panel an illustration sits in. |
-| `createToolOgImage` | The standard tool card: brand row, inset title, full-width illustration panel. |
+| Reach for                        | Purpose                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| `packages/core/src/og/tokens.ts` | `OG_SIZE`, `OG_COLORS`, `OG_LANES`, `OG_TYPE`.                                 |
+| `OgFrame`                        | The card root: background, padding, font stack. `center` for brand-only cards. |
+| `OgBrandRow`                     | The brand line, with an optional per-tool label on the right.                  |
+| `OgEyebrow`                      | A wide-tracked label on its own.                                               |
+| `OgTitle` / `OgSubtitle`         | Named type-scale steps, never raw sizes.                                       |
+| `OgPanel`                        | The translucent bordered panel an illustration sits in.                        |
+| `createToolOgImage`              | The standard tool card: brand row, inset title, full-width illustration panel. |
 
 **The type scale** — pick a named step, never a number:
 
-| Step | Size | Use |
-| --- | --- | --- |
-| `display` | 132 | Brand-only card with no illustration (the root default). |
-| `title` | 92 | The standard tool card. |
-| `titleCompact` | 66 | Two-line titles, or cards whose illustration needs the room. |
-| `titleInset` | 56 | A title sharing the card with a full-width framed panel. |
+| Step           | Size | Use                                                          |
+| -------------- | ---- | ------------------------------------------------------------ |
+| `display`      | 132  | Brand-only card with no illustration (the root default).     |
+| `title`        | 92   | The standard tool card.                                      |
+| `titleCompact` | 66   | Two-line titles, or cards whose illustration needs the room. |
+| `titleInset`   | 56   | A title sharing the card with a full-width framed panel.     |
 
 Weight 760 and tracking −0.03em everywhere. Splitting those was drift, not
 intent. Subtitles have their own steps: `subtitle` (32) by default,
@@ -138,13 +138,13 @@ inline SVG work; anything more exotic needs checking against a real render.
 **Lane colours** come from `OG_LANES`, which restates the dark
 `.landing-lanes` values because Satori cannot read CSS custom properties. A
 test keeps that copy equal to `LANE_FALLBACKS` in
-`components/landing/lanes.ts`, so the two cannot drift.
+`packages/core/src/components/landing/lanes.ts`, so the two cannot drift.
 
 ---
 
 ## 3. Page shells and the outer gutter
 
-`components/SiteChrome.tsx` owns two **independent** decisions — which header
+`packages/core/src/components/SiteChrome.tsx` owns two **independent** decisions — which header
 a route renders, and how much gutter `<main>` gives it. Deriving the second
 from the first is what forced `/find-music` to cancel its gutter with a
 hard-coded negative margin.
@@ -152,9 +152,9 @@ hard-coded negative margin.
 Both live as fields of one `ROUTE_CHROME` entry, matched by prefix, first
 match wins:
 
-| Field | Values |
-| --- | --- |
-| `header` | `'compact'` (the compact site header, for editor routes) or `'nav'` (the full site nav). |
+| Field    | Values                                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `header` | `'compact'` (the compact site header, for editor routes) or `'nav'` (the full site nav).                                   |
 | `gutter` | `'px-3 pb-3'` on editor routes, `''` for full-bleed pages that lay out their own header row and panes, `'p-4'` by default. |
 
 One entry per route rather than one list per decision, so "in two lists, one
@@ -163,7 +163,7 @@ silently wins" is unrepresentable.
 **If your page wants a different gutter, give it a `ROUTE_CHROME` entry.** Do
 not subtract the gutter back out in the page. A test fails on
 `w-[calc(100%+…)]` and on an all-sides negative margin (including responsive
-forms like `sm:-m-4`) anywhere in `app/`, `components/`, or `lib/`.
+forms like `sm:-m-4`) anywhere in `app/` or `packages/core/src/`.
 
 ### Density
 
@@ -185,12 +185,12 @@ There is **no single dashboard shell**, and that is a recorded position rather
 than an oversight. See `docs/design-system-audit.md` Track C for the full
 comparison and the reasoning.
 
-| Page | Shell | Status |
-| --- | --- | --- |
-| `/chart-editor` | `.chart-editor-grid`, a named-areas grid over header / sidebar / main / bottom with a ≥1440px rearrangement | The reference structure. |
-| `/find-music` | Its own header row plus a two-column grid; a strict subset of the editor's regions | Full-bleed; no gutter hack. |
-| `/sheet-music` | Document-flow search page | **Different, keep.** Lower density and document scrolling are intentional. |
-| `/sheet-music/[slug]` | Full-viewport chart detail view | **Different, keep.** Not a dashboard: no rail, no region structure. |
+| Page                  | Shell                                                                                                       | Status                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `/chart-editor`       | `.chart-editor-grid`, a named-areas grid over header / sidebar / main / bottom with a ≥1440px rearrangement | The reference structure.                                                   |
+| `/find-music`         | Its own header row plus a two-column grid; a strict subset of the editor's regions                          | Full-bleed; no gutter hack.                                                |
+| `/sheet-music`        | Document-flow search page                                                                                   | **Different, keep.** Lower density and document scrolling are intentional. |
+| `/sheet-music/[slug]` | Full-viewport chart detail view                                                                             | **Different, keep.** Not a dashboard: no rail, no region structure.        |
 
 If a shared shell is built later, the audit already settles the design
 question in writing: it must be the named-areas grid generalized, because a
@@ -204,9 +204,9 @@ not have.
 
 ## 4. Where the rules live
 
-| Question | Document |
-| --- | --- |
-| What may this page say? | `docs/landing-page-style-guide.md` |
-| Which component do I reach for? | this document |
-| Why does page X differ from page Y? | `docs/design-system-audit.md` |
-| What does the codebase already provide? | `CLAUDE.md`, "Existing Utilities" |
+| Question                                | Document                           |
+| --------------------------------------- | ---------------------------------- |
+| What may this page say?                 | `docs/landing-page-style-guide.md` |
+| Which component do I reach for?         | this document                      |
+| Why does page X differ from page Y?     | `docs/design-system-audit.md`      |
+| What does the codebase already provide? | `CLAUDE.md`, "Existing Utilities"  |

@@ -6,7 +6,7 @@ user_invocable: true
 
 # Extract Shared Utility
 
-Move existing code from a page-specific location into a shared `lib/` location so multiple pages can use it. This MUST be done in its own commit before the new code that depends on it.
+Move existing code from a page-specific location into a shared `packages/core/src/` location so multiple pages can use it. This MUST be done in its own commit before the new code that depends on it.
 
 The argument should describe what to extract (e.g., `/extract-utility tickToMs from chartUtils.ts`).
 
@@ -14,11 +14,11 @@ The argument should describe what to extract (e.g., `/extract-utility tickToMs f
 
 1. **Identify the code to extract** — Find the function, type, or module that needs to be shared. Read the source file to understand its dependencies and exports.
 
-2. **Choose the shared location** — Place it under `lib/` in an appropriate directory:
-   - Drum note/instrument mapping → `lib/drum-mapping/`
-   - Tick/time conversion → `lib/chart-utils/`
+2. **Choose the shared location** — Place it under `packages/core/src/` in an appropriate directory:
+   - Drum note/instrument mapping → `packages/core/src/drum-mapping/`
+   - Tick/time conversion → `packages/core/src/chart-utils/`
    - General chart types → use `@eliwhite/scan-chart` types directly if possible
-   - Other utilities → `lib/{descriptive-name}/`
+   - Other utilities → `packages/core/src/{descriptive-name}/`
 
 3. **Create the shared module** — Copy the code to the new location. Keep the same function signatures and types. Add any necessary imports.
 
@@ -29,7 +29,7 @@ The argument should describe what to extract (e.g., `/extract-utility tickToMs f
 
 5. **Verify no other consumers exist** — Search the codebase for other files that import or duplicate the same code. Update them too.
 
-6. **Commit this extraction separately** — Create a commit with just the extraction and callsite updates. The message should be: "refactor: extract {utility name} to lib/{path} for sharing"
+6. **Commit this extraction separately** — Create a commit with just the extraction and callsite updates. The message should be: "refactor: extract {utility name} to packages/core/src/{path} for sharing"
 
 7. **Report** — Confirm the extraction is complete and ready for the drum transcription code to import from the new location.
 

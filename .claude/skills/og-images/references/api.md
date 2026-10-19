@@ -1,6 +1,6 @@
 # OG system API
 
-Everything in `lib/og/`.
+Everything in `packages/core/src/og/`.
 
 ## Contents
 
@@ -14,7 +14,7 @@ Everything in `lib/og/`.
 
 ## Tokens
 
-`lib/og/tokens.ts` is the only place a brand color, gradient, lane color, or
+`packages/core/src/og/tokens.ts` is the only place a brand color, gradient, lane color, or
 type size is written down for social cards.
 
 ### `OG_SIZE`
@@ -69,7 +69,7 @@ and pins both this and `LANE_FALLBACKS` to it, so all three stay in step.
 
 ## Layout primitives
 
-From `lib/og/layout.tsx`. Every one already sets `display: flex`.
+From `packages/core/src/og/layout.tsx`. Every one already sets `display: flex`.
 
 The `style` prop is typed as `Omit<CSSProperties, 'display' | 'fontSize' |
 'fontWeight' | 'letterSpacing' | 'color'>`. Spacing, measure, and alignment are

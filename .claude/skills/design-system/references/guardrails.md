@@ -6,12 +6,12 @@ regression rather than a style opinion. A broad rule ("no arbitrary Tailwind
 values") would fight this codebase and get disabled within a release.
 
 ```bash
-pnpm jest components/__tests__/design-system-guardrails lib/og components/landing
+pnpm jest packages/core/src/components/__tests__/design-system-guardrails packages/core/src/og packages/core/src/components/landing
 ```
 
-## `components/__tests__/design-system-guardrails.test.ts`
+## `packages/core/src/components/__tests__/design-system-guardrails.test.ts`
 
-Scans `app/`, `components/`, and `lib/`, with comments stripped — a doc comment
+Scans `app/` and `packages/core/src/`, with comments stripped — a doc comment
 explaining a removed hack is documentation, not a reintroduction.
 
 | Rule                                                     | What it catches                                                                                                    |
@@ -26,7 +26,7 @@ The last two exist because guarding only the _already-fixed_ regressions was
 not enough — `/why` forked the shell days after the system landed and nothing
 caught it.
 
-## `lib/og/__tests__/og-routes.test.ts`
+## `packages/core/src/og/__tests__/og-routes.test.ts`
 
 Discovers every `opengraph-image.tsx` under `app/` and checks each one exports
 `OG_SIZE` as `size`, a non-empty `alt`, `image/png`, and a default function.
@@ -41,7 +41,7 @@ dark block by **parsing `app/globals.css`**. An earlier version compared the two
 TypeScript constants to each other, which would have stayed green while both
 drifted away from the stylesheet together.
 
-## `components/landing/__tests__/`
+## `packages/core/src/components/landing/__tests__/`
 
 Component contracts: heading levels, `aria` wiring, `ComparisonTable` row
 groups and group separators, the intro-only `LandingSection`, the empty-slot

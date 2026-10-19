@@ -2,7 +2,7 @@
 
 ## The gutter contract
 
-`components/SiteChrome.tsx` owns two decisions for every route:
+`packages/core/src/components/SiteChrome.tsx` owns two decisions for every route:
 
 - **which header** it renders — the compact site header, or the full site nav
 - **how much gutter** `<main>` gives it
@@ -32,7 +32,7 @@ in two lists and have one silently win.
 **If your page wants a different gutter, give it a `ROUTE_CHROME` entry.** Do
 not subtract the gutter back out in the page. A test fails on
 `w-[calc(100%+…)]` and on an all-sides negative margin — including responsive
-forms like `sm:-m-4` — anywhere in `app/`, `components/`, or `lib/`.
+forms like `sm:-m-4` — anywhere in `app/` or `packages/core/src/`.
 
 A page-specific affordance is not a gutter workaround and is fine to keep:
 `/find-music` carries `pt-12 sm:pt-0` to clear a floating control on small

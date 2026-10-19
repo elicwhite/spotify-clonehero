@@ -20,7 +20,7 @@ yarn test -- --testPathPattern="chart-writer|chart-io|export"
 
 If tests pass, report results and stop. If tests fail, report failures with details.
 
-2. **If no tests exist yet**, or if new behavior needs verification, **write a new test** in `lib/drum-transcription/__tests__/chart-writer.test.ts` (or the appropriate test file). Do NOT test via the browser console.
+2. **If no tests exist yet**, or if new behavior needs verification, **write a new test** in `packages/core/src/drum-transcription/__tests__/chart-writer.test.ts` (or the appropriate test file). Do NOT test via the browser console.
 
 3. **Test structure** — every round-trip test should follow this pattern:
 
@@ -92,7 +92,7 @@ yarn test -- --testPathPattern="chart-writer|chart-io" --verbose
 
 ## When to use this skill
 
-- After any change to the chart writer (`lib/drum-transcription/chart-io/writer.ts`)
+- After any change to the chart writer (`packages/core/src/drum-transcription/chart-io/writer.ts`)
 - After any change to chart types or note mapping
 - After implementing export packaging (0009, 0010) to verify exported charts parse correctly
 - When investigating a chart that doesn't load correctly in Clone Hero or scan-chart

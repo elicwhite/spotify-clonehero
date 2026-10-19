@@ -1,12 +1,12 @@
 ---
 name: landing-pages
-description: Build and edit marketing / tool landing pages in Music Charts Tools using the shared primitives in components/landing (LandingPage, LandingHero, LandingSection, ComparisonTable, ToolEntrySection, ToolEntryCard, CardGrid, StepFlow, LandingProse, ScrollToStartCta, TrustLine, Eyebrow, StatChip, ExternalLink, heroCanvasFrameClass). Use this whenever creating a new landing or marketing page, adding a hero, section, comparison or measurement table, trust signals, stat chips with provenance, or a call-to-action, and whenever editing /drum-transcription, /tempo, /add-lyrics, /drum-difficulties, /guitar-difficulties, /why, or the /find-music welcome. Also use it before writing any page-level container div with a max-width and vertical rhythm, since that shell already exists and forking it fails a test.
+description: Build and edit marketing / tool landing pages in Music Charts Tools using the shared primitives in packages/core/src/components/landing (LandingPage, LandingHero, LandingSection, ComparisonTable, ToolEntrySection, ToolEntryCard, CardGrid, StepFlow, LandingProse, ScrollToStartCta, TrustLine, Eyebrow, StatChip, ExternalLink, heroCanvasFrameClass). Use this whenever creating a new landing or marketing page, adding a hero, section, comparison or measurement table, trust signals, stat chips with provenance, or a call-to-action, and whenever editing /drum-transcription, /tempo, /add-lyrics, /drum-difficulties, /guitar-difficulties, /why, or the /find-music welcome. Also use it before writing any page-level container div with a max-width and vertical rhythm, since that shell already exists and forking it fails a test.
 ---
 
 # Landing pages
 
 Everything structural on a landing page already exists in
-`components/landing/`. Your job is to supply content.
+`packages/core/src/components/landing/`. Your job is to supply content.
 
 The two class strings that define the shell — the page container and the hero
 `h1` — are owned by `LandingPage.tsx` and `LandingHero.tsx`, and a test fails
@@ -71,7 +71,7 @@ A page with no tool still splits, it just has no `toolEntry`: `/why` is
 server component may render it.
 
 Every route needs `page.tsx` with a `metadata` export. A route with no
-`ROUTE_CHROME` entry in `components/SiteChrome.tsx` gets the default chrome —
+`ROUTE_CHROME` entry in `packages/core/src/components/SiteChrome.tsx` gets the default chrome —
 the full site nav and a `p-4` gutter — which is what a marketing page wants, so
 most new pages add nothing there.
 
@@ -125,7 +125,7 @@ you are consolidating, keep the copy byte-identical.
 ## Checking your work
 
 ```bash
-pnpm jest components/landing components/__tests__/design-system-guardrails
+pnpm jest packages/core/src/components/landing packages/core/src/components/__tests__/design-system-guardrails
 ```
 
 If you changed an existing page and intended no visual change, verify it —

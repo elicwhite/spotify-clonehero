@@ -54,16 +54,16 @@ slack to notice a broken workflow.
 
 ## Code map
 
-| Concern                                   | Location                                             |
-| ----------------------------------------- | ---------------------------------------------------- |
-| Keys, URLs, manifest type, client loading | `lib/chorusChartDb/chartDbAssets.ts`                 |
-| Manifest construction, cache headers      | `lib/chorusChartDb/chartDbPublish.ts`                |
-| Crawl + merge + paging                    | `lib/chorusChartDb/fetchNewCharts.ts`                |
-| Crash-resume bookkeeping                  | `lib/chorusChartDb/rawRunFiles.ts`                   |
-| CLI that builds a dump                    | `downloadDb.ts`                                      |
-| CLI that publishes it                     | `scripts/uploadChartDb.ts`                           |
-| Client cold start                         | `lib/chorusChartDb/database.ts` → `fetchInitialDump` |
-| Schema version endpoint                   | `app/api/data/route.ts`                              |
+| Concern                                   | Location                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| Keys, URLs, manifest type, client loading | `packages/core/src/chorusChartDb/chartDbAssets.ts`                 |
+| Manifest construction, cache headers      | `packages/core/src/chorusChartDb/chartDbPublish.ts`                |
+| Crawl + merge + paging                    | `packages/core/src/chorusChartDb/fetchNewCharts.ts`                |
+| Crash-resume bookkeeping                  | `packages/core/src/chorusChartDb/rawRunFiles.ts`                   |
+| CLI that builds a dump                    | `downloadDb.ts`                                                    |
+| CLI that publishes it                     | `scripts/uploadChartDb.ts`                                         |
+| Client cold start                         | `packages/core/src/chorusChartDb/database.ts` → `fetchInitialDump` |
+| Schema version endpoint                   | `app/api/data/route.ts`                                            |
 
 ## Commands
 

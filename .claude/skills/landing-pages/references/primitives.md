@@ -1,6 +1,6 @@
 # Landing primitives
 
-Everything in `components/landing/`. Import directly; there are no re-export
+Everything in `packages/core/src/components/landing/`. Import directly; there are no re-export
 barrels in this repo.
 
 ## Import paths
@@ -9,25 +9,32 @@ barrels in this repo.
 guessing, because `LandingSection` is the one that catches people.
 
 ```tsx
-import {LandingPage} from '@/components/landing/LandingPage';
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingSection} from '@/components/landing/Section'; // ← not LandingSection.tsx
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingSection} from '@musiccharts/core/components/landing/Section'; // ← not LandingSection.tsx
 import {
   ToolEntrySection,
   START_SECTION_ID,
-} from '@/components/landing/ToolEntrySection';
-import {ScrollToStartCta} from '@/components/landing/ScrollToStartCta';
-import {ComparisonTable} from '@/components/landing/ComparisonTable';
-import {ExternalLink} from '@/components/landing/ExternalLink';
-import {Eyebrow} from '@/components/landing/Eyebrow';
-import {TrustLine} from '@/components/landing/TrustLine';
-import {StepFlow} from '@/components/landing/StepFlow';
-import {StatChip, InlineStat, StatCell} from '@/components/landing/StatChip';
-import SectionDropZone from '@/components/landing/SectionDropZone'; // ← default export
-import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
-import {CardGrid, CardGridCell} from '@/components/landing/CardGrid';
-import {LandingProse} from '@/components/landing/Prose'; // ← not LandingProse.tsx
-import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
+} from '@musiccharts/core/components/landing/ToolEntrySection';
+import {ScrollToStartCta} from '@musiccharts/core/components/landing/ScrollToStartCta';
+import {ComparisonTable} from '@musiccharts/core/components/landing/ComparisonTable';
+import {ExternalLink} from '@musiccharts/core/components/landing/ExternalLink';
+import {Eyebrow} from '@musiccharts/core/components/landing/Eyebrow';
+import {TrustLine} from '@musiccharts/core/components/landing/TrustLine';
+import {StepFlow} from '@musiccharts/core/components/landing/StepFlow';
+import {
+  StatChip,
+  InlineStat,
+  StatCell,
+} from '@musiccharts/core/components/landing/StatChip';
+import SectionDropZone from '@musiccharts/core/components/landing/SectionDropZone'; // ← default export
+import {ToolEntryCard} from '@musiccharts/core/components/landing/ToolEntryCard';
+import {
+  CardGrid,
+  CardGridCell,
+} from '@musiccharts/core/components/landing/CardGrid';
+import {LandingProse} from '@musiccharts/core/components/landing/Prose'; // ← not LandingProse.tsx
+import {heroCanvasFrameClass} from '@musiccharts/core/components/landing/heroCanvasFrame';
 ```
 
 All named exports except `SectionDropZone`.
@@ -247,7 +254,7 @@ Nothing enforces this — it is a layout fact to design around.
   disclaimer?={ReactNode}   // what the measurement does not establish
 />
 
-// Both exported from '@/components/landing/ComparisonTable'
+// Both exported from '@musiccharts/core/components/landing/ComparisonTable'
 interface ComparisonTableRow {
   header: string;                    // also the React key within its group,
                                      // so keep it unique inside one group
@@ -382,5 +389,5 @@ before the stylesheet applies. The values live in `app/globals.css` under
 
 These are the only illustrative colors the landing pages use, and they are
 always used for the lane they name. The OG system restates the dark values in
-`lib/og/tokens.ts` because Satori cannot read CSS custom properties; a test
+`packages/core/src/og/tokens.ts` because Satori cannot read CSS custom properties; a test
 keeps all three copies pinned to the stylesheet.

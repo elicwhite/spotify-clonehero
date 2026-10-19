@@ -39,9 +39,9 @@ already exists.
 primitive is close but not right, change the primitive or add a documented
 variant — do not copy its markup into a page. When a prop blocks reuse, making
 that prop optional is nearly always the better fix than forking. This is not
-style advice; `components/__tests__/design-system-guardrails.test.ts` fails the
+style advice; `packages/core/src/components/__tests__/design-system-guardrails.test.ts` fails the
 build if the shell or hero class strings appear outside
-`components/landing/`.
+`packages/core/src/components/landing/`.
 
 **2. Two documents govern, and they do not overlap.**
 
@@ -66,5 +66,5 @@ Run `pnpm test`, `pnpm typecheck`, and `pnpm lint`. The guardrail suites are
 cheap and they encode real regressions, not opinions:
 
 ```bash
-pnpm jest components/__tests__/design-system-guardrails lib/og components/landing
+pnpm jest packages/core/src/components/__tests__/design-system-guardrails packages/core/src/og packages/core/src/components/landing
 ```

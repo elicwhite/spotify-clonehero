@@ -6,13 +6,13 @@ a recorded decision in `../docs/design-system-audit.md`, not an accident — and
 
 ## In the system
 
-| Page                                         | File                                                             | Notes                                                                                                                                                                                          |
-| -------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/drum-transcription`                        | `app/drum-transcription/landing/DrumTranscriptionLanding.tsx`    | The fullest example: hero with canvas, tool entry, `StepFlow`, a `CardGrid` fixes grid, and a two-group `ComparisonTable` with summary rows.                                                   |
-| `/tempo`                                     | `app/tempo/landing/TempoLanding.tsx`                             | The smaller example. Exercises the intro-only `LandingSection` and a single-group peer-measurement table.                                                                                      |
-| `/add-lyrics`                                | `app/add-lyrics/landing/AddLyricsLanding.tsx`                    | Hero canvas, tool entry, `StepFlow`, and a `LandingProse` credit line. No comparison table.                                                                                                    |
-| `/drum-difficulties`, `/guitar-difficulties` | `components/difficulty-generation/landing/DifficultyLanding.tsx` | One shared layout for two routes. Each route's client (`app/<route>/<Name>Client.tsx`) supplies the copy; the shared file owns the structure, the shared-verbatim section titles, and the CTA. |
-| `/why`                                       | `app/why/WhyPage.tsx`                                            | A position page, not a tool page: `LandingHero` with no `trust`, and no tool entry.                                                                                                            |
+| Page                                         | File                                                                               | Notes                                                                                                                                                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/drum-transcription`                        | `app/drum-transcription/landing/DrumTranscriptionLanding.tsx`                      | The fullest example: hero with canvas, tool entry, `StepFlow`, a `CardGrid` fixes grid, and a two-group `ComparisonTable` with summary rows.                                                   |
+| `/tempo`                                     | `app/tempo/landing/TempoLanding.tsx`                                               | The smaller example. Exercises the intro-only `LandingSection` and a single-group peer-measurement table.                                                                                      |
+| `/add-lyrics`                                | `app/add-lyrics/landing/AddLyricsLanding.tsx`                                      | Hero canvas, tool entry, `StepFlow`, and a `LandingProse` credit line. No comparison table.                                                                                                    |
+| `/drum-difficulties`, `/guitar-difficulties` | `packages/core/src/components/difficulty-generation/landing/DifficultyLanding.tsx` | One shared layout for two routes. Each route's client (`app/<route>/<Name>Client.tsx`) supplies the copy; the shared file owns the structure, the shared-verbatim section titles, and the CTA. |
+| `/why`                                       | `app/why/WhyPage.tsx`                                                              | A position page, not a tool page: `LandingHero` with no `trust`, and no tool entry.                                                                                                            |
 
 After migration these files hold content and nothing structural — step copy,
 failure-mode copy, their canvases, and the metrics they import. The difficulty
@@ -40,7 +40,7 @@ two icons went.
 
 `SetupCard`, `OutcomePanel` and `StatusDot` in that file are dashboard
 source-status components, not marketing components. If they ever move, it is to
-a dashboard namespace, not `components/landing/`.
+a dashboard namespace, not `packages/core/src/components/landing/`.
 
 ### `/sng` (`app/sng/components/SngLanding.tsx`)
 
@@ -62,7 +62,7 @@ Two things came out of that:
 
 - `trust` is optional now.
 - A guardrail test fails if the shell or hero class strings appear outside
-  `components/landing/`.
+  `packages/core/src/components/landing/`.
 
 When a required prop blocks reuse, **make it optional**. That is almost always
 cheaper than the fork, and the fork is what the system exists to prevent.
