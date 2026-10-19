@@ -136,7 +136,7 @@ export default function BackgroundVideo({
         setFailed(true);
       }}
       className={cn(
-        'pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
+        'pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-200',
         hasFrame ? 'opacity-100' : 'opacity-0',
         className,
       )}
