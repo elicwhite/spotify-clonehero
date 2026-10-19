@@ -125,7 +125,11 @@ jobs:
   deploy:
     name: Deploy to production
     needs: [test, lint, typecheck]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Production deploys only from the private repo. The public repo runs the
+    # same workflow file, so this check keeps it from deploying too.
+    if: >-
+      github.repository == 'elicwhite/music-charts-private' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Long enough to outlast a full crawl it may be waiting on. The wait ends
     # early on its own if no rebuild is in flight, so this ceiling is only
@@ -181,7 +185,8 @@ jobs:
           }
 
           rebuilds_in_flight() {
-            gh run list --workflow 'Update chart DB' --branch main \
+            gh run list --repo elicwhite/spotify-clonehero \
+              --workflow 'Update chart DB' --branch main \
               --status in_progress --status queued --json databaseId \
               --jq 'length' 2>/dev/null || echo 0
           }

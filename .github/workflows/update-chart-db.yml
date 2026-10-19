@@ -44,6 +44,9 @@ concurrency:
 
 jobs:
   update:
+    # The crawl runs only in the public repo, where Actions minutes are free.
+    # The private repo's deploy job reads this repo's runs to wait for it.
+    if: github.repository == 'elicwhite/spotify-clonehero'
     runs-on: ubuntu-latest
     # A full crawl is ~400 paged requests with rate-limit backoff; the job limit
     # is 360 minutes, so fail before GitHub kills us mid-upload.
