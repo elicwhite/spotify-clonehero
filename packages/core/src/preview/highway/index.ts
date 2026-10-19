@@ -2,7 +2,7 @@ import {RefObject} from 'react';
 import * as THREE from 'three';
 import type {ParsedChart} from '../chorus-chart-processing';
 import {ChartResponseEncore} from '../../chartSelection';
-import {AudioManager} from '../audioManager';
+import type {HighwayClock} from './clock';
 import {
   getHighwayTexture,
   createWaveformSurface,
@@ -85,7 +85,7 @@ export const setupRenderer = (
   chart: ParsedChart,
   sizingRef: RefObject<HTMLDivElement>,
   ref: RefObject<HTMLDivElement>,
-  audioManager: AudioManager,
+  audioManager: HighwayClock,
   config: RendererConfig = {},
 ) => {
   const showDrumLanes = config.showDrumLanes ?? true;

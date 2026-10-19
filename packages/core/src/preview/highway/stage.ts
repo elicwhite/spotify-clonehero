@@ -1,7 +1,7 @@
 import {RefObject} from 'react';
 import * as THREE from 'three';
 import type {ParsedChart} from '../chorus-chart-processing';
-import type {AudioManager} from '../audioManager';
+import type {HighwayClock} from './clock';
 import {
   schemaForTrack,
   drums4LaneSchema,
@@ -85,11 +85,8 @@ export interface StageConfig {
   loadingManager?: THREE.LoadingManager;
 }
 
-/** The members of the playback clock (the app's `AudioManager`) the stage reads. */
-export type StageClock = Pick<
-  AudioManager,
-  'chartTime' | 'delay' | 'chartDelay' | 'isPlaying' | 'isInitialized'
->;
+/** The playback clock the stage reads each frame. */
+export type StageClock = HighwayClock;
 
 /** What `setGridData` takes: the grid overlay's config minus what the stage supplies. */
 export type GridData = Omit<GridOverlayConfig, 'highwayWidth' | 'highwaySpeed'>;
