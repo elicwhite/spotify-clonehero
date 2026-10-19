@@ -7,8 +7,8 @@
  */
 import {ImageResponse} from 'next/og';
 
-import {OgFrame, OgSubtitle, OgTitle} from '@/lib/og/layout';
-import {OG_COLORS, OG_SIZE} from '@/lib/og/tokens';
+import {OgFrame, OgSubtitle, OgTitle} from '@musiccharts/core/og/layout';
+import {OG_COLORS, OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Music Charts Tools';
 export const size = OG_SIZE;

@@ -23,24 +23,24 @@ import type {ParsedChart} from '@eliwhite/scan-chart';
 import {
   detectFills,
   getExpertDrumsTrack,
-} from '../lib/drum-fills/detection/detectFills';
-import {classifyAndDedupe} from '../lib/drum-fills/detection/classify';
-import {buildFingerprints} from '../lib/drum-fills/detection/grooveModel';
+} from '@musiccharts/core/drum-fills/detection/detectFills';
+import {classifyAndDedupe} from '@musiccharts/core/drum-fills/detection/classify';
+import {buildFingerprints} from '@musiccharts/core/drum-fills/detection/grooveModel';
 import {
   canonicalGrooveFingerprint,
   grooveSimilarityKey,
   grooveSpanFingerprints,
-} from '../lib/drum-fills/detection/grooveFingerprint';
+} from '@musiccharts/core/drum-fills/detection/grooveFingerprint';
 import {
   buildGrooveClusters,
   summarizeClusterDistribution,
   type GrooveClusterInput,
-} from '../lib/drum-fills/grooveClusters';
+} from '@musiccharts/core/drum-fills/grooveClusters';
 import type {
   ClassifiedFill,
   DrumVoice,
-} from '../lib/drum-fills/detection/types';
-import {GRID_DIVISIONS_PER_BAR} from '../lib/drum-fills/detection/types';
+} from '@musiccharts/core/drum-fills/detection/types';
+import {GRID_DIVISIONS_PER_BAR} from '@musiccharts/core/drum-fills/detection/types';
 
 interface SongResult {
   name: string;

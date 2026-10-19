@@ -1,0 +1,530 @@
+import * as THREE from 'three';
+import type {SceneReconciler} from './SceneReconciler';
+import {NoteRenderer, type NoteElementData} from './NoteRenderer';
+import {type HitResult} from './types';
+import {snapTickToGrid} from '../../chart-edit';
+import type {InstrumentSchema} from '../../chart-edit/instruments/types';
+
+// ---------------------------------------------------------------------------
+// InteractionManager
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles hit-testing and coordinate conversion for the highway scene.
+ *
+ * React sends mouse coordinates, InteractionManager raycasts through the
+ * Three.js scene and returns what's under the cursor (a note or the empty
+ * highway). React decides what to do with the result.
+ */
+export class InteractionManager {
+  private camera: THREE.PerspectiveCamera;
+  private reconciler: SceneReconciler;
+  private highwaySpeed: number;
+  private schema: InstrumentSchema;
+
+  /**
+   * Editor lane → world X position, carried wholesale from the schema
+   * (array order matches `schema.lanes` order, which is also the "editor
+   * lane" numbering `typeToLane`/`laneToType` use). `worldXOffset` is the
+   * only place a lane's X is spelled, so a hit target can never land
+   * somewhere the renderer did not draw the lane.
+   */
+  private laneXPositions: Array<{lane: number; x: number}>;
+
+  /**
+   * Editor lane the schema's full-width note (kick for drums, open for
+   * five-fret) occupies. Full-width notes render in the highway's center
+   * (world X 0) rather than in a pad-lane slot, but `worldXToLane` still
+   * resolves clicks there to *some* array index — this is the one the
+   * schema assigns it, derived (not assumed to be a fixed number) so a
+   * schema lane reorder can't silently desync this.
+   */
+  private fullWidthLane: number;
+
+  /** Half the highway's visual width, from `schema.highwayWidth`. */
+  private highwayHalfWidth: number;
+
+  /**
+   * World X of the highway root this manager tests against. Every world-space
+   * X the ray produces is shifted by `-rootWorldX` before it is compared to
+   * schema lane offsets or the highway bounds, all of which are expressed
+   * root-locally around 0. A single-highway renderer leaves this at 0.
+   */
+  private rootWorldX: number;
+
+  private raycaster = new THREE.Raycaster();
+  /** Reusable vector to avoid per-frame allocations. */
+  private ndcVec = new THREE.Vector2();
+  /** Reusable plane for highway intersection. */
+  private highwayPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  /**
+   * Reusable vector for the highway-plane intersection point. Always
+   * root-local: `intersectHighwayPlaneLocal` is its only writer.
+   */
+  private intersectionPoint = new THREE.Vector3();
+
+  // Timing data for coordinate conversion
+  private timedTempos: {
+    tick: number;
+    msTime: number;
+    beatsPerMinute: number;
+  }[] = [];
+  private resolution = 480;
+
+  /** Function to get current audio time in ms. */
+  private getElapsedMs: () => number;
+
+  /**
+   * Cached sprite list for raycasting. Rebuilt when the reconciler's
+   * active-groups revision changes.
+   *
+   * Tracking by revision (not size) is required: when a hovered note's
+   * data changes, the reconciler recycles the old group and `updateWindow`
+   * re-creates a new one at the same key, so the size returns to its
+   * prior value and a size-only check would happily reuse a stale sprite
+   * reference. The revision bumps on every add/delete, so any in-place
+   * replacement still invalidates the cache.
+   */
+  private cachedNoteSprites: THREE.Sprite[] = [];
+  private cachedNoteSpriteToKey = new Map<THREE.Sprite, string>();
+  private cachedGroupsRevision = -1;
+
+  constructor(
+    camera: THREE.PerspectiveCamera,
+    reconciler: SceneReconciler,
+    highwaySpeed: number,
+    getElapsedMs: () => number,
+    schema: InstrumentSchema,
+    rootWorldX: number = 0,
+  ) {
+    this.camera = camera;
+    this.rootWorldX = rootWorldX;
+    this.reconciler = reconciler;
+    this.highwaySpeed = highwaySpeed;
+    this.getElapsedMs = getElapsedMs;
+    this.schema = schema;
+    // Drums are the one instrument whose full-width lane (kick) is also a
+    // pointer target: aiming at the highway's center means "kick".
+    //
+    // Pad lanes come first, and `worldXToLane` keeps the first of an equal
+    // pair, so a pad always wins a tie against the kick. That decides 5-lane
+    // drums, where the middle pad shares the kick's center X: without the
+    // ordering the kick would shadow blue on every click, and blue is the
+    // lane a pointer can actually express.
+    const nearestLaneCandidates = [
+      ...schema.lanes.filter(lane => !lane.fullWidth),
+      ...schema.lanes.filter(
+        lane => lane.fullWidth && schema.instrument === 'drums',
+      ),
+    ];
+    this.laneXPositions = nearestLaneCandidates.map(l => ({
+      lane: l.index,
+      x: l.worldXOffset,
+    }));
+    this.fullWidthLane = schema.lanes.find(l => l.fullWidth)?.index ?? -1;
+    this.highwayHalfWidth = schema.highwayWidth / 2;
+  }
+
+  // -----------------------------------------------------------------------
+  // Configuration
+  // -----------------------------------------------------------------------
+
+  /** Update timing data for tick/ms conversion. */
+  setTimingData(
+    timedTempos: {tick: number; msTime: number; beatsPerMinute: number}[],
+    resolution: number,
+  ): void {
+    this.timedTempos = timedTempos;
+    this.resolution = resolution;
+  }
+
+  // -----------------------------------------------------------------------
+  // Hit testing
+  // -----------------------------------------------------------------------
+
+  /**
+   * Perform a raycast hit-test at the given canvas-relative pixel coordinates.
+   *
+   * Priority order: notes > highway plane.
+   * Returns null if the ray misses the highway entirely.
+   *
+   * @param canvasX  X pixel offset from the left edge of the canvas/div
+   * @param canvasY  Y pixel offset from the top edge of the canvas/div
+   * @param canvasW  Width of the canvas/div in CSS pixels
+   * @param canvasH  Height of the canvas/div in CSS pixels
+   * @param gridDivision  Grid snap division (0 = no snapping)
+   */
+  hitTest(
+    canvasX: number,
+    canvasY: number,
+    canvasW: number,
+    canvasH: number,
+    gridDivision: number = 0,
+  ): HitResult {
+    // Convert canvas coords to NDC (-1 to +1)
+    this.ndcVec.set((canvasX / canvasW) * 2 - 1, -(canvasY / canvasH) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndcVec, this.camera);
+
+    this.rebuildSpriteCachesIfNeeded();
+
+    // --- 1. Notes ---
+    const noteHit = this.hitTestNotes();
+    if (noteHit) return noteHit;
+
+    // --- 2. Intersect the highway plane ---
+    return this.hitTestHighway(gridDivision);
+  }
+
+  /**
+   * Rebuild the note sprite cache when the reconciler's active-groups
+   * revision has advanced. Cheap to run on a hit (early exit), so
+   * `hitTest()` calls it unconditionally on entry.
+   */
+  private rebuildSpriteCachesIfNeeded(): void {
+    const revision = this.reconciler.getActiveGroupsRevision();
+    if (revision === this.cachedGroupsRevision) return;
+
+    this.cachedNoteSprites.length = 0;
+    this.cachedNoteSpriteToKey.clear();
+
+    for (const [key, group] of this.reconciler.getActiveGroups()) {
+      if (!key.startsWith('note:')) continue;
+      const sprite = NoteRenderer.getSprite(group);
+      if (sprite) {
+        this.cachedNoteSprites.push(sprite);
+        this.cachedNoteSpriteToKey.set(sprite, key);
+      }
+    }
+
+    this.cachedGroupsRevision = revision;
+  }
+
+  // -----------------------------------------------------------------------
+  // Note hit testing
+  // -----------------------------------------------------------------------
+
+  private hitTestNotes(): HitResult {
+    if (this.cachedNoteSprites.length === 0) return null;
+
+    const hits = this.raycaster.intersectObjects(this.cachedNoteSprites, false);
+    if (hits.length === 0) return null;
+
+    const hitSprite = hits[0].object as THREE.Sprite;
+    const key = this.cachedNoteSpriteToKey.get(hitSprite);
+    if (!key) return null;
+
+    const el = this.reconciler.getElement(key);
+    if (!el || el.kind !== 'note') return null;
+
+    const data = el.data as NoteElementData;
+    // Extract noteId from key: 'note:480:redDrum' -> '480:redDrum'
+    const noteId = key.startsWith('note:') ? key.slice(5) : key;
+    const tick = data.note.tick ?? 0;
+    // `data.lane` is the pad-color index (0=red..3=green), which the schema
+    // now assigns the identical editor lane numbers to; kick alone needs
+    // translating to its (schema-derived) editor lane.
+    const lane =
+      data.isKick || data.isOpen
+        ? this.fullWidthLane
+        : (data.editorLane ?? data.lane);
+
+    return {
+      type: 'note',
+      noteId,
+      note: {
+        note: data.note,
+        msTime: el.msTime,
+        msLength: data.msLength,
+        xPosition: data.xPosition,
+        inStarPower: data.inStarPower,
+        isKick: data.isKick,
+        isOpen: data.isOpen,
+        lane: data.lane,
+        editorLane: data.editorLane ?? data.lane,
+      },
+      lane,
+      tick,
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // Highway plane hit testing
+  // -----------------------------------------------------------------------
+
+  private hitTestHighway(gridDivision: number): HitResult {
+    const hit = this.intersectHighwayPlaneLocal();
+    if (!hit) return null;
+
+    // Check if intersection is within highway bounds
+    if (Math.abs(hit.x) > this.highwayHalfWidth) return null;
+
+    const lane = this.worldXToLane(hit.x);
+    const ms = this.worldYToMs(hit.y);
+    const tick = this.msToTickSnapped(ms, gridDivision);
+
+    // Check for kick notes at this position. Kick notes span the full
+    // highway width, so a click anywhere on the highway at a kick's
+    // tick position should select the kick note -- but only if the
+    // click wasn't on a specific pad lane. Pad notes have higher
+    // specificity; if the raycast missed a pad sprite, the user
+    // probably intended to click empty highway, not a kick.
+    if (lane === this.fullWidthLane) {
+      const fullWidthHit = this.hitTestFullWidthAtTick(tick, ms);
+      if (fullWidthHit) return fullWidthHit;
+    }
+
+    return {
+      type: 'highway',
+      lane,
+      tick,
+      ms,
+    };
+  }
+
+  /**
+   * Check if there is a kick note at the given tick position.
+   * Returns a note HitResult if found, null otherwise.
+   */
+  private hitTestFullWidthAtTick(tick: number, ms: number): HitResult {
+    const elements = this.reconciler.getElements();
+    if (elements.length === 0) return null;
+    // Tolerance: check notes within a small ms range around the click
+    const tolerance = 15; // ms
+    // Binary search for the first element >= ms - tolerance
+    let lo = 0;
+    let hi = elements.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (elements[mid].msTime < ms - tolerance) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < elements.length; i++) {
+      const el = elements[i];
+      if (el.msTime > ms + tolerance) break;
+      if (el.kind !== 'note') continue;
+      const data = el.data as NoteElementData;
+      if (!data.isKick && !data.isOpen) continue;
+      const noteId = `${data.note.tick ?? 0}:${data.isKick ? 'kick' : 'open'}`;
+      return {
+        type: 'note',
+        noteId,
+        note: {
+          note: data.note,
+          msTime: el.msTime,
+          msLength: data.msLength,
+          xPosition: data.xPosition,
+          inStarPower: data.inStarPower,
+          isKick: data.isKick,
+          isOpen: data.isOpen,
+          lane: data.lane,
+          editorLane: data.editorLane ?? data.lane,
+        },
+        lane: this.fullWidthLane,
+        tick: data.note.tick ?? 0,
+      };
+    }
+    return null;
+  }
+
+  // -----------------------------------------------------------------------
+  // Coordinate helpers (public, for React to use directly)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Map a canvas-pixel position to an editor lane index (schema order —
+   * see `drums4LaneSchema` in `lib/chart-edit/instruments/drums.ts`).
+   */
+  screenToLane(
+    canvasX: number,
+    canvasY: number,
+    canvasW: number,
+    canvasH: number,
+  ): number {
+    const world = this.screenToWorldPoint(canvasX, canvasY, canvasW, canvasH);
+    if (!world) return 0;
+    return this.worldXToLane(world.x);
+  }
+
+  /**
+   * Map a canvas-pixel position to a millisecond timestamp.
+   */
+  screenToMs(
+    canvasX: number,
+    canvasY: number,
+    canvasW: number,
+    canvasH: number,
+  ): number {
+    const world = this.screenToWorldPoint(canvasX, canvasY, canvasW, canvasH);
+    if (!world) return 0;
+    return this.worldYToMs(world.y);
+  }
+
+  /**
+   * Map a canvas-pixel position to a tick value, snapped to grid.
+   */
+  screenToTick(
+    canvasX: number,
+    canvasY: number,
+    canvasW: number,
+    canvasH: number,
+    gridDivision: number = 0,
+  ): number {
+    const ms = this.screenToMs(canvasX, canvasY, canvasW, canvasH);
+    return this.msToTickSnapped(ms, gridDivision);
+  }
+
+  /**
+   * Determine the CSS cursor style based on a HitResult and tool mode.
+   */
+  getCursor(hit: HitResult, toolMode: string): string {
+    if (!hit) {
+      switch (toolMode) {
+        case 'place':
+          return 'crosshair';
+        case 'erase':
+          return 'pointer';
+        default:
+          return 'default';
+      }
+    }
+
+    switch (hit.type) {
+      case 'note':
+        switch (toolMode) {
+          case 'cursor':
+            return 'pointer';
+          case 'erase':
+            return 'pointer';
+          default:
+            return 'crosshair';
+        }
+      case 'highway':
+        switch (toolMode) {
+          case 'place':
+            return 'crosshair';
+          case 'erase':
+            return 'pointer';
+          default:
+            return 'default';
+        }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal coordinate conversion
+  // -----------------------------------------------------------------------
+
+  /**
+   * Intersect the current ray with the highway plane (z=0) and return the hit
+   * root-locally: `x` is shifted by `-rootWorldX`, so the highway bounds,
+   * `worldXToLane`, and the schema's lane offsets -- all expressed around 0 --
+   * apply unchanged at any root position. Every consumer of the shared
+   * `intersectionPoint` goes through here, so it only ever holds root-local X.
+   *
+   * The returned vector is that shared instance, valid until the next call.
+   */
+  private intersectHighwayPlaneLocal(): THREE.Vector3 | null {
+    const hit = this.raycaster.ray.intersectPlane(
+      this.highwayPlane,
+      this.intersectionPoint,
+    );
+    if (!hit) return null;
+    hit.x -= this.rootWorldX;
+    return hit;
+  }
+
+  /**
+   * Unproject a canvas-pixel coordinate to a root-local point on the highway
+   * plane. Aims the shared raycaster, so it invalidates any hit-test in
+   * progress.
+   */
+  private screenToWorldPoint(
+    canvasX: number,
+    canvasY: number,
+    canvasW: number,
+    canvasH: number,
+  ): THREE.Vector3 | null {
+    const ndcX = (canvasX / canvasW) * 2 - 1;
+    const ndcY = -(canvasY / canvasH) * 2 + 1;
+
+    this.ndcVec.set(ndcX, ndcY);
+    this.raycaster.setFromCamera(this.ndcVec, this.camera);
+    return this.intersectHighwayPlaneLocal();
+  }
+
+  /**
+   * Find the closest lane index for a world X coordinate. Strict `<` keeps
+   * the earlier of two equidistant candidates, and the constructor orders
+   * `laneXPositions` pads-first, so a pad beats the full-width lane whenever
+   * they share an X (5-lane drums).
+   */
+  private worldXToLane(worldX: number): number {
+    let bestLane = this.fullWidthLane >= 0 ? this.fullWidthLane : 0;
+    let bestDist = Infinity;
+    for (const candidate of this.laneXPositions) {
+      const dist = Math.abs(worldX - candidate.x);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestLane = candidate.lane;
+      }
+    }
+    return bestLane;
+  }
+
+  /** Convert a world Y coordinate to a millisecond timestamp. */
+  private worldYToMs(worldY: number): number {
+    // worldY = ((noteMs - elapsedMs) / 1000) * highwaySpeed - 1
+    // Solve: noteMs = ((worldY + 1) / highwaySpeed) * 1000 + elapsedMs
+    const elapsedMs = this.getElapsedMs();
+    return ((worldY + 1) / this.highwaySpeed) * 1000 + elapsedMs;
+  }
+
+  /** Convert a world Y coordinate back relative to elapsed time. */
+  private msToWorldY(ms: number, elapsedMs: number): number {
+    return ((ms - elapsedMs) / 1000) * this.highwaySpeed - 1;
+  }
+
+  // -----------------------------------------------------------------------
+  // Timing helpers
+  // -----------------------------------------------------------------------
+
+  private tickToMs(tick: number): number {
+    if (this.timedTempos.length === 0) return 0;
+    let idx = 0;
+    for (let i = 1; i < this.timedTempos.length; i++) {
+      if (this.timedTempos[i].tick <= tick) idx = i;
+      else break;
+    }
+    const tempo = this.timedTempos[idx];
+    return (
+      tempo.msTime +
+      ((tick - tempo.tick) * 60000) / (tempo.beatsPerMinute * this.resolution)
+    );
+  }
+
+  private msToTickRaw(ms: number): number {
+    if (this.timedTempos.length === 0) return 0;
+    let idx = 0;
+    for (let i = 1; i < this.timedTempos.length; i++) {
+      if (this.timedTempos[i].msTime <= ms) idx = i;
+      else break;
+    }
+    const tempo = this.timedTempos[idx];
+    return Math.round(
+      tempo.tick +
+        ((ms - tempo.msTime) * tempo.beatsPerMinute * this.resolution) / 60000,
+    );
+  }
+
+  private msToTickSnapped(ms: number, gridDivision: number): number {
+    return snapTickToGrid(this.msToTickRaw(ms), this.resolution, gridDivision);
+  }
+
+  // -----------------------------------------------------------------------
+  // Lifecycle
+  // -----------------------------------------------------------------------
+
+  dispose(): void {
+    // No resources to release -- all objects are lightweight and GC'd.
+  }
+}

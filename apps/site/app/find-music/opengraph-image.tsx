@@ -6,8 +6,8 @@ import {
   OgPanel,
   OgSubtitle,
   OgTitle,
-} from '@/lib/og/layout';
-import {OG_COLORS, OG_SIZE} from '@/lib/og/tokens';
+} from '@musiccharts/core/og/layout';
+import {OG_COLORS, OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Find charts for the music you already listen to';
 export const size = OG_SIZE;

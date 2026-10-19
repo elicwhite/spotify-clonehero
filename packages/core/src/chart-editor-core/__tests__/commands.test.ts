@@ -1,0 +1,822 @@
+/**
+ * Command execute + snapshot-restore tests.
+ *
+ * Undo is snapshot replay, not command inversion (`ChartEditorContext.tsx`
+ * pushes the pre-command doc onto `undoEntries` and `useUndoRedo`
+ * reinstalls it directly — commands have no `undo()` method). So each test
+ * here asserts two things: `execute()` produces the expected structural
+ * change, and `execute()` never mutates its input doc — which is exactly
+ * what makes that input doc a valid snapshot to restore to. Equality is
+ * structural (via `expectDocsEqual`) — `msTime` / `msLength` and File-blob
+ * assets are stripped before compare since they don't survive the
+ * writer/parser round-trip exactly bit-for-bit.
+ */
+
+import {
+  AddBPMCommand,
+  AddNoteCommand,
+  toSchemaNote,
+  translateSchemaNote,
+  AddSectionCommand,
+  AddTimeSignatureCommand,
+  BatchCommand,
+  DeleteNotesCommand,
+  DeleteSectionCommand,
+  MoveEntitiesCommand,
+  RenameSectionCommand,
+  ToggleFlagCommand,
+  SetFlagCommand,
+  SetNoteLengthCommand,
+  SetNoteTechniqueCommand,
+  ResizeNotesCommand,
+  noteId,
+} from '../commands';
+import {
+  expectDocsEqual,
+  makeFixtureDoc,
+  makeMultiPartVocalsDoc,
+} from './fixtures';
+import {emptyTrackData} from '../../chart-edit/__tests__/test-utils';
+import {trackKeyId} from '../trackInventory';
+import {
+  getDrumNotes,
+  drums4LaneSchema,
+  guitarSchema,
+  listNotes,
+  addNote,
+} from '../../chart-edit';
+import type {ChartDocument, TrackKey} from '../../chart-edit';
+import {noteTypes, noteFlags} from '@eliwhite/scan-chart';
+
+const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};
+
+/**
+ * Asserts `execute()` leaves `before` structurally identical to a pristine
+ * doc built the same way — i.e. `before` is still a valid pre-edit snapshot
+ * for the reducer's `undoEntries` to restore.
+ */
+function expectInputUntouched(
+  before: ChartDocument,
+  pristine: ChartDocument,
+): void {
+  expectDocsEqual(before, pristine);
+}
+
+describe('command execute + snapshot-restore', () => {
+  describe('AddNoteCommand', () => {
+    it('adds the note and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new AddNoteCommand(
+        toSchemaNote({
+          tick: 240,
+          type: noteTypes.redDrum,
+          length: 0,
+          flags: 0,
+        }),
+        DRUMS_KEY,
+      );
+      const after = cmd.execute(before);
+      expect(after).not.toBe(before);
+      expect(
+        getDrumNotes(after.parsedChart.trackData[0]).some(
+          n => n.tick === 240 && n.type === noteTypes.redDrum,
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('declares its target track in affectedTracks', () => {
+      const cmd = new AddNoteCommand(
+        toSchemaNote({tick: 240, type: noteTypes.redDrum}),
+        DRUMS_KEY,
+      );
+      expect(cmd.affectedTracks).toEqual(new Set([trackKeyId(DRUMS_KEY)]));
+    });
+
+    // Regression: a note added at a non-zero tick must carry a tempo-map
+    // msTime. When it stayed 0 the highway (which windows/positions by
+    // msTime) rendered the note at song start — off-window — so it appeared
+    // in the piano roll (positions by tick) but never on the highway.
+    it('computes the new note msTime from the tempo map (push model §2)', () => {
+      const before = makeFixtureDoc();
+      // 720 ticks at 120 BPM / res 480 = 750ms; the tick is empty in the
+      // fixture so the added event is unambiguous.
+      const cmd = new AddNoteCommand(
+        toSchemaNote({tick: 720, type: noteTypes.redDrum, length: 0, flags: 0}),
+        DRUMS_KEY,
+      );
+      const after = cmd.execute(before);
+      const drums = after.parsedChart.trackData.find(
+        t => t.instrument === 'drums',
+      )!;
+      const added = drums.noteEventGroups.flat().find(n => n.tick === 720)!;
+      expect(added).toBeDefined();
+      expect(added.msTime).toBeCloseTo(750, 5);
+    });
+  });
+
+  describe('DeleteNotesCommand', () => {
+    it('removes the notes and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new DeleteNotesCommand(
+        new Set([
+          noteId({tick: 480, type: noteTypes.redDrum}),
+          noteId({tick: 1440, type: noteTypes.blueDrum}),
+        ]),
+        DRUMS_KEY,
+      );
+      const after = cmd.execute(before);
+      const remaining = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(remaining.some(n => n.tick === 480)).toBe(false);
+      expect(remaining.some(n => n.tick === 1440)).toBe(false);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('deleting a non-existent note is a no-op (round-trip safe)', () => {
+      const before = makeFixtureDoc();
+      const cmd = new DeleteNotesCommand(
+        new Set([noteId({tick: 99999, type: noteTypes.kick})]),
+        DRUMS_KEY,
+      );
+      const after = cmd.execute(before);
+      expectDocsEqual(after, before);
+    });
+  });
+
+  describe('SetNoteLengthCommand', () => {
+    const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+
+    /** Guitar track with three green notes at ragged tail lengths. */
+    function guitarDoc(): ChartDocument {
+      const doc = makeFixtureDoc();
+      doc.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = doc.parsedChart.trackData[1];
+      addNote(guitar, {tick: 0, type: noteTypes.green}, guitarSchema);
+      addNote(
+        guitar,
+        {tick: 480, type: noteTypes.red, length: 50},
+        guitarSchema,
+      );
+      addNote(
+        guitar,
+        {tick: 960, type: noteTypes.yellow, length: 9999},
+        guitarSchema,
+      );
+      return doc;
+    }
+
+    const IDS = [
+      noteId({tick: 0, type: noteTypes.green}),
+      noteId({tick: 480, type: noteTypes.red}),
+      noteId({tick: 960, type: noteTypes.yellow}),
+    ];
+
+    function lengths(doc: ChartDocument): number[] {
+      return listNotes(doc.parsedChart.trackData[1], guitarSchema)
+        .sort((a, b) => a.tick - b.tick)
+        .map(n => n.length);
+    }
+
+    it('drives a ragged selection to one absolute length', () => {
+      const res = guitarDoc().parsedChart.resolution;
+      const after = new SetNoteLengthCommand(
+        IDS,
+        res * 2,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(guitarDoc());
+      expect(lengths(after)).toEqual([res * 2, res * 2, res * 2]);
+    });
+
+    it('removes every tail when the length is zero', () => {
+      const after = new SetNoteLengthCommand(
+        IDS,
+        0,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(guitarDoc());
+      expect(lengths(after)).toEqual([0, 0, 0]);
+    });
+
+    it('leaves notes outside the selection alone', () => {
+      const after = new SetNoteLengthCommand(
+        [IDS[0]],
+        240,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(guitarDoc());
+      expect(lengths(after)).toEqual([240, 50, 9999]);
+    });
+
+    it('is a no-op on a schema with no sustain', () => {
+      // Drum hits have no tail; the guard keeps a stray call from writing one.
+      const before = makeFixtureDoc();
+      const after = new SetNoteLengthCommand(
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        480,
+        DRUMS_KEY,
+        drums4LaneSchema,
+      ).execute(before);
+      expectDocsEqual(after, before);
+    });
+
+    it('leaves the input doc untouched', () => {
+      const before = guitarDoc();
+      const pristine = guitarDoc();
+      new SetNoteLengthCommand(IDS, 480, GUITAR_KEY, guitarSchema).execute(
+        before,
+      );
+      expect(lengths(before)).toEqual(lengths(pristine));
+    });
+  });
+
+  describe('SetFlagCommand', () => {
+    /** Red at 480 already accented, blue at 1440 not — the mixed selection a
+     *  toggle gets wrong. */
+    function mixedAccentDoc(): ChartDocument {
+      const doc = makeFixtureDoc();
+      return new ToggleFlagCommand(
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        'accent',
+        DRUMS_KEY,
+      ).execute(doc);
+    }
+
+    const MIXED = [
+      noteId({tick: 480, type: noteTypes.redDrum}),
+      noteId({tick: 1440, type: noteTypes.blueDrum}),
+    ];
+
+    it('adds the flag to every target without inverting the ones that had it', () => {
+      const after = new SetFlagCommand(
+        MIXED,
+        'accent',
+        true,
+        DRUMS_KEY,
+      ).execute(mixedAccentDoc());
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      for (const tick of [480, 1440]) {
+        const note = notes.find(n => n.tick === tick)!;
+        expect(!!(note.flags & noteFlags.accent)).toBe(true);
+      }
+    });
+
+    it('removes the flag from every target, including ones that lacked it', () => {
+      const after = new SetFlagCommand(
+        MIXED,
+        'accent',
+        false,
+        DRUMS_KEY,
+      ).execute(mixedAccentDoc());
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      for (const tick of [480, 1440]) {
+        const note = notes.find(n => n.tick === tick)!;
+        expect(!!(note.flags & noteFlags.accent)).toBe(false);
+      }
+    });
+
+    it('adding a dynamic clears the other one across a mixed selection', () => {
+      const after = new SetFlagCommand(MIXED, 'ghost', true, DRUMS_KEY).execute(
+        mixedAccentDoc(),
+      );
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      for (const tick of [480, 1440]) {
+        const note = notes.find(n => n.tick === tick)!;
+        expect(!!(note.flags & noteFlags.ghost)).toBe(true);
+        expect(!!(note.flags & noteFlags.accent)).toBe(false);
+      }
+    });
+
+    it('keeps the cymbal flag when ghosting a cymbal', () => {
+      // The fixture's yellow at 960 is a cymbal. Ghost-on-cymbal is 7.7% of
+      // drum charts in the corpus, so it must survive intact.
+      const after = new SetFlagCommand(
+        [noteId({tick: 960, type: noteTypes.yellowDrum})],
+        'ghost',
+        true,
+        DRUMS_KEY,
+      ).execute(makeFixtureDoc());
+      const yellow = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 960,
+      )!;
+      expect(!!(yellow.flags & noteFlags.cymbal)).toBe(true);
+      expect(!!(yellow.flags & noteFlags.ghost)).toBe(true);
+    });
+
+    it('leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      new SetFlagCommand(
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        'ghost',
+        true,
+        DRUMS_KEY,
+      ).execute(before);
+      expectInputUntouched(before, pristine);
+    });
+  });
+
+  describe('ToggleFlagCommand', () => {
+    it('toggles cymbal on and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const yellowId = noteId({tick: 960, type: noteTypes.yellowDrum});
+      const cmd = new ToggleFlagCommand([yellowId], 'cymbal', DRUMS_KEY);
+      const after = cmd.execute(before);
+      const yellow = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 960,
+      )!;
+      expect(!!(yellow.flags & noteFlags.cymbal)).toBe(false);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('toggling accent on from no-flag state', () => {
+      const before = makeFixtureDoc();
+      const redId = noteId({tick: 480, type: noteTypes.redDrum});
+      const cmd = new ToggleFlagCommand([redId], 'accent', DRUMS_KEY);
+      const after = cmd.execute(before);
+      const red = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 480,
+      )!;
+      expect(!!(red.flags & noteFlags.accent)).toBe(true);
+    });
+
+    it('toggling accent on a ghosted note clears the ghost', () => {
+      const before = makeFixtureDoc();
+      const redId = noteId({tick: 480, type: noteTypes.redDrum});
+      const ghosted = new ToggleFlagCommand(
+        [redId],
+        'ghost',
+        DRUMS_KEY,
+      ).execute(before);
+      const after = new ToggleFlagCommand([redId], 'accent', DRUMS_KEY).execute(
+        ghosted,
+      );
+      const red = getDrumNotes(after.parsedChart.trackData[0]).find(
+        n => n.tick === 480,
+      )!;
+      expect(!!(red.flags & noteFlags.accent)).toBe(true);
+      expect(!!(red.flags & noteFlags.ghost)).toBe(false);
+    });
+
+    // Plan 0067 §5: ToggleFlagCommand takes the schema explicitly, so
+    // non-drum flags (HOPO/tap/strum) work when a guitar schema is passed.
+    it('toggles HOPO on a guitar note when passed guitarSchema', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = before.parsedChart.trackData[1];
+      addNote(guitar, {tick: 240, type: noteTypes.green}, guitarSchema);
+
+      const greenId = noteId({tick: 240, type: noteTypes.green});
+      const cmd = new ToggleFlagCommand(
+        [greenId],
+        'hopo',
+        GUITAR_KEY,
+        guitarSchema,
+      );
+      const after = cmd.execute(before);
+      const guitarAfter = after.parsedChart.trackData[1];
+      const green = listNotes(guitarAfter, guitarSchema).find(
+        n => n.tick === 240,
+      )!;
+      expect(!!(green.flags & noteFlags.hopo)).toBe(true);
+    });
+
+    it('sets articulation across every gem in a guitar chord', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = before.parsedChart.trackData[1];
+      addNote(guitar, {tick: 240, type: noteTypes.green}, guitarSchema);
+      addNote(guitar, {tick: 240, type: noteTypes.red}, guitarSchema);
+
+      const after = new SetNoteTechniqueCommand(
+        [noteId({tick: 240, type: noteTypes.green})],
+        'tap',
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(before);
+      expect(
+        listNotes(after.parsedChart.trackData[1], guitarSchema).every(
+          n =>
+            (n.flags & noteFlags.tap) !== 0 &&
+            (n.flags & (noteFlags.hopo | noteFlags.strum)) === 0,
+        ),
+      ).toBe(true);
+    });
+
+    it('resizes selected guitar sustains and clamps through zero', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('guitar', 'expert'));
+      const guitar = before.parsedChart.trackData[1];
+      addNote(
+        guitar,
+        {tick: 240, type: noteTypes.green, length: 120},
+        guitarSchema,
+      );
+
+      const id = noteId({tick: 240, type: noteTypes.green});
+      const longer = new ResizeNotesCommand(
+        [id],
+        360,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(before);
+      expect(
+        listNotes(longer.parsedChart.trackData[1], guitarSchema)[0].length,
+      ).toBe(480);
+      const shorter = new ResizeNotesCommand(
+        [id],
+        -1000,
+        GUITAR_KEY,
+        guitarSchema,
+      ).execute(before);
+      expect(
+        listNotes(shorter.parsedChart.trackData[1], guitarSchema)[0].length,
+      ).toBe(0);
+    });
+  });
+
+  describe('MoveEntitiesCommand (notes)', () => {
+    it('moves tick + lane and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new MoveEntitiesCommand(
+        'note',
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        240,
+        1,
+        {trackKey: DRUMS_KEY},
+      );
+      const after = cmd.execute(before);
+      expect(
+        getDrumNotes(after.parsedChart.trackData[0]).some(
+          n => n.tick === 480 && n.type === noteTypes.redDrum,
+        ),
+      ).toBe(false);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('moving multiple notes by the same delta', () => {
+      const before = makeFixtureDoc();
+      const cmd = new MoveEntitiesCommand(
+        'note',
+        [
+          noteId({tick: 0, type: noteTypes.kick}),
+          noteId({tick: 480, type: noteTypes.redDrum}),
+        ],
+        240,
+        0,
+        {trackKey: DRUMS_KEY},
+      );
+      const after = cmd.execute(before);
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(notes.some(n => n.tick === 240 && n.type === noteTypes.kick)).toBe(
+        true,
+      );
+      expect(
+        notes.some(n => n.tick === 720 && n.type === noteTypes.redDrum),
+      ).toBe(true);
+    });
+
+    it('declares the moved track in affectedTracks', () => {
+      const cmd = new MoveEntitiesCommand(
+        'note',
+        [noteId({tick: 480, type: noteTypes.redDrum})],
+        240,
+        1,
+        {trackKey: DRUMS_KEY},
+      );
+      expect(cmd.affectedTracks).toEqual(new Set([trackKeyId(DRUMS_KEY)]));
+    });
+  });
+
+  describe('MoveEntitiesCommand (sections)', () => {
+    it('moves the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new MoveEntitiesCommand('section', ['1920'], -480, 0);
+      const after = cmd.execute(before);
+      expect(after.parsedChart.sections.some(s => s.tick === 1440)).toBe(true);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('leaves affectedTracks undefined (chart-wide, not track-scoped)', () => {
+      const cmd = new MoveEntitiesCommand('section', ['1920'], -480, 0);
+      expect(cmd.affectedTracks).toBeUndefined();
+    });
+  });
+
+  describe('MoveEntitiesCommand (lyrics in vocals scope)', () => {
+    it('moves a lyric within the active vocal part', () => {
+      const before = makeFixtureDoc();
+      const cmd = new MoveEntitiesCommand('lyric', ['vocals:240'], 120, 0, {
+        partName: 'vocals',
+      });
+      const after = cmd.execute(before);
+      const lyrics = after.parsedChart
+        .vocalTracks!.parts['vocals'].notePhrases.flatMap(p => p.lyrics)
+        .map(l => l.tick);
+      expect(lyrics).toContain(360);
+    });
+
+    it('moves a lyric in harm1 without disturbing vocals', () => {
+      const before = makeMultiPartVocalsDoc();
+      const cmd = new MoveEntitiesCommand('lyric', ['harm1:120'], 60, 0, {
+        partName: 'harm1',
+      });
+      const after = cmd.execute(before);
+      const harm1Lyrics = after.parsedChart
+        .vocalTracks!.parts['harm1'].notePhrases.flatMap(p => p.lyrics)
+        .map(l => l.tick);
+      expect(harm1Lyrics).toContain(180);
+      const vocalsLyrics = after.parsedChart
+        .vocalTracks!.parts['vocals'].notePhrases.flatMap(p => p.lyrics)
+        .map(l => l.tick);
+      expect(vocalsLyrics).toEqual([240]);
+    });
+  });
+
+  describe('MoveEntitiesCommand (phrase-start)', () => {
+    it('moves a phrase-start', () => {
+      const before = makeFixtureDoc();
+      // The fixture phrase starts at 0; bump to 60.
+      const cmd = new MoveEntitiesCommand('phrase-start', ['vocals:0'], 60, 0, {
+        partName: 'vocals',
+      });
+      const after = cmd.execute(before);
+      const starts = after.parsedChart
+        .vocalTracks!.parts[
+          'vocals'
+        ].notePhrases.filter(p => p.lyrics.length > 0)
+        .map(p => p.tick);
+      expect(starts).toContain(60);
+    });
+  });
+
+  describe('AddBPMCommand', () => {
+    it('adds/replaces a BPM marker and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new AddBPMCommand(960, 100, 'grid');
+      const after = cmd.execute(before);
+      expect(
+        after.parsedChart.tempos.some(
+          t => t.tick === 960 && t.beatsPerMinute === 100,
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('replaces the tick-0 seed tempo', () => {
+      const before = makeFixtureDoc();
+      const cmd = new AddBPMCommand(0, 200, 'grid');
+      const after = cmd.execute(before);
+      expect(
+        after.parsedChart.tempos.some(
+          t => t.tick === 0 && t.beatsPerMinute === 200,
+        ),
+      ).toBe(true);
+    });
+
+    it('leaves affectedTracks undefined (intent carried by entityKinds)', () => {
+      const cmd = new AddBPMCommand(960, 100, 'grid');
+      expect(cmd.affectedTracks).toBeUndefined();
+    });
+  });
+
+  describe('AddTimeSignatureCommand', () => {
+    it('adds the time signature and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new AddTimeSignatureCommand(960, 3, 4);
+      const after = cmd.execute(before);
+      expect(
+        after.parsedChart.timeSignatures.some(
+          ts => ts.tick === 960 && ts.numerator === 3 && ts.denominator === 4,
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
+    });
+  });
+
+  describe('AddSectionCommand', () => {
+    it('adds the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new AddSectionCommand(2880, 'Chorus');
+      const after = cmd.execute(before);
+      expect(
+        after.parsedChart.sections.some(
+          s => s.tick === 2880 && s.name === 'Chorus',
+        ),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
+    });
+  });
+
+  describe('DeleteSectionCommand', () => {
+    it('removes the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new DeleteSectionCommand(1920, 'Verse');
+      const after = cmd.execute(before);
+      expect(after.parsedChart.sections.some(s => s.tick === 1920)).toBe(false);
+      expectInputUntouched(before, pristine);
+    });
+  });
+
+  describe('RenameSectionCommand', () => {
+    it('renames the section and leaves the input doc untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const cmd = new RenameSectionCommand(0, 'Intro', 'Opening');
+      const after = cmd.execute(before);
+      expect(after.parsedChart.sections.find(s => s.tick === 0)?.name).toBe(
+        'Opening',
+      );
+      expectInputUntouched(before, pristine);
+    });
+  });
+
+  describe('BatchCommand', () => {
+    it('runs sub-commands in order on execute', () => {
+      const before = makeFixtureDoc();
+      const order: string[] = [];
+      const wrap = (label: string, inner: () => void) => ({
+        description: label,
+        entityKinds: new Set<never>(),
+        operations: new Set<never>(),
+        execute: (doc: typeof before) => {
+          order.push(`${label}:execute`);
+          inner();
+          return doc;
+        },
+      });
+      const batch = new BatchCommand([
+        wrap('A', () => {}),
+        wrap('B', () => {}),
+        wrap('C', () => {}),
+      ]);
+      batch.execute(before);
+      expect(order).toEqual(['A:execute', 'B:execute', 'C:execute']);
+    });
+
+    it('round-trips a real edit batch (add three notes), input untouched', () => {
+      const pristine = makeFixtureDoc();
+      const before = makeFixtureDoc();
+      const batch = new BatchCommand([
+        new AddNoteCommand(
+          toSchemaNote({tick: 60, type: noteTypes.kick, length: 0, flags: 0}),
+          DRUMS_KEY,
+        ),
+        new AddNoteCommand(
+          toSchemaNote({
+            tick: 120,
+            type: noteTypes.redDrum,
+            length: 0,
+            flags: 0,
+          }),
+          DRUMS_KEY,
+        ),
+        new AddNoteCommand(
+          toSchemaNote({
+            tick: 180,
+            type: noteTypes.yellowDrum,
+            length: 0,
+            flags: 0,
+          }),
+          DRUMS_KEY,
+        ),
+      ]);
+      const after = batch.execute(before);
+      const notes = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(notes.some(n => n.tick === 60 && n.type === noteTypes.kick)).toBe(
+        true,
+      );
+      expect(
+        notes.some(n => n.tick === 120 && n.type === noteTypes.redDrum),
+      ).toBe(true);
+      expect(
+        notes.some(n => n.tick === 180 && n.type === noteTypes.yellowDrum),
+      ).toBe(true);
+      expectInputUntouched(before, pristine);
+    });
+
+    it('unions member affectedTracks, ignoring members that declare none', () => {
+      const GUITAR_KEY: TrackKey = {instrument: 'guitar', difficulty: 'expert'};
+      const batch = new BatchCommand([
+        new AddNoteCommand(
+          toSchemaNote({tick: 60, type: noteTypes.kick}),
+          DRUMS_KEY,
+        ),
+        new AddTimeSignatureCommand(960, 3, 4), // no affectedTracks
+        new AddNoteCommand(
+          toSchemaNote({tick: 60, type: noteTypes.green}),
+          GUITAR_KEY,
+          guitarSchema,
+        ),
+      ]);
+      expect(batch.affectedTracks).toEqual(
+        new Set([trackKeyId(DRUMS_KEY), trackKeyId(GUITAR_KEY)]),
+      );
+    });
+
+    it('leaves affectedTracks undefined when no member declares one', () => {
+      const batch = new BatchCommand([
+        new AddTimeSignatureCommand(960, 3, 4),
+        new AddSectionCommand(2880, 'Chorus'),
+      ]);
+      expect(batch.affectedTracks).toBeUndefined();
+    });
+  });
+
+  // Plan 0037 Task 6: scope-aware, schema-typed clipboard — notes are
+  // translated lane-by-lane between the copy source's and paste target's
+  // `InstrumentSchema` rather than assuming they match.
+  describe('translateSchemaNote', () => {
+    it('passes the note through unchanged when source and target schemas match', () => {
+      const note = toSchemaNote({
+        tick: 240,
+        type: noteTypes.redDrum,
+        length: 0,
+        flags: noteFlags.accent,
+      });
+      expect(
+        translateSchemaNote(note, drums4LaneSchema, drums4LaneSchema),
+      ).toEqual(note);
+    });
+
+    it('remaps by lane index across differently-shaped schemas', () => {
+      // drums4LaneSchema lane 0 = red; guitarSchema lane 0 = open.
+      const note = toSchemaNote({
+        tick: 240,
+        type: noteTypes.redDrum,
+        length: 0,
+        flags: 0,
+      });
+      const translated = translateSchemaNote(
+        note,
+        drums4LaneSchema,
+        guitarSchema,
+      );
+      expect(translated).toEqual({...note, type: noteTypes.open});
+    });
+
+    it('drops a note whose source lane has no counterpart in the target schema', () => {
+      // guitarSchema lane 5 = orange; drums4LaneSchema only has 5 lanes
+      // (indices 0-4), so nothing occupies lane 5.
+      const note = toSchemaNote({
+        tick: 240,
+        type: noteTypes.orange,
+        length: 0,
+        flags: 0,
+      });
+      expect(
+        translateSchemaNote(note, guitarSchema, drums4LaneSchema),
+      ).toBeNull();
+    });
+  });
+
+  describe('cross-difficulty paste (AddNoteCommand with a translated note)', () => {
+    it('lands the pasted note in the target track, leaving the source track untouched', () => {
+      const HARD_KEY: TrackKey = {instrument: 'drums', difficulty: 'hard'};
+      const before = makeFixtureDoc();
+      before.parsedChart.trackData.push(emptyTrackData('drums', 'hard'));
+
+      const sourceNote = getDrumNotes(before.parsedChart.trackData[0]).find(
+        n => n.tick === 0 && n.type === noteTypes.kick,
+      )!;
+      expect(sourceNote).toBeDefined();
+
+      // Same-schema translate (drums expert -> drums hard) is a passthrough;
+      // paste dispatches AddNoteCommand against the target track's key.
+      const pasted = translateSchemaNote(
+        toSchemaNote(sourceNote),
+        drums4LaneSchema,
+        drums4LaneSchema,
+      )!;
+      const cmd = new AddNoteCommand(pasted, HARD_KEY);
+      const after = cmd.execute(before);
+
+      const hardTrack = after.parsedChart.trackData.find(
+        t => t.instrument === 'drums' && t.difficulty === 'hard',
+      )!;
+      expect(
+        getDrumNotes(hardTrack).some(
+          n => n.tick === 0 && n.type === noteTypes.kick,
+        ),
+      ).toBe(true);
+
+      // The expert (source) track keeps exactly its original notes — the
+      // paste only added to hard.
+      const expertBefore = getDrumNotes(before.parsedChart.trackData[0]);
+      const expertAfter = getDrumNotes(after.parsedChart.trackData[0]);
+      expect(expertAfter).toEqual(expertBefore);
+    });
+  });
+});

@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type {ScanProgress} from '@/lib/drum-fills/scan/types';
-import {getFillCount} from '@/lib/drum-fills/db';
+import type {ScanProgress} from '@musiccharts/core/drum-fills/scan/types';
+import {getFillCount} from '@musiccharts/core/drum-fills/db';
 import {useLibraryScan} from '../hooks/useLibraryScan';
 
 /**

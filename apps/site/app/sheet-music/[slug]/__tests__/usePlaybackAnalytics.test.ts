@@ -3,11 +3,11 @@
  */
 
 import {act, renderHook} from '@testing-library/react';
-import {track} from '../../../../lib/analytics/track';
-import type {AudioManager} from '../../../../lib/preview/audioManager';
+import {track} from '@musiccharts/core/analytics/track';
+import type {AudioManager} from '@musiccharts/core/preview/audioManager';
 import {usePlaybackAnalytics} from '../usePlaybackAnalytics';
 
-jest.mock('../../../../lib/analytics/track', () => ({track: jest.fn()}));
+jest.mock('@musiccharts/core/analytics/track', () => ({track: jest.fn()}));
 
 const trackMock = track as jest.MockedFunction<typeof track>;
 

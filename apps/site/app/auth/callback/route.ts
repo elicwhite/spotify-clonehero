@@ -1,8 +1,8 @@
 import {NextResponse} from 'next/server';
 // The client you created from the Server-Side Auth instructions
-import {createClient} from '@/lib/supabase/server';
-import storeSpotifyToken from '@/lib/spotify-server/storeSpotifyToken';
-import {safeNextPath} from '@/lib/safe-next-path';
+import {createClient} from '@musiccharts/core/supabase/server';
+import storeSpotifyToken from '@musiccharts/core/spotify-server/storeSpotifyToken';
+import {safeNextPath} from '@musiccharts/core/safe-next-path';
 
 export async function GET(request: Request) {
   const {searchParams, origin} = new URL(request.url);

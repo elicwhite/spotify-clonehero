@@ -5,8 +5,13 @@
  */
 import {ImageResponse} from 'next/og';
 
-import {OgBrandRow, OgFrame, OgSubtitle, OgTitle} from '@/lib/og/layout';
-import {OG_SIZE} from '@/lib/og/tokens';
+import {
+  OgBrandRow,
+  OgFrame,
+  OgSubtitle,
+  OgTitle,
+} from '@musiccharts/core/og/layout';
+import {OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt =
   'I want the songs people love to be playable, and charted well';

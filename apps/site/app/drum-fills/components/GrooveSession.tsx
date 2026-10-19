@@ -2,13 +2,13 @@
 
 import {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
 import {
   getFillsByIds,
   type FillWithSrs,
   type GrooveCluster,
-} from '@/lib/drum-fills/db';
+} from '@musiccharts/core/drum-fills/db';
 import {useChromeSlot} from '../contexts/DrumFillsChromeContext';
 import GrooveStave from './GrooveStave';
 import FillRotationSession from './FillRotationSession';

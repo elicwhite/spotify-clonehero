@@ -1,5 +1,5 @@
 import {redirect} from 'next/navigation';
-import {createClient} from '@/lib/supabase/server';
+import {createClient} from '@musiccharts/core/supabase/server';
 import {LoginForm} from '../login/LoginForm';
 
 export default async function SpotifyLoginPage({

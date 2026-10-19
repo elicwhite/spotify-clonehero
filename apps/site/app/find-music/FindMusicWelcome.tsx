@@ -14,19 +14,19 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-import AppleMusicIcon from '@/components/AppleMusicIcon';
-import SpotifyIcon from '@/components/SpotifyIcon';
-import {Eyebrow} from '@/components/landing/Eyebrow';
-import {TrustLine} from '@/components/landing/TrustLine';
-import {Button} from '@/components/ui/button';
+import AppleMusicIcon from '@musiccharts/core/components/AppleMusicIcon';
+import SpotifyIcon from '@musiccharts/core/components/SpotifyIcon';
+import {Eyebrow} from '@musiccharts/core/components/landing/Eyebrow';
+import {TrustLine} from '@musiccharts/core/components/landing/TrustLine';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {Progress} from '@/components/ui/progress';
-import {cn} from '@/lib/utils';
+} from '@musiccharts/core/components/ui/dropdown-menu';
+import {Progress} from '@musiccharts/core/components/ui/progress';
+import {cn} from '@musiccharts/core/utils';
 
 import {NoFolderPickerNotice} from './songsFolderCopy';
 import type {CardOverflowAction, SourceStatus} from './types';

@@ -1,18 +1,23 @@
 'use client';
 
 import {useState} from 'react';
-import {createClient} from '@/lib/supabase/client';
-import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
-import {Button} from '@/components/ui/button';
-import {Input} from '@/components/ui/input';
-import {Label} from '@/components/ui/label';
-import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
+import {createClient} from '@musiccharts/core/supabase/client';
+import {getAuthCallbackUrl} from '@musiccharts/core/supabase/auth-callback-url';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Input} from '@musiccharts/core/components/ui/input';
+import {Label} from '@musiccharts/core/components/ui/label';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@musiccharts/core/components/ui/card';
 import {useSearchParams} from 'next/navigation';
 
-import {cn} from '@/lib/utils';
-import {Icons} from '@/components/icons';
-import SpotifyIcon from '@/components/SpotifyIcon';
-import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
+import {cn} from '@musiccharts/core/utils';
+import {Icons} from '@musiccharts/core/components/icons';
+import SpotifyIcon from '@musiccharts/core/components/SpotifyIcon';
+import {SPOTIFY_SCOPES} from '@musiccharts/core/spotify-sdk/spotifyScopes';
 
 export function LoginForm({
   className,

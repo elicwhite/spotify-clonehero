@@ -1,6 +1,6 @@
 import {redirect} from 'next/navigation';
 import AccountClient from './AccountClient';
-import {createClient} from '@/lib/supabase/server';
+import {createClient} from '@musiccharts/core/supabase/server';
 
 export const metadata = {
   title: 'Account',

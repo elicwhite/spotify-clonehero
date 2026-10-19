@@ -1,15 +1,15 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
-import type {FillWithSrs} from '@/lib/drum-fills/db';
-import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
+import type {FillWithSrs} from '@musiccharts/core/drum-fills/db';
+import type {ScoredAttempt} from '@musiccharts/core/drum-fills/practice/attempt';
 import {
   nextRotationIndex,
   previewRotationIndex,
   type RotationOrder,
-} from '@/lib/drum-fills/practice/fillRotation';
+} from '@musiccharts/core/drum-fills/practice/fillRotation';
 import PracticeView from './PracticeView';
 
 export interface FillRotationSessionProps {

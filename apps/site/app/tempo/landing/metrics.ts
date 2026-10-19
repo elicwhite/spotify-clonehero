@@ -21,7 +21,7 @@
 import type {
   LandingMetric,
   LandingProvenance,
-} from '@/components/landing/StatChip';
+} from '@musiccharts/core/components/landing/StatChip';
 
 export interface TempoComparisonRow {
   measurement: string;

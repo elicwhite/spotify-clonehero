@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   getAttemptStats,
   getGroupedLibrary,
@@ -10,7 +10,7 @@ import {
   queryFills,
   type FillWithSrs,
   type GroupedFill,
-} from '@/lib/drum-fills/db';
+} from '@musiccharts/core/drum-fills/db';
 import {useDrumFillsChrome} from '../contexts/DrumFillsChromeContext';
 import {useLibraryFilters, useLibraryView} from '../hooks/useLibraryFilters';
 import {
@@ -19,7 +19,7 @@ import {
   sortFills,
   availableVoicingTags,
   type LibrarySort,
-} from '@/lib/drum-fills/library/filterFills';
+} from '@musiccharts/core/drum-fills/library/filterFills';
 import FilterPanel from './FilterPanel';
 import FillGrid from './FillGrid';
 import GroupedFillGrid from './GroupedFillGrid';

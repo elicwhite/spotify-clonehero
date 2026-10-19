@@ -9,18 +9,21 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import {CardGrid, CardGridCell} from '@/components/landing/CardGrid';
-import {ComparisonTable} from '@/components/landing/ComparisonTable';
-import {ExternalLink} from '@/components/landing/ExternalLink';
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {LandingProse} from '@/components/landing/Prose';
-import {ScrollToStartCta} from '@/components/landing/ScrollToStartCta';
-import {LandingSection} from '@/components/landing/Section';
-import {StepFlow} from '@/components/landing/StepFlow';
-import {ToolEntrySection} from '@/components/landing/ToolEntrySection';
+import {
+  CardGrid,
+  CardGridCell,
+} from '@musiccharts/core/components/landing/CardGrid';
+import {ComparisonTable} from '@musiccharts/core/components/landing/ComparisonTable';
+import {ExternalLink} from '@musiccharts/core/components/landing/ExternalLink';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {LandingProse} from '@musiccharts/core/components/landing/Prose';
+import {ScrollToStartCta} from '@musiccharts/core/components/landing/ScrollToStartCta';
+import {LandingSection} from '@musiccharts/core/components/landing/Section';
+import {StepFlow} from '@musiccharts/core/components/landing/StepFlow';
+import {ToolEntrySection} from '@musiccharts/core/components/landing/ToolEntrySection';
 
-import {EditPassCanvas} from '@/components/landing/EditPassCanvas';
+import {EditPassCanvas} from '@musiccharts/core/components/landing/EditPassCanvas';
 import {
   COMPARISON_ROWS,
   DATA_DISCLAIMER,

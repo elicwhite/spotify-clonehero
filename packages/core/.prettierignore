@@ -1,0 +1,11 @@
+# Dependencies
+node_modules
+
+# Data blobs and test fixtures (not source — keep minified/as-authored)
+src/drum-difficulty/__fixtures__
+src/drum-difficulty/ours/__fixtures__
+src/tempo-map/beat-this-mel-fb.json
+src/tempo-map/__tests__/fixtures
+src/drum-transcription/__tests__/fixtures
+src/section-names/__tests__/fixtures
+src/section-names/linkseg-mel-fb.json

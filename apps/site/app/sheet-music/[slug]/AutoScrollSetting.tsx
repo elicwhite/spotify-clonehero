@@ -1,7 +1,7 @@
-import {Button} from '@/components/ui/button';
-import {Switch} from '@/components/ui/switch';
-import type {AutoScrollState} from '@/lib/sheet-follow/useAutoScroll';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Switch} from '@musiccharts/core/components/ui/switch';
+import type {AutoScrollState} from '@musiccharts/core/sheet-follow/useAutoScroll';
+import {cn} from '@musiccharts/core/utils';
 
 /**
  * Auto scroll is unfinished, and development-only.

@@ -1,0 +1,1148 @@
+/**
+ * @jest-environment jsdom
+ */
+/**
+ * `useShiftedAudio` stem-list generalization (plan 0074 Phase 5 Task 5a).
+ *
+ * `AudioManager` is stubbed at the boundary (`preview/audioManager`) —
+ * these tests never touch real Web Audio — capturing the audio sources its
+ * fake constructor receives, so we can assert one track per stem plus the
+ * full mix and the click, for an arbitrary stem list.
+ */
+
+import '@testing-library/jest-dom';
+
+import {act} from 'react';
+import {renderHook, waitFor} from '@testing-library/react';
+import {createEmptyChart} from '@eliwhite/scan-chart';
+import type {ChartDocument} from '../../../../chart-edit';
+import {setAudioAnchor} from '../../../../chart-edit';
+import type {AudioStemInput} from '../useShiftedAudio';
+import {
+  decodedBufferFor,
+  rememberDecodedBuffer,
+} from '../../../../preview/decodedPcm';
+import {
+  AudioServiceProvider,
+  useAudioServiceContext,
+} from '../../AudioServiceContext';
+
+// ---------------------------------------------------------------------------
+// AudioManager stub
+// ---------------------------------------------------------------------------
+
+interface CapturedFile {
+  fileName: string;
+  pcm?: {samples: Float32Array; sampleRate: number; channels?: number};
+  data?: Uint8Array;
+}
+
+let lastCapturedFiles: CapturedFile[] = [];
+
+class FakeAudioManager {
+  ready = Promise.resolve();
+  isPlaying = false;
+  chartTime = 0;
+  duration = 10;
+  destroy = jest.fn();
+  pause = jest.fn(async () => {});
+  resume = jest.fn(async () => {});
+  seekToChartTime = jest.fn(async () => {});
+  setChartDelay = jest.fn();
+  replaceTrack = jest.fn(async (_trackName: string, _pcm: unknown) => {});
+  #volumes = new Map<string, number>();
+  setVolume = jest.fn((trackName: string, volume: number) => {
+    this.#volumes.set(trackName, volume);
+  });
+  // Mirrors the real manager: one track per audio file, defaulting to full
+  // volume until something sets it.
+  getVolume = jest.fn((trackName: string) => this.#volumes.get(trackName) ?? 1);
+  trackNames: string[];
+
+  constructor(audioFiles: CapturedFile[]) {
+    lastCapturedFiles = audioFiles;
+    this.trackNames = audioFiles.map(file =>
+      file.fileName.replace(/\.wav$/, ''),
+    );
+  }
+}
+
+// jsdom has no OfflineAudioContext; `generateBeatClickTrackSamples` (used inside
+// `buildShiftedAudioManager` to synthesize the click stem) needs one. The
+// click stem's actual content isn't under test here, so stub that one export
+// out; the rest of the module, `clickTrackSignature` included, is pure and
+// stays real.
+const clickRenderCalls: Array<[unknown, number, number]> = [];
+jest.mock('../../../../preview/clickTrack', () => ({
+  ...jest.requireActual('../../../../preview/clickTrack'),
+  generateBeatClickTrackSamples: jest.fn(
+    async (chart: unknown, durationMs: number, chartDelayMs: number) => {
+      clickRenderCalls.push([chart, durationMs, chartDelayMs]);
+      return {samples: new Float32Array(4), sampleRate: 8000};
+    },
+  ),
+}));
+
+// The pad worker client, wrapped so tests can count how many times a build
+// actually padded. The real implementation runs inline here (jsdom has no
+// Worker), so results stay real; only the call count is observed.
+const encodeCalls = {count: 0};
+jest.mock('../../../../audio/shift-tracks-client', () => {
+  const actual = jest.requireActual('../../../../audio/shift-tracks-client');
+  return {
+    ...actual,
+    shiftTracksInWorker: jest.fn((tracks: unknown, options: unknown) => {
+      encodeCalls.count++;
+      return actual.shiftTracksInWorker(tracks, options);
+    }),
+  };
+});
+
+jest.mock('../../../../preview/audioManager', () => ({
+  AudioManager: jest.fn().mockImplementation(function (
+    this: unknown,
+    audioFiles: CapturedFile[],
+  ) {
+    return new FakeAudioManager(audioFiles);
+  }),
+}));
+
+// `require`, not `import`: the module has to load AFTER the jest.mock calls
+// above are hoisted. Typed via `typeof import(...)` (a type-only position,
+// so it adds no runtime import) to keep the signatures checked.
+const {useShiftedAudio, buildShiftedAudioManager, anchorShiftSamples} =
+  require('../useShiftedAudio') as typeof import('../useShiftedAudio');
+
+function makeChartDoc(): ChartDocument {
+  const parsedChart = createEmptyChart({bpm: 120, resolution: 480});
+  return {parsedChart, assets: []};
+}
+
+function interleavedPcm(
+  frames: number,
+  channels = 2,
+  fill = 0.5,
+): Float32Array {
+  const out = new Float32Array(frames * channels);
+  out.fill(fill);
+  return out;
+}
+
+const AUDIO_META = {sampleRate: 8000, channels: 2};
+
+describe('buildShiftedAudioManager — N-stem construction (plan 0074 Task 5a)', () => {
+  beforeEach(() => {
+    lastCapturedFiles = [];
+  });
+
+  it('produces one track per stem, correctly named, plus song and click', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMix = interleavedPcm(100);
+    const stems = [
+      {
+        name: 'drums',
+        pcm: interleavedPcm(100),
+        origin: 'ai-separated' as const,
+      },
+      {name: 'vocals', pcm: interleavedPcm(100), origin: 'chart-file' as const},
+    ];
+
+    await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      stems,
+      chartDoc,
+      () => {},
+      'song',
+    );
+
+    const fileNames = lastCapturedFiles.map(f => f.fileName);
+    expect(fileNames).toEqual(
+      expect.arrayContaining([
+        'song.wav',
+        'drums.wav',
+        'vocals.wav',
+        'click.wav',
+      ]),
+    );
+    expect(fileNames).toHaveLength(4);
+  });
+
+  it('hands every track to the manager as PCM, never as an encoded file', async () => {
+    // The manager builds its own AudioBuffers from these samples. Encoding a
+    // WAV for it to decode again cost seconds of every album-length load.
+    await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      interleavedPcm(100),
+      [{name: 'bass', pcm: interleavedPcm(100), origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+      'song',
+    );
+
+    for (const file of lastCapturedFiles) {
+      expect(file.data).toBeUndefined();
+      expect(file.pcm).toBeDefined();
+    }
+    const song = lastCapturedFiles.find(f => f.fileName === 'song.wav');
+    expect(song!.pcm).toMatchObject({
+      sampleRate: AUDIO_META.sampleRate,
+      channels: AUDIO_META.channels,
+    });
+  });
+
+  it('hands over the source samples themselves when there is no silence to add', async () => {
+    // A zero pad is what every load of a chart without leading silence does.
+    // Nothing is copied, so nothing is spent: the manager gets the very PCM
+    // the host decoded.
+    const fullMix = interleavedPcm(100);
+    const bass = interleavedPcm(100);
+
+    const {shiftedFullMixPcm, shiftedStems} = await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      [{name: 'bass', pcm: bass, origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+      'song',
+    );
+
+    expect(shiftedFullMixPcm).toBe(fullMix);
+    expect(shiftedStems[0].pcm).toBe(bass);
+    expect(
+      lastCapturedFiles.find(f => f.fileName === 'song.wav')!.pcm!.samples,
+    ).toBe(fullMix);
+    expect(
+      lastCapturedFiles.find(f => f.fileName === 'bass.wav')!.pcm!.samples,
+    ).toBe(bass);
+  });
+
+  it('releases the decoded buffers of source samples a pad has superseded', async () => {
+    // The manager plays the PADDED copies, so the buffers the host's
+    // originals were decoded into are dead — and each is a second full copy
+    // of the song, held for as long as the host keeps its PCM.
+    const fullMix = interleavedPcm(100);
+    const bass = interleavedPcm(100);
+    const buffer = {
+      sampleRate: AUDIO_META.sampleRate,
+      numberOfChannels: AUDIO_META.channels,
+    } as AudioBuffer;
+    rememberDecodedBuffer(fullMix, buffer);
+    rememberDecodedBuffer(bass, buffer);
+
+    await buildShiftedAudioManager(
+      50,
+      AUDIO_META,
+      fullMix,
+      [{name: 'bass', pcm: bass, origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+      'song',
+    );
+
+    const {sampleRate, channels} = AUDIO_META;
+    expect(decodedBufferFor(fullMix, sampleRate, channels)).toBeUndefined();
+    expect(decodedBufferFor(bass, sampleRate, channels)).toBeUndefined();
+  });
+
+  it('keeps them when there was no pad, since those buffers are what plays', async () => {
+    const fullMix = interleavedPcm(100);
+    const buffer = {
+      sampleRate: AUDIO_META.sampleRate,
+      numberOfChannels: AUDIO_META.channels,
+    } as AudioBuffer;
+    rememberDecodedBuffer(fullMix, buffer);
+
+    await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      [],
+      makeChartDoc(),
+      () => {},
+      'song',
+    );
+
+    expect(
+      decodedBufferFor(fullMix, AUDIO_META.sampleRate, AUDIO_META.channels),
+    ).toBe(buffer);
+  });
+
+  it('produces only the full mix and the click for an empty stem list', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMix = interleavedPcm(100);
+
+    await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      [],
+      chartDoc,
+      () => {},
+      'song',
+    );
+
+    const fileNames = lastCapturedFiles.map(f => f.fileName);
+    expect(fileNames.sort()).toEqual(['click.wav', 'song.wav']);
+  });
+
+  it('names the full mix after the file it came from', async () => {
+    // A package's full-mix file keeps its own name (here guitar); the mixer
+    // row and its WAV take that name, so the row isn't labelled "song" while
+    // playing guitar.
+    await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      interleavedPcm(100),
+      [{name: 'bass', pcm: interleavedPcm(100), origin: 'chart-file' as const}],
+      makeChartDoc(),
+      () => {},
+      'guitar',
+    );
+
+    const fileNames = lastCapturedFiles.map(f => f.fileName);
+    expect(fileNames.sort()).toEqual(['bass.wav', 'click.wav', 'guitar.wav']);
+  });
+
+  it('pads a full mix with no track name but does not play it', async () => {
+    // A package that ships only stems has no full-mix file of its own: its
+    // full mix is their sum, drawn and measured as the song. The stems
+    // already play, so playing the sum beside them would double every
+    // instrument.
+    const shiftSamples = 50;
+    const {shiftedFullMixPcm, shiftedStems} = await buildShiftedAudioManager(
+      shiftSamples,
+      AUDIO_META,
+      interleavedPcm(100, 2, 0.75),
+      [
+        {
+          name: 'drums',
+          pcm: interleavedPcm(100),
+          origin: 'chart-file' as const,
+        },
+        {
+          name: 'vocals',
+          pcm: interleavedPcm(100, 2, 0.25),
+          origin: 'chart-file' as const,
+        },
+      ],
+      makeChartDoc(),
+      () => {},
+      null,
+    );
+
+    const fileNames = lastCapturedFiles.map(f => f.fileName);
+    expect(fileNames.sort()).toEqual(['click.wav', 'drums.wav', 'vocals.wav']);
+    const paddedLength = (100 + shiftSamples) * AUDIO_META.channels;
+    expect(shiftedFullMixPcm?.length).toBe(paddedLength);
+    expect(shiftedStems.map(stem => stem.pcm.length)).toEqual([
+      paddedLength,
+      paddedLength,
+    ]);
+  });
+
+  it('pads every stem by the same sample count as the full mix', async () => {
+    const chartDoc = makeChartDoc();
+    const shiftSamples = 50;
+    const fullMix = interleavedPcm(100);
+    const stems = [
+      {
+        name: 'drums',
+        pcm: interleavedPcm(100),
+        origin: 'ai-separated' as const,
+      },
+      {name: 'vocals', pcm: interleavedPcm(100), origin: 'chart-file' as const},
+    ];
+
+    const {shiftedFullMixPcm, shiftedStems} = await buildShiftedAudioManager(
+      shiftSamples,
+      AUDIO_META,
+      fullMix,
+      stems,
+      chartDoc,
+      () => {},
+      'song',
+    );
+
+    const expectedLength = (100 + shiftSamples) * AUDIO_META.channels;
+    expect(shiftedFullMixPcm?.length).toBe(expectedLength);
+    for (const stem of shiftedStems) {
+      expect(stem.pcm.length).toBe(expectedLength);
+    }
+    // The padded region (leading `shiftSamples` frames) is silence for every
+    // stem, matching the full mix.
+    for (const stem of shiftedStems) {
+      for (let i = 0; i < shiftSamples * AUDIO_META.channels; i++) {
+        expect(stem.pcm[i]).toBe(0);
+      }
+    }
+  });
+
+  it('round-trips origin metadata for each stem unchanged', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMix = interleavedPcm(100);
+    const stems = [
+      {
+        name: 'drums',
+        pcm: interleavedPcm(100),
+        origin: 'ai-separated' as const,
+      },
+      {name: 'guitar', pcm: interleavedPcm(100), origin: 'chart-file' as const},
+    ];
+
+    const {shiftedStems} = await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      fullMix,
+      stems,
+      chartDoc,
+      () => {},
+      'song',
+    );
+
+    expect(shiftedStems.find((s: any) => s.name === 'drums')?.origin).toBe(
+      'ai-separated',
+    );
+    expect(shiftedStems.find((s: any) => s.name === 'guitar')?.origin).toBe(
+      'chart-file',
+    );
+  });
+});
+
+describe('buildShiftedAudioManager — a project with no audio', () => {
+  beforeEach(() => {
+    lastCapturedFiles = [];
+  });
+
+  it('builds the click alone, spanning the requested silent duration', async () => {
+    const chartDoc = makeChartDoc();
+    const {audioManager, shiftedFullMixPcm, shiftedStems} =
+      await buildShiftedAudioManager(
+        0,
+        AUDIO_META,
+        null,
+        [],
+        chartDoc,
+        () => {},
+        'song',
+        42,
+      );
+
+    expect(lastCapturedFiles.map(f => f.fileName)).toEqual(['click.wav']);
+    expect(audioManager.trackNames).toEqual(['click']);
+    expect(shiftedFullMixPcm).toBeNull();
+    expect(shiftedStems).toEqual([]);
+  });
+
+  it('starts the click audible, since it is the only thing to hear', async () => {
+    const chartDoc = makeChartDoc();
+    const silent = await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      null,
+      [],
+      chartDoc,
+      () => {},
+      'song',
+      42,
+    );
+    expect(silent.audioManager.setVolume).toHaveBeenCalledWith('click', 0.7);
+
+    const withAudio = await buildShiftedAudioManager(
+      0,
+      AUDIO_META,
+      interleavedPcm(100),
+      [],
+      chartDoc,
+      () => {},
+      'song',
+    );
+    expect(withAudio.audioManager.setVolume).toHaveBeenCalledWith('click', 0);
+  });
+});
+
+describe('anchorShiftSamples', () => {
+  it('returns 0 for a null/non-positive anchor', () => {
+    expect(anchorShiftSamples(null, 8000)).toBe(0);
+    expect(anchorShiftSamples({ms: 0}, 8000)).toBe(0);
+  });
+
+  it('quantizes ms to samples at the given rate', () => {
+    expect(anchorShiftSamples({ms: 500}, 8000)).toBe(4000);
+  });
+});
+
+describe('useShiftedAudio — hook contract (plan 0074 Task 5a)', () => {
+  beforeEach(() => {
+    lastCapturedFiles = [];
+  });
+
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  it('builds an AudioManager exposing the padded stem list with origins', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    const drumPcm = interleavedPcm(100);
+
+    const {result} = renderHook(
+      () =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
+          onSongEnded: () => {},
+        }),
+      {wrapper},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+
+    expect(result.current.stems).toHaveLength(1);
+    expect(result.current.stems[0]).toMatchObject({
+      name: 'drums',
+      origin: 'ai-separated',
+    });
+    expect(lastCapturedFiles.map(f => f.fileName)).toEqual(
+      expect.arrayContaining(['song.wav', 'drums.wav', 'click.wav']),
+    );
+  });
+
+  it('rebuilds and adds a track when a stem is added at runtime, preserving position', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    const drumPcm = interleavedPcm(100);
+    const vocalsPcm = interleavedPcm(100);
+
+    type StemsProp = {
+      stems: {
+        name: string;
+        pcm: Float32Array;
+        origin: 'chart-file' | 'ai-separated';
+      }[];
+    };
+
+    const {result, rerender} = renderHook(
+      ({stems}: StemsProp) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems,
+          onSongEnded: () => {},
+        }),
+      {
+        wrapper,
+        initialProps: {
+          stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
+        } as StemsProp,
+      },
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const firstManager = result.current.audioManager;
+
+    // Simulate mid-session playback position the swap must preserve.
+    (firstManager as unknown as FakeAudioManager).isPlaying = true;
+    (firstManager as unknown as FakeAudioManager).chartTime = 3.5;
+
+    rerender({
+      stems: [
+        {name: 'drums', pcm: drumPcm, origin: 'ai-separated'},
+        {name: 'vocals', pcm: vocalsPcm, origin: 'chart-file'},
+      ],
+    } as StemsProp);
+
+    await waitFor(() => expect(result.current.stems).toHaveLength(2));
+
+    expect(lastCapturedFiles.map(f => f.fileName)).toEqual(
+      expect.arrayContaining([
+        'song.wav',
+        'drums.wav',
+        'vocals.wav',
+        'click.wav',
+      ]),
+    );
+
+    const rebuiltManager = result.current
+      .audioManager as unknown as FakeAudioManager;
+    expect(rebuiltManager.seekToChartTime).toHaveBeenCalledWith(3.5);
+    expect(rebuiltManager.resume).toHaveBeenCalled();
+  });
+
+  it('does not rebuild when a same-content stem array is passed by new reference', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    const drumPcm = interleavedPcm(100);
+
+    const {result, rerender} = renderHook(
+      ({stems}: {stems: AudioStemInput[]}) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems,
+          onSongEnded: () => {},
+        }),
+      {
+        wrapper,
+        initialProps: {
+          stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
+        },
+      },
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const firstManager = result.current.audioManager;
+
+    // New array literal, same name/origin/pcm reference — must not rebuild.
+    rerender({
+      stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
+    });
+
+    // Give any accidental async rebuild a chance to happen.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.audioManager).toBe(firstManager);
+  });
+
+  it('migration call sites: single-stem shape still behaves like before', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    const drumPcm = interleavedPcm(100);
+
+    const {result} = renderHook(
+      () =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems: [{name: 'drums', pcm: drumPcm, origin: 'ai-separated'}],
+          onSongEnded: () => {},
+        }),
+      {wrapper},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    expect(result.current.fullMixPcm).not.toBeNull();
+    expect(result.current.stems[0].pcm).not.toBeNull();
+    expect(result.current.durationSeconds).toBe(10);
+  });
+
+  it('rebuilds without a removed stem', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    const drumPcm = interleavedPcm(100);
+    const vocalsPcm = interleavedPcm(100);
+    const drums = {
+      name: 'drums',
+      pcm: drumPcm,
+      origin: 'ai-separated' as const,
+    };
+    const vocals = {
+      name: 'vocals',
+      pcm: vocalsPcm,
+      origin: 'chart-file' as const,
+    };
+
+    const {result, rerender} = renderHook(
+      ({stems}: {stems: AudioStemInput[]}) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems,
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {stems: [drums, vocals]}},
+    );
+
+    await waitFor(() => expect(result.current.stems).toHaveLength(2));
+
+    rerender({stems: [drums]});
+
+    await waitFor(() => expect(result.current.stems).toHaveLength(1));
+    expect(result.current.stems[0].name).toBe('drums');
+    expect(lastCapturedFiles.map(f => f.fileName).sort()).toEqual([
+      'click.wav',
+      'drums.wav',
+      'song.wav',
+    ]);
+  });
+
+  it('rebuilds when the stems are reordered', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    const drums = {
+      name: 'drums',
+      pcm: interleavedPcm(100),
+      origin: 'ai-separated' as const,
+    };
+    const vocals = {
+      name: 'vocals',
+      pcm: interleavedPcm(100),
+      origin: 'chart-file' as const,
+    };
+
+    const {result, rerender} = renderHook(
+      ({stems}: {stems: AudioStemInput[]}) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems,
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {stems: [drums, vocals]}},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const firstManager = result.current.audioManager;
+
+    rerender({stems: [vocals, drums]});
+
+    await waitFor(() =>
+      expect(result.current.audioManager).not.toBe(firstManager),
+    );
+    expect(result.current.stems.map(stem => stem.name)).toEqual([
+      'vocals',
+      'drums',
+    ]);
+  });
+
+  it('carries per-track volumes onto the new manager before resuming', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+    // Chart-file stems, so the volume being carried is the manager's own
+    // default rather than the silence a separated stem starts at.
+    const drums = {
+      name: 'drums',
+      pcm: interleavedPcm(100),
+      origin: 'chart-file' as const,
+    };
+    const keys = {
+      name: 'keys',
+      pcm: interleavedPcm(100),
+      origin: 'user-added' as const,
+    };
+
+    const {result, rerender} = renderHook(
+      ({stems}: {stems: AudioStemInput[]}) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems,
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {stems: [drums] as AudioStemInput[]}},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const firstManager = result.current
+      .audioManager as unknown as FakeAudioManager;
+
+    // What the mixer does when the user mutes the full mix and raises the
+    // click, mid-playback.
+    firstManager.setVolume('song', 0);
+    firstManager.setVolume('click', 0.5);
+    firstManager.isPlaying = true;
+
+    rerender({stems: [drums, keys]});
+
+    await waitFor(() => expect(result.current.stems).toHaveLength(2));
+    const rebuilt = result.current.audioManager as unknown as FakeAudioManager;
+    expect(rebuilt).not.toBe(firstManager);
+
+    const volumeFor = (track: string) =>
+      rebuilt.setVolume.mock.calls
+        .filter(([name]) => name === track)
+        .pop()?.[1];
+    expect(volumeFor('song')).toBe(0);
+    expect(volumeFor('click')).toBe(0.5);
+    expect(volumeFor('drums')).toBe(1);
+
+    // The muted track must be silent BEFORE playback resumes, otherwise it
+    // blips at full volume on the new manager.
+    const lastSongVolumeCall = rebuilt.setVolume.mock.invocationCallOrder
+      .filter((_, i) => rebuilt.setVolume.mock.calls[i][0] === 'song')
+      .pop() as number;
+    expect(lastSongVolumeCall).toBeLessThan(
+      rebuilt.resume.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('rebuilds when the audioAnchor changes with an unchanged (empty) stem list', async () => {
+    const initialDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+
+    const {result, rerender} = renderHook(
+      ({chartDoc}) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems: [],
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {chartDoc: initialDoc}},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const firstManager = result.current.audioManager;
+
+    const anchoredDoc = setAudioAnchor(initialDoc, {tick: 480, ms: 500});
+    rerender({chartDoc: anchoredDoc});
+
+    await waitFor(() =>
+      expect(result.current.audioManager).not.toBe(firstManager),
+    );
+  });
+});
+
+describe('useShiftedAudio — rebuild gating covers the full mix and the length', () => {
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  it('rebuilds when a silent project gains its first audio', async () => {
+    const chartDoc = makeChartDoc();
+    const fullMixPcm = interleavedPcm(100);
+
+    type Props = {
+      fullMixPcm: Float32Array | null;
+      silentDurationSeconds: number | undefined;
+    };
+    const {result, rerender} = renderHook(
+      ({fullMixPcm: pcm, silentDurationSeconds}: Props) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: pcm ? AUDIO_META : null,
+          fullMixPcm: pcm,
+          fullMixName: 'song',
+          stems: [],
+          silentDurationSeconds,
+          onSongEnded: () => {},
+        }),
+      {
+        wrapper,
+        initialProps: {
+          fullMixPcm: null,
+          silentDurationSeconds: 300,
+        } as Props,
+      },
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const silentManager = result.current.audioManager;
+    expect(silentManager?.trackNames).toEqual(['click']);
+
+    rerender({fullMixPcm, silentDurationSeconds: undefined});
+
+    await waitFor(() =>
+      expect(result.current.audioManager).not.toBe(silentManager),
+    );
+    expect(result.current.audioManager?.trackNames).toEqual(['song', 'click']);
+  });
+
+  it('rebuilds when only the silent duration changes, and not when nothing does', async () => {
+    const chartDoc = makeChartDoc();
+    const {result, rerender} = renderHook(
+      ({seconds}: {seconds: number}) =>
+        useShiftedAudio({
+          chartDoc,
+          audioMeta: null,
+          fullMixPcm: null,
+          fullMixName: 'song',
+          stems: [],
+          silentDurationSeconds: seconds,
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {seconds: 300}},
+    );
+
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const first = result.current.audioManager;
+
+    rerender({seconds: 300});
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.audioManager).toBe(first);
+
+    rerender({seconds: 200});
+    await waitFor(() => expect(result.current.audioManager).not.toBe(first));
+  });
+});
+
+describe('useShiftedAudio — the click track follows the tempo map', () => {
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  function docWithBpm(bpm: number): ChartDocument {
+    return {parsedChart: createEmptyChart({bpm, resolution: 480}), assets: []};
+  }
+
+  /** A new doc object carrying value-identical sync data by fresh
+   *  references — what a non-tempo edit hands the hook. */
+  function reclonedDoc(doc: ChartDocument): ChartDocument {
+    return {
+      ...doc,
+      parsedChart: {
+        ...doc.parsedChart,
+        tempos: doc.parsedChart.tempos.map(t => ({...t})),
+        timeSignatures: doc.parsedChart.timeSignatures.map(ts => ({...ts})),
+      },
+    };
+  }
+
+  const fullMixPcm = interleavedPcm(100);
+
+  function renderWithDoc(chartDoc: ChartDocument) {
+    return renderHook(
+      ({chartDoc: doc}: {chartDoc: ChartDocument}) =>
+        useShiftedAudio({
+          chartDoc: doc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems: [],
+          onSongEnded: () => {},
+        }),
+      {wrapper, initialProps: {chartDoc}},
+    );
+  }
+
+  beforeEach(() => {
+    clickRenderCalls.length = 0;
+    lastCapturedFiles = [];
+  });
+
+  it('re-renders the click for a new tempo map without rebuilding the manager', async () => {
+    const {result, rerender} = renderWithDoc(docWithBpm(120));
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const manager = result.current.audioManager as unknown as FakeAudioManager;
+    expect(clickRenderCalls).toHaveLength(1);
+    const builtDurationMs = clickRenderCalls[0][1];
+
+    rerender({chartDoc: docWithBpm(150)});
+    await waitFor(() => expect(manager.replaceTrack).toHaveBeenCalled());
+
+    // The one track swapped, on the SAME manager: a manager rebuild would
+    // re-decode every stem of the song and stall the editor.
+    expect(result.current.audioManager).toBe(
+      manager as unknown as typeof result.current.audioManager,
+    );
+    expect(manager.replaceTrack.mock.calls[0][0]).toBe('click');
+    expect(clickRenderCalls).toHaveLength(2);
+    // Re-rendered over exactly the span the build used — deriving it again
+    // would leave the signature unable to settle.
+    expect(clickRenderCalls[1][1]).toBe(builtDurationMs);
+  });
+
+  it('leaves the click alone when the map is unchanged by value', async () => {
+    const doc = docWithBpm(120);
+    const {result, rerender} = renderWithDoc(doc);
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const manager = result.current.audioManager as unknown as FakeAudioManager;
+
+    rerender({chartDoc: reclonedDoc(doc)});
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(manager.replaceTrack).not.toHaveBeenCalled();
+    expect(clickRenderCalls).toHaveLength(1);
+  });
+
+  it('installs only the newest map when tempo edits arrive in a burst', async () => {
+    const {result, rerender} = renderWithDoc(docWithBpm(120));
+    await waitFor(() => expect(result.current.audioManager).not.toBeNull());
+    const manager = result.current.audioManager as unknown as FakeAudioManager;
+
+    rerender({chartDoc: docWithBpm(130)});
+    rerender({chartDoc: docWithBpm(140)});
+    rerender({chartDoc: docWithBpm(150)});
+
+    await waitFor(() => expect(manager.replaceTrack).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(manager.replaceTrack).toHaveBeenCalledTimes(1);
+    expect(clickRenderCalls.at(-1)?.[0]).toMatchObject({
+      tempos: [expect.objectContaining({beatsPerMinute: 150})],
+    });
+  });
+});
+
+describe('useShiftedAudio — pre-padding for an anchor change', () => {
+  function wrapper({children}: {children: React.ReactNode}) {
+    return <AudioServiceProvider>{children}</AudioServiceProvider>;
+  }
+
+  const fullMixPcm = interleavedPcm(100);
+  const drumPcm = interleavedPcm(100);
+  const STEMS = [
+    {name: 'drums', pcm: drumPcm, origin: 'ai-separated' as const},
+  ];
+
+  /** Renders the hook plus a handle on the service it publishes to. */
+  function renderWithService() {
+    return renderHook(
+      ({chartDoc}: {chartDoc: ChartDocument}) => ({
+        audio: useShiftedAudio({
+          chartDoc,
+          audioMeta: AUDIO_META,
+          fullMixPcm,
+          fullMixName: 'song',
+          stems: STEMS,
+          onSongEnded: () => {},
+        }),
+        service: useAudioServiceContext(),
+      }),
+      {wrapper, initialProps: {chartDoc: makeChartDoc()}},
+    );
+  }
+
+  beforeEach(() => {
+    encodeCalls.count = 0;
+    lastCapturedFiles = [];
+  });
+
+  it('publishes a pre-pad function while mounted and withdraws it on unmount', async () => {
+    const {result, unmount} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+    const service = result.current.service;
+
+    expect(service.getShiftAudioAhead()).not.toBeNull();
+    unmount();
+    expect(service.getShiftAudioAhead()).toBeNull();
+  });
+
+  it('installs nothing by itself: the manager only changes when the anchor does', async () => {
+    const {result} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+    const before = result.current.audio.audioManager;
+
+    await act(async () => {
+      await result.current.service.getShiftAudioAhead()!(500, {});
+    });
+
+    expect(result.current.audio.audioManager).toBe(before);
+    expect(result.current.audio.fullMixPcm?.length).toBe(100 * 2);
+  });
+
+  it('reuses the pre-padded audio for the build that matches it', async () => {
+    const {result, rerender} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    await act(async () => {
+      await result.current.service.getShiftAudioAhead()!(500, {});
+    });
+    const encodesBeforeRebuild = encodeCalls.count;
+
+    // The same 500 ms the pre-pad was asked for, quantized identically.
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 500, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
+    );
+
+    expect(encodeCalls.count).toBe(encodesBeforeRebuild);
+    expect(result.current.audio.stems[0].pcm.length).toBe((100 + 4000) * 2);
+  });
+
+  it('encodes again when the pad it prepared for is no longer the pad needed', async () => {
+    const {result, rerender} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    // A tempo edit during the run changes the bar length, so the anchor the
+    // command installs (250 ms) is not the one this encoded for (500 ms).
+    await act(async () => {
+      await result.current.service.getShiftAudioAhead()!(500, {});
+    });
+    const encodesBeforeRebuild = encodeCalls.count;
+
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 250, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 2000) * 2),
+    );
+
+    expect(encodeCalls.count).toBe(encodesBeforeRebuild + 1);
+  });
+
+  it('drops a claimed pre-pad, so a later build never picks up a stale one', async () => {
+    const {result, rerender} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    await act(async () => {
+      await result.current.service.getShiftAudioAhead()!(500, {});
+    });
+
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 500, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
+    );
+    const afterFirst = encodeCalls.count;
+
+    // Back to no silence, then to the same 500 ms anchor again: the second
+    // trip has to pad for itself. Only the 500 ms trip reaches the worker —
+    // a zero pad has nothing to do and uses the source PCM by reference.
+    rerender({chartDoc: makeChartDoc()});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe(100 * 2),
+    );
+    rerender({chartDoc: setAudioAnchor(makeChartDoc(), {ms: 500, tick: 0})});
+    await waitFor(() =>
+      expect(result.current.audio.fullMixPcm?.length).toBe((100 + 4000) * 2),
+    );
+
+    expect(encodeCalls.count).toBe(afterFirst + 1);
+  });
+
+  it('reports pad progress per track', async () => {
+    const {result} = renderWithService();
+    await waitFor(() =>
+      expect(result.current.audio.audioManager).not.toBeNull(),
+    );
+
+    const seen: Array<[number, string]> = [];
+    await act(async () => {
+      await result.current.service.getShiftAudioAhead()!(500, {
+        onProgress: (fraction, detail) => seen.push([fraction, detail]),
+      });
+    });
+
+    // The full mix plus one stem.
+    expect(seen).toEqual([
+      [0.5, '1 of 2'],
+      [1, '2 of 2'],
+    ]);
+  });
+});

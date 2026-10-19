@@ -18,11 +18,11 @@
 import '@testing-library/jest-dom';
 import {render, screen, waitFor} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
-import {TooltipProvider} from '@/components/ui/tooltip';
-import type {ChartDocument} from '@/lib/chart-edit';
-import {writeChartFolder} from '@/lib/chart-edit';
-import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import TrackEditPage from '@/components/chart-editor/TrackEditPage';
+import {TooltipProvider} from '@musiccharts/core/components/ui/tooltip';
+import type {ChartDocument} from '@musiccharts/core/chart-edit';
+import {writeChartFolder} from '@musiccharts/core/chart-edit';
+import {emptyTrackData} from '@musiccharts/core/chart-edit/__tests__/test-utils';
+import TrackEditPage from '@musiccharts/core/components/chart-editor/TrackEditPage';
 import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 
 class FakeResizeObserver {
@@ -34,26 +34,29 @@ class FakeResizeObserver {
   FakeResizeObserver;
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
-jest.mock('../../../components/chart-editor/HighwayEditor', () => ({
+jest.mock('@musiccharts/core/components/chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
 }));
 jest.mock(
-  '../../../components/chart-editor/piano-roll/PianoRollTimeline',
+  '@musiccharts/core/components/chart-editor/piano-roll/PianoRollTimeline',
   () => ({
     __esModule: true,
     default: () => <div data-testid="piano-roll-stub" />,
   }),
 );
-jest.mock('../../../components/chart-editor/TransportControls', () => ({
-  __esModule: true,
-  default: () => <div data-testid="transport-controls-stub" />,
-}));
+jest.mock(
+  '@musiccharts/core/components/chart-editor/TransportControls',
+  () => ({
+    __esModule: true,
+    default: () => <div data-testid="transport-controls-stub" />,
+  }),
+);
 
 /** Records what the manager was constructed from, so the suite can assert
  *  the click is the only track a no-audio project plays. */
 let lastAudioFileNames: string[] = [];
-jest.mock('../../../lib/preview/audioManager', () => ({
+jest.mock('@musiccharts/core/preview/audioManager', () => ({
   AudioManager: jest.fn().mockImplementation(function (
     this: any,
     audioFiles: {fileName: string}[],
@@ -77,20 +80,20 @@ jest.mock('../../../lib/preview/audioManager', () => ({
 // Only the WAV synthesis is stubbed (it needs an OfflineAudioContext jsdom
 // doesn't have); the rest of the module, `clickTrackSignature` included, is
 // pure and stays real.
-jest.mock('../../../lib/preview/clickTrack', () => ({
-  ...jest.requireActual('../../../lib/preview/clickTrack'),
+jest.mock('@musiccharts/core/preview/clickTrack', () => ({
+  ...jest.requireActual('@musiccharts/core/preview/clickTrack'),
   generateBeatClickTrackSamples: jest.fn(async () => ({
     samples: new Float32Array(1),
     sampleRate: 8000,
   })),
 }));
-jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+jest.mock('@musiccharts/core/audio-pipeline/decode-audio', () => ({
   decodeAtRate: jest.fn(async () => {
     throw new Error('a project with no audio must not decode anything');
   }),
   nativeDecodeRate: jest.fn(() => 44100),
 }));
-jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
+jest.mock('@musiccharts/core/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => {
     throw new Error('a project with no audio must not decode anything');
   }),
@@ -101,7 +104,7 @@ jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
 let fixtureChartText = '';
 const loadAudioFiles = jest.fn(async () => []);
 
-jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
+jest.mock('@musiccharts/core/project-storage/opfsProjectStore', () => ({
   createOpfsProjectStore: jest.fn(() => ({
     listProjects: jest.fn(async () => []),
     namespaceOf: jest.fn(async () => 'chart-editor'),

@@ -6,8 +6,8 @@ import {
   OgPanel,
   OgSubtitle,
   OgTitle,
-} from '@/lib/og/layout';
-import {OG_LANES, OG_SIZE} from '@/lib/og/tokens';
+} from '@musiccharts/core/og/layout';
+import {OG_LANES, OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Drum Sheet Music for any Clone Hero chart';
 export const size = OG_SIZE;

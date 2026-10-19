@@ -9,9 +9,9 @@ import {
   useSyncExternalStore,
 } from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
-import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
-import {useWebGpuFp16} from '@/components/onnx/useWebGpuFp16';
-import WebGpuRequirementNotice from '@/components/onnx/WebGpuRequirementNotice';
+import OrtRuntimeScript from '@musiccharts/core/components/onnx/OrtRuntimeScript';
+import {useWebGpuFp16} from '@musiccharts/core/components/onnx/useWebGpuFp16';
+import WebGpuRequirementNotice from '@musiccharts/core/components/onnx/WebGpuRequirementNotice';
 import {Loader2, ArrowLeft, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
 import {
@@ -20,39 +20,39 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import {Button} from '@/components/ui/button';
-import SectionDropZone from '@/components/landing/SectionDropZone';
-import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
+} from '@musiccharts/core/components/ui/card';
+import {Button} from '@musiccharts/core/components/ui/button';
+import SectionDropZone from '@musiccharts/core/components/landing/SectionDropZone';
+import {ToolEntryCard} from '@musiccharts/core/components/landing/ToolEntryCard';
 import SourcePicker from './components/SourcePicker';
 import {DrumTranscriptionLanding} from './landing/DrumTranscriptionLanding';
-import type {LoadedFiles} from '@/lib/chart-files/chart-package';
-import {readChart} from '@/lib/chart-edit';
-import {isChartOrIniFileName} from '@/lib/chart-files/chart-file-names';
-import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import {pickPrimaryAudioFile} from '@/lib/audio/pickPrimaryAudioFile';
-import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
-import ProjectList from '@/components/project-list/ProjectList';
-import type {SongMetadataValue} from '@/lib/chart-editor-core';
-import {getProject} from '@/lib/drum-transcription/storage/opfs';
+import type {LoadedFiles} from '@musiccharts/core/chart-files/chart-package';
+import {readChart} from '@musiccharts/core/chart-edit';
+import {isChartOrIniFileName} from '@musiccharts/core/chart-files/chart-file-names';
+import {findAudioFiles} from '@musiccharts/core/preview/chorus-chart-processing';
+import {pickPrimaryAudioFile} from '@musiccharts/core/audio/pickPrimaryAudioFile';
+import ConnectedProcessingView from '@musiccharts/core/components/assist/ConnectedProcessingView';
+import ProjectList from '@musiccharts/core/components/project-list/ProjectList';
+import type {SongMetadataValue} from '@musiccharts/core/chart-editor-core';
+import {getProject} from '@musiccharts/core/drum-transcription/storage/opfs';
 import {
   deleteProject as deleteProjectRecord,
   listProjects as listProjectRecords,
   renameProject as renameProjectRecord,
-} from '@/lib/project-storage/projects';
-import type {ProjectRecord} from '@/lib/project-storage/types';
+} from '@musiccharts/core/project-storage/projects';
+import type {ProjectRecord} from '@musiccharts/core/project-storage/types';
 import {
   transcribeDrumsTask,
   type TranscribeDrumsRun,
-} from '@/lib/assist/tasks/transcribe-drums';
+} from '@musiccharts/core/assist/tasks/transcribe-drums';
 import {
   ASSIST_RUN_BUSY_MESSAGE,
   useAssistRunnerControls,
   type AssistRunContext,
-} from '@/components/assist/useAssistRunner';
-import {isAbortError} from '@/lib/workers/abortable-worker';
-import {useToolLandingView} from '@/components/analytics/useToolLandingView';
-import {track, type ChartOpenSource} from '@/lib/analytics/track';
+} from '@musiccharts/core/components/assist/useAssistRunner';
+import {isAbortError} from '@musiccharts/core/workers/abortable-worker';
+import {useToolLandingView} from '@musiccharts/core/components/analytics/useToolLandingView';
+import {track, type ChartOpenSource} from '@musiccharts/core/analytics/track';
 
 /** Every run on this page is the transcription tool's own landing flow. The
  *  project the pipeline creates is stamped `drum-transcription` to match. */

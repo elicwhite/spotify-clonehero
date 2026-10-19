@@ -6,12 +6,12 @@ import {
   InstrumentImage,
   RENDERED_INSTRUMENTS,
   type AllowedInstrument,
-} from '@/components/ChartInstruments';
-import {Card, CardContent} from '@/components/ui/card';
+} from '@musiccharts/core/components/ChartInstruments';
+import {Card, CardContent} from '@musiccharts/core/components/ui/card';
 import {
   parseChartPreview,
   DIFFICULTY_LABEL,
-} from '@/lib/sng/parse-chart-preview';
+} from '@musiccharts/core/sng/parse-chart-preview';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 function isRenderedInstrument(

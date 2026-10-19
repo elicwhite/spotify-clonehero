@@ -3,16 +3,16 @@
 import {useMemo, useEffect, useRef, useState} from 'react';
 import {parseAsString, useQueryState} from 'nuqs';
 import {Search as SearchIcon} from 'lucide-react';
-import {Input} from '@/components/ui/input';
+import {Input} from '@musiccharts/core/components/ui/input';
 import Link from 'next/link';
 import Image from 'next/image';
 import debounce from 'debounce';
 import {
   ChartInstruments,
   preFilterInstruments,
-} from '@/components/ChartInstruments';
-import {EncoreResponse} from '@/lib/search-encore';
-import {getKaraokeUrl} from '@/lib/song-urls/buildKaraokeUrl';
+} from '@musiccharts/core/components/ChartInstruments';
+import {EncoreResponse} from '@musiccharts/core/search-encore';
+import {getKaraokeUrl} from '@musiccharts/core/song-urls/buildKaraokeUrl';
 import {searchKaraoke} from './searchKaraoke';
 
 export default function Search({

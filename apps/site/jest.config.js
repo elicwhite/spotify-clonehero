@@ -41,11 +41,17 @@ const customJestConfig = {
     '**/?(*.)+(spec|test).ts',
     '**/?(*.)+(spec|test).tsx',
   ],
+  // The tests of packages/core run from this one config, so jest also searches
+  // the core folder and maps its package name to the source.
+  roots: ['<rootDir>', '<rootDir>/../../packages/core'],
+  moduleNameMapper: {
+    '^@musiccharts/core/(.*)$': '<rootDir>/../../packages/core/src/$1',
+  },
   collectCoverageFrom: [
-    'lib/**/*.ts',
-    'lib/**/*.tsx',
-    '!lib/**/*.d.ts',
-    '!lib/**/__tests__/**',
+    '<rootDir>/../../packages/core/src/**/*.ts',
+    '<rootDir>/../../packages/core/src/**/*.tsx',
+    '!**/*.d.ts',
+    '!**/__tests__/**',
   ],
   // Never scan sibling agent worktrees under `.claude/worktrees/` — they hold
   // in-flight copies of the repo with their own (possibly failing) suites.

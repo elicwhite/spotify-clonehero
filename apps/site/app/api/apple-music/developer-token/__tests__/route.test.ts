@@ -1,6 +1,6 @@
 import {generateKeyPairSync} from 'node:crypto';
 import {GET} from '../route';
-import {resetAppleMusicDeveloperTokenCacheForTests} from '@/lib/apple-music-server/developer-token';
+import {resetAppleMusicDeveloperTokenCacheForTests} from '@musiccharts/core/apple-music-server/developer-token';
 
 const {privateKey} = generateKeyPairSync('ec', {namedCurve: 'prime256v1'});
 const privateKeyPem = privateKey.export({

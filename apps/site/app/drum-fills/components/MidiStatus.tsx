@@ -1,9 +1,9 @@
 'use client';
 
 import {useRef, useState} from 'react';
-import {Button} from '@/components/ui/button';
-import {Badge} from '@/components/ui/badge';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Badge} from '@musiccharts/core/components/ui/badge';
+import {cn} from '@musiccharts/core/utils';
 import {useMidi} from '../contexts/MidiContext';
 import CalibrationDialog from './CalibrationDialog';
 

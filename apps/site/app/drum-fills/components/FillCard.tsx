@@ -1,12 +1,16 @@
 'use client';
 
 import {memo, useEffect, useRef} from 'react';
-import {Card, CardContent, CardHeader} from '@/components/ui/card';
-import {Badge} from '@/components/ui/badge';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
-import type {FillWithSrs} from '@/lib/drum-fills/db';
-import {masteryOf} from '@/lib/drum-fills/library/filterFills';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+} from '@musiccharts/core/components/ui/card';
+import {Badge} from '@musiccharts/core/components/ui/badge';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
+import type {FillWithSrs} from '@musiccharts/core/drum-fills/db';
+import {masteryOf} from '@musiccharts/core/drum-fills/library/filterFills';
 import FillSketch from './FillSketch';
 import DifficultyBar from './DifficultyBar';
 

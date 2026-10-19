@@ -4,22 +4,22 @@ import {useState} from 'react';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@musiccharts/core/components/ui/card';
 import {Star, Music, LogOut, Trash2} from 'lucide-react';
-import {createClient} from '@/lib/supabase/client';
-import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
+import {createClient} from '@musiccharts/core/supabase/client';
+import {getAuthCallbackUrl} from '@musiccharts/core/supabase/auth-callback-url';
 import {
   deleteCurrentUser,
   unfavoriteSongByHash,
-} from '@/lib/supabase/accountActions';
-import SpotifyIcon from '@/components/SpotifyIcon';
+} from '@musiccharts/core/supabase/accountActions';
+import SpotifyIcon from '@musiccharts/core/components/SpotifyIcon';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,9 +30,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {getSheetMusicUrl} from '@/lib/song-urls/buildSheetMusicUrl';
-import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
+} from '@musiccharts/core/components/ui/alert-dialog';
+import {getSheetMusicUrl} from '@musiccharts/core/song-urls/buildSheetMusicUrl';
+import {SPOTIFY_SCOPES} from '@musiccharts/core/spotify-sdk/spotifyScopes';
 
 type SavedSong = {
   hash: string;

@@ -1,6 +1,6 @@
-import {SYLLABLES} from '@/lib/landing/syllableAlignModel';
-import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
-import {cn} from '@/lib/utils';
+import {SYLLABLES} from '@musiccharts/core/landing/syllableAlignModel';
+import {heroCanvasFrameClass} from '@musiccharts/core/components/landing/heroCanvasFrame';
+import {cn} from '@musiccharts/core/utils';
 
 /**
  * What lyric syncing produces: syllables with the time each one lands.

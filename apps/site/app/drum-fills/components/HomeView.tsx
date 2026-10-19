@@ -2,9 +2,9 @@
 
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent} from '@/components/ui/card';
-import {Progress} from '@/components/ui/progress';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Card, CardContent} from '@musiccharts/core/components/ui/card';
+import {Progress} from '@musiccharts/core/components/ui/progress';
 import {
   getActiveLadders,
   getGrooveClusters,
@@ -13,8 +13,8 @@ import {
   type ActiveLadder,
   type GrooveCluster,
   type ProgressSummary,
-} from '@/lib/drum-fills/db';
-import type {ScanProgress} from '@/lib/drum-fills/scan/types';
+} from '@musiccharts/core/drum-fills/db';
+import type {ScanProgress} from '@musiccharts/core/drum-fills/scan/types';
 import GrooveStave from './GrooveStave';
 
 /**

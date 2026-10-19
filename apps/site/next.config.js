@@ -4,6 +4,8 @@ const workspaceRoot = path.resolve(__dirname, '../..');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Core ships TypeScript source and no build step, so Next compiles it.
+  transpilePackages: ['@musiccharts/core'],
   // Auto-memoize components/hooks via the React Compiler (babel-plugin-react-
   // compiler). Next applies it only to files with JSX/hooks via an SWC pre-pass.
   reactCompiler: true,

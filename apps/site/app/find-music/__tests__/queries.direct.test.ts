@@ -1,6 +1,6 @@
 import {Kysely, SqliteDialect, type Insertable} from 'kysely';
 
-import type {DB} from '../../../lib/local-db/types';
+import type {DB} from '@musiccharts/core/local-db/types';
 import {getFindMusicSongs, getFindMusicStats} from '../queries';
 
 const Database = require('better-sqlite3') as new (path: string) => {

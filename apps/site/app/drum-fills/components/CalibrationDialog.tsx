@@ -8,12 +8,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import {Button} from '@/components/ui/button';
+} from '@musiccharts/core/components/ui/dialog';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {toast} from 'sonner';
-import {calibrate} from '@/lib/drum-fills/midi/calibration';
-import {renderClickTrackWav} from '@/lib/drum-fills/practice/clickTrack';
-import {AudioManager} from '@/lib/preview/audioManager';
+import {calibrate} from '@musiccharts/core/drum-fills/midi/calibration';
+import {renderClickTrackWav} from '@musiccharts/core/drum-fills/practice/clickTrack';
+import {AudioManager} from '@musiccharts/core/preview/audioManager';
 import {useMidi} from '../contexts/MidiContext';
 
 const CLICK_COUNT = 16;

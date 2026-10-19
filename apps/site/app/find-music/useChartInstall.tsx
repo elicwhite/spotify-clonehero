@@ -3,7 +3,7 @@
 import * as Sentry from '@sentry/nextjs';
 import {useCallback, useRef, useState, useSyncExternalStore} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -11,23 +11,23 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import {downloadFallbackText} from '@/components/file-access/DownloadFallbackNotice';
+} from '@musiccharts/core/components/ui/dialog';
+import {downloadFallbackText} from '@musiccharts/core/components/file-access/DownloadFallbackNotice';
 import {
   supportsDirectoryPicker,
   useSupportsDirectoryPicker,
-} from '@/lib/file-access/capabilities';
+} from '@musiccharts/core/file-access/capabilities';
 import {
   downloadSong,
   getCachedSongsDirectoryHandle,
   getSongsDownloadFolder,
   pickSongsDirectory,
-} from '@/lib/local-songs-folder';
+} from '@musiccharts/core/local-songs-folder';
 import {
   prefersBrowserDownload,
   setPrefersBrowserDownload,
   subscribeToDownloadChoice,
-} from '@/lib/local-songs-folder/downloadChoice';
+} from '@musiccharts/core/local-songs-folder/downloadChoice';
 import type {FindMusicChart} from './types';
 
 export type ChartInstallState =

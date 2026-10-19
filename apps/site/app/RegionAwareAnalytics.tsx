@@ -2,8 +2,8 @@
 
 import {useEffect, useSyncExternalStore} from 'react';
 import {GoogleAnalytics} from '@next/third-parties/google';
-import {analyticsAllowed} from '@/lib/analytics/region';
-import {flushPendingEvents} from '@/lib/analytics/track';
+import {analyticsAllowed} from '@musiccharts/core/analytics/region';
+import {flushPendingEvents} from '@musiccharts/core/analytics/track';
 
 // Renders <GoogleAnalytics> only when the proxy explicitly classified the
 // visitor as outside the EEA/UK/CH (region cookie === 'other'). EEA/UK/CH

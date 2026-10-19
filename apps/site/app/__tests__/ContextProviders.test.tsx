@@ -12,7 +12,7 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
 }));
 
-jest.mock('../AudioProvider', () => ({
+jest.mock('@musiccharts/core/components/AudioProvider', () => ({
   AudioProvider: ({children}: {children: React.ReactNode}) => (
     <div data-testid="audio-provider">{children}</div>
   ),
@@ -22,7 +22,7 @@ jest.mock('nuqs/adapters/next/app', () => ({
   NuqsAdapter: ({children}: {children: React.ReactNode}) => <>{children}</>,
 }));
 
-jest.mock('../../lib/supabase/AuthProvider', () => ({
+jest.mock('@musiccharts/core/supabase/AuthProvider', () => ({
   AuthProvider: ({children}: {children: React.ReactNode}) => (
     <div data-testid="auth-provider">{children}</div>
   ),

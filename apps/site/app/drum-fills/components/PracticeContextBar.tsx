@@ -1,8 +1,8 @@
 'use client';
 
 import {useState} from 'react';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
 
 export type PracticeMode =
   | 'song-context'

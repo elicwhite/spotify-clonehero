@@ -2,9 +2,14 @@
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {getTodayQueue, type FillWithSrs} from '@/lib/drum-fills/db';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@musiccharts/core/components/ui/card';
+import {getTodayQueue, type FillWithSrs} from '@musiccharts/core/drum-fills/db';
 import {useChromeSlot} from '../contexts/DrumFillsChromeContext';
 import PracticeView from './PracticeView';
 

@@ -1,13 +1,13 @@
 'use client';
 
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {cn} from '@/lib/utils';
+import {cn} from '@musiccharts/core/utils';
 import {
   buildRhythmSketch,
   type RhythmSketch,
   type SketchInput,
   type SketchLane,
-} from '@/lib/drum-fills/library/rhythmSketch';
+} from '@musiccharts/core/drum-fills/library/rhythmSketch';
 
 const LANE_LABEL: Record<SketchLane['voice'], string> = {
   crash: 'CR',

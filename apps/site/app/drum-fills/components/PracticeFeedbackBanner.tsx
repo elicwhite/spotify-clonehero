@@ -1,13 +1,13 @@
 'use client';
 
 import {useMemo} from 'react';
-import {cn} from '@/lib/utils';
-import {DEFAULT_WINDOWS} from '@/lib/drum-fills/midi/hitMatcher';
-import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
+import {cn} from '@musiccharts/core/utils';
+import {DEFAULT_WINDOWS} from '@musiccharts/core/drum-fills/midi/hitMatcher';
+import type {ScoredAttempt} from '@musiccharts/core/drum-fills/practice/attempt';
 import {
   feedbackVerdict,
   type Verdict,
-} from '@/lib/drum-fills/practice/feedbackVerdict';
+} from '@musiccharts/core/drum-fills/practice/feedbackVerdict';
 
 /**
  * Across-the-room practice feedback. The player is several feet away at a kit,

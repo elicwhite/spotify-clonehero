@@ -9,16 +9,16 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import {ComparisonTable} from '@/components/landing/ComparisonTable';
-import {ExternalLink} from '@/components/landing/ExternalLink';
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {ScrollToStartCta} from '@/components/landing/ScrollToStartCta';
-import {LandingSection} from '@/components/landing/Section';
-import {StepFlow} from '@/components/landing/StepFlow';
-import {ToolEntrySection} from '@/components/landing/ToolEntrySection';
+import {ComparisonTable} from '@musiccharts/core/components/landing/ComparisonTable';
+import {ExternalLink} from '@musiccharts/core/components/landing/ExternalLink';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {ScrollToStartCta} from '@musiccharts/core/components/landing/ScrollToStartCta';
+import {LandingSection} from '@musiccharts/core/components/landing/Section';
+import {StepFlow} from '@musiccharts/core/components/landing/StepFlow';
+import {ToolEntrySection} from '@musiccharts/core/components/landing/ToolEntrySection';
 
-import {BeatGridCanvas} from '@/components/landing/BeatGridCanvas';
+import {BeatGridCanvas} from '@musiccharts/core/components/landing/BeatGridCanvas';
 import {TEMPO_COMPARISON_DISCLAIMER, TEMPO_COMPARISON_ROWS} from './metrics';
 
 const STEPS: {Icon: LucideIcon; label: string; desc: string}[] = [

@@ -1,8 +1,8 @@
 'use client';
 
 import {useEffect} from 'react';
-import {collectEarnedPersistence} from '@/lib/browser-storage';
-import {attachStorageContext} from '@/lib/sentry/storage-context';
+import {collectEarnedPersistence} from '@musiccharts/core/browser-storage';
+import {attachStorageContext} from '@musiccharts/core/sentry/storage-context';
 
 /**
  * Collects storage persistence on load, on the browsers that grant it without

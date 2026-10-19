@@ -1,9 +1,9 @@
 'use server';
 
-import {createClient} from '@/lib/supabase/server';
-import {searchAdvanced} from '@/lib/search-encore';
+import {createClient} from '@musiccharts/core/supabase/server';
+import {searchAdvanced} from '@musiccharts/core/search-encore';
 import {SupabaseClient} from '@supabase/supabase-js';
-import {Database} from '@/@types/database.types';
+import {Database} from '@musiccharts/core/supabase/database.types';
 
 async function ensureSongExists(
   supabase: SupabaseClient<Database>,

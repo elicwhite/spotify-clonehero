@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
-import type {GroupedFill} from '@/lib/drum-fills/db';
+import type {GroupedFill} from '@musiccharts/core/drum-fills/db';
 import VirtualCardGrid from './VirtualCardGrid';
 import GroupedFillCard from './GroupedFillCard';
 

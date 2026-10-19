@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
-import {createClient} from '@/lib/supabase/server';
-import {getSpotifyAccessToken} from '@/lib/spotify-server/tokens';
+import {createClient} from '@musiccharts/core/supabase/server';
+import {getSpotifyAccessToken} from '@musiccharts/core/spotify-server/tokens';
 
 export async function GET(request: Request) {
   const supabase = await createClient();

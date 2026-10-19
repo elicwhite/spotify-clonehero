@@ -5,12 +5,12 @@ import {toast} from 'sonner';
 import {
   getCachedSongsDirectoryHandle,
   pickSongsDirectory,
-} from '@/lib/local-songs-folder';
+} from '@musiccharts/core/local-songs-folder';
 import {
   startLibraryScan,
   type ScanHandle,
-} from '@/lib/drum-fills/scan/scanController';
-import type {ScanProgress} from '@/lib/drum-fills/scan/types';
+} from '@musiccharts/core/drum-fills/scan/scanController';
+import type {ScanProgress} from '@musiccharts/core/drum-fills/scan/types';
 
 /**
  * Library-scan orchestration shared by the Library and Grooves views: drives the

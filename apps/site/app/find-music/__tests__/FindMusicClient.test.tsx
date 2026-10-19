@@ -18,7 +18,7 @@ import type {
   FindMusicStats,
   SourceStatus,
 } from '../types';
-import type {AppleMusicRefreshResult} from '../../../lib/apple-music/AppleMusicFetching';
+import type {AppleMusicRefreshResult} from '@musiccharts/core/apple-music/AppleMusicFetching';
 import {FIND_MUSIC_FILTERS_STORAGE_KEY} from '../filterPersistence';
 import {FIND_MUSIC_ACTIVATION_KEY} from '../activation';
 
@@ -40,7 +40,7 @@ const mockSignInWithOAuth = jest.fn(async () => ({
   data: {url: null},
   error: null as {message: string} | null,
 }));
-jest.mock('../../../lib/supabase/client', () => ({
+jest.mock('@musiccharts/core/supabase/client', () => ({
   createClient: () => ({
     auth: {
       getUser: mockGetUser,
@@ -53,7 +53,7 @@ jest.mock('../../../lib/supabase/client', () => ({
 const mockRefreshChorus = jest.fn(async () => []);
 const mockGetServerChartsDataVersion = jest.fn(async () => 6);
 let releaseRefresh = () => {};
-jest.mock('../../../lib/chorusChartDb', () => ({
+jest.mock('@musiccharts/core/chorusChartDb', () => ({
   getServerChartsDataVersion: () => mockGetServerChartsDataVersion(),
   useChorusChartDb: () => [
     {status: 'idle', numFetched: 0, numTotal: 0},
@@ -63,14 +63,14 @@ jest.mock('../../../lib/chorusChartDb', () => ({
 
 const mockLocalDbExists = jest.fn(async () => true);
 const mockGetChartsDataVersion = jest.fn(async () => 0);
-jest.mock('../../../lib/local-db/client', () => ({
+jest.mock('@musiccharts/core/local-db/client', () => ({
   localDbExists: () => mockLocalDbExists(),
 }));
-jest.mock('../../../lib/local-db/chorus', () => ({
+jest.mock('@musiccharts/core/local-db/chorus', () => ({
   getChartsDataVersion: () => mockGetChartsDataVersion(),
 }));
 
-jest.mock('../../../lib/spotify-sdk/SpotifyFetching', () => ({
+jest.mock('@musiccharts/core/spotify-sdk/SpotifyFetching', () => ({
   useSpotifyLibraryUpdate: () => [
     {playlists: {}, albums: {}, updateStatus: 'idle'},
     jest.fn(),
@@ -85,7 +85,7 @@ const mockRefreshAppleMusic = jest.fn(
 );
 const mockDisconnectAppleMusic = jest.fn(async () => undefined);
 let mockAppleSetupState = 'unauthorized';
-jest.mock('../../../lib/apple-music/AppleMusicFetching', () => ({
+jest.mock('@musiccharts/core/apple-music/AppleMusicFetching', () => ({
   useAppleMusicLibraryUpdate: () => ({
     setupState: mockAppleSetupState,
     progress: {
@@ -103,7 +103,7 @@ jest.mock('../../../lib/apple-music/AppleMusicFetching', () => ({
 }));
 
 const mockNavigateToAppleMusicPath = jest.fn();
-jest.mock('../../../lib/apple-music/navigation', () => ({
+jest.mock('@musiccharts/core/apple-music/navigation', () => ({
   navigateToAppleMusicPath: (path: string) =>
     mockNavigateToAppleMusicPath(path),
 }));
@@ -120,7 +120,7 @@ jest.mock('sonner', () => ({
 }));
 
 const mockDiscardLegacyHistoryDumpCache = jest.fn(async () => undefined);
-jest.mock('../../../lib/spotify-sdk/HistoryDumpParsing', () => ({
+jest.mock('@musiccharts/core/spotify-sdk/HistoryDumpParsing', () => ({
   tryProcessSpotifyDump: jest.fn(),
   discardLegacyHistoryDumpCache: () => mockDiscardLegacyHistoryDumpCache(),
 }));
@@ -148,10 +148,10 @@ const mockChosenFolderScan = jest.fn(
   async (_onProgress?: ScanProgress): Promise<LocalScanResult | null> => null,
 );
 const mockPickFolder = jest.fn();
-jest.mock('../../../lib/file-access/pickFolder', () => ({
+jest.mock('@musiccharts/core/file-access/pickFolder', () => ({
   pickFolder: (options: unknown) => mockPickFolder(options),
 }));
-jest.mock('../../../lib/local-songs-folder', () => {
+jest.mock('@musiccharts/core/local-songs-folder', () => {
   const tryGetSongsDirectoryHandle = async () => null;
   const pickSongsDirectory = async () => null;
   const getGrantedSongsDirectoryHandle = async () => null;
@@ -294,12 +294,12 @@ jest.mock('../FindMusicTable', () => ({
 }));
 
 import FindMusicClient from '../FindMusicClient';
-import {LocalDbUnavailableError} from '../../../lib/local-db/errors';
-import {LOCAL_DB_RESET_PATH} from '@/lib/storage-routes';
+import {LocalDbUnavailableError} from '@musiccharts/core/local-db/errors';
+import {LOCAL_DB_RESET_PATH} from '@musiccharts/core/storage-routes';
 import {
   CHORUS_UNAVAILABLE_MESSAGE,
   ChorusUnavailableError,
-} from '../../../lib/chorus-errors';
+} from '@musiccharts/core/chorus-errors';
 
 const stats: FindMusicStats = {
   historySongs: 2,

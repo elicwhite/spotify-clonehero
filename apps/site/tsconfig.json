@@ -25,15 +25,18 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@musiccharts/core/*": ["../../packages/core/src/*"]
     }
   },
   "typeRoots": ["./node_modules/@types", "src/@types"],
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    "lib/chorusChartDb",
-    "lib/fill-detector/**/*",
+    "../../packages/core/src/**/*.ts",
+    "../../packages/core/src/**/*.tsx",
+    "../../packages/core/src/chorusChartDb",
+    "../../packages/core/src/fill-detector/**/*",
     "next-env.d.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"

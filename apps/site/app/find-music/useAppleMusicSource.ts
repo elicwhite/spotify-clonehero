@@ -4,9 +4,9 @@ import * as Sentry from '@sentry/nextjs';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
-import type {AppleMusicLibraryClient} from '@/lib/apple-music';
-import {useAppleMusicLibraryUpdate} from '@/lib/apple-music/AppleMusicFetching';
-import {navigateToAppleMusicPath} from '@/lib/apple-music/navigation';
+import type {AppleMusicLibraryClient} from '@musiccharts/core/apple-music';
+import {useAppleMusicLibraryUpdate} from '@musiccharts/core/apple-music/AppleMusicFetching';
+import {navigateToAppleMusicPath} from '@musiccharts/core/apple-music/navigation';
 
 import {findMusicPathForView} from './routes';
 import type {FindMusicStats, FindMusicView, SourceStatus} from './types';

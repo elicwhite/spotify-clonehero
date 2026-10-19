@@ -13,7 +13,7 @@
 import {act, render, screen, waitFor} from '@testing-library/react';
 
 import {ChartExportDialog} from '../storage/ChartExportDialog';
-import type {StoredProject} from '../../lib/project-storage/storedProjects';
+import type {StoredProject} from '@musiccharts/core/project-storage/storedProjects';
 
 const exportDialog = jest.fn();
 const chartPackageStore = jest.fn();
@@ -32,11 +32,11 @@ jest.mock('next/dynamic', () => () => {
   return Mock;
 });
 
-jest.mock('../../lib/project-storage/projects', () => ({
+jest.mock('@musiccharts/core/project-storage/projects', () => ({
   chartPackageStore: () => chartPackageStore(),
 }));
 
-jest.mock('../../lib/drum-transcription/storage/opfs', () => ({
+jest.mock('@musiccharts/core/drum-transcription/storage/opfs', () => ({
   getProject: (id: string) => transcriptionStore.getProject(id),
   findProjectChartFile: (id: string) =>
     transcriptionStore.findProjectChartFile(id),
@@ -50,11 +50,11 @@ const withSongIniFields = jest.fn((_doc: unknown, _ini: unknown) => ({
   doc: 'chart+ini',
 }));
 
-jest.mock('../../lib/chart-edit', () => ({
+jest.mock('@musiccharts/core/chart-edit', () => ({
   readChartForEditing: (files: unknown) => readChartForEditing(files),
 }));
 
-jest.mock('../../lib/chart-editor-core', () => ({
+jest.mock('@musiccharts/core/chart-editor-core', () => ({
   withSongIniFields: (doc: unknown, ini: unknown) =>
     withSongIniFields(doc, ini),
 }));

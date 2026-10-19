@@ -1,6 +1,6 @@
 import {useRef} from 'react';
 import {AbsoluteFill, interpolate} from 'remotion';
-import type {LyricLine, Syllable} from '@/lib/karaoke/parse-lyrics';
+import type {LyricLine, Syllable} from '@musiccharts/core/karaoke/parse-lyrics';
 import type {TreatmentProps} from './types';
 
 const BALL_SIZE = 20;

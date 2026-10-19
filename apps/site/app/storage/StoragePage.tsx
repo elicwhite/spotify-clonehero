@@ -1,7 +1,7 @@
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {LandingProse} from '@/components/landing/Prose';
-import {LandingSection} from '@/components/landing/Section';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {LandingProse} from '@musiccharts/core/components/landing/Prose';
+import {LandingSection} from '@musiccharts/core/components/landing/Section';
 
 import {StoragePanel} from './StoragePanel';
 

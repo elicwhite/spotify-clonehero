@@ -21,25 +21,25 @@ const deleteStoredProject = jest.fn();
 const chartExportDialog = jest.fn();
 const attachStorageContext = jest.fn();
 
-jest.mock('../../lib/browser-storage', () => ({
+jest.mock('@musiccharts/core/browser-storage', () => ({
   getStoragePressure: () => getStoragePressure(),
   isStoragePersisted: () => isStoragePersisted(),
   getPersistencePermission: () => getPersistencePermission(),
   requestPersistentStorage: () => requestPersistentStorage(),
 }));
 
-jest.mock('../../lib/audio-pipeline/stem-cache', () => ({
+jest.mock('@musiccharts/core/audio-pipeline/stem-cache', () => ({
   listStemCacheEntries: () => listStemCacheEntries(),
   pruneStemCache: (options: unknown) => pruneStemCache(options),
   deleteStemEntry: (fingerprint: string) => deleteStemEntry(fingerprint),
 }));
 
-jest.mock('../../lib/lyrics-align/model-cache', () => ({
+jest.mock('@musiccharts/core/lyrics-align/model-cache', () => ({
   getCachedModelBytes: () => getCachedModelBytes(),
   deleteCachedModels: () => deleteCachedModels(),
 }));
 
-jest.mock('../../lib/project-storage/storedProjects', () => ({
+jest.mock('@musiccharts/core/project-storage/storedProjects', () => ({
   measureProjectStorage: () => measureProjectStorage(),
   deleteStoredProject: (namespace: string, id: string) =>
     deleteStoredProject(namespace, id),
@@ -62,13 +62,13 @@ jest.mock('../../app/storage/ChartExportDialog', () => ({
   },
 }));
 
-jest.mock('../../lib/sentry/storage-context', () => ({
+jest.mock('@musiccharts/core/sentry/storage-context', () => ({
   attachStorageContext: () => attachStorageContext(),
 }));
 
 // The real module is ESM-only SQLocal, which is exactly why the page reaches
 // for it on the click rather than at the top of the file.
-jest.mock('../../lib/local-db/client', () => ({
+jest.mock('@musiccharts/core/local-db/client', () => ({
   resetLocalDb: () => resetLocalDb(),
 }));
 

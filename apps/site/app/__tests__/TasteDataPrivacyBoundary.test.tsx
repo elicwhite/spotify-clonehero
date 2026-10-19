@@ -19,7 +19,7 @@ jest.mock('@sentry/nextjs', () => ({
   getReplay: () => mockReplay,
 }));
 
-jest.mock('../../lib/sentry/replay', () => ({
+jest.mock('@musiccharts/core/sentry/replay', () => ({
   ensureReplayRegistered: () => ensureReplayRegistered(),
 }));
 

@@ -1,11 +1,14 @@
 import Link from 'next/link';
 import type {ReactNode} from 'react';
 
-import {CardGrid, CardGridCell} from '@/components/landing/CardGrid';
-import {ExternalLink} from '@/components/landing/ExternalLink';
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {LandingSection} from '@/components/landing/Section';
+import {
+  CardGrid,
+  CardGridCell,
+} from '@musiccharts/core/components/landing/CardGrid';
+import {ExternalLink} from '@musiccharts/core/components/landing/ExternalLink';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {LandingSection} from '@musiccharts/core/components/landing/Section';
 
 const DISCORD_URL = 'https://discord.gg/EDxu95B98s';
 

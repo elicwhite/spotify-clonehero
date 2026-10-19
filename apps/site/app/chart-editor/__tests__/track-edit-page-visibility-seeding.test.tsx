@@ -22,12 +22,12 @@
 import '@testing-library/jest-dom';
 import {render, screen, waitFor} from '@testing-library/react';
 import {createEmptyChart, drumTypes, noteTypes} from '@eliwhite/scan-chart';
-import {TooltipProvider} from '@/components/ui/tooltip';
-import type {ChartDocument} from '@/lib/chart-edit';
-import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
-import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import TrackEditPage from '@/components/chart-editor/TrackEditPage';
-import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
+import {TooltipProvider} from '@musiccharts/core/components/ui/tooltip';
+import type {ChartDocument} from '@musiccharts/core/chart-edit';
+import {addDrumNote, writeChartFolder} from '@musiccharts/core/chart-edit';
+import {emptyTrackData} from '@musiccharts/core/chart-edit/__tests__/test-utils';
+import TrackEditPage from '@musiccharts/core/components/chart-editor/TrackEditPage';
+import {useChartEditorContext} from '@musiccharts/core/components/chart-editor/ChartEditorContext';
 import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 
 // jsdom has no ResizeObserver; the sidebar's Stems mixer (Radix Slider)
@@ -43,26 +43,29 @@ class FakeResizeObserver {
 // ---------------------------------------------------------------------------
 // Heavy/canvas children — same stubs as chart-editor-layout.test.tsx.
 // ---------------------------------------------------------------------------
-jest.mock('../../../components/chart-editor/HighwayEditor', () => ({
+jest.mock('@musiccharts/core/components/chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
 }));
 jest.mock(
-  '../../../components/chart-editor/piano-roll/PianoRollTimeline',
+  '@musiccharts/core/components/chart-editor/piano-roll/PianoRollTimeline',
   () => ({
     __esModule: true,
     default: () => <div data-testid="piano-roll-stub" />,
   }),
 );
-jest.mock('../../../components/chart-editor/TransportControls', () => ({
-  __esModule: true,
-  default: () => <div data-testid="transport-controls-stub" />,
-}));
+jest.mock(
+  '@musiccharts/core/components/chart-editor/TransportControls',
+  () => ({
+    __esModule: true,
+    default: () => <div data-testid="transport-controls-stub" />,
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Audio boundary — no real Web Audio in jsdom.
 // ---------------------------------------------------------------------------
-jest.mock('../../../lib/preview/audioManager', () => ({
+jest.mock('@musiccharts/core/preview/audioManager', () => ({
   AudioManager: jest.fn().mockImplementation(function (
     this: any,
     audioFiles: {fileName: string}[],
@@ -89,8 +92,8 @@ jest.mock('../../../lib/preview/audioManager', () => ({
 // Only the WAV synthesis is stubbed (it needs an OfflineAudioContext jsdom
 // doesn't have); the rest of the module, `clickTrackSignature` included, is
 // pure and stays real.
-jest.mock('../../../lib/preview/clickTrack', () => ({
-  ...jest.requireActual('../../../lib/preview/clickTrack'),
+jest.mock('@musiccharts/core/preview/clickTrack', () => ({
+  ...jest.requireActual('@musiccharts/core/preview/clickTrack'),
   generateBeatClickTrackSamples: jest.fn(async () => ({
     samples: new Float32Array(1),
     sampleRate: 8000,
@@ -104,7 +107,7 @@ jest.mock('../../../lib/preview/clickTrack', () => ({
 // The editor decodes the project's audio files into PCM for
 // `useShiftedAudio`; jsdom has neither OfflineAudioContext nor the soxr
 // resampler behind the real decode.
-jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+jest.mock('@musiccharts/core/audio-pipeline/decode-audio', () => ({
   decodeAtRate: jest.fn(async () => ({
     numberOfChannels: 2,
     length: 8,
@@ -114,7 +117,7 @@ jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
   })),
   nativeDecodeRate: jest.fn(() => 44100),
 }));
-jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
+jest.mock('@musiccharts/core/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => ({
     numberOfChannels: 2,
     length: 8,
@@ -129,8 +132,10 @@ jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
 // The editor probes the stem cache for anything separation produced for
 // this project's audio. Nothing was separated here, and jsdom has neither
 // OPFS nor `crypto.subtle` for the fingerprint the probe is keyed by.
-jest.mock('../../../lib/audio-pipeline/stem-cache', () => {
-  const actual = jest.requireActual('../../../lib/audio-pipeline/stem-cache');
+jest.mock('@musiccharts/core/audio-pipeline/stem-cache', () => {
+  const actual = jest.requireActual(
+    '@musiccharts/core/audio-pipeline/stem-cache',
+  );
   return {
     ...actual,
     computeStemFingerprint: jest.fn(async () => 'fingerprint-1'),
@@ -162,7 +167,7 @@ let fixtureChartText = '';
 let fixtureOrigin: string | undefined;
 const fixtureAudioFiles = [{fileName: 'song.ogg', data: new Uint8Array([1])}];
 
-jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
+jest.mock('@musiccharts/core/project-storage/opfsProjectStore', () => ({
   createOpfsProjectStore: jest.fn(() => ({
     listProjects: jest.fn(async () => []),
     namespaceOf: jest.fn(async () => 'chart-editor'),

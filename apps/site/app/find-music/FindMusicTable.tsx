@@ -21,19 +21,19 @@ import {
   X,
 } from 'lucide-react';
 import {useVirtual} from 'react-virtual';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {cn} from '@/lib/utils';
+} from '@musiccharts/core/components/ui/tooltip';
+import {cn} from '@musiccharts/core/utils';
 import MusicPreviewButton, {
   type MusicPreviewProvider,
-} from '@/components/MusicPreviewButton';
-import {AudioContext} from '@/app/AudioProvider';
-import type {AppleMusicLibraryClient} from '@/lib/apple-music';
+} from '@musiccharts/core/components/MusicPreviewButton';
+import {AudioContext} from '@musiccharts/core/components/AudioProvider';
+import type {AppleMusicLibraryClient} from '@musiccharts/core/apple-music';
 import FindMusicInstrumentIcon from './FindMusicInstrumentIcon';
 import {
   INSTRUMENTS,

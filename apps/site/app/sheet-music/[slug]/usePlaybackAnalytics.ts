@@ -1,6 +1,6 @@
 import {useEffect, useRef} from 'react';
-import {track} from '@/lib/analytics/track';
-import type {AudioManager} from '@/lib/preview/audioManager';
+import {track} from '@musiccharts/core/analytics/track';
+import type {AudioManager} from '@musiccharts/core/preview/audioManager';
 
 /** Segments shorter than a second are a stray click, not playback. */
 const MIN_SESSION_SEC = 1;

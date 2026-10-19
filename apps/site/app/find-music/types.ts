@@ -1,5 +1,5 @@
 import type {DrumType} from '@eliwhite/scan-chart';
-import type {CoreInstrument} from '@/lib/chorusChartDb/types';
+import type {CoreInstrument} from '@musiccharts/core/chorusChartDb/types';
 
 /**
  * Display metadata for the instruments this page renders: id, badge, label.

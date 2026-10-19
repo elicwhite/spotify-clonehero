@@ -1,9 +1,14 @@
 import {ImageResponse} from 'next/og';
-import {getMd5FromSlug} from '@/lib/song-urls/songSlug';
-import {searchAdvanced} from '@/lib/search-encore';
+import {getMd5FromSlug} from '@musiccharts/core/song-urls/songSlug';
+import {searchAdvanced} from '@musiccharts/core/search-encore';
 
-import {OgEyebrow, OgFrame, OgSubtitle, OgTitle} from '@/lib/og/layout';
-import {OG_SIZE} from '@/lib/og/tokens';
+import {
+  OgEyebrow,
+  OgFrame,
+  OgSubtitle,
+  OgTitle,
+} from '@musiccharts/core/og/layout';
+import {OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Drum Sheet Music';
 export const size = OG_SIZE;

@@ -4,8 +4,8 @@ import {
   MIN_DRILLABLE_FILLS,
   type GrooveProgress,
   type GrooveSort,
-} from '@/lib/drum-fills/grooveClusters';
-import type {DrumVoice} from '@/lib/drum-fills/detection/types';
+} from '@musiccharts/core/drum-fills/grooveClusters';
+import type {DrumVoice} from '@musiccharts/core/drum-fills/detection/types';
 import {useLocalStorageState} from './useLocalStorageState';
 
 interface GrooveFilterState {

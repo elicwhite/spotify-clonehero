@@ -28,8 +28,8 @@ import {
   buildTimedTempos,
   msToTick,
   tickToMs,
-} from '../lib/drum-transcription/timing';
-import {snapGroupToGrid} from '../lib/tempo-map/quantize-grid';
+} from '@musiccharts/core/drum-transcription/timing';
+import {snapGroupToGrid} from '@musiccharts/core/tempo-map/quantize-grid';
 
 const RESOLUTION = 480;
 const DEFAULT_SNAP_TOLERANCE_MS = 40;

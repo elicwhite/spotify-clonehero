@@ -1,6 +1,6 @@
 'use client';
 
-import {cn} from '@/lib/utils';
+import {cn} from '@musiccharts/core/utils';
 
 /**
  * Compact continuous-difficulty indicator (0–100). A small filled bar plus the

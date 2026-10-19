@@ -6,25 +6,25 @@ import Link from 'next/link';
 import {usePathname} from 'next/navigation';
 import {toast} from 'sonner';
 import type {User} from '@supabase/supabase-js';
-import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
-import {createClient} from '@/lib/supabase/client';
-import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
-import {useChorusChartDb} from '@/lib/chorusChartDb';
+import {SPOTIFY_SCOPES} from '@musiccharts/core/spotify-sdk/spotifyScopes';
+import {createClient} from '@musiccharts/core/supabase/client';
+import {getAuthCallbackUrl} from '@musiccharts/core/supabase/auth-callback-url';
+import {useChorusChartDb} from '@musiccharts/core/chorusChartDb';
 import * as Sentry from '@sentry/nextjs';
 import {
   CHORUS_UNAVAILABLE_MESSAGE,
   isChorusUnavailableError,
-} from '@/lib/chorus-errors';
-import {localDbExists} from '@/lib/local-db/client';
-import {isLocalDbUnavailableError} from '@/lib/local-db/errors';
+} from '@musiccharts/core/chorus-errors';
+import {localDbExists} from '@musiccharts/core/local-db/client';
+import {isLocalDbUnavailableError} from '@musiccharts/core/local-db/errors';
 import {
   onPlaylistCacheUpdated,
   useSpotifyLibraryUpdate,
-} from '@/lib/spotify-sdk/SpotifyFetching';
+} from '@musiccharts/core/spotify-sdk/SpotifyFetching';
 import {
   discardLegacyHistoryDumpCache,
   tryProcessSpotifyDump,
-} from '@/lib/spotify-sdk/HistoryDumpParsing';
+} from '@musiccharts/core/spotify-sdk/HistoryDumpParsing';
 import {
   getGrantedSongsDirectoryHandle,
   getLocalScanWarning,
@@ -32,11 +32,11 @@ import {
   scanSongsFolder,
   songsFolderFrom,
   tryGetSongsDirectoryHandle,
-} from '@/lib/local-songs-folder';
-import type {FolderSource} from '@/lib/file-access/folderSource';
-import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
-import {pickFolder} from '@/lib/file-access/pickFolder';
-import {Button} from '@/components/ui/button';
+} from '@musiccharts/core/local-songs-folder';
+import type {FolderSource} from '@musiccharts/core/file-access/folderSource';
+import {useSupportsDirectoryPicker} from '@musiccharts/core/file-access/capabilities';
+import {pickFolder} from '@musiccharts/core/file-access/pickFolder';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Sheet,
   SheetContent,
@@ -44,7 +44,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from '@/components/ui/sheet';
+} from '@musiccharts/core/components/ui/sheet';
 import FindMusicSidebar from './FindMusicSidebar';
 import FindMusicTable from './FindMusicTable';
 import FindMusicWelcome from './FindMusicWelcome';
@@ -61,7 +61,7 @@ import {
   saveFindMusicFilters,
 } from './filterPersistence';
 import {getFindMusicSongs, getFindMusicStats, getRadarSongs} from './queries';
-import {LOCAL_DB_RESET_PATH} from '@/lib/storage-routes';
+import {LOCAL_DB_RESET_PATH} from '@musiccharts/core/storage-routes';
 import {FIND_MUSIC_RECOMMENDATIONS_PATH, findMusicPathForView} from './routes';
 import {
   type FindMusicFilters,

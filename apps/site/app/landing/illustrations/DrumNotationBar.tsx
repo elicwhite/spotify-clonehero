@@ -1,4 +1,4 @@
-import {LANE_VARS} from '@/lib/landing/lanes';
+import {LANE_VARS} from '@musiccharts/core/landing/lanes';
 
 /**
  * One bar of drum notation, drawn the way `/sheet-music` draws it: percussion

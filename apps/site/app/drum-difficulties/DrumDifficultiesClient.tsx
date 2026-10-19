@@ -2,9 +2,9 @@
 
 import {ArrowRightLeft, CopyCheck, Filter, Repeat} from 'lucide-react';
 
-import DifficultyGenerationFlow from '@/components/difficulty-generation/DifficultyGenerationFlow';
-import {DifficultyLanding} from '@/components/difficulty-generation/landing/DifficultyLanding';
-import {useToolLandingView} from '@/components/analytics/useToolLandingView';
+import DifficultyGenerationFlow from '@musiccharts/core/components/difficulty-generation/DifficultyGenerationFlow';
+import {DifficultyLanding} from '@musiccharts/core/components/difficulty-generation/landing/DifficultyLanding';
+import {useToolLandingView} from '@musiccharts/core/components/analytics/useToolLandingView';
 
 /**
  * The /drum-difficulties page. Copy lives here, at the call site. Model

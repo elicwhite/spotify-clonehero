@@ -1,4 +1,7 @@
-import {searchAdvanced, type EncoreResponse} from '@/lib/search-encore';
+import {
+  searchAdvanced,
+  type EncoreResponse,
+} from '@musiccharts/core/search-encore';
 
 /**
  * Search Enchor for charts with lyrics. Searches both name and artist

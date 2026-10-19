@@ -14,7 +14,7 @@ import {
 } from '@testing-library/react';
 import FindMusicTable from '../FindMusicTable';
 import {dismissRadarSong} from '../queries';
-import {AudioContext} from '../../AudioProvider';
+import {AudioContext} from '@musiccharts/core/components/AudioProvider';
 import type {
   FindMusicChart,
   FindMusicFilters,
@@ -42,7 +42,7 @@ const mockSongsFolder = {name: 'Songs'} as FileSystemDirectoryHandle;
 const mockDownloadsFolder = {name: 'downloads'} as FileSystemDirectoryHandle;
 const mockGetCachedSongsFolder = jest.fn();
 const mockPickSongsFolder = jest.fn();
-jest.mock('../../../lib/local-songs-folder', () => ({
+jest.mock('@musiccharts/core/local-songs-folder', () => ({
   downloadSong: jest.fn(
     async (
       _artist: string,
@@ -71,7 +71,7 @@ jest.mock('sonner', () => ({
   },
 }));
 
-jest.mock('../../../components/MusicPreviewButton', () => ({
+jest.mock('@musiccharts/core/components/MusicPreviewButton', () => ({
   __esModule: true,
   default: ({
     artist,
@@ -107,8 +107,8 @@ jest.mock('../../../components/MusicPreviewButton', () => ({
   ),
 }));
 
-import {downloadSong} from '../../../lib/local-songs-folder';
-import {setPrefersBrowserDownload} from '../../../lib/local-songs-folder/downloadChoice';
+import {downloadSong} from '@musiccharts/core/local-songs-folder';
+import {setPrefersBrowserDownload} from '@musiccharts/core/local-songs-folder/downloadChoice';
 
 const mockDismissRadarSong = dismissRadarSong as jest.MockedFunction<
   typeof dismissRadarSong

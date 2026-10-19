@@ -6,7 +6,7 @@ import {
   grooveStaveCells,
   type GrooveStaveData,
   type StaveVoice,
-} from '@/lib/drum-fills/library/grooveStave';
+} from '@musiccharts/core/drum-fills/library/grooveStave';
 
 /** Voice → VexFlow key (cymbals use the /x2 X-notehead glyph). */
 const VOICE_KEY: Record<StaveVoice, string> = {

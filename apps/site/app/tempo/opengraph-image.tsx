@@ -1,5 +1,5 @@
-import {createToolOgImage} from '@/lib/og/tool-og-image';
-import {OG_COLORS, OG_LANES, OG_SIZE} from '@/lib/og/tokens';
+import {createToolOgImage} from '@musiccharts/core/og/tool-og-image';
+import {OG_COLORS, OG_LANES, OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Build a draft tempo map for 4/4 songs';
 export const size = OG_SIZE;

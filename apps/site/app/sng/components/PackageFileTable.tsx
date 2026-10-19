@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Play, Pause, Trash2} from 'lucide-react';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Table,
   TableBody,
@@ -10,9 +10,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import {hasAudioExtension} from '@/lib/src-shared/utils';
-import {audioMimeType, formatBytes} from '@/lib/sng/file-utils';
+} from '@musiccharts/core/components/ui/table';
+import {hasAudioExtension} from '@musiccharts/core/src-shared/utils';
+import {audioMimeType, formatBytes} from '@musiccharts/core/sng/file-utils';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 
 interface PackageFileTableProps {

@@ -4,7 +4,7 @@ import {
   DEFAULT_LIBRARY_FILTERS,
   type LibraryFilters,
   type LibrarySort,
-} from '@/lib/drum-fills/library/filterFills';
+} from '@musiccharts/core/drum-fills/library/filterFills';
 import {useLocalStorageState} from './useLocalStorageState';
 
 /**

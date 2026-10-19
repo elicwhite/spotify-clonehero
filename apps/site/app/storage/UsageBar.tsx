@@ -1,6 +1,6 @@
 'use client';
 
-import {formatBytes} from '@/lib/sng/file-utils';
+import {formatBytes} from '@musiccharts/core/sng/file-utils';
 
 /** Share of the quota at which the browser is close enough to matter. */
 const NEARLY_FULL_RATIO = 0.7;

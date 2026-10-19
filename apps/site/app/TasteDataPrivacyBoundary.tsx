@@ -3,8 +3,8 @@
 import {useEffect, useRef} from 'react';
 import {usePathname} from 'next/navigation';
 import * as Sentry from '@sentry/nextjs';
-import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
-import {ensureReplayRegistered} from '@/lib/sentry/replay';
+import {rendersPersonalTasteData} from '@musiccharts/core/apple-music/private-route';
+import {ensureReplayRegistered} from '@musiccharts/core/sentry/replay';
 
 /**
  * Keeps Session Replay away from browser-local taste data.

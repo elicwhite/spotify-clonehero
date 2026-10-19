@@ -3,7 +3,10 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from '@sentry/nextjs';
-import {getSentryEnvironment, isSentryEnabled} from '@/lib/sentry/environment';
+import {
+  getSentryEnvironment,
+  isSentryEnabled,
+} from '@musiccharts/core/sentry/environment';
 
 const sentryEnvironment = getSentryEnvironment(process.env['VERCEL_ENV']);
 

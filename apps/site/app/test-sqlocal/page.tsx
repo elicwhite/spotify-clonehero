@@ -7,12 +7,12 @@ import {
   runRawSql,
   exportLocalDbFile,
   overwriteLocalDbFile,
-} from '@/lib/local-db/client';
+} from '@musiccharts/core/local-db/client';
 import {
   analyzeDataConsistency,
   deleteOrphanedTracks,
-} from '@/lib/local-db/spotify';
-import {downloadBlob} from '@/lib/download';
+} from '@musiccharts/core/local-db/spotify';
+import {downloadBlob} from '@musiccharts/core/download';
 
 export default function TestSQLocalPage() {
   const [status, setStatus] = useState<

@@ -2,7 +2,7 @@
 
 import type {ReactNode} from 'react';
 
-import {formatBytes} from '@/lib/sng/file-utils';
+import {formatBytes} from '@musiccharts/core/sng/file-utils';
 
 /**
  * One stored thing: what it is, how much room it takes, and what can be done

@@ -16,8 +16,8 @@
 
 import '@testing-library/jest-dom';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
-import type {RawDrumEvent} from '@/lib/drum-transcription/ml/types';
-import type {Synctrack} from '@/lib/tempo-map/types';
+import type {RawDrumEvent} from '@musiccharts/core/drum-transcription/ml/types';
+import type {Synctrack} from '@musiccharts/core/tempo-map/types';
 
 // jsdom's Blob has no arrayBuffer(); the pipeline reads its upload through it.
 if (typeof Blob.prototype.arrayBuffer !== 'function') {
@@ -60,28 +60,34 @@ jest.mock('next/script', () => ({
   default: () => null,
 }));
 
-jest.mock('../../../lib/drum-transcription/storage/opfs', () =>
+jest.mock('@musiccharts/core/drum-transcription/storage/opfs', () =>
   jest
     .requireActual<
-      typeof import('../../../lib/drum-transcription/storage/__tests__/fake-project-opfs')
-    >('../../../lib/drum-transcription/storage/__tests__/fake-project-opfs')
+      typeof import('@musiccharts/core/drum-transcription/storage/__tests__/fake-project-opfs')
+    >('@musiccharts/core/drum-transcription/storage/__tests__/fake-project-opfs')
     .createProjectOpfsMock(),
 );
 
-jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
-  separateDrums: jest.fn(async () => {}),
-  hasDrumStem: jest.fn(async () => true),
-  loadDrumStem: jest.fn(async () => new Float32Array(512)),
-}));
+jest.mock(
+  '@musiccharts/core/drum-transcription/ml/roformer-separation',
+  () => ({
+    separateDrums: jest.fn(async () => {}),
+    hasDrumStem: jest.fn(async () => true),
+    loadDrumStem: jest.fn(async () => new Float32Array(512)),
+  }),
+);
 
-jest.mock('../../../lib/drum-transcription/pipeline/crnn-audio-prep', () => ({
-  CRNN_SAMPLE_RATE: 48000,
-  planarStereoToCrnnInput: jest.fn(
-    async (left: Float32Array) => new Float32Array(left.length * 2),
-  ),
-}));
+jest.mock(
+  '@musiccharts/core/drum-transcription/pipeline/crnn-audio-prep',
+  () => ({
+    CRNN_SAMPLE_RATE: 48000,
+    planarStereoToCrnnInput: jest.fn(
+      async (left: Float32Array) => new Float32Array(left.length * 2),
+    ),
+  }),
+);
 
-jest.mock('../../../lib/drum-transcription/ml/transcriber', () => ({
+jest.mock('@musiccharts/core/drum-transcription/ml/transcriber', () => ({
   CrnnTranscriber: class {
     async transcribe() {
       return {
@@ -99,7 +105,7 @@ jest.mock('../../../lib/drum-transcription/ml/transcriber', () => ({
   },
 }));
 
-jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
+jest.mock('@musiccharts/core/drum-transcription/audio/decoder', () => ({
   decodeAudio: jest.fn(async () => ({
     length: 256,
     duration: 4,
@@ -109,20 +115,20 @@ jest.mock('../../../lib/drum-transcription/audio/decoder', () => ({
   })),
 }));
 
-jest.mock('../../../lib/tempo-map/pipeline-client', () => ({
+jest.mock('@musiccharts/core/tempo-map/pipeline-client', () => ({
   runTempoPipelineFromPcm: jest.fn(),
   runTempoPipeline: jest.fn(),
   defaultCreateWorker: jest.fn(),
 }));
 
-jest.mock('../../../lib/lyrics-align/aligner', () => ({
+jest.mock('@musiccharts/core/lyrics-align/aligner', () => ({
   alignVocals: jest.fn(),
 }));
 
-import * as opfs from '@/lib/drum-transcription/storage/opfs';
-import type {ProjectOpfsMock} from '@/lib/drum-transcription/storage/__tests__/fake-project-opfs';
-import {runTempoPipelineFromPcm} from '@/lib/tempo-map/pipeline-client';
-import {transcribeDrumsTask} from '@/lib/assist/tasks/transcribe-drums';
+import * as opfs from '@musiccharts/core/drum-transcription/storage/opfs';
+import type {ProjectOpfsMock} from '@musiccharts/core/drum-transcription/storage/__tests__/fake-project-opfs';
+import {runTempoPipelineFromPcm} from '@musiccharts/core/tempo-map/pipeline-client';
+import {transcribeDrumsTask} from '@musiccharts/core/assist/tasks/transcribe-drums';
 import DrumTranscriptionClient from '../DrumTranscriptionClient';
 
 const mockOpfs = opfs as unknown as ProjectOpfsMock;
@@ -255,7 +261,7 @@ describe('/drum-transcription upload flow', () => {
     // chart, so fail a stage that has no fallback: the transcriber's audio
     // prep, once, so the retry succeeds.
     const prep = jest.requireMock(
-      '../../../lib/drum-transcription/pipeline/crnn-audio-prep',
+      '@musiccharts/core/drum-transcription/pipeline/crnn-audio-prep',
     ) as {planarStereoToCrnnInput: jest.Mock};
     prep.planarStereoToCrnnInput.mockRejectedValueOnce(
       new Error('audio prep exploded'),

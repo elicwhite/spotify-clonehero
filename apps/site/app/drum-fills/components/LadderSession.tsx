@@ -2,23 +2,23 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
 import {
   getGrooveLadder,
   getLadderProgress,
   setLadderProgress,
   type GrooveCluster,
   type LadderRung,
-} from '@/lib/drum-fills/db';
-import type {ScoredAttempt} from '@/lib/drum-fills/practice/attempt';
-import {resolveRungIndex} from '@/lib/drum-fills/practice/fillLadder';
+} from '@musiccharts/core/drum-fills/db';
+import type {ScoredAttempt} from '@musiccharts/core/drum-fills/practice/attempt';
+import {resolveRungIndex} from '@musiccharts/core/drum-fills/practice/fillLadder';
 import {
   climbLadder,
   initRungClimb,
   type LadderClimbOptions,
   type RungClimb,
-} from '@/lib/drum-fills/practice/ladderClimb';
+} from '@musiccharts/core/drum-fills/practice/ladderClimb';
 import DifficultyBar from './DifficultyBar';
 import PracticeView from './PracticeView';
 import type {FeedbackCallout} from './PracticeFeedbackBanner';

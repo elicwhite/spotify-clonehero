@@ -1,8 +1,8 @@
 'use client';
 
 import {useEffect, useRef, useState} from 'react';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
 import {useMidi} from '../contexts/MidiContext';
 import MidiStatus from './MidiStatus';
 

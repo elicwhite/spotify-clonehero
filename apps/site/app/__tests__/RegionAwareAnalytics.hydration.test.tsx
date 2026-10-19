@@ -23,8 +23,8 @@ import {act} from 'react';
 import {hydrateRoot, type Root} from 'react-dom/client';
 
 import RegionAwareAnalytics from '../RegionAwareAnalytics';
-import {flushPendingEvents} from '@/lib/analytics/track';
-import {useToolLandingView} from '@/components/analytics/useToolLandingView';
+import {flushPendingEvents} from '@musiccharts/core/analytics/track';
+import {useToolLandingView} from '@musiccharts/core/components/analytics/useToolLandingView';
 
 // Hydration here is driven directly rather than through @testing-library,
 // which sets this up itself.

@@ -3,17 +3,17 @@
 import {useCallback} from 'react';
 import {FilePlus2, FolderInput, FolderCog} from 'lucide-react';
 import {toast} from 'sonner';
-import {pickFiles} from '@/lib/file-access/pickFiles';
-import {useSupportsDirectoryPicker} from '@/lib/file-access/capabilities';
-import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNotice';
-import {Button} from '@/components/ui/button';
+import {pickFiles} from '@musiccharts/core/file-access/pickFiles';
+import {useSupportsDirectoryPicker} from '@musiccharts/core/file-access/capabilities';
+import DownloadFallbackNotice from '@musiccharts/core/components/file-access/DownloadFallbackNotice';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@musiccharts/core/components/ui/card';
 
 interface SngLandingProps {
   onCreate: () => void;

@@ -2,19 +2,22 @@
 
 import {useEffect, useState} from 'react';
 import {parseChartAndIni} from '@eliwhite/scan-chart';
-import {getCachedSongsDirectoryHandle} from '@/lib/local-songs-folder';
-import {getFillById, type FillWithSrs} from '@/lib/drum-fills/db';
-import {locateAndLoadSong} from '@/lib/drum-fills/practice/songLocator';
-import {findAudioFiles} from '@/lib/preview/chorus-chart-processing';
-import type {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
-import {getExpertDrumsTrack} from '@/lib/drum-fills/detection/detectFills';
+import {getCachedSongsDirectoryHandle} from '@musiccharts/core/local-songs-folder';
+import {getFillById, type FillWithSrs} from '@musiccharts/core/drum-fills/db';
+import {locateAndLoadSong} from '@musiccharts/core/drum-fills/practice/songLocator';
+import {findAudioFiles} from '@musiccharts/core/preview/chorus-chart-processing';
+import type {
+  Files,
+  ParsedChart,
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {getExpertDrumsTrack} from '@musiccharts/core/drum-fills/detection/detectFills';
 import {
   buildFillPracticeData,
   buildGroovePattern,
   type FillPracticeData,
-} from '@/lib/drum-fills/practice/fillNotes';
-import type {ParsedTrackData} from '@/lib/chart-edit/types';
-import type {BackingPattern} from '@/lib/drum-fills/practice/backingTrack';
+} from '@musiccharts/core/drum-fills/practice/fillNotes';
+import type {ParsedTrackData} from '@musiccharts/core/chart-edit/types';
+import type {BackingPattern} from '@musiccharts/core/drum-fills/practice/backingTrack';
 
 export type FillChartStatus =
   | 'loading'

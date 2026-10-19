@@ -15,8 +15,8 @@ import {
   ALESIS_SURGE_PROFILE,
   parseChProfile,
   type ChProfile,
-} from '@/lib/drum-fills/midi/chProfile';
-import {PadMapping} from '@/lib/drum-fills/midi/padMapping';
+} from '@musiccharts/core/drum-fills/midi/chProfile';
+import {PadMapping} from '@musiccharts/core/drum-fills/midi/padMapping';
 
 // Calibration is per MIDI instrument: audio + MIDI latency differs by device, so
 // each connected instrument gets its own persisted offset. The base key (no

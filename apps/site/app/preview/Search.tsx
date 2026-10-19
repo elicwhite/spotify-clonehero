@@ -5,30 +5,30 @@ import {useInView} from 'react-intersection-observer';
 import {parseAsString, useQueryState} from 'nuqs';
 import {ArrowLeft, Loader2, Search as SearchIcon} from 'lucide-react';
 import {toast} from 'sonner';
-import {Input} from '@/components/ui/input';
-import {Button} from '@/components/ui/button';
+import {Input} from '@musiccharts/core/components/ui/input';
+import {Button} from '@musiccharts/core/components/ui/button';
 import Image from 'next/image';
 import debounce from 'debounce';
 
 import LocalChartLoader, {
   type LocalChart,
-} from '@/components/chart-picker/LocalChartLoader';
+} from '@musiccharts/core/components/chart-picker/LocalChartLoader';
 import PreviewViewer, {type PreviewChart} from './PreviewViewer';
 import {
   ChartInstruments,
   preFilterInstruments,
-} from '@/components/ChartInstruments';
+} from '@musiccharts/core/components/ChartInstruments';
 import {
   EncoreResponse,
   searchEncore,
   searchAdvanced,
-} from '@/lib/search-encore';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
+} from '@musiccharts/core/search-encore';
+import type {ChartResponseEncore} from '@musiccharts/core/chartSelection';
 import {
   findAudioFiles,
   getChartFiles,
-} from '@/lib/preview/chorus-chart-processing';
-import {readChart} from '@/lib/chart-edit';
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {readChart} from '@musiccharts/core/chart-edit';
 
 const instrumentFilter = 'drums';
 

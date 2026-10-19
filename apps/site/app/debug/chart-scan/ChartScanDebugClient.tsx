@@ -4,18 +4,18 @@ import {useCallback, useState} from 'react';
 import * as Sentry from '@sentry/nextjs';
 import {ClipboardCopy, FolderSearch, Send} from 'lucide-react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@musiccharts/core/components/ui/card';
 import {
   collectScanDiagnostics,
   type ScanDiagnosticsReport,
-} from '@/lib/local-songs-folder/scanDiagnostics';
+} from '@musiccharts/core/local-songs-folder/scanDiagnostics';
 
 type State =
   | {phase: 'idle'}

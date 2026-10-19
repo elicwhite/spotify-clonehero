@@ -1,9 +1,9 @@
 import {sql, type Kysely} from 'kysely';
 
-import type {DB} from '../../lib/local-db/types';
+import type {DB} from '@musiccharts/core/local-db/types';
 import {drumTypes} from '@eliwhite/scan-chart';
-import {isDrumType} from '@/lib/chorusChartDb/types';
-import {removeStyleTags} from '@/lib/ui-utils';
+import {isDrumType} from '@musiccharts/core/chorusChartDb/types';
+import {removeStyleTags} from '@musiccharts/core/ui-utils';
 import type {
   FindMusicChart,
   FindMusicProviderAction,
@@ -106,7 +106,7 @@ function currentChorusChartsCte() {
 
 async function resolveDb(db?: Kysely<DB>): Promise<Kysely<DB>> {
   if (db) return db;
-  const {getLocalDb} = await import('../../lib/local-db/client');
+  const {getLocalDb} = await import('@musiccharts/core/local-db/client');
   return getLocalDb();
 }
 

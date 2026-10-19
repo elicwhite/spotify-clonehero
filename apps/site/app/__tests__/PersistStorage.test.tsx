@@ -8,11 +8,11 @@ import PersistStorage from '../PersistStorage';
 const collectEarnedPersistence = jest.fn(async () => false);
 const attachStorageContext = jest.fn(async () => undefined);
 
-jest.mock('../../lib/browser-storage', () => ({
+jest.mock('@musiccharts/core/browser-storage', () => ({
   collectEarnedPersistence: () => collectEarnedPersistence(),
 }));
 
-jest.mock('../../lib/sentry/storage-context', () => ({
+jest.mock('@musiccharts/core/sentry/storage-context', () => ({
   attachStorageContext: () => attachStorageContext(),
 }));
 

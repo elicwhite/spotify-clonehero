@@ -3,13 +3,16 @@
 import {useCallback, useState} from 'react';
 import {Upload, FilePlus, FolderOpen} from 'lucide-react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {cn} from '@musiccharts/core/utils';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
-import {readChartFolder} from '@/lib/chart-files/chart-package';
-import {pickFolder} from '@/lib/file-access/pickFolder';
-import {readDroppedItems, readFileList} from '@/lib/chart-files/entries';
-import {pickFiles} from '@/lib/file-access/pickFiles';
+import {readChartFolder} from '@musiccharts/core/chart-files/chart-package';
+import {pickFolder} from '@musiccharts/core/file-access/pickFolder';
+import {
+  readDroppedItems,
+  readFileList,
+} from '@musiccharts/core/chart-files/entries';
+import {pickFiles} from '@musiccharts/core/file-access/pickFiles';
 
 interface DropZoneProps {
   onAdd: (files: FileEntry[]) => void;

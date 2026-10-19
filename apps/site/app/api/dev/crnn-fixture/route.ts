@@ -17,7 +17,7 @@ export async function GET() {
   }
   const fixturePath = path.join(
     process.cwd(),
-    'lib',
+    '../../packages/core/src',
     'drum-transcription',
     '__tests__',
     'fixtures',

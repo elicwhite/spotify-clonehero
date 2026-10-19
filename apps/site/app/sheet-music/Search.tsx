@@ -4,22 +4,22 @@ import {useMemo, useEffect, useRef, useState, useCallback} from 'react';
 import {useInView} from 'react-intersection-observer';
 import {parseAsString, useQueryState} from 'nuqs';
 import {ArrowLeft, Search as SearchIcon} from 'lucide-react';
-import {Input} from '@/components/ui/input';
-import {Button} from '@/components/ui/button';
+import {Input} from '@musiccharts/core/components/ui/input';
+import {Button} from '@musiccharts/core/components/ui/button';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import debounce from 'debounce';
 import LocalChartLoader, {
   type LocalChart,
-} from '@/components/chart-picker/LocalChartLoader';
+} from '@musiccharts/core/components/chart-picker/LocalChartLoader';
 
 const SongView = dynamic(() => import('./[slug]/SongView'), {ssr: false});
 import {
   ChartInstruments,
   preFilterInstruments,
-} from '@/components/ChartInstruments';
-import {EncoreResponse, searchEncore} from '@/lib/search-encore';
-import {getSheetMusicUrl} from '@/lib/song-urls/buildSheetMusicUrl';
+} from '@musiccharts/core/components/ChartInstruments';
+import {EncoreResponse, searchEncore} from '@musiccharts/core/search-encore';
+import {getSheetMusicUrl} from '@musiccharts/core/song-urls/buildSheetMusicUrl';
 
 // const DifficultyBadge = ({
 //   instrument,

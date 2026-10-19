@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {getAppleMusicDeveloperToken} from '@/lib/apple-music-server/developer-token';
+import {getAppleMusicDeveloperToken} from '@musiccharts/core/apple-music-server/developer-token';
 
 export const runtime = 'nodejs';
 

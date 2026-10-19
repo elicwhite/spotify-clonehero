@@ -19,7 +19,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/site/lib/chorusChartDb/chartDbAssets.ts'
+      - 'packages/core/src/chorusChartDb/chartDbAssets.ts'
   schedule:
     # Daily incremental: only what changed since the published dump.
     - cron: '0 8 * * *'
@@ -79,7 +79,7 @@ jobs:
         # generation has nothing to do — the daily run covers it.
         run: |
           expected="$(grep -oE 'CHART_DB_DATA_VERSION = [0-9]+' \
-            lib/chorusChartDb/chartDbAssets.ts | grep -oE '[0-9]+$')"
+            ../../packages/core/src/chorusChartDb/chartDbAssets.ts | grep -oE '[0-9]+$')"
           if [ -z "$expected" ]; then
             echo "::error::Could not read CHART_DB_DATA_VERSION"
             exit 1

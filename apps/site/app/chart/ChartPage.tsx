@@ -2,16 +2,16 @@
 
 import Link from 'next/link';
 
-import {EditPassCanvas} from '@/components/landing/EditPassCanvas';
-import {ReductionCascadeCanvas} from '@/components/difficulty-generation/landing/illustrations/ReductionCascadeCanvas';
-import {BeatGridCanvas} from '@/components/landing/BeatGridCanvas';
-import {FeatureBand} from '@/components/landing/FeatureBand';
-import {LandingFooter} from '@/components/landing/LandingFooter';
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {LandingSection} from '@/components/landing/Section';
-import {START_SECTION_ID} from '@/components/landing/ToolEntrySection';
-import {buttonVariants} from '@/components/ui/button';
+import {EditPassCanvas} from '@musiccharts/core/components/landing/EditPassCanvas';
+import {ReductionCascadeCanvas} from '@musiccharts/core/components/difficulty-generation/landing/illustrations/ReductionCascadeCanvas';
+import {BeatGridCanvas} from '@musiccharts/core/components/landing/BeatGridCanvas';
+import {FeatureBand} from '@musiccharts/core/components/landing/FeatureBand';
+import {LandingFooter} from '@musiccharts/core/components/landing/LandingFooter';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {LandingSection} from '@musiccharts/core/components/landing/Section';
+import {START_SECTION_ID} from '@musiccharts/core/components/landing/ToolEntrySection';
+import {buttonVariants} from '@musiccharts/core/components/ui/button';
 
 import {LyricSyllables} from './illustrations/LyricSyllables';
 

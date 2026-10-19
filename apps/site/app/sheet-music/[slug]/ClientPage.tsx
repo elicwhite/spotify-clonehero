@@ -1,14 +1,14 @@
 'use client';
 
 import {useEffect, useState} from 'react';
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {ChartResponseEncore} from '@musiccharts/core/chartSelection';
 import SongView from './SongView';
 import {
   Files,
   getChartAndAudioFiles,
   ParsedChart,
-} from '@/lib/preview/chorus-chart-processing';
-import {searchAdvanced} from '@/lib/search-encore';
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {searchAdvanced} from '@musiccharts/core/search-encore';
 
 export default function MyComponent({md5}: {md5: string}) {
   const [rendering, setRendering] = useState<null | {

@@ -1,9 +1,9 @@
 import {
   OgReductionCascade,
   type OgCascadeRow,
-} from '@/lib/og/reduction-cascade';
-import {createToolOgImage} from '@/lib/og/tool-og-image';
-import {OG_LANES, OG_SIZE} from '@/lib/og/tokens';
+} from '@musiccharts/core/og/reduction-cascade';
+import {createToolOgImage} from '@musiccharts/core/og/tool-og-image';
+import {OG_LANES, OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Generate guitar Hard, Medium, and Easy from Expert';
 export const size = OG_SIZE;

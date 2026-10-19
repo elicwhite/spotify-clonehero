@@ -11,14 +11,14 @@ import {
   chartDbAssetUrl,
   chartDbDumpKey,
   chartDbVersionFromDate,
-} from '../lib/chorusChartDb/chartDbAssets';
+} from '@musiccharts/core/chorusChartDb/chartDbAssets';
 import {
   assertPublishableDump,
   buildManifest,
   DUMP_CACHE_CONTROL,
   MANIFEST_CACHE_CONTROL,
-} from '../lib/chorusChartDb/chartDbPublish';
-import {toChorusChartDbRow} from '../lib/chorusChartDb/types';
+} from '@musiccharts/core/chorusChartDb/chartDbPublish';
+import {toChorusChartDbRow} from '@musiccharts/core/chorusChartDb/types';
 
 /**
  * Publishes what `downloadDb.ts` wrote to the R2 bucket behind

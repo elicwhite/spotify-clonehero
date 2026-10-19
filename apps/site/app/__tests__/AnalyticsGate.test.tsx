@@ -4,7 +4,7 @@
 
 import '@testing-library/jest-dom';
 import {render, screen} from '@testing-library/react';
-import {analyticsEnabled} from '../../lib/analytics/environment';
+import {analyticsEnabled} from '@musiccharts/core/analytics/environment';
 import AnalyticsGate from '../AnalyticsGate';
 
 jest.mock('@next/third-parties/google', () => ({
@@ -17,7 +17,7 @@ jest.mock('@next/third-parties/google', () => ({
 // page from localhost — the exact case the gate stops. So the decision is
 // mocked here and the rule behind it is tested for real in
 // `lib/analytics/__tests__/environment.test.ts`.
-jest.mock('../../lib/analytics/environment', () => ({
+jest.mock('@musiccharts/core/analytics/environment', () => ({
   analyticsEnabled: jest.fn(),
 }));
 

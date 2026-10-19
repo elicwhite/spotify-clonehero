@@ -19,46 +19,49 @@ import {
   type File as ScanFile,
   type ParsedChart,
 } from '@eliwhite/scan-chart';
-import {Button} from '@/components/ui/button';
-import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {ToolEntryCard} from '@musiccharts/core/components/landing/ToolEntryCard';
 import {
   findAudioFiles,
   type Files,
-} from '@/lib/preview/chorus-chart-processing';
-import {chartDocToFolderFiles, readChart} from '@/lib/chart-edit';
-import {chartFileFormatOf} from '@/lib/chart-files/chart-file-names';
-import {useWebGpuFp16} from '@/components/onnx/useWebGpuFp16';
-import WebGpuRequirementNotice from '@/components/onnx/WebGpuRequirementNotice';
-import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles, SourceFormat} from '@/lib/chart-files/chart-package';
-import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
-import SectionDropZone from '@/components/landing/SectionDropZone';
-import AudioUploader from '@/components/AudioUploader';
-import {chartPackageAudioBytes} from '@/components/chart-editor/chartPackage';
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {chartDocToFolderFiles, readChart} from '@musiccharts/core/chart-edit';
+import {chartFileFormatOf} from '@musiccharts/core/chart-files/chart-file-names';
+import {useWebGpuFp16} from '@musiccharts/core/components/onnx/useWebGpuFp16';
+import WebGpuRequirementNotice from '@musiccharts/core/components/onnx/WebGpuRequirementNotice';
+import ChartDropZone from '@musiccharts/core/components/chart-picker/ChartDropZone';
+import type {
+  LoadedFiles,
+  SourceFormat,
+} from '@musiccharts/core/chart-files/chart-package';
+import ConnectedProcessingView from '@musiccharts/core/components/assist/ConnectedProcessingView';
+import SectionDropZone from '@musiccharts/core/components/landing/SectionDropZone';
+import AudioUploader from '@musiccharts/core/components/AudioUploader';
+import {chartPackageAudioBytes} from '@musiccharts/core/components/chart-editor/chartPackage';
 
 import {TempoLanding} from './landing/TempoLanding';
 
-import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
-import {swapSynctrack} from '@/lib/tempo-map/swap-synctrack';
-import {buildChartFromSynctrack} from '@/lib/tempo-map/build-chart';
+import {mergeAudioFiles} from '@musiccharts/core/tempo-map/merge-audio';
+import {swapSynctrack} from '@musiccharts/core/tempo-map/swap-synctrack';
+import {buildChartFromSynctrack} from '@musiccharts/core/tempo-map/build-chart';
 
-import {track} from '@/lib/analytics/track';
+import {track} from '@musiccharts/core/analytics/track';
 import {
   useAssistRunnerControls,
   type AssistRunContext,
-} from '@/components/assist/useAssistRunner';
+} from '@musiccharts/core/components/assist/useAssistRunner';
 import {
   generateTempoMapTask,
   type GenerateTempoMapInput,
   type GenerateTempoMapResult,
-} from '@/lib/assist/tasks/generate-tempo-map';
+} from '@musiccharts/core/assist/tasks/generate-tempo-map';
 import {
   resolveStemFingerprint,
   type AssistTaskDef,
-} from '@/lib/assist/tasks/types';
-import {isAbortError} from '@/lib/workers/abortable-worker';
-import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
-import {useToolLandingView} from '@/components/analytics/useToolLandingView';
+} from '@musiccharts/core/assist/tasks/types';
+import {isAbortError} from '@musiccharts/core/workers/abortable-worker';
+import {createProjectFromDoc} from '@musiccharts/core/project-storage/createProjectFromDoc';
+import {useToolLandingView} from '@musiccharts/core/components/analytics/useToolLandingView';
 
 // ---------------------------------------------------------------------------
 // Types

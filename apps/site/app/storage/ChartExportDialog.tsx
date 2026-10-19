@@ -3,12 +3,12 @@
 import dynamic from 'next/dynamic';
 import {useEffect, useState} from 'react';
 
-import type {ChartDocument} from '@/lib/chart-edit';
-import type {AssistTaskKey} from '@/lib/assist/tasks/types';
-import type {ChartFileFormat} from '@/lib/chart-files/chart-file-names';
-import {DRUM_TRANSCRIPTION_NAMESPACE} from '@/lib/project-storage/namespaces';
-import type {ChartOrigin} from '@/lib/project-storage/types';
-import type {StoredProject} from '@/lib/project-storage/storedProjects';
+import type {ChartDocument} from '@musiccharts/core/chart-edit';
+import type {AssistTaskKey} from '@musiccharts/core/assist/tasks/types';
+import type {ChartFileFormat} from '@musiccharts/core/chart-files/chart-file-names';
+import {DRUM_TRANSCRIPTION_NAMESPACE} from '@musiccharts/core/project-storage/namespaces';
+import type {ChartOrigin} from '@musiccharts/core/project-storage/types';
+import type {StoredProject} from '@musiccharts/core/project-storage/storedProjects';
 
 /**
  * The editor's export dialog, loaded only when a chart is chosen.
@@ -18,7 +18,7 @@ import type {StoredProject} from '@/lib/project-storage/storedProjects';
  * pays for that until they ask for a copy of something.
  */
 const ExportDialog = dynamic(
-  () => import('@/components/chart-editor/ExportDialog'),
+  () => import('@musiccharts/core/components/chart-editor/ExportDialog'),
   {ssr: false},
 );
 
@@ -50,8 +50,8 @@ async function documentOf(
   songIni: Uint8Array | null,
 ): Promise<ChartDocument> {
   const [{readChartForEditing}, {withSongIniFields}] = await Promise.all([
-    import('@/lib/chart-edit'),
-    import('@/lib/chart-editor-core'),
+    import('@musiccharts/core/chart-edit'),
+    import('@musiccharts/core/chart-editor-core'),
   ]);
   const doc = readChartForEditing([chartFile]);
   return songIni
@@ -61,7 +61,9 @@ async function documentOf(
 
 /** A chart-package project: the `/chart-editor` layout and its legacy names. */
 async function loadChartPackage(project: StoredProject): Promise<ExportInputs> {
-  const {chartPackageStore} = await import('@/lib/project-storage/projects');
+  const {chartPackageStore} = await import(
+    '@musiccharts/core/project-storage/projects'
+  );
   const store = chartPackageStore();
   const [metadata, chartFile, songIni] = await Promise.all([
     store.getProject(project.id),
@@ -95,7 +97,9 @@ async function loadChartPackage(project: StoredProject): Promise<ExportInputs> {
 async function loadTranscription(
   project: StoredProject,
 ): Promise<ExportInputs> {
-  const opfs = await import('@/lib/drum-transcription/storage/opfs');
+  const opfs = await import(
+    '@musiccharts/core/drum-transcription/storage/opfs'
+  );
   const metadata = await opfs.getProject(project.id);
   const chartName = await opfs.findProjectChartFile(project.id);
   if (chartName == null) {

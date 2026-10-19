@@ -6,15 +6,20 @@ import {
   OgPanel,
   OgSubtitle,
   OgTitle,
-} from '@/lib/og/layout';
-import {OG_COLORS, OG_LANES, OG_SIZE, OG_TYPE} from '@/lib/og/tokens';
+} from '@musiccharts/core/og/layout';
+import {
+  OG_COLORS,
+  OG_LANES,
+  OG_SIZE,
+  OG_TYPE,
+} from '@musiccharts/core/og/tokens';
 
 import {
   CORRECTED_INDEX,
   PROPOSED_AT,
   SYLLABLES,
   envelope,
-} from '@/lib/landing/syllableAlignModel';
+} from '@musiccharts/core/landing/syllableAlignModel';
 
 export const alt = 'Add synced lyrics to a chart';
 export const size = OG_SIZE;

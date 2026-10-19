@@ -7,7 +7,7 @@
 import type {
   LandingMetric,
   LandingProvenance,
-} from '@/components/landing/StatChip';
+} from '@musiccharts/core/components/landing/StatChip';
 
 const P = (measuredOn: string, note?: string): LandingProvenance => ({
   script: 'analysis/threeway_comparison/',

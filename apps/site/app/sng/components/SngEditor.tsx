@@ -1,7 +1,7 @@
 'use client';
 
 import {ArrowLeft, Download, FileArchive} from 'lucide-react';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import type {File as FileEntry} from '@eliwhite/scan-chart';
 import ChartInfoCard from './ChartInfoCard';
 import DropZone from './DropZone';

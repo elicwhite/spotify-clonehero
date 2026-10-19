@@ -3,8 +3,11 @@
 import {useCallback, useEffect, useState} from 'react';
 import {useRouter, useSearchParams} from 'next/navigation';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {getGrooveClusterByKey, type GrooveCluster} from '@/lib/drum-fills/db';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {
+  getGrooveClusterByKey,
+  type GrooveCluster,
+} from '@musiccharts/core/drum-fills/db';
 import {useDrumFillsChrome} from '../../contexts/DrumFillsChromeContext';
 import GrooveSession from '../../components/GrooveSession';
 

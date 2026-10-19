@@ -2,26 +2,26 @@
 
 import {useEffect, useState, useMemo} from 'react';
 import {Loader2, AlertCircle} from 'lucide-react';
-import type {ChartDocument} from '@/lib/chart-edit';
-import type {Files} from '@/lib/preview/chorus-chart-processing';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
-import {AudioManager} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
+import type {ChartDocument} from '@musiccharts/core/chart-edit';
+import type {Files} from '@musiccharts/core/preview/chorus-chart-processing';
+import type {ChartResponseEncore} from '@musiccharts/core/chartSelection';
+import {AudioManager} from '@musiccharts/core/preview/audioManager';
+import {getChartDelayMs} from '@musiccharts/core/chart-utils/chartDelay';
 import {
   mixToInterleavedStereo,
   type DecodedStem,
-} from '@/lib/preview/waveformMix';
+} from '@musiccharts/core/preview/waveformMix';
 import {
   ChartEditorProvider,
   useChartEditorContext,
   AudioServiceProvider,
   useAudioServiceContext,
-} from '@/components/chart-editor';
-import {PREVIEW_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
-import ChartEditor from '@/components/chart-editor/ChartEditor';
-import {audioSamples} from '@/components/chart-editor/audioSamples';
-import {NO_TOOLS_APPLIED} from '@/components/chart-editor/hooks/useToolsApplied';
+} from '@musiccharts/core/components/chart-editor';
+import {PREVIEW_CAPABILITIES} from '@musiccharts/core/chart-editor-core/capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@musiccharts/core/chart-editor-core/scope';
+import ChartEditor from '@musiccharts/core/components/chart-editor/ChartEditor';
+import {audioSamples} from '@musiccharts/core/components/chart-editor/audioSamples';
+import {NO_TOOLS_APPLIED} from '@musiccharts/core/components/chart-editor/hooks/useToolsApplied';
 
 export interface PreviewChart {
   metadata: ChartResponseEncore;

@@ -1,21 +1,21 @@
 import {Difficulty} from '@eliwhite/scan-chart';
 
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from '@musiccharts/core/components/ui/select';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import {Slider} from '@/components/ui/slider';
-import {Switch} from '@/components/ui/switch';
+} from '@musiccharts/core/components/ui/dialog';
+import {Slider} from '@musiccharts/core/components/ui/slider';
+import {Switch} from '@musiccharts/core/components/ui/switch';
 import {
   Play,
   Pause,
@@ -32,39 +32,42 @@ import {
 } from 'lucide-react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useRouter} from 'next/navigation';
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {ChartResponseEncore} from '@musiccharts/core/chartSelection';
 
-import {getBasename} from '@/lib/src-shared/utils';
-import {cn} from '@/lib/utils';
-import {track as trackEvent} from '@/lib/analytics/track';
-import SheetMusic from '@/lib/sheet-music/SheetMusic';
-import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
+import {getBasename} from '@musiccharts/core/src-shared/utils';
+import {cn} from '@musiccharts/core/utils';
+import {track as trackEvent} from '@musiccharts/core/analytics/track';
+import SheetMusic from '@musiccharts/core/sheet-music/SheetMusic';
+import {
+  Files,
+  ParsedChart,
+} from '@musiccharts/core/preview/chorus-chart-processing';
 import {
   AudioManager,
   PracticeModeConfig,
   type AudioSource,
-} from '@/lib/preview/audioManager';
-import CloneHeroRenderer from '@/lib/preview/CloneHeroRenderer';
+} from '@musiccharts/core/preview/audioManager';
+import CloneHeroRenderer from '@musiccharts/core/preview/CloneHeroRenderer';
 import PlaybackBar from './PlaybackBar';
 import {usePlaybackAnalytics} from './usePlaybackAnalytics';
 import {formatTimeMs} from './formatTime';
 import Image from 'next/image';
-import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
-import SongHeader from '@/components/chart-detail/SongHeader';
+import ChartDetailLayout from '@musiccharts/core/components/chart-detail/ChartDetailLayout';
+import SongHeader from '@musiccharts/core/components/chart-detail/SongHeader';
 import {activeClickVoices, generateClickVoicePcm} from './generateClickTrack';
 import type {ClickVoice, ClickVolumes} from './generateClickTrack';
-import convertToVexFlow from '@/lib/sheet-music/convertToVexflow';
+import convertToVexFlow from '@musiccharts/core/sheet-music/convertToVexflow';
 import debounce from 'debounce';
 import wholeNote from '@/public/assets/svgs/whole-note.svg';
 import quarterNote from '@/public/assets/svgs/quarter-note.svg';
 import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import {useAutoScroll} from '@/lib/sheet-follow/useAutoScroll';
+import {getChartDelayMs} from '@musiccharts/core/chart-utils/chartDelay';
+import {useAutoScroll} from '@musiccharts/core/sheet-follow/useAutoScroll';
 import {AUTO_SCROLL_ENABLED, AutoScrollSetting} from './AutoScrollSetting';
-import {toast} from '@/components/ui/toast';
-import {createClient} from '@/lib/supabase/client';
-import {unfavoriteSongByHash} from '@/lib/supabase/accountActions';
+import {toast} from '@musiccharts/core/components/ui/toast';
+import {createClient} from '@musiccharts/core/supabase/client';
+import {unfavoriteSongByHash} from '@musiccharts/core/supabase/accountActions';
 import {
   saveSongByHash,
   savePracticeSection,

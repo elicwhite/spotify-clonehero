@@ -20,16 +20,16 @@
 import '@testing-library/jest-dom';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {createEmptyChart} from '@eliwhite/scan-chart';
-import {TooltipProvider} from '@/components/ui/tooltip';
-import type {ChartDocument} from '@/lib/chart-edit';
-import {writeChartFolder} from '@/lib/chart-edit';
-import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import TrackEditPage from '@/components/chart-editor/TrackEditPage';
+import {TooltipProvider} from '@musiccharts/core/components/ui/tooltip';
+import type {ChartDocument} from '@musiccharts/core/chart-edit';
+import {writeChartFolder} from '@musiccharts/core/chart-edit';
+import {emptyTrackData} from '@musiccharts/core/chart-edit/__tests__/test-utils';
+import TrackEditPage from '@musiccharts/core/components/chart-editor/TrackEditPage';
 import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 
 const trackMock = jest.fn();
-jest.mock('../../../lib/analytics/track', () => ({
-  ...jest.requireActual('../../../lib/analytics/track'),
+jest.mock('@musiccharts/core/analytics/track', () => ({
+  ...jest.requireActual('@musiccharts/core/analytics/track'),
   track: (payload: unknown) => trackMock(payload),
 }));
 
@@ -53,7 +53,7 @@ const createProject = jest.fn(async (_opts?: unknown) => {
   }
   return {id: 'created-1'};
 });
-jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
+jest.mock('@musiccharts/core/project-storage/opfsProjectStore', () => ({
   createOpfsProjectStore: jest.fn(() => ({
     listProjects: jest.fn(async () => []),
     namespaceOf: jest.fn(async () => 'chart-editor'),
@@ -81,13 +81,13 @@ const createBlankProject = jest.fn(async (_opts?: unknown) => {
   }
   return {id: 'blank-1', hasAudio: false};
 });
-jest.mock('../../../lib/project-storage/projects', () => ({
-  ...jest.requireActual('../../../lib/project-storage/projects'),
+jest.mock('@musiccharts/core/project-storage/projects', () => ({
+  ...jest.requireActual('@musiccharts/core/project-storage/projects'),
   createBlankProject: (opts: unknown) => createBlankProject(opts),
   listProjects: jest.fn(async () => []),
   deleteProjectRecord: jest.fn(async () => {}),
 }));
-jest.mock('../../../lib/project-storage/attachAudio', () => ({
+jest.mock('@musiccharts/core/project-storage/attachAudio', () => ({
   attachAudioToProject: jest.fn(async () => {}),
 }));
 
@@ -108,7 +108,7 @@ jest.mock('next/navigation', () => ({
 
 /** The chart a "Load a Chart" drop hands over. Replaced per test. */
 let nextLoaded: {fileName: string; data: Uint8Array}[] = [];
-jest.mock('../../../components/chart-picker/ChartDropZone', () => ({
+jest.mock('@musiccharts/core/components/chart-picker/ChartDropZone', () => ({
   __esModule: true,
   default: ({onLoaded, disabled}: any) => (
     <button
@@ -124,7 +124,7 @@ jest.mock('../../../components/chart-picker/ChartDropZone', () => ({
     </button>
   ),
 }));
-jest.mock('../../../components/project-list/AudioDropZone', () => ({
+jest.mock('@musiccharts/core/components/project-list/AudioDropZone', () => ({
   __esModule: true,
   default: ({onDropped, disabled}: any) => (
     <button
@@ -140,7 +140,7 @@ jest.mock('../../../components/project-list/AudioDropZone', () => ({
     </button>
   ),
 }));
-jest.mock('../../../components/project-list/ProjectList', () => ({
+jest.mock('@musiccharts/core/components/project-list/ProjectList', () => ({
   __esModule: true,
   default: () => <div />,
 }));

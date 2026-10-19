@@ -2,17 +2,20 @@
 
 import {useEffect, useState} from 'react';
 import {Player} from '@remotion/player';
-import {ChartResponseEncore} from '@/lib/chartSelection';
+import {ChartResponseEncore} from '@musiccharts/core/chartSelection';
 import {
   getChartAndAudioFiles,
   Files,
-} from '@/lib/preview/chorus-chart-processing';
-import {searchAdvanced} from '@/lib/search-encore';
-import {parseLyrics, type LyricLine} from '@/lib/karaoke/parse-lyrics';
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {searchAdvanced} from '@musiccharts/core/search-encore';
+import {
+  parseLyrics,
+  type LyricLine,
+} from '@musiccharts/core/karaoke/parse-lyrics';
 import {KaraokeVideo} from '../KaraokeVideo';
 import {TREATMENTS, type TreatmentId} from '../treatments/types';
-import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
-import SongHeader from '@/components/chart-detail/SongHeader';
+import ChartDetailLayout from '@musiccharts/core/components/chart-detail/ChartDetailLayout';
+import SongHeader from '@musiccharts/core/components/chart-detail/SongHeader';
 
 const FPS = 30;
 

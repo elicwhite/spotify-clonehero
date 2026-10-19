@@ -1,7 +1,7 @@
 'use client';
 
 import {useSyncExternalStore} from 'react';
-import {analyticsEnabled} from '@/lib/analytics/environment';
+import {analyticsEnabled} from '@musiccharts/core/analytics/environment';
 import RegionAwareAnalytics from './RegionAwareAnalytics';
 
 // The environment decides, so this cannot live in `app/layout.tsx`: the

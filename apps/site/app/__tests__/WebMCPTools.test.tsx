@@ -11,7 +11,7 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
 }));
 
-jest.mock('../../lib/local-db/client', () => ({
+jest.mock('@musiccharts/core/local-db/client', () => ({
   runRawSql: jest.fn(),
 }));
 
@@ -74,7 +74,9 @@ describe('WebMCPTools', () => {
         },
       ],
     });
-    const {runRawSql} = jest.requireMock('../../lib/local-db/client') as {
+    const {runRawSql} = jest.requireMock(
+      '@musiccharts/core/local-db/client',
+    ) as {
       runRawSql: jest.Mock;
     };
     expect(runRawSql).not.toHaveBeenCalled();
@@ -152,7 +154,9 @@ describe('WebMCPTools', () => {
         },
       ],
     });
-    const {runRawSql} = jest.requireMock('../../lib/local-db/client') as {
+    const {runRawSql} = jest.requireMock(
+      '@musiccharts/core/local-db/client',
+    ) as {
       runRawSql: jest.Mock;
     };
     expect(runRawSql).not.toHaveBeenCalled();

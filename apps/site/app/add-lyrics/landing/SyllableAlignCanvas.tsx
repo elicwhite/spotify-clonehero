@@ -2,15 +2,15 @@
 
 import {useEffect, useRef} from 'react';
 
-import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/lib/landing/lanes';
-import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
+import {LANE_FALLBACKS, LANE_PROPERTIES} from '@musiccharts/core/landing/lanes';
+import {heroCanvasFrameClass} from '@musiccharts/core/components/landing/heroCanvasFrame';
 
 import {
   CORRECTED_INDEX,
   PROPOSED_AT,
   SYLLABLES,
   envelope,
-} from '@/lib/landing/syllableAlignModel';
+} from '@musiccharts/core/landing/syllableAlignModel';
 
 /**
  * The hero motif for /add-lyrics, the family's edit-pass picture told with

@@ -1,0 +1,242 @@
+'use client';
+
+/**
+ * The chart-package host boundary: turning an in-memory `ChartDocument` plus
+ * the audio files that shipped with it into what `ChartEditor` needs.
+ *
+ * `/chart-editor` mounts the editor this way, through `TrackEditPage`, with
+ * the audio read back from its OPFS project. The pieces a chart-package host
+ * must supply live here: the metronome click stem, the chart delay applied to
+ * playback, the waveform PCM and its sample rate, the export audio sources,
+ * and the Chart Assist audio boundary.
+ */
+
+import {useCallback, useMemo} from 'react';
+
+import type {ChartDocument} from '../../chart-edit';
+import type {Files} from '../../preview/chorus-chart-processing';
+import {
+  AudioManager,
+  type AudioSource as AudioManagerSource,
+} from '../../preview/audioManager';
+import {getChartDelayMs} from '../../chart-utils/chartDelay';
+import {
+  CLICK_TRACK_NAME,
+  generateBeatClickTrackSamples,
+} from '../../preview/clickTrack';
+import {mixStemsToAudioBuffer} from '../../audio-pipeline/lyrics-audio';
+import {interleaveAudioBuffer} from '../../drum-transcription/audio/decoder';
+import {encodeWavBlob} from '../../audio/wav-encoder';
+import {audioMimeType} from '../../sng/file-utils';
+import {getBasename} from '../../src-shared/utils';
+import type {AssistAudio} from '../../assist/tasks/types';
+import {defaultVolumeFor} from './sidebar/mixerBus';
+import type {AudioSource} from './ExportDialog';
+import type {ChartAssistProps} from './sidebar/ChartAssist';
+
+// ---------------------------------------------------------------------------
+// Audio
+// ---------------------------------------------------------------------------
+
+export interface PreparedChartPackageAudio {
+  audioManager: AudioManager;
+  /** Interleaved PCM of the package's first audio file, for the piano roll's
+   *  waveform. Undefined when that file couldn't be decoded. */
+  audioData: Float32Array | undefined;
+  audioChannels: number;
+  audioSampleRate: number | undefined;
+  /** Duration of that same file, or 0 when it couldn't be decoded. */
+  durationSeconds: number;
+}
+
+/**
+ * Builds the `AudioManager` a chart package plays through, plus the decoded
+ * PCM the piano roll draws.
+ *
+ * The chart's `delay` is applied to playback and a metronome click stem is
+ * synthesized from its tempo map and registered as another audio file, so
+ * the click gets the same speed/seek sync as every other stem and shows up
+ * as the Stems mixer's click row (silent by default).
+ *
+ * `audioFiles` is never mutated: the click stem goes into a copy, so the
+ * caller's list stays the package's real audio for export and Chart Assist.
+ */
+export async function prepareChartPackageAudio(options: {
+  chartDoc: ChartDocument;
+  audioFiles: Files;
+  onPlaybackEnded: () => void;
+}): Promise<PreparedChartPackageAudio> {
+  const {chartDoc, audioFiles, onPlaybackEnded} = options;
+  if (audioFiles.length === 0) {
+    throw new Error('No audio files found in chart package');
+  }
+
+  let audioData: Float32Array | undefined;
+  let audioChannels = 2;
+  let audioSampleRate: number | undefined;
+  let durationSeconds = 0;
+  try {
+    const decodeCtx = new AudioContext({sampleRate: 44100});
+    try {
+      const buffer = audioFiles[0].data.slice(0).buffer;
+      const decoded = await decodeCtx.decodeAudioData(buffer as ArrayBuffer);
+      audioChannels = decoded.numberOfChannels;
+      audioSampleRate = decoded.sampleRate;
+      durationSeconds = decoded.duration;
+      const interleaved = new Float32Array(decoded.length * audioChannels);
+      for (let ch = 0; ch < audioChannels; ch++) {
+        const channelData = decoded.getChannelData(ch);
+        for (let i = 0; i < decoded.length; i++) {
+          interleaved[i * audioChannels + ch] = channelData[i];
+        }
+      }
+      audioData = interleaved;
+    } finally {
+      await decodeCtx.close();
+    }
+  } catch {
+    // The waveform and the exact duration are both optional — a package
+    // whose first file won't decode still plays through AudioManager.
+    console.warn('Could not decode audio for waveform display');
+  }
+
+  const chartDelayMs = getChartDelayMs(chartDoc.parsedChart.metadata);
+  const stems: AudioManagerSource[] = [...audioFiles];
+  if (durationSeconds > 0) {
+    try {
+      const clickPcm = await generateBeatClickTrackSamples(
+        chartDoc.parsedChart,
+        durationSeconds * 1000,
+        chartDelayMs,
+      );
+      stems.push({fileName: `${CLICK_TRACK_NAME}.wav`, pcm: clickPcm});
+    } catch (err) {
+      // Click track is a nice-to-have — don't fail the whole load if
+      // synthesis fails.
+      console.warn('Could not generate click track:', err);
+    }
+  }
+
+  const audioManager = new AudioManager(stems, onPlaybackEnded);
+  await audioManager.ready;
+  audioManager.setChartDelay(chartDelayMs / 1000);
+  try {
+    audioManager.setVolume(
+      CLICK_TRACK_NAME,
+      defaultVolumeFor(CLICK_TRACK_NAME) / 100,
+    );
+  } catch {
+    // Click track failed to generate above — no such stem to silence.
+  }
+
+  return {
+    audioManager,
+    audioData,
+    audioChannels,
+    audioSampleRate,
+    durationSeconds,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Assist audio
+// ---------------------------------------------------------------------------
+
+/**
+ * The package's audio as one file's bytes, for the assist tasks that work
+ * from audio alone. A single file IS the full mix, so its bytes go over
+ * verbatim and the fingerprint derived from them matches the same file
+ * separated by any other tool. A multi-stem package has no single mixed
+ * file, so the stems are summed back into one and encoded, the same
+ * reconstruction `/add-lyrics` performs before re-separating.
+ *
+ * The metronome click is not music and is dropped from the sum: it is a
+ * charting aid, and mixing it in would put a click on every beat of the
+ * audio these tasks separate and transcribe.
+ */
+export async function chartPackageAudioBytes(
+  audioFiles: Files,
+): Promise<Uint8Array> {
+  const musicFiles = audioFiles.filter(
+    f => getBasename(f.fileName).toLowerCase() !== CLICK_TRACK_NAME,
+  );
+  if (musicFiles.length === 0) {
+    throw new Error('No audio files found in chart package');
+  }
+  if (musicFiles.length === 1) return musicFiles[0].data;
+  const mixed = await mixStemsToAudioBuffer(
+    musicFiles.map(f => ({
+      data: f.data,
+      mimeType: audioMimeType(f.fileName),
+    })),
+  );
+  const wav = encodeWavBlob(interleaveAudioBuffer(mixed), mixed.sampleRate, 2);
+  return new Uint8Array(await wav.arrayBuffer());
+}
+
+// ---------------------------------------------------------------------------
+// Editor props
+// ---------------------------------------------------------------------------
+
+export interface ChartPackageEditorProps {
+  getAudioSources: () => Promise<AudioSource[]>;
+  chartAssist: ChartAssistProps;
+}
+
+/**
+ * The `ChartEditor` props a chart-package host derives from its prepared
+ * audio and its live chart doc.
+ *
+ * Chart Assist on this host, card by card (plan 0074 Phase 2):
+ * - Tempo map: RUNS. `generate-tempo-map` needs nothing but the song's audio
+ *   bytes, which the chart package supplies.
+ * - Lyrics: RUNS. `add-lyrics` needs audio bytes plus the pasted
+ *   text. With no stem-cache fingerprint to offer, a chart whose audio was
+ *   never separated here takes the Demucs branch, which is exactly what
+ *   `/add-lyrics` does with the same input.
+ * - Add leading silence: RUNS. `TrackEditPage` pads both its playback
+ *   (`useShiftedAudio`) and its exported audio, so a shifted chart stays with
+ *   its audio.
+ * - Drum transcription: RUNS, on charts that have Expert Drums.
+ *   `transcribe-drums-from-audio` separates its own drum stem out of the same
+ *   audio bytes, so it needs no OPFS drum-transcription project.
+ *
+ * `loadAudioFiles` must be referentially stable (a `useCallback`): it is a
+ * dependency of the memoized callbacks handed to the editor.
+ */
+export function useChartPackageEditor(args: {
+  loadAudioFiles: () => Promise<Files>;
+  /**
+   * The stem-cache fingerprint this host has persisted for the audio, when
+   * it has one. Supplied, assist tasks key the cache with it verbatim rather
+   * than hashing the bytes — which for a multi-file package means mixing the
+   * whole song down first.
+   */
+  stemFingerprint?: string | undefined;
+}): ChartPackageEditorProps {
+  const {loadAudioFiles, stemFingerprint} = args;
+
+  const getAudioSources = useCallback(async (): Promise<AudioSource[]> => {
+    const files = await loadAudioFiles();
+    return files.map(f => ({
+      fileName: f.fileName,
+      data: f.data.buffer as ArrayBuffer,
+    }));
+  }, [loadAudioFiles]);
+
+  const loadAudio = useCallback(
+    async (): Promise<AssistAudio> => ({
+      loadOriginalBytes: async () =>
+        chartPackageAudioBytes(await loadAudioFiles()),
+      stemFingerprint,
+    }),
+    [loadAudioFiles, stemFingerprint],
+  );
+
+  const chartAssist = useMemo<ChartAssistProps>(
+    () => ({loadAudio}),
+    [loadAudio],
+  );
+
+  return {getAudioSources, chartAssist};
+}

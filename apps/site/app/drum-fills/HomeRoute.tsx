@@ -2,7 +2,10 @@
 
 import {useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
-import {getFillCount, type GrooveCluster} from '@/lib/drum-fills/db';
+import {
+  getFillCount,
+  type GrooveCluster,
+} from '@musiccharts/core/drum-fills/db';
 import {useDrumFillsChrome} from './contexts/DrumFillsChromeContext';
 import HomeView from './components/HomeView';
 

@@ -9,7 +9,7 @@
  * type says the value is fixed, and for the duration of one test it is not.
  */
 
-import {getSiteUrl} from '../lib/site-url';
+import {getSiteUrl} from '@musiccharts/core/site-url';
 
 /**
  * Every variable the answer must not depend on. `VERCEL_PROJECT_PRODUCTION_URL`

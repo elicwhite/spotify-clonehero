@@ -1,13 +1,13 @@
 'use client';
 
 import {useEffect, useState} from 'react';
-import {Button} from '@/components/ui/button';
-import {navigateToAppleMusicPath} from '@/lib/apple-music/navigation';
-import {safeAppleMusicReturnPath} from '@/lib/apple-music/return-path';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {navigateToAppleMusicPath} from '@musiccharts/core/apple-music/navigation';
+import {safeAppleMusicReturnPath} from '@musiccharts/core/apple-music/return-path';
 import {
   prepareAppleMusicClient,
   type AppleMusicClient,
-} from '@/lib/apple-music';
+} from '@musiccharts/core/apple-music';
 
 export default function AppleMusicConnectClient({
   returnTo,

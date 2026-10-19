@@ -17,7 +17,7 @@
 import '@testing-library/jest-dom';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 
-import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
+import {installFakeOPFS} from '@musiccharts/core/drum-transcription/storage/__tests__/fake-opfs';
 
 const mockRouterPush = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -27,39 +27,45 @@ jest.mock('next/navigation', () => ({
 // jest.mock's first argument is resolved directly (not alias-rewritten), so
 // mocks below use relative paths to the same files the `@/...` imports
 // elsewhere resolve to — same convention as lib/assist/__tests__/tasks.test.ts.
-jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+jest.mock('@musiccharts/core/audio-pipeline/decode-audio', () => ({
   decodeAndResampleTo44k: jest.fn(),
   decodeNativeRate: jest.fn(),
 }));
-jest.mock('../../../lib/tempo-map/merge-audio', () => ({
+jest.mock('@musiccharts/core/tempo-map/merge-audio', () => ({
   mergeAudioFiles: jest.fn(),
 }));
 // Resampling the separated stem to the CRNN's rate pulls a wasm resampler
 // over the network; the rate conversion is not what this page's flow is
 // about.
-jest.mock('../../../lib/drum-transcription/pipeline/crnn-audio-prep', () => ({
-  planarStereoToCrnnInput: jest.fn(async () => new Float32Array(8)),
-}));
-jest.mock('../../../components/chart-editor/HighwayEditor', () => ({
+jest.mock(
+  '@musiccharts/core/drum-transcription/pipeline/crnn-audio-prep',
+  () => ({
+    planarStereoToCrnnInput: jest.fn(async () => new Float32Array(8)),
+  }),
+);
+jest.mock('@musiccharts/core/components/chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
 }));
 jest.mock(
-  '../../../components/chart-editor/piano-roll/PianoRollTimeline',
+  '@musiccharts/core/components/chart-editor/piano-roll/PianoRollTimeline',
   () => ({
     __esModule: true,
     default: () => <div data-testid="piano-roll-stub" />,
   }),
 );
-jest.mock('../../../components/chart-editor/TransportControls', () => ({
-  __esModule: true,
-  default: () => <div data-testid="transport-controls-stub" />,
-}));
+jest.mock(
+  '@musiccharts/core/components/chart-editor/TransportControls',
+  () => ({
+    __esModule: true,
+    default: () => <div data-testid="transport-controls-stub" />,
+  }),
+);
 // Only the WAV synthesis is stubbed (it needs an OfflineAudioContext jsdom
 // doesn't have); the rest of the module, `clickTrackSignature` included, is
 // pure and stays real.
-jest.mock('../../../lib/preview/clickTrack', () => ({
-  ...jest.requireActual('../../../lib/preview/clickTrack'),
+jest.mock('@musiccharts/core/preview/clickTrack', () => ({
+  ...jest.requireActual('@musiccharts/core/preview/clickTrack'),
   generateBeatClickTrackSamples: jest.fn(async () => ({
     samples: new Float32Array(1),
     sampleRate: 8000,
@@ -73,7 +79,7 @@ const audioManagers: {
   getVolume: jest.Mock;
   destroy: jest.Mock;
 }[] = [];
-jest.mock('../../../lib/preview/audioManager', () => ({
+jest.mock('@musiccharts/core/preview/audioManager', () => ({
   AudioManager: jest.fn().mockImplementation(function (
     this: any,
     audioFiles: {fileName: string}[],
@@ -95,17 +101,17 @@ jest.mock('../../../lib/preview/audioManager', () => ({
   }),
 }));
 
-import {decodeAndResampleTo44k} from '@/lib/audio-pipeline/decode-audio';
-import {mergeAudioFiles} from '@/lib/tempo-map/merge-audio';
-import {makeGenerateTempoMapTask} from '@/lib/assist/tasks/generate-tempo-map';
+import {decodeAndResampleTo44k} from '@musiccharts/core/audio-pipeline/decode-audio';
+import {mergeAudioFiles} from '@musiccharts/core/tempo-map/merge-audio';
+import {makeGenerateTempoMapTask} from '@musiccharts/core/assist/tasks/generate-tempo-map';
 import type {
   PipelineWorkerMessage,
   PipelineRunRequest,
-} from '@/lib/tempo-map/types';
-import type {DrumTranscriber} from '@/lib/drum-transcription/ml/transcriber';
-import {chartPackageStore} from '@/lib/project-storage/projects';
+} from '@musiccharts/core/tempo-map/types';
+import type {DrumTranscriber} from '@musiccharts/core/drum-transcription/ml/transcriber';
+import {chartPackageStore} from '@musiccharts/core/project-storage/projects';
 import TempoClient from '../TempoClient';
-import {chartTextOf} from '@/lib/project-storage/__tests__/chartText';
+import {chartTextOf} from '@musiccharts/core/project-storage/__tests__/chartText';
 
 const mockDecode = decodeAndResampleTo44k as jest.Mock;
 const mockMerge = mergeAudioFiles as jest.Mock;

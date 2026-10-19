@@ -1,6 +1,6 @@
 import {redirect} from 'next/navigation';
-import {createClient} from '@/lib/supabase/server';
-import {safeNextPath} from '@/lib/safe-next-path';
+import {createClient} from '@musiccharts/core/supabase/server';
+import {safeNextPath} from '@musiccharts/core/safe-next-path';
 import {LoginForm} from './LoginForm';
 
 export default async function LoginPage({

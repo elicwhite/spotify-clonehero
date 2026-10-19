@@ -2,21 +2,21 @@
 
 import '@testing-library/jest-dom';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
-import type {AppleMusicClient} from '@/lib/apple-music/client';
+import type {AppleMusicClient} from '@musiccharts/core/apple-music/client';
 import AppleMusicConnectClient from '../AppleMusicConnectClient';
 
 const mockLoad = jest.fn(async () => undefined);
 const mockConfigure = jest.fn();
 const mockNavigate = jest.fn();
 
-jest.mock('../../../lib/apple-music', () => ({
+jest.mock('@musiccharts/core/apple-music', () => ({
   prepareAppleMusicClient: async () => {
     await mockLoad();
     return {client: await mockConfigure(), developerTokenExpiresAt: Infinity};
   },
 }));
 
-jest.mock('../../../lib/apple-music/navigation', () => ({
+jest.mock('@musiccharts/core/apple-music/navigation', () => ({
   navigateToAppleMusicPath: (path: string) => mockNavigate(path),
 }));
 

@@ -1,6 +1,6 @@
 import {notFound, redirect} from 'next/navigation';
 
-import {findSongSlugInSegments} from '@/lib/song-urls/songSlug';
+import {findSongSlugInSegments} from '@musiccharts/core/song-urls/songSlug';
 
 /**
  * A chart path with more than one segment after `/sheet-music/`. Sends it to

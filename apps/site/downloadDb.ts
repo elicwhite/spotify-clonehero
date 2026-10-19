@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import fetchNewCharts from './lib/chorusChartDb/fetchNewCharts';
+import fetchNewCharts from '@musiccharts/core/chorusChartDb/fetchNewCharts';
 import {
   findResumableRun,
   newRunDir,
@@ -8,15 +8,15 @@ import {
   RunState,
   saveBatch,
   writeRunState,
-} from './lib/chorusChartDb/rawRunFiles';
+} from '@musiccharts/core/chorusChartDb/rawRunFiles';
 import {
   CHART_DB_DATA_VERSION,
   ChartDbManifest,
   chartDbDumpKey,
   fetchChartDbDump,
   fetchChartDbManifest,
-} from './lib/chorusChartDb/chartDbAssets';
-import type {ChorusChartDbRow} from './lib/chorusChartDb/types';
+} from '@musiccharts/core/chorusChartDb/chartDbAssets';
+import type {ChorusChartDbRow} from '@musiccharts/core/chorusChartDb/types';
 
 /**
  * Builds the Chorus chart dump that seeds a first-time visitor's local

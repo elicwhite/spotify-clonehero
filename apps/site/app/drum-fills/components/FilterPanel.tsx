@@ -1,15 +1,15 @@
 'use client';
 
-import {Input} from '@/components/ui/input';
-import {Button} from '@/components/ui/button';
-import {Slider} from '@/components/ui/slider';
-import {cn} from '@/lib/utils';
-import type {Subdivision} from '@/lib/drum-fills/db';
+import {Input} from '@musiccharts/core/components/ui/input';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Slider} from '@musiccharts/core/components/ui/slider';
+import {cn} from '@musiccharts/core/utils';
+import type {Subdivision} from '@musiccharts/core/drum-fills/db';
 import {
   type LibraryFilters,
   type MasteryFilter,
   FULL_TEMPO_RANGE,
-} from '@/lib/drum-fills/library/filterFills';
+} from '@musiccharts/core/drum-fills/library/filterFills';
 
 const SUBDIVISIONS: Subdivision[] = ['8ths', '16ths', 'triplets', 'mixed'];
 const LENGTHS: {value: number; label: string}[] = [

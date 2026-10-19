@@ -5,7 +5,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
+import type {LyricLine} from '@musiccharts/core/karaoke/parse-lyrics';
 import type {TreatmentId} from './treatments/types';
 import {HighlightTreatment} from './treatments/HighlightTreatment';
 import {BounceTreatment} from './treatments/BounceTreatment';

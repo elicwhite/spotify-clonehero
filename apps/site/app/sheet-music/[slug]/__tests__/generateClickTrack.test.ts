@@ -8,7 +8,7 @@
  * at zero costs nothing, and each voice carries only its own events.
  */
 
-import type {Measure} from '@/lib/sheet-music/convertToVexflow';
+import type {Measure} from '@musiccharts/core/sheet-music/convertToVexflow';
 import {
   activeClickVoices,
   generateClickEventsFromMeasures,
@@ -18,8 +18,8 @@ import {
 // jsdom has no OfflineAudioContext. The click sample's shape isn't under test
 // here — its placement and amplitude are — so it stands in as a single
 // full-scale sample, making every event one nonzero frame.
-jest.mock('../../../../lib/preview/clickTrack', () => ({
-  ...jest.requireActual('../../../../lib/preview/clickTrack'),
+jest.mock('@musiccharts/core/preview/clickTrack', () => ({
+  ...jest.requireActual('@musiccharts/core/preview/clickTrack'),
   generateClickSample: jest.fn(async () => Float32Array.from([1])),
 }));
 

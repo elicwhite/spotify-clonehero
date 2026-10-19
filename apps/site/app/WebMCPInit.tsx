@@ -2,7 +2,7 @@
 
 import {useEffect} from 'react';
 import {usePathname} from 'next/navigation';
-import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
+import {rendersPersonalTasteData} from '@musiccharts/core/apple-music/private-route';
 
 export default function WebMCPInit() {
   const pathname = usePathname();

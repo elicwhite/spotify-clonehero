@@ -1,8 +1,8 @@
 import {
   InstrumentImage,
   type AllowedInstrument,
-} from '@/components/ChartInstruments';
-import {cn} from '@/lib/utils';
+} from '@musiccharts/core/components/ChartInstruments';
+import {cn} from '@musiccharts/core/utils';
 
 import type {InstrumentId} from './types';
 

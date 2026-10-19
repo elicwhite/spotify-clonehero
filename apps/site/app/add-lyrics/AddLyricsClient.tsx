@@ -4,20 +4,20 @@ import {useEffect, useState, useCallback, useRef} from 'react';
 import {useRouter} from 'next/navigation';
 import {FolderOpen, TriangleAlert} from 'lucide-react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {DestructiveNotice} from '@/components/DestructiveNotice';
-import SectionDropZone from '@/components/landing/SectionDropZone';
-import {ToolEntryCard} from '@/components/landing/ToolEntryCard';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {DestructiveNotice} from '@musiccharts/core/components/DestructiveNotice';
+import SectionDropZone from '@musiccharts/core/components/landing/SectionDropZone';
+import {ToolEntryCard} from '@musiccharts/core/components/landing/ToolEntryCard';
 
-import {getExtension, getBasename} from '@/lib/src-shared/utils';
-import {removeStyleTags} from '@/lib/ui-utils';
+import {getExtension, getBasename} from '@musiccharts/core/src-shared/utils';
+import {removeStyleTags} from '@musiccharts/core/ui-utils';
 import {
   findAudioFiles,
   type Files,
-} from '@/lib/preview/chorus-chart-processing';
-import {readChart, type ChartDocument} from '@/lib/chart-edit';
-import {applyAlignedLyricsToDoc} from '@/lib/lyrics-align/apply-lyrics';
-import {createProjectFromDoc} from '@/lib/project-storage/createProjectFromDoc';
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {readChart, type ChartDocument} from '@musiccharts/core/chart-edit';
+import {applyAlignedLyricsToDoc} from '@musiccharts/core/lyrics-align/apply-lyrics';
+import {createProjectFromDoc} from '@musiccharts/core/project-storage/createProjectFromDoc';
 import {
   detectFormat,
   readChartFolder,
@@ -25,20 +25,20 @@ import {
   readZipFile,
   type LoadedFiles,
   type SourceFormat,
-} from '@/lib/chart-files/chart-package';
-import {pickFolder} from '@/lib/file-access/pickFolder';
-import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
-import {track} from '@/lib/analytics/track';
-import type {AssistRunContext} from '@/components/assist/useAssistRunner';
-import {useAssistRunnerControls} from '@/components/assist/useAssistRunner';
+} from '@musiccharts/core/chart-files/chart-package';
+import {pickFolder} from '@musiccharts/core/file-access/pickFolder';
+import ChartDropZone from '@musiccharts/core/components/chart-picker/ChartDropZone';
+import ConnectedProcessingView from '@musiccharts/core/components/assist/ConnectedProcessingView';
+import {track} from '@musiccharts/core/analytics/track';
+import type {AssistRunContext} from '@musiccharts/core/components/assist/useAssistRunner';
+import {useAssistRunnerControls} from '@musiccharts/core/components/assist/useAssistRunner';
 import {
   addLyricsTask,
   type AddLyricsInput,
-} from '@/lib/assist/tasks/add-lyrics';
-import {isAbortError} from '@/lib/workers/abortable-worker';
+} from '@musiccharts/core/assist/tasks/add-lyrics';
+import {isAbortError} from '@musiccharts/core/workers/abortable-worker';
 import {AddLyricsLanding} from './landing/AddLyricsLanding';
-import {useToolLandingView} from '@/components/analytics/useToolLandingView';
+import {useToolLandingView} from '@musiccharts/core/components/analytics/useToolLandingView';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,7 +169,7 @@ export default function AddLyricsClient() {
 
     (async () => {
       try {
-        const {init} = await import('@/lib/lyrics-align/aligner');
+        const {init} = await import('@musiccharts/core/lyrics-align/aligner');
         await init(msg => console.log('[aligner init]', msg));
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);

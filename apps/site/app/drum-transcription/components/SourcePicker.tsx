@@ -2,10 +2,10 @@
 
 import {useState} from 'react';
 import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import ChartDropZone from '@/components/chart-picker/ChartDropZone';
-import type {LoadedFiles} from '@/lib/chart-files/chart-package';
-import AudioUploader from '@/components/AudioUploader';
+import {Button} from '@musiccharts/core/components/ui/button';
+import ChartDropZone from '@musiccharts/core/components/chart-picker/ChartDropZone';
+import type {LoadedFiles} from '@musiccharts/core/chart-files/chart-package';
+import AudioUploader from '@musiccharts/core/components/AudioUploader';
 
 interface SourcePickerProps {
   /** Called when the user selects an audio file for the audio-only path. */

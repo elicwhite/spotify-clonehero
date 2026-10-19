@@ -11,36 +11,36 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {Button} from '@/components/ui/button';
+} from '@musiccharts/core/components/ui/alert-dialog';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   getPersistencePermission,
   getStoragePressure,
   isStoragePersisted,
   requestPersistentStorage,
   type StoragePressure,
-} from '@/lib/browser-storage';
+} from '@musiccharts/core/browser-storage';
 import {
   deleteStemEntry,
   listStemCacheEntries,
   pruneStemCache,
   type StemCacheEntry,
-} from '@/lib/audio-pipeline/stem-cache';
+} from '@musiccharts/core/audio-pipeline/stem-cache';
 import {
   deleteCachedModels,
   getCachedModelBytes,
-} from '@/lib/lyrics-align/model-cache';
+} from '@musiccharts/core/lyrics-align/model-cache';
 import {
   deleteStoredProject,
   measureProjectStorage,
   type ProjectStorage,
   type StoredProject,
-} from '@/lib/project-storage/storedProjects';
-import {attachStorageContext} from '@/lib/sentry/storage-context';
-import {formatBytes} from '@/lib/sng/file-utils';
+} from '@musiccharts/core/project-storage/storedProjects';
+import {attachStorageContext} from '@musiccharts/core/sentry/storage-context';
+import {formatBytes} from '@musiccharts/core/sng/file-utils';
 
 import {ChartExportDialog} from './ChartExportDialog';
-import {LOCAL_DB_ANCHOR} from '@/lib/storage-routes';
+import {LOCAL_DB_ANCHOR} from '@musiccharts/core/storage-routes';
 import {StorageGroup, StorageRow} from './StorageRow';
 import {UsageBar, type UsageSegment} from './UsageBar';
 
@@ -464,7 +464,9 @@ export function StoragePanel() {
                   // not need SQLocal, Kysely and every migration merely to
                   // render. Pressing the button is the first time any of that
                   // is worth loading.
-                  const {resetLocalDb} = await import('@/lib/local-db/client');
+                  const {resetLocalDb} = await import(
+                    '@musiccharts/core/local-db/client'
+                  );
                   await resetLocalDb();
                   return 'The song library database was reset. Find Music will fill it again.';
                 });

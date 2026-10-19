@@ -1,6 +1,9 @@
-import {Measure} from '@/lib/sheet-music/convertToVexflow';
-import {generateClickSample, mixSamples} from '@/lib/preview/clickTrack';
-import type {TrackPcm} from '@/lib/preview/audioManager';
+import {Measure} from '@musiccharts/core/sheet-music/convertToVexflow';
+import {
+  generateClickSample,
+  mixSamples,
+} from '@musiccharts/core/preview/clickTrack';
+import type {TrackPcm} from '@musiccharts/core/preview/audioManager';
 
 export interface ClickOptions {
   clickDuration: number; // Duration (in seconds) of each click sound

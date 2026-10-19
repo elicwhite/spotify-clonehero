@@ -4,13 +4,13 @@ import {type ReactNode} from 'react';
 
 import {AudioLines, Pencil, Type, Waves, type LucideIcon} from 'lucide-react';
 
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {LandingProse} from '@/components/landing/Prose';
-import {ScrollToStartCta} from '@/components/landing/ScrollToStartCta';
-import {LandingSection} from '@/components/landing/Section';
-import {StepFlow} from '@/components/landing/StepFlow';
-import {ToolEntrySection} from '@/components/landing/ToolEntrySection';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {LandingProse} from '@musiccharts/core/components/landing/Prose';
+import {ScrollToStartCta} from '@musiccharts/core/components/landing/ScrollToStartCta';
+import {LandingSection} from '@musiccharts/core/components/landing/Section';
+import {StepFlow} from '@musiccharts/core/components/landing/StepFlow';
+import {ToolEntrySection} from '@musiccharts/core/components/landing/ToolEntrySection';
 
 import {SyllableAlignCanvas} from './SyllableAlignCanvas';
 

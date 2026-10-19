@@ -1,4 +1,4 @@
-import {searchEncore} from '@/lib/search-encore';
+import {searchEncore} from '@musiccharts/core/search-encore';
 import Search from './Search';
 
 export const metadata = {

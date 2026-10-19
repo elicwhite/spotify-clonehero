@@ -1,11 +1,11 @@
 'use client';
 
-import {cn} from '@/lib/utils';
+import {cn} from '@musiccharts/core/utils';
 import type {
   BestAttempt,
   ScoredAttempt,
-} from '@/lib/drum-fills/practice/attempt';
-import type {FillSrsState} from '@/lib/drum-fills/practice/srs';
+} from '@musiccharts/core/drum-fills/practice/attempt';
+import type {FillSrsState} from '@musiccharts/core/drum-fills/practice/srs';
 
 function scoreColor(score: number): string {
   if (score >= 90) return 'text-green-600';

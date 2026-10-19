@@ -3,31 +3,31 @@
 import {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {useGrooveFilters} from '../hooks/useGrooveFilters';
-import {Button} from '@/components/ui/button';
-import {Badge} from '@/components/ui/badge';
-import {Card, CardContent} from '@/components/ui/card';
-import {Slider} from '@/components/ui/slider';
-import {cn} from '@/lib/utils';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Badge} from '@musiccharts/core/components/ui/badge';
+import {Card, CardContent} from '@musiccharts/core/components/ui/card';
+import {Slider} from '@musiccharts/core/components/ui/slider';
+import {cn} from '@musiccharts/core/utils';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from '@musiccharts/core/components/ui/select';
 import {
   getGrooveClusters,
   hasFillsNeedingGrooveRescan,
   type GrooveCluster,
-} from '@/lib/drum-fills/db';
+} from '@musiccharts/core/drum-fills/db';
 import {useDrumFillsChrome} from '../contexts/DrumFillsChromeContext';
 import {
   MIN_DRILLABLE_FILLS,
   filterAndSortGrooves,
   type GrooveProgress,
   type GrooveSort,
-} from '@/lib/drum-fills/grooveClusters';
-import type {DrumVoice} from '@/lib/drum-fills/detection/types';
+} from '@musiccharts/core/drum-fills/grooveClusters';
+import type {DrumVoice} from '@musiccharts/core/drum-fills/detection/types';
 import GrooveStave from './GrooveStave';
 import VirtualCardGrid from './VirtualCardGrid';
 

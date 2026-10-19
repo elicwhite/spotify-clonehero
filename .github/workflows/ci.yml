@@ -98,7 +98,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # From the repo root, so the lint of packages/core runs with the site's.
       - name: Lint
+        working-directory: .
         run: pnpm lint
 
   typecheck:
@@ -172,7 +174,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           expected="$(grep -oE 'CHART_DB_DATA_VERSION = [0-9]+' \
-            apps/site/lib/chorusChartDb/chartDbAssets.ts \
+            packages/core/src/chorusChartDb/chartDbAssets.ts \
             | grep -oE '[0-9]+$')"
           if [ -z "$expected" ]; then
             echo "::error::Could not read CHART_DB_DATA_VERSION"

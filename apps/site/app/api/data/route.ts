@@ -1,4 +1,4 @@
-import {CHART_DB_DATA_VERSION} from '@/lib/chorusChartDb/chartDbAssets';
+import {CHART_DB_DATA_VERSION} from '@musiccharts/core/chorusChartDb/chartDbAssets';
 
 export async function GET() {
   return Response.json({

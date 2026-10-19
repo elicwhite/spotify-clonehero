@@ -9,8 +9,13 @@ import {
   FolderCog,
 } from 'lucide-react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@musiccharts/core/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,24 +25,27 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from '@musiccharts/core/components/ui/alert-dialog';
 import scanLocalCharts, {
   type SongAccumulator,
-} from '@/lib/local-songs-folder/scanLocalCharts';
-import {coalesceProgress} from '@/lib/local-songs-folder/scan-progress';
-import type {FolderSource} from '@/lib/file-access/folderSource';
-import DownloadFallbackNotice from '@/components/file-access/DownloadFallbackNotice';
-import {downloadBlob} from '@/lib/download';
+} from '@musiccharts/core/local-songs-folder/scanLocalCharts';
+import {coalesceProgress} from '@musiccharts/core/local-songs-folder/scan-progress';
+import type {FolderSource} from '@musiccharts/core/file-access/folderSource';
+import DownloadFallbackNotice from '@musiccharts/core/components/file-access/DownloadFallbackNotice';
+import {downloadBlob} from '@musiccharts/core/download';
 import {
   convertChartFolders,
   saveIntoFolder,
   saveIntoZip,
   selectChartFoldersToConvert,
   type SaveSng,
-} from '@/lib/sng/convert-folder-to-sng';
-import {PartedZip} from '@/lib/sng/partedZip';
-import {formatBytes} from '@/lib/sng/file-utils';
-import {calculateTimeRemaining, formatTimeRemaining} from '@/lib/ui-utils';
+} from '@musiccharts/core/sng/convert-folder-to-sng';
+import {PartedZip} from '@musiccharts/core/sng/partedZip';
+import {formatBytes} from '@musiccharts/core/sng/file-utils';
+import {
+  calculateTimeRemaining,
+  formatTimeRemaining,
+} from '@musiccharts/core/ui-utils';
 
 interface SngFolderConverterProps {
   folder: FolderSource;

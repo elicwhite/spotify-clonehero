@@ -1,7 +1,7 @@
 'use client';
 
 import {useRouter} from 'next/navigation';
-import {type GrooveCluster} from '@/lib/drum-fills/db';
+import {type GrooveCluster} from '@musiccharts/core/drum-fills/db';
 import {useDrumFillsChrome} from '../contexts/DrumFillsChromeContext';
 import GroovesView from '../components/GroovesView';
 

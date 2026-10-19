@@ -3,42 +3,42 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import useInterval from 'use-interval';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
+import {Button} from '@musiccharts/core/components/ui/button';
 import {
   AudioManager,
   type PracticeModeConfig,
-} from '@/lib/preview/audioManager';
-import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
-import CloneHeroRenderer from '@/lib/preview/CloneHeroRenderer';
-import SheetMusic from '@/lib/sheet-music/SheetMusic';
+} from '@musiccharts/core/preview/audioManager';
+import {getChartDelayMs} from '@musiccharts/core/chart-utils/chartDelay';
+import type {ChartResponseEncore} from '@musiccharts/core/chartSelection';
+import CloneHeroRenderer from '@musiccharts/core/preview/CloneHeroRenderer';
+import SheetMusic from '@musiccharts/core/sheet-music/SheetMusic';
 import {
   buildPracticeChart,
   fillNotesToBeatOffsets,
-} from '@/lib/drum-fills/practice/practiceChart';
-import {renderBackingWav} from '@/lib/drum-fills/practice/backingAudio';
+} from '@musiccharts/core/drum-fills/practice/practiceChart';
+import {renderBackingWav} from '@musiccharts/core/drum-fills/practice/backingAudio';
 import {
   applyAttempt,
   initFillSrsState,
   isDue,
   type FillSrsState,
-} from '@/lib/drum-fills/practice/srs';
+} from '@musiccharts/core/drum-fills/practice/srs';
 import {
   nextTempoPct,
   initialTempoPct,
-} from '@/lib/drum-fills/practice/speedTrainer';
+} from '@musiccharts/core/drum-fills/practice/speedTrainer';
 import {
   getFillBest,
   getFillSiblings,
   recordAttempt,
   upsertSrs,
   type FillWithSrs,
-} from '@/lib/drum-fills/db';
+} from '@musiccharts/core/drum-fills/db';
 import {
   bestFromStored,
   type ScoredAttempt,
-} from '@/lib/drum-fills/practice/attempt';
-import type {FillMode} from '@/lib/drum-fills/db';
+} from '@musiccharts/core/drum-fills/practice/attempt';
+import type {FillMode} from '@musiccharts/core/drum-fills/db';
 import {useFillChart} from '../hooks/useFillChart';
 import {useLiveScoring} from '../hooks/useLiveScoring';
 import {useMidi} from '../contexts/MidiContext';

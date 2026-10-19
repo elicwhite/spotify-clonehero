@@ -1,4 +1,4 @@
-import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
+import type {LyricLine} from '@musiccharts/core/karaoke/parse-lyrics';
 
 export interface TreatmentProps {
   lines: LyricLine[];

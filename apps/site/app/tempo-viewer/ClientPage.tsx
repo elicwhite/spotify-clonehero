@@ -4,27 +4,30 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {defaultIniChartModifiers, parseChartFile} from '@eliwhite/scan-chart';
 import {Play, Pause, Loader2} from 'lucide-react';
 
-import {Button} from '@/components/ui/button';
-import {Slider} from '@/components/ui/slider';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Slider} from '@musiccharts/core/components/ui/slider';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {cn} from '@/lib/utils';
+} from '@musiccharts/core/components/ui/select';
+import {cn} from '@musiccharts/core/utils';
 import {
   Files,
   ParsedChart,
   findAudioFiles,
-} from '@/lib/preview/chorus-chart-processing';
-import {AudioManager} from '@/lib/preview/audioManager';
-import {applyIniDelay, getChartDelayMs} from '@/lib/chart-utils/chartDelay';
-import type {ChartResponseEncore} from '@/lib/chartSelection';
+} from '@musiccharts/core/preview/chorus-chart-processing';
+import {AudioManager} from '@musiccharts/core/preview/audioManager';
+import {
+  applyIniDelay,
+  getChartDelayMs,
+} from '@musiccharts/core/chart-utils/chartDelay';
+import type {ChartResponseEncore} from '@musiccharts/core/chartSelection';
 
-import SheetMusic from '@/lib/sheet-music/SheetMusic';
-import CloneHeroRenderer from '@/lib/preview/CloneHeroRenderer';
+import SheetMusic from '@musiccharts/core/sheet-music/SheetMusic';
+import CloneHeroRenderer from '@musiccharts/core/preview/CloneHeroRenderer';
 
 // ---------------------------------------------------------------------------
 // Types & helpers

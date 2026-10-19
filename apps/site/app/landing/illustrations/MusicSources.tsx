@@ -1,8 +1,8 @@
 import {FolderOpen} from 'lucide-react';
 import type {ReactNode} from 'react';
 
-import AppleMusicIcon from '@/components/AppleMusicIcon';
-import SpotifyIcon from '@/components/SpotifyIcon';
+import AppleMusicIcon from '@musiccharts/core/components/AppleMusicIcon';
+import SpotifyIcon from '@musiccharts/core/components/SpotifyIcon';
 
 /**
  * What Find Music reads: the two connected services and the local Songs

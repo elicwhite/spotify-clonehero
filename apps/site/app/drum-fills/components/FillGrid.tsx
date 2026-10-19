@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback} from 'react';
-import type {FillWithSrs} from '@/lib/drum-fills/db';
+import type {FillWithSrs} from '@musiccharts/core/drum-fills/db';
 import VirtualCardGrid from './VirtualCardGrid';
 import FillCard from './FillCard';
 

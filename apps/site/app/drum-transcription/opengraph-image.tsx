@@ -1,5 +1,5 @@
-import {createToolOgImage} from '@/lib/og/tool-og-image';
-import {OG_LANES, OG_SIZE} from '@/lib/og/tokens';
+import {createToolOgImage} from '@musiccharts/core/og/tool-og-image';
+import {OG_LANES, OG_SIZE} from '@musiccharts/core/og/tokens';
 
 export const alt = 'Turn a song into a draft drum chart';
 export const size = OG_SIZE;

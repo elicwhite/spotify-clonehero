@@ -2,9 +2,9 @@
 
 import {useEffect} from 'react';
 import {usePathname} from 'next/navigation';
-import {runRawSql} from '@/lib/local-db/client';
-import {rendersPersonalTasteData} from '@/lib/apple-music/private-route';
-import {getStoragePressure} from '@/lib/browser-storage';
+import {runRawSql} from '@musiccharts/core/local-db/client';
+import {rendersPersonalTasteData} from '@musiccharts/core/apple-music/private-route';
+import {getStoragePressure} from '@musiccharts/core/browser-storage';
 
 function currentRoutePrivacyError() {
   if (!rendersPersonalTasteData(window.location.pathname)) return null;

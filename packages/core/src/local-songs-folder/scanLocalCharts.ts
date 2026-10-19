@@ -1,0 +1,402 @@
+import pLimit, {type LimitFunction} from 'p-limit';
+import {parse} from '../ini-parser';
+import {readSongIni} from '@eliwhite/parse-sng';
+import {removeStyleTags} from '../ui-utils';
+import type {ChartLocation} from '../chart-files/chart-package';
+import type {FolderFile, FolderSource} from '../file-access/folderSource';
+
+// Caps concurrent FS ops across the whole recursive scan. Without a shared
+// limit, Promise.all at every level would multiply with depth and exhaust
+// file handles on large libraries.
+const SCAN_CONCURRENCY = 32;
+
+export type SongIniData = {
+  name: string;
+  artist: string;
+  charter: string;
+  genre?: string | null;
+  diff_drums?: number | null;
+  diff_drums_real?: number | null;
+  diff_guitar?: number | null;
+  song_length?: number | null;
+  frets?: string | null;
+};
+
+export type SongAccumulator = {
+  artist: string;
+  song: string; // Change this to Name to match Encore
+  modifiedTime: string;
+  charter: string;
+  genre: string;
+  data: SongIniData;
+  file: string; // This will throw if you access it
+  location: ChartLocation;
+};
+
+export type LocalChartScanIssue = {
+  kind: 'directory' | 'song-ini' | 'sng';
+  path: string;
+  message: string;
+};
+
+export type LocalChartScanResult = {
+  issues: LocalChartScanIssue[];
+};
+
+export default async function scanLocalCharts(
+  folder: FolderSource,
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+): Promise<LocalChartScanResult> {
+  const limit = pLimit(SCAN_CONCURRENCY);
+  // A root that cannot be listed is a failed scan, not a skipped chart, so
+  // this listing is the one that is allowed to reject.
+  const listing = await folder.list();
+  const issues: LocalChartScanIssue[] = [];
+  const {subdirs, sngFiles, songIni} = partitionEntries(listing);
+  const path = folder.name;
+
+  // The user may pick one chart's own folder rather than a folder of charts.
+  // Such a chart has no parent.
+  if (songIni) {
+    const {songIniData, songIniMTime} = await readSongIniData(
+      songIni,
+      path,
+      issues,
+    );
+    pushChart(accumulator, callbackPerSong, songIniData, songIniMTime, {
+      parent: null,
+      entry: folder,
+      path,
+    });
+  }
+
+  await Promise.all([
+    ...subdirs.map(sub =>
+      scanLocalChartsDirectory(
+        folder,
+        sub,
+        accumulator,
+        callbackPerSong,
+        limit,
+        `${path}/${sub.name}`,
+        issues,
+      ),
+    ),
+    ...sngFiles.map(sng =>
+      scanLocalSngFile(
+        folder,
+        sng,
+        accumulator,
+        callbackPerSong,
+        limit,
+        `${path}/${sng.name}`,
+        issues,
+      ),
+    ),
+  ]);
+
+  return {issues};
+}
+
+/** The three things a scan cares about among a folder's entries. */
+function partitionEntries({
+  files,
+  subfolders,
+}: {
+  files: FolderFile[];
+  subfolders: FolderSource[];
+}) {
+  return {
+    subdirs: subfolders,
+    sngFiles: files.filter(file => file.name.toLowerCase().endsWith('.sng')),
+    songIni: files.find(file => file.name === 'song.ini') ?? null,
+  };
+}
+
+/** A chart folder's metadata, or nulls when the `song.ini` cannot be used. */
+async function readSongIniData(
+  songIni: FolderFile,
+  path: string,
+  issues: LocalChartScanIssue[],
+): Promise<{songIniData: SongIniData | null; songIniMTime: number}> {
+  let file: File;
+  try {
+    file = await songIni.file();
+  } catch (error) {
+    reportScanIssue(
+      issues,
+      'song-ini',
+      `${path}/song.ini`,
+      `Could not read ${path}/song.ini`,
+      error,
+    );
+    return {songIniData: null, songIniMTime: 0};
+  }
+
+  try {
+    const values = parse(new Uint8Array(await file.arrayBuffer()));
+    // The ini parser returns loose string maps; the [Song] section is assumed
+    // to carry the fields SongIniData names.
+    const songIniData = (values.iniObject['song'] ??
+      null) as unknown as SongIniData | null;
+    return {songIniData, songIniMTime: file.lastModified};
+  } catch (error) {
+    reportScanIssue(
+      issues,
+      'song-ini',
+      `${path}/song.ini`,
+      `Could not parse ${path}/song.ini`,
+      error,
+    );
+    return {songIniData: null, songIniMTime: 0};
+  }
+}
+
+/**
+ * Record one scanned chart. Metadata with neither a name nor an artist says
+ * the folder is not a chart, so nothing is recorded for it.
+ */
+function pushChart(
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+  songIniData: SongIniData | null,
+  modifiedTime: number,
+  location: ChartLocation,
+) {
+  if (songIniData == null || (!songIniData.name && !songIniData.artist)) {
+    return;
+  }
+
+  const chart = {
+    artist: removeStyleTags(songIniData.artist ?? ''),
+    song: removeStyleTags(songIniData.name ?? ''),
+    modifiedTime: new Date(modifiedTime).toISOString(),
+    charter: removeStyleTags(songIniData.charter || songIniData.frets || ''),
+    genre: removeStyleTags(songIniData.genre ?? ''),
+    data: convertValues(songIniData),
+    location,
+    file: '',
+  };
+  Object.defineProperty(chart, 'file', {
+    get() {
+      throw new Error('Charts from disk do not have a download URL');
+    },
+    enumerable: false, // Can't serialize to JSON
+  });
+
+  accumulator.push(chart);
+  callbackPerSong();
+}
+
+async function scanLocalChartsDirectory(
+  parentFolder: FolderSource,
+  currentFolder: FolderSource,
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+  limit: LimitFunction,
+  path: string,
+  issues: LocalChartScanIssue[],
+) {
+  // Run listEntries + song.ini parse atomically inside one limit slot. This
+  // bounds total in-flight FS-Access ops to ~`limit` instead of fanning out
+  // tens of thousands of listings ahead of all parses (which Chrome's FS
+  // queue would FIFO behind, starving the parses for seconds on a flat tree
+  // with 60k+ subdirs).
+  //
+  // Recursion + .sng scanning happens OUTSIDE this slot — we release before
+  // awaiting children so deep trees can't deadlock.
+  type LeafResult = {
+    subdirs: FolderSource[];
+    sngFiles: FolderFile[];
+    songIniData: SongIniData | null;
+    songIniMTime: number;
+  } | null;
+
+  const result: LeafResult = await limit(async () => {
+    let listing: Awaited<ReturnType<FolderSource['list']>>;
+    try {
+      listing = await currentFolder.list();
+    } catch (e) {
+      reportScanIssue(
+        issues,
+        'directory',
+        path,
+        `Could not list chart directory ${path}`,
+        e,
+      );
+      return null;
+    }
+
+    const {subdirs, sngFiles, songIni} = partitionEntries(listing);
+    const {songIniData, songIniMTime} = songIni
+      ? await readSongIniData(songIni, path, issues)
+      : {songIniData: null, songIniMTime: 0};
+
+    return {subdirs, sngFiles, songIniData, songIniMTime};
+  });
+
+  if (result == null) return;
+
+  // Push chart immediately on slot release so the counter starts ticking
+  // before any children have been processed.
+  pushChart(
+    accumulator,
+    callbackPerSong,
+    result.songIniData,
+    result.songIniMTime,
+    {parent: parentFolder, entry: currentFolder, path},
+  );
+
+  // Recurse + scan SNGs OUTSIDE the slot so the slot is freed for siblings.
+  await Promise.all([
+    ...result.subdirs.map(sub =>
+      scanLocalChartsDirectory(
+        currentFolder,
+        sub,
+        accumulator,
+        callbackPerSong,
+        limit,
+        `${path}/${sub.name}`,
+        issues,
+      ),
+    ),
+    ...result.sngFiles.map(sng =>
+      scanLocalSngFile(
+        currentFolder,
+        sng,
+        accumulator,
+        callbackPerSong,
+        limit,
+        `${path}/${sng.name}`,
+        issues,
+      ),
+    ),
+  ]);
+}
+
+async function scanLocalSngFile(
+  parentFolder: FolderSource,
+  sngFile: FolderFile,
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+  limit: LimitFunction,
+  path: string,
+  issues: LocalChartScanIssue[],
+) {
+  await limit(() =>
+    scanLocalSngFileInner(
+      parentFolder,
+      sngFile,
+      accumulator,
+      callbackPerSong,
+      path,
+      issues,
+    ),
+  );
+}
+
+async function scanLocalSngFileInner(
+  parentFolder: FolderSource,
+  sngFile: FolderFile,
+  accumulator: SongAccumulator[],
+  callbackPerSong: () => void,
+  path: string,
+  issues: LocalChartScanIssue[],
+) {
+  const file = await sngFile.file();
+  let metadata: {[key: string]: string};
+
+  try {
+    metadata = await readSongIni(file.stream());
+  } catch (e) {
+    reportScanIssue(
+      issues,
+      'sng',
+      path,
+      `Could not read SNG metadata from ${path}`,
+      e,
+    );
+    return;
+  }
+
+  // The SNG header's metadata mirrors the [Song] section of song.ini — same
+  // key/value shape. convertValues() coerces numeric/boolean strings below.
+  pushChart(
+    accumulator,
+    callbackPerSong,
+    metadata as unknown as SongIniData,
+    file.lastModified,
+    {parent: parentFolder, entry: sngFile, path},
+  );
+}
+
+function reportScanIssue(
+  issues: LocalChartScanIssue[],
+  kind: LocalChartScanIssue['kind'],
+  path: string,
+  message: string,
+  error: unknown,
+) {
+  console.warn(message, error);
+  issues.push({kind, path, message});
+}
+
+function convertValues(songIniData: SongIniData): SongIniData {
+  const mappedEntries = Object.entries(songIniData).map(([key, value]) => {
+    // @ts-ignore Checking if type is int
+    const tryIntValue = parseInt(value, 10);
+    if (value == tryIntValue || value == tryIntValue.toString()) {
+      return [key, tryIntValue];
+    }
+
+    if (value == 'True') {
+      return [key, true];
+    } else if (value == 'False') {
+      return [key, false];
+    }
+
+    return [key, value];
+  });
+
+  return Object.fromEntries(mappedEntries);
+}
+
+export type ChartInstalledChecker = (
+  artist: string,
+  song: string,
+  charter: string,
+) => boolean;
+
+export type SongInstalledChecker = (artist: string, song: string) => boolean;
+
+function createChartLookupKey(artist: string, song: string, charter: string) {
+  return `${artist} - ${song} - ${charter}`;
+}
+
+function createSongLookupKey(artist: string, song: string) {
+  return `${artist} - ${song}`;
+}
+
+export function createIsInstalledFilter(installedSongs: SongAccumulator[]): {
+  isChartInstalled: ChartInstalledChecker;
+  isSongInstalled: SongInstalledChecker;
+} {
+  const installedCharts = new Set<string>();
+  const installedSongKeys = new Set<string>();
+
+  for (const installedSong of installedSongs) {
+    const {artist, song, charter} = installedSong;
+    installedCharts.add(createChartLookupKey(artist, song, charter));
+    installedSongKeys.add(createSongLookupKey(artist, song));
+  }
+
+  return {
+    isChartInstalled(artist: string, song: string, charter: string) {
+      return installedCharts.has(createChartLookupKey(artist, song, charter));
+    },
+    isSongInstalled(artist: string, song: string) {
+      return installedSongKeys.has(createSongLookupKey(artist, song));
+    },
+  };
+}

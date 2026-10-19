@@ -2,13 +2,13 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useMidi} from '../contexts/MidiContext';
-import {applyCalibration} from '@/lib/drum-fills/midi/calibration';
+import {applyCalibration} from '@musiccharts/core/drum-fills/midi/calibration';
 import {
   DEFAULT_WINDOWS,
   type ExpectedNote,
   type TimedHit,
-} from '@/lib/drum-fills/midi/hitMatcher';
-import type {DrumLane} from '@/lib/drum-fills/midi/padMapping';
+} from '@musiccharts/core/drum-fills/midi/hitMatcher';
+import type {DrumLane} from '@musiccharts/core/drum-fills/midi/padMapping';
 import {
   bestFromScored,
   evaluateAttempt,
@@ -17,13 +17,13 @@ import {
   isRealAttempt,
   type BestAttempt,
   type ScoredAttempt,
-} from '@/lib/drum-fills/practice/attempt';
-import type {ExpectedFillNote} from '@/lib/drum-fills/practice/fillNotes';
+} from '@musiccharts/core/drum-fills/practice/attempt';
+import type {ExpectedFillNote} from '@musiccharts/core/drum-fills/practice/fillNotes';
 import {
   buildAttemptDebug,
   recordAttemptDebug,
   type DebugHit,
-} from '@/lib/drum-fills/practice/scoringDebug';
+} from '@musiccharts/core/drum-fills/practice/scoringDebug';
 
 /** A live per-hit flash for highway feedback. */
 export interface HitFlash {

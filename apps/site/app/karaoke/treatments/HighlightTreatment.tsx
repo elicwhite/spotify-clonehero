@@ -1,5 +1,5 @@
 import {AbsoluteFill, interpolate} from 'remotion';
-import type {LyricLine} from '@/lib/karaoke/parse-lyrics';
+import type {LyricLine} from '@musiccharts/core/karaoke/parse-lyrics';
 import type {TreatmentProps} from './types';
 
 const LINE_HEIGHT = 80;

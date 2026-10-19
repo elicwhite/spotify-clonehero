@@ -1,10 +1,10 @@
 import Link from 'next/link';
 
-import {FeatureBand} from '@/components/landing/FeatureBand';
-import {LandingFooter} from '@/components/landing/LandingFooter';
-import {LandingHero} from '@/components/landing/LandingHero';
-import {LandingPage} from '@/components/landing/LandingPage';
-import {buttonVariants} from '@/components/ui/button';
+import {FeatureBand} from '@musiccharts/core/components/landing/FeatureBand';
+import {LandingFooter} from '@musiccharts/core/components/landing/LandingFooter';
+import {LandingHero} from '@musiccharts/core/components/landing/LandingHero';
+import {LandingPage} from '@musiccharts/core/components/landing/LandingPage';
+import {buttonVariants} from '@musiccharts/core/components/ui/button';
 
 import {DrumNotationBar} from './illustrations/DrumNotationBar';
 import {MusicSources} from './illustrations/MusicSources';

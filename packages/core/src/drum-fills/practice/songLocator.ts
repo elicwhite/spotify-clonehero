@@ -1,0 +1,41 @@
+/**
+ * Filesystem wrapper around {@link matchSong}: enumerate the user's library and
+ * read all of a matched song's files for practice playback.
+ *
+ * Uses the shared library walker (`scanLocalCharts`) + chart readers
+ * (`lib/chart-files`). The pure matching logic lives in ./songMatch.ts.
+ */
+
+import scanLocalCharts, {
+  type SongAccumulator,
+} from '../../local-songs-folder/scanLocalCharts';
+import {readChartLocation} from '../../chart-files/chart-package';
+import {folderSourceFromHandle} from '../../file-access/folderSource';
+import type {Files} from '../../preview/chorus-chart-processing';
+import {matchSong, type SongRef} from './songMatch';
+
+/** Read every file for an enumerated song (folder or .sng). */
+export async function readAllSongFiles(song: SongAccumulator): Promise<Files> {
+  const loaded = await readChartLocation(song.location);
+  return loaded.files;
+}
+
+/**
+ * Enumerate the library under `directoryHandle`, match the fill's song, and read
+ * all of its files. Returns null when the song can't be found.
+ */
+export async function locateAndLoadSong(
+  directoryHandle: FileSystemDirectoryHandle,
+  ref: SongRef,
+): Promise<{song: SongAccumulator; files: Files} | null> {
+  const songs: SongAccumulator[] = [];
+  await scanLocalCharts(
+    folderSourceFromHandle(directoryHandle),
+    songs,
+    () => {},
+  );
+  const match = matchSong(songs, ref);
+  if (!match) return null;
+  const files = await readAllSongFiles(match);
+  return {song: match, files};
+}

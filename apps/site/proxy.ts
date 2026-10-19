@@ -1,12 +1,12 @@
 import {type NextRequest} from 'next/server';
-import {updateSession} from './lib/supabase/middleware';
+import {updateSession} from '@musiccharts/core/supabase/middleware';
 import {
   REGION_ALLOWED,
   REGION_COOKIE,
   REGION_EEA,
   VERCEL_COUNTRY_HEADER,
   isEeaCountry,
-} from './lib/analytics/region';
+} from '@musiccharts/core/analytics/region';
 
 export async function proxy(request: NextRequest) {
   const response = await updateSession(request);

@@ -3,10 +3,15 @@
 import {useEffect, useSyncExternalStore, type ReactNode} from 'react';
 import Link from 'next/link';
 import {usePathname} from 'next/navigation';
-import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {Button} from '@/components/ui/button';
-import {Progress} from '@/components/ui/progress';
-import {cn} from '@/lib/utils';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@musiccharts/core/components/ui/card';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {Progress} from '@musiccharts/core/components/ui/progress';
+import {cn} from '@musiccharts/core/utils';
 import {MidiProvider} from './contexts/MidiContext';
 import {
   DrumFillsChromeProvider,

@@ -2,8 +2,8 @@
 
 import {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
-import {Button} from '@/components/ui/button';
-import {queryFills, type FillWithSrs} from '@/lib/drum-fills/db';
+import {Button} from '@musiccharts/core/components/ui/button';
+import {queryFills, type FillWithSrs} from '@musiccharts/core/drum-fills/db';
 import {useChromeSlot} from '../contexts/DrumFillsChromeContext';
 import FillRotationSession from './FillRotationSession';
 

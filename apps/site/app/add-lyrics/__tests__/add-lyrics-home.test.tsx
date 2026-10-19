@@ -24,14 +24,17 @@ import '@testing-library/jest-dom';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import {zipSync} from 'fflate';
 import {createEmptyChart} from '@eliwhite/scan-chart';
-import {writeChartFolder, type ChartDocument} from '@/lib/chart-edit';
-import {installFakeOPFS} from '@/lib/drum-transcription/storage/__tests__/fake-opfs';
+import {
+  writeChartFolder,
+  type ChartDocument,
+} from '@musiccharts/core/chart-edit';
+import {installFakeOPFS} from '@musiccharts/core/drum-transcription/storage/__tests__/fake-opfs';
 import {
   computeStemFingerprint,
   ROFORMER_SEPARATOR_ID,
   storeStemOpus,
-} from '@/lib/audio-pipeline/stem-cache';
-import {VOCALS_STEM} from '@/lib/audio-pipeline/separate-stems';
+} from '@musiccharts/core/audio-pipeline/stem-cache';
+import {VOCALS_STEM} from '@musiccharts/core/audio-pipeline/separate-stems';
 
 // jsdom has neither `Blob.prototype.arrayBuffer` (the zip reader calls
 // `file.arrayBuffer()`), `crypto.subtle` (the stem cache's fingerprint
@@ -71,23 +74,23 @@ jest.mock('next/navigation', () => ({
 }));
 
 const createdProjects: {origin: string}[] = [];
-jest.mock('../../../lib/project-storage/createProjectFromDoc', () => ({
+jest.mock('@musiccharts/core/project-storage/createProjectFromDoc', () => ({
   createProjectFromDoc: jest.fn(async (opts: never) => {
     createdProjects.push(opts);
     return `project-${createdProjects.length}`;
   }),
 }));
 
-jest.mock('../../../lib/lyrics-align/aligner', () => ({
+jest.mock('@musiccharts/core/lyrics-align/aligner', () => ({
   init: jest.fn(async () => {}),
   alignVocals: jest.fn(),
 }));
 
-jest.mock('../../../lib/audio-pipeline/decode-audio', () => ({
+jest.mock('@musiccharts/core/audio-pipeline/decode-audio', () => ({
   decodeAndResampleTo44k: jest.fn(async () => fakeAudioBuffer()),
 }));
 
-jest.mock('../../../lib/audio-pipeline/lyrics-audio', () => ({
+jest.mock('@musiccharts/core/audio-pipeline/lyrics-audio', () => ({
   resampleTo16kMono: jest.fn(),
   mixStemsToAudioBuffer: jest.fn(async () => fakeAudioBuffer()),
 }));
@@ -111,8 +114,10 @@ class FakeWorker {
 }
 
 const spawnedWorkers: FakeWorker[] = [];
-jest.mock('../../../lib/lyrics-align/demucs-client', () => {
-  const actual = jest.requireActual('../../../lib/lyrics-align/demucs-client');
+jest.mock('@musiccharts/core/lyrics-align/demucs-client', () => {
+  const actual = jest.requireActual(
+    '@musiccharts/core/lyrics-align/demucs-client',
+  );
   return {
     ...actual,
     defaultCreateDemucsWorker: () => {
@@ -124,8 +129,8 @@ jest.mock('../../../lib/lyrics-align/demucs-client', () => {
 });
 
 import AddLyricsClient from '../AddLyricsClient';
-import {alignVocals} from '@/lib/lyrics-align/aligner';
-import {resampleTo16kMono} from '@/lib/audio-pipeline/lyrics-audio';
+import {alignVocals} from '@musiccharts/core/lyrics-align/aligner';
+import {resampleTo16kMono} from '@musiccharts/core/audio-pipeline/lyrics-audio';
 
 const mockAlignVocals = alignVocals as jest.Mock;
 const mockResample = resampleTo16kMono as jest.Mock;

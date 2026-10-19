@@ -1,8 +1,8 @@
 import {RefObject, useState} from 'react';
 import useInterval from 'use-interval';
-import {Slider} from '@/components/ui/slider';
-import {cn} from '@/lib/utils';
-import {AudioManager} from '@/lib/preview/audioManager';
+import {Slider} from '@musiccharts/core/components/ui/slider';
+import {cn} from '@musiccharts/core/utils';
+import {AudioManager} from '@musiccharts/core/preview/audioManager';
 import {formatSeconds} from './formatTime';
 
 /**

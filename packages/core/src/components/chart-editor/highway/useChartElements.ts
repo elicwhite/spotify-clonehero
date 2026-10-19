@@ -1,0 +1,323 @@
+'use client';
+
+/**
+ * Push the active chart's elements (notes + markers) to the SceneReconciler.
+ *
+ * Three responsibilities, three effects:
+ *
+ *   1. **Element set push** — derive `ChartElement[]` from the chart and
+ *      capabilities. Element data is intrinsic-only (text, lane, length,
+ *      msTime); transient state lives elsewhere. A note drag injects a
+ *      live `msTime` so the dragged notes track the cursor; the
+ *      reconciler treats this as reposition-only because `dataEqual`
+ *      ignores msTime.
+ *
+ *   2. **Hover push** — translate `state.hovered` (`{kind, id} | null`) to
+ *      a reconciler key via `reconcilerKeyFor` and call
+ *      `reconciler.setHoveredKey`. One push site so mouse and drag don't
+ *      race each other through the renderer.
+ *
+ *   3. **Selection push** — translate per-kind selection sets to a single
+ *      `Set<reconciler-key>` and call `reconciler.setSelectedKeys`. Notes
+ *      ride the same dispatch path as marker entities.
+ */
+
+import {useEffect, type RefObject} from 'react';
+import type {DrumType, Instrument, parseChartFile} from '@eliwhite/scan-chart';
+import type {
+  ChartElement,
+  SceneReconciler,
+} from '../../../preview/highway/SceneReconciler';
+
+/**
+ * Parser-shape ParsedChart. Differs from scan-chart's wrapper type in
+ * that it lacks `chartBytes` / `format` / `iniChartModifiers` — those
+ * come from the consumer's `ChartDocument`. The editor's reducer state
+ * stores this narrower shape.
+ */
+type ParsedChart = ReturnType<typeof parseChartFile>;
+import type {EntityKind, SelectableKind} from '../../../chart-edit';
+import type {TimedTempo} from '../../../drum-transcription/chart-types';
+import {tickToMs} from '../../../drum-transcription/timing';
+import type {ChartDocument} from '../../../chart-edit';
+import {buildProjectionFor} from '../../../preview/highway/projection';
+import type {NoteElementData} from '../../../preview/highway/NoteRenderer';
+import {
+  drumSchemaFor,
+  schemaForInstrument,
+  type InstrumentSchema,
+} from '../../../chart-edit/instruments';
+import {
+  isReconciledKind,
+  reconcilerKeyFor,
+} from '../../../preview/highway/reconcilerKey';
+import type {EditorCapabilities} from '../../../chart-editor-core/capabilities';
+import {
+  isTrackScope,
+  localNoteIdForTrack,
+  localNoteIdsForTrack,
+  type EditorScope,
+} from '../../../chart-editor-core/scope';
+
+/**
+ * Live multi-note drag preview. `ids` are the selected notes' entity ids
+ * (`tick:type`); their elements are repositioned by `tickDelta` (and shifted
+ * across pad lanes by `laneDelta`) so the notes visibly follow the cursor,
+ * snapping with it, before the move commits on release.
+ */
+export interface NoteDragHint {
+  tickDelta: number;
+  laneDelta: number;
+  ids: ReadonlySet<string>;
+}
+
+export interface UseChartElementsInputs {
+  reconcilerRef: RefObject<SceneReconciler | null>;
+  /**
+   * Bumped when the renderer handle is swapped out (re-mount). Drives
+   * the "first reconciler push after mount" path.
+   */
+  rendererVersion: number;
+  chart: ParsedChart | null;
+  activeScope: EditorScope;
+  /** Active vocal part. `vocals` for non-vocals scopes. */
+  partName: string;
+  capabilities: EditorCapabilities;
+  /** Per-kind selection from the editor reducer. Wider than the
+   *  reconciler's kind space; filtered by `isReconciledKind` at the push. */
+  selection: ReadonlyMap<SelectableKind, ReadonlySet<string>>;
+  /** Single hovered entity from the editor reducer (or null). */
+  hovered: {kind: EntityKind; id: string} | null;
+  noteDrag: NoteDragHint | null;
+  timedTempos: TimedTempo[];
+  resolution: number;
+}
+
+/**
+ * Pure inputs for `computeChartElements`. The element-set computation is
+ * factored out as a side-effect-free function so it can be unit-tested
+ * directly without renderHook + a mocked reconciler.
+ */
+export interface ComputeChartElementsInputs {
+  chart: ParsedChart;
+  activeScope: EditorScope;
+  capabilities: EditorCapabilities;
+  noteDrag: NoteDragHint | null;
+  timedTempos: TimedTempo[];
+  resolution: number;
+}
+
+/**
+ * The lane schema for an `EditorScope`'s track. Scopes carry a `TrackKey`
+ * (instrument + difficulty), not the parsed track, so the drum layout has to
+ * come from the chart alongside it.
+ */
+function laneSchemaFor(
+  instrument: Instrument,
+  drumType: DrumType | null | undefined,
+): InstrumentSchema | null {
+  if (instrument === 'drums') return drumSchemaFor(drumType);
+  return schemaForInstrument(instrument);
+}
+
+/**
+ * Pure: derive the `ChartElement[]` to push to the reconciler from the
+ * current chart + capabilities + note-drag hint. No React, no refs.
+ *
+ * Notes + markers come from `buildProjectionFor(activeScope, doc, null)`
+ * (`lib/preview/highway/projection.ts`) — the same `EditorProjection`
+ * builder the piano-roll uses. `schema` is passed `null` because neither
+ * `trackToElements` nor `buildMarkerElements` reads lane geometry today;
+ * this call site only needs `projection.elements` + `projection.markers`.
+ *
+ * The full projection is produced here, including the marker kinds the
+ * highway does not draw. Narrowing happens at the consumer: the highway's
+ * reconciler accepts `HIGHWAY_ELEMENT_KINDS` only
+ * (`lib/preview/highway/cell.ts`), and the piano roll consumes the same
+ * projection and needs every kind.
+ *
+ * Drag handling: each selected note's element gets an `msTime` recomputed
+ * from its tick plus the drag's `tickDelta`. The reconciler's `dataEqual`
+ * ignores `msTime`, so this is a reposition-only update — no recycle, no key
+ * churn. A non-zero `laneDelta` additionally rewrites the element's lane /
+ * xPosition / note type (a data change, so the reconciler recycles the
+ * sprite into the previewed lane's visual).
+ */
+export function computeChartElements(
+  inputs: ComputeChartElementsInputs,
+): ChartElement[] {
+  const {chart, activeScope, capabilities, noteDrag, timedTempos, resolution} =
+    inputs;
+  // `computeChartElements` still takes the narrower `ParsedChart` shape
+  // (see the type comment above); `buildProjectionFor` only reads
+  // `doc.parsedChart`, so a minimal wrapper is enough to reuse it here.
+  const doc = {parsedChart: chart} as unknown as ChartDocument;
+  const projection = buildProjectionFor(activeScope, doc, null);
+  const elements = [...projection.elements, ...projection.markers];
+
+  const noteDragIds =
+    noteDrag && isTrackScope(activeScope)
+      ? localNoteIdsForTrack(noteDrag.ids, activeScope.track)
+      : noteDrag
+        ? Array.from(noteDrag.ids)
+        : [];
+  const noteDragKeys =
+    noteDrag && timedTempos.length > 0
+      ? new Set(noteDragIds.map(id => reconcilerKeyFor('note', id)))
+      : null;
+  // Resolved with the chart's `drumType`, not from the instrument alone:
+  // `schemaForInstrument` always answers 4-lane for drums, and a lateral drag
+  // resolved against the wrong drum schema previews the note at an X the
+  // renderer never draws it at -- or, for a fifth-pad note that has no 4-lane
+  // lane at all, silently does nothing.
+  const noteSchema =
+    activeScope.kind === 'track'
+      ? laneSchemaFor(activeScope.track.instrument, chart.drumType)
+      : null;
+  const padLanes =
+    noteSchema?.lanes
+      .filter(lane => !lane.fullWidth)
+      .sort((a, b) => a.index - b.index) ?? [];
+
+  return elements
+    .filter(e => capabilities.showDrumLanes || e.kind !== 'note')
+    .map(e => {
+      if (noteDragKeys && e.kind === 'note' && noteDragKeys.has(e.key)) {
+        const data = e.data as NoteElementData;
+        const tick = data.note.tick ?? 0;
+        const msTime = tickToMs(
+          Math.max(0, tick + noteDrag!.tickDelta),
+          timedTempos,
+          resolution,
+        );
+        // Full-width notes (Kick/Open) stay on their own axis; pads shift
+        // through the active instrument schema's editor lane indices.
+        if (
+          noteDrag!.laneDelta === 0 ||
+          data.isKick ||
+          data.isOpen ||
+          data.lane < 0 ||
+          !noteSchema
+        ) {
+          return {...e, msTime};
+        }
+        const currentEditorLane = data.editorLane ?? data.lane;
+        const currentPadIndex = padLanes.findIndex(
+          lane => lane.index === currentEditorLane,
+        );
+        if (currentPadIndex < 0 || padLanes.length === 0) {
+          return {...e, msTime};
+        }
+        const newPadIndex = Math.max(
+          0,
+          Math.min(padLanes.length - 1, currentPadIndex + noteDrag!.laneDelta),
+        );
+        const newLaneDefinition = padLanes[newPadIndex];
+        return {
+          ...e,
+          msTime,
+          data: {
+            ...data,
+            lane: newPadIndex,
+            editorLane: newLaneDefinition.index,
+            xPosition: newLaneDefinition.worldXOffset,
+            note: {...data.note, type: newLaneDefinition.noteType},
+          } satisfies NoteElementData,
+        };
+      }
+      return e;
+    });
+}
+
+/**
+ * Effect-only hook. Pushes a fresh element set to the reconciler on every
+ * input change; pushes hover/selection through dedicated dispatch channels,
+ * separate from element data.
+ */
+export function useChartElements(inputs: UseChartElementsInputs): void {
+  const {
+    reconcilerRef,
+    rendererVersion,
+    chart,
+    activeScope,
+    partName,
+    capabilities,
+    selection,
+    hovered,
+    noteDrag,
+    timedTempos,
+    resolution,
+  } = inputs;
+
+  // ---------------------------------------------------------------------
+  // 1. Element-set push.
+  //    Intrinsic-only data; a note drag injects msTime which the
+  //    reconciler treats as reposition-only.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const reconciler = reconcilerRef.current;
+    if (!reconciler || !chart) return;
+    reconciler.setElements(
+      computeChartElements({
+        chart,
+        activeScope,
+        capabilities,
+        noteDrag,
+        timedTempos,
+        resolution,
+      }),
+    );
+  }, [
+    reconcilerRef,
+    rendererVersion,
+    chart,
+    activeScope,
+    capabilities,
+    noteDrag,
+    timedTempos,
+    resolution,
+  ]);
+
+  // ---------------------------------------------------------------------
+  // 2. Hover push. Single source of truth: state.hovered → reconciler.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const reconciler = reconcilerRef.current;
+    if (!reconciler) return;
+    const hoveredId =
+      hovered && hovered.kind === 'note' && isTrackScope(activeScope)
+        ? localNoteIdForTrack(hovered.id, activeScope.track)
+        : hovered?.id;
+    const key =
+      hovered && hoveredId
+        ? reconcilerKeyFor(hovered.kind, hoveredId, partName)
+        : null;
+    reconciler.setHoveredKey(key);
+  }, [activeScope, hovered, partName, reconcilerRef, rendererVersion]);
+
+  // ---------------------------------------------------------------------
+  // 3. Selection push. Translate per-kind selection ids to reconciler
+  //    keys and replace the reconciler's set.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const reconciler = reconcilerRef.current;
+    if (!reconciler) return;
+    const keys = new Set<string>();
+    const track = isTrackScope(activeScope) ? activeScope.track : null;
+    for (const [kind, ids] of selection) {
+      // Tempo markers / time-signature chips are piano-roll-only entities:
+      // the marquee can select them, but the highway has no element to
+      // highlight, so they never reach the reconciler.
+      if (!isReconciledKind(kind)) continue;
+      for (const id of ids) {
+        if (kind === 'note' && track) {
+          const localId = localNoteIdForTrack(id, track);
+          if (localId) keys.add(reconcilerKeyFor(kind, localId, partName));
+        } else if (kind !== 'note') {
+          keys.add(reconcilerKeyFor(kind, id, partName));
+        }
+      }
+    }
+    reconciler.setSelectedKeys(keys);
+  }, [activeScope, partName, reconcilerRef, rendererVersion, selection]);
+}
