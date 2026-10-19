@@ -18,11 +18,11 @@ videos/
 ## Quickstart
 
 ```sh
+pnpm install                                  # at the repo root: the one workspace; each package links the shared browser
 cd videos
-pnpm install                                  # the workspace; each package links the shared browser
 pnpm browser                                  # once per checkout: the headless Chrome (see Machine gotchas)
 pnpm new-film --name my-film --title "My Product"
-pnpm install                                  # links the new film into the workspace
+pnpm -w install                               # links the new film into the root workspace
 cd films/my-film
 pnpm studio                                   # the film, and each scene on its own
 pnpm still --frame=150                        # one frame to out/still.png

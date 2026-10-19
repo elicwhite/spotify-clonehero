@@ -11,12 +11,14 @@
   },
   "dependencies": {
     "@eliwhite/scan-chart": "catalog:",
+    "@musiccharts/core": "workspace:*",
     "@musiccharts/video-kit": "workspace:*",
     "@remotion/cli": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "remotion": "catalog:",
-    "three": "catalog:"
+    "three": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

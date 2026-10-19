@@ -15,11 +15,11 @@ import type {ChartDocument} from '@eliwhite/scan-chart';
 import {
   setupStage,
   type HighwayStage,
-} from '@product/lib/preview/highway/stage';
-import type {StageLayout} from '@product/lib/preview/highway/layout';
-import {findTrack} from '@product/lib/chart-edit';
-import {buildTimedTempos} from '@product/lib/drum-transcription/timing';
-import {trackKeyId} from '@product/lib/chart-editor-core/scope';
+} from '@musiccharts/core/preview/highway/stage';
+import type {StageLayout} from '@musiccharts/core/preview/highway/layout';
+import {findTrack} from '@musiccharts/core/chart-edit';
+import {buildTimedTempos} from '@musiccharts/core/drum-transcription/timing';
+import {trackKeyId} from '@musiccharts/core/chart-editor-core/scope';
 import {
   drawReplayed,
   type Karaoke,

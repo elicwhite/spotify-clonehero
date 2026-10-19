@@ -1,18 +1,19 @@
 /**
  * Bundling a film with the product app's own sources (Node only).
  *
- * A film draws the real highway with the app's three.js renderer and reads
- * app modules, so its bundle must:
- * - resolve `@/...` (the app's own imports) to the app's source root, and
- *   `@product/lib/...` and `@product/components/...` (the film's imports of
- *   product code) to core's source (packages/core/src);
- * - compile app and core sources with the app's TypeScript semantics: the app leaves
- *   `useDefineForClassFields` off, while the kit's ES2022 target turns it
- *   on, and the difference changes what declared-only class fields do;
- * - keep one copy of each library the app, the kit and the film share
- *   (the highway's asset hooks need a single THREE);
- * - find bare imports from app and core files even where they have no
- *   node_modules of their own (a worktree), through the film's and the kit's.
+ * A film draws the real highway with core's three.js renderer and reads core
+ * modules, so its bundle must:
+ * - resolve `@musiccharts/core/...` (the kit's imports of shared product
+ *   code) to core's source (packages/core/src): core's package exports map
+ *   to extensionless paths, which webpack does not complete;
+ * - compile core's sources with the app's TypeScript semantics: the app
+ *   leaves `useDefineForClassFields` off, while the kit's ES2022 target turns
+ *   it on, and the difference changes what declared-only class fields do;
+ * - keep one copy of each library core, the kit and the film share
+ *   (the highway's asset hooks need a single THREE).
+ *
+ * The app's own folder matters only for its art: a film serves it from its
+ * `public/product` link (see `appRoot`).
  *
  * A film states where its app is in ONE module, `productApp.config.ts`
  * beside its remotion.config.ts. The config passes it to
@@ -33,7 +34,7 @@ const KIT_ROOT = path.resolve(
   '../..',
 );
 
-/** Where the app sits relative to the kit: videos/kit -> ../../apps/site. */
+/** Where the app sits relative to the kit: videos/kit -> ../../apps/site. Its public/assets is the art a film serves. */
 const DEFAULT_APP_ROOT = path.resolve(KIT_ROOT, '../../apps/site');
 
 /** Core's source, shared by every app: videos/kit -> ../../packages/core/src. */
@@ -50,13 +51,13 @@ const SINGLE_COPY = ['react-dom', 'three', '@eliwhite/scan-chart'] as const;
 
 /** What a film states in its productApp.config.ts. */
 export interface ProductAppOptions {
-  /** The app's source root, relative to the film. Default: the app next to the videos workspace. */
+  /** The app folder whose public/assets a film serves, relative to the film. Default: the app next to the videos workspace. */
   appRoot?: string;
 }
 
 export interface ProductAppPaths {
   appRoot: string;
-  /** Core's source folder, where `@product/lib` and `@product/components` point. */
+  /** Core's source folder, where `@musiccharts/core` points. */
   coreRoot: string;
   kitRoot: string;
   filmRoot: string;
@@ -127,12 +128,10 @@ export const productAppWebpack = (
   options: ProductAppOptions = {},
 ): WebpackOverrideFn => {
   // Resolve now: Remotion runs the override later, from another directory.
-  const {
-    appRoot,
-    coreRoot,
-    kitRoot,
-    filmRoot: film,
-  } = productAppPaths(filmRoot, options);
+  const {coreRoot, kitRoot, filmRoot: film} = productAppPaths(
+    filmRoot,
+    options,
+  );
   const roots = [film, kitRoot];
   const singles: Record<string, string> = {};
   for (const name of SINGLE_COPY) {
@@ -173,25 +172,18 @@ export const productAppWebpack = (
         ...config.module,
         rules: [
           ...rules.map(rule =>
-            rule === tsRule ? {...tsRule, exclude: [appRoot, coreRoot]} : rule,
+            rule === tsRule ? {...tsRule, exclude: [coreRoot]} : rule,
           ),
-          {test: /\.tsx?$/, include: [appRoot, coreRoot], use: appUse},
+          {test: /\.tsx?$/, include: [coreRoot], use: appUse},
         ],
       },
       resolve: {
         ...config.resolve,
         alias: {
           ...config.resolve?.alias,
-          '@': appRoot,
-          '@product/lib': coreRoot,
-          '@product/components': path.join(coreRoot, 'components'),
-          '@product': appRoot,
+          '@musiccharts/core': coreRoot,
           ...singles,
         },
-        modules: [
-          ...(config.resolve?.modules ?? ['node_modules']),
-          ...roots.map(root => path.join(root, 'node_modules')),
-        ],
       },
     };
   };

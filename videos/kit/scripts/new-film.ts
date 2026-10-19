@@ -8,7 +8,7 @@
  *   node --import tsx kit/scripts/new-film.ts --name <slug> ...   (the same)
  *
  * The new film renders as it is: its timeline is a tempo bed, so it needs no
- * song material. Then run `pnpm install` in videos/ to link it into the
+ * song material. Then run `pnpm install` at the repo root to link it into the
  * workspace. Refuses to write over an existing folder.
  */
 import fs from 'node:fs';
@@ -117,7 +117,7 @@ runCli(USAGE, () => {
   const inVideos = path.relative(path.dirname(FILMS), film);
   console.log(`Created videos/${inVideos} ("${title}").
 
-Next, in videos/:
-  pnpm install                      links the film into the workspace
-  cd ${inVideos} && pnpm studio`);
+Next:
+  pnpm install                      at the repo root: links the film into the workspace
+  cd videos/${inVideos} && pnpm studio`);
 });

@@ -10,14 +10,14 @@ import {
   DeleteNotesCommand,
   MoveEntitiesCommand,
   SetNoteLengthCommand,
-} from '@product/lib/chart-editor-core/commands';
+} from '@musiccharts/core/chart-editor-core/commands';
 import {
   findTrack,
   listNotes,
   schemaForTrack,
   schemaNoteId,
-} from '@product/lib/chart-edit';
-import type {InstrumentSchema} from '@product/lib/chart-edit/instruments';
+} from '@musiccharts/core/chart-edit';
+import type {InstrumentSchema} from '@musiccharts/core/chart-edit/instruments';
 
 /**
  * Chart edits, made with the chart editor's own commands, so an edited

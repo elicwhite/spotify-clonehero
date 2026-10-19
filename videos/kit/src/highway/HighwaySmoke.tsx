@@ -25,7 +25,7 @@
 import {useMemo, useRef} from 'react';
 import {AbsoluteFill, cancelRender, useVideoConfig} from 'remotion';
 import type {ChartDocument} from '@eliwhite/scan-chart';
-import {CANVAS_CSS_HEIGHT} from '@product/lib/preview/highway/LyricsOverlay';
+import {CANVAS_CSS_HEIGHT} from '@musiccharts/core/preview/highway/LyricsOverlay';
 import {useGlobalFrame} from '../clock';
 import type {Segment} from '../music';
 import type {Point, Rect} from '../motion';

@@ -17,7 +17,7 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "@product/lib/og/*": ["../packages/core/src/og/*"]
+      "@musiccharts/core/og/*": ["../packages/core/src/og/*"]
     }
   }
 }

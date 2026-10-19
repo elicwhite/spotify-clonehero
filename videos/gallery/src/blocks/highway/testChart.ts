@@ -4,7 +4,7 @@
  */
 import {useMemo} from 'react';
 import type {ChartDocument} from '@eliwhite/scan-chart';
-import {readChartForEditing} from '@product/lib/chart-edit';
+import {readChartForEditing} from '@musiccharts/core/chart-edit';
 import {
   EXPERT_DRUMS,
   laneOfNoteType,

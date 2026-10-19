@@ -2,11 +2,11 @@
 
 Bundling a film with the product app's own sources. Node only.
 
-A film draws the real highway with the app's renderer and imports app
-modules, so its bundle must resolve the app's `@/...` imports, compile app
-files with the app's TypeScript semantics (`useDefineForClassFields: false`),
-keep one copy of the libraries the app and the film share, and find app
-files' bare imports even where the app has no `node_modules` of its own.
+A film draws the real highway with core's renderer and imports core
+modules (`@musiccharts/core/...`, a workspace package), so its bundle must
+resolve them to core's source, compile core's files with the app's
+TypeScript semantics (`useDefineForClassFields: false`), and keep one copy of
+the libraries core and the film share.
 
 A film states its options once, in `productApp.config.ts` beside its
 remotion.config.ts. The config and the kit's tools both read it:
@@ -51,25 +51,25 @@ const serveUrl = await bundle({
 | `ProductAppOptions`                     | `{appRoot?}`: what a film states                                                                          |
 | `withProductApp(Config, options?)`      | Sets the webpack override and ANGLE for the film Remotion runs the config in. Returns the resolved paths. |
 | `loadProductAppOptions(filmRoot)`       | A film's `productApp.config.ts` default export, or `{}` without one                                       |
-| `productAppPaths(filmRoot, options?)`   | `{appRoot, kitRoot, filmRoot, publicDir}`, all absolute; `publicDir` is always the film's own `public/`   |
+| `productAppPaths(filmRoot, options?)`   | `{appRoot, coreRoot, kitRoot, filmRoot, publicDir}`, all absolute; `publicDir` is always the film's own `public/`   |
 | `productAppWebpack(filmRoot, options?)` | The webpack override alone, for `bundle()` or to compose with a film's own override                       |
 | `productAppChromiumOptions`             | `{gl: 'angle'}` for `renderMedia`/`renderStill`                                                           |
 | `PRODUCT_APP_CONFIG`                    | `'productApp.config.ts'`                                                                                  |
 
 `appRoot` is relative to the film; by default it is the app next to the
-videos workspace, found from the kit's own location (`videos/kit` →
-`../../apps/site`).
+videos folder, found from the kit's own location (`videos/kit` →
+`../../apps/site`). It only names the app whose `public/assets` the film
+serves; no app source is bundled.
 
 What the override does:
 
-- aliases `@` and `@product` to the app root, and `@product/lib` and
-  `@product/components` to core's source (`packages/core/src`);
+- aliases `@musiccharts/core` to core's source (`packages/core/src`),
+  because core's package exports map to extensionless paths that webpack
+  does not complete;
 - aliases `react-dom`, `three` and `@eliwhite/scan-chart` to one real copy
   (the film's, else the kit's); React and Remotion are already pinned by
   Remotion's own config;
-- adds the film's and the kit's `node_modules` as fallbacks for bare
-  imports from app and core files;
-- compiles `.ts`/`.tsx` under the app root and core's source with
+- compiles `.ts`/`.tsx` under core's source with
   `useDefineForClassFields: false`.
 
 ## Rules

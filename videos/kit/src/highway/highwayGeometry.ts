@@ -1,22 +1,22 @@
 import {Vector3} from 'three';
 import type {NoteType} from '@eliwhite/scan-chart';
-import {STRIKELINE_WORLD_Y} from '@product/lib/preview/highway/cameraFit';
+import {STRIKELINE_WORLD_Y} from '@musiccharts/core/preview/highway/cameraFit';
 import {
   createHighwayCamera,
   fitHighwayCamera,
-} from '@product/lib/preview/highway/highwayCamera';
-import {GEM_ANCHOR_Y} from '@product/lib/preview/highway/NoteRenderer';
-import {SCALE} from '@product/lib/preview/highway/types';
+} from '@musiccharts/core/preview/highway/highwayCamera';
+import {GEM_ANCHOR_Y} from '@musiccharts/core/preview/highway/NoteRenderer';
+import {SCALE} from '@musiccharts/core/preview/highway/types';
 import {
   computeStageLayout,
   type HighwayRect,
   type StageLayout,
-} from '@product/lib/preview/highway/layout';
+} from '@musiccharts/core/preview/highway/layout';
 import {
   drums4LaneSchema,
   guitarSchema,
   type InstrumentSchema,
-} from '@product/lib/chart-edit/instruments';
+} from '@musiccharts/core/chart-edit/instruments';
 import {mapQuad, type Point, type Quad} from '../motion';
 import {
   FLOOR_FAR_Y,

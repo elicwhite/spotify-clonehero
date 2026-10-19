@@ -1,7 +1,7 @@
 /**
  * The kit's one copy of the app's types (src/highway/product-modules.d.ts)
  * against the app's own sources. Every name a `declare module
- * '@product/...'` block exports must exist in the app file it mirrors, with
+ * '@musiccharts/core/...'` block exports must exist in the app file it mirrors, with
  * the same kind, and every real export must fit its declaration; a type the
  * kit builds and hands to the app must also fit the app's.
  * TypeScript checks a generated file that assigns each real export to its
@@ -66,7 +66,7 @@ const isExported = (node: ts.Node): boolean =>
     m => m.kind === ts.SyntaxKind.ExportKeyword,
   );
 
-/** Every `export` of every `declare module '@product/...'` block. */
+/** Every `export` of every `declare module '@musiccharts/core/...'` block. */
 const declaredExports = (): Declared[] => {
   const source = ts.createSourceFile(
     DTS,
@@ -102,11 +102,11 @@ const declaredExports = (): Declared[] => {
   return out;
 };
 
-/** The core file a `@product/lib/...` or `@product/components/...` module mirrors. */
+/** The core file a `@musiccharts/core/...` module mirrors. */
 const appFile = (module: string): string => {
   const base = path.join(
     CORE,
-    module.slice('@product/'.length).replace(/^lib\//, ''),
+    module.slice('@musiccharts/core/'.length),
   );
   const found = [`${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')].find(
     f => fs.existsSync(f),

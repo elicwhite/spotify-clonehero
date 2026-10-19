@@ -14,10 +14,10 @@ below.
 ## Setup
 
 1. The film's `remotion.config.ts` calls `withProductApp(Config, productApp)`
-   with the options from its `productApp.config.ts` (config area): `@` and
-   `@product` resolve to the app (`@product/lib` and `@product/components`
-   to core), the app's TypeScript compiles with its own
-   semantics, and there is ONE copy each of three and scan-chart.
+   with the options from its `productApp.config.ts` (config area):
+   `@musiccharts/core` resolves to core's source, core's TypeScript compiles
+   with its own semantics, and there is ONE copy each of three and
+   scan-chart.
 2. The film serves the app's art: `public/product` is a committed link to
    the app's `public/assets` (`PRODUCT_ASSETS_PATH`). The renderer requests
    `/assets/preview/...`. Each stage loads its art through its own loading

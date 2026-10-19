@@ -7,8 +7,8 @@ import {
 } from 'react';
 import {cancelRender, useVideoConfig} from 'remotion';
 import type {ChartDocument} from '@eliwhite/scan-chart';
-import {buildTimedTempos} from '@product/lib/drum-transcription/timing';
-import {trackLabel} from '@product/components/chart-editor/trackLabels';
+import {buildTimedTempos} from '@musiccharts/core/drum-transcription/timing';
+import {trackLabel} from '@musiccharts/core/components/chart-editor/trackLabels';
 import {useGlobalFrame} from '../clock';
 import type {Segment} from '../music';
 import {EXPERT_DRUMS} from './editing';

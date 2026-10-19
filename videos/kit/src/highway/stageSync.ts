@@ -8,15 +8,15 @@ import type {
   GridData,
   StageClock,
   StageHighwayHandle,
-} from '@product/lib/preview/highway/stage';
-import type {OverlayState} from '@product/lib/preview/highway/SceneOverlays';
-import type {SceneReconciler} from '@product/lib/preview/highway/SceneReconciler';
-import {reconcilerKeyFor} from '@product/lib/preview/highway/reconcilerKey';
-import {DEFAULT_VOCALS_PART} from '@product/lib/chart-edit';
-import type {TimedTempo} from '@product/lib/drum-transcription/chart-types';
-import {DRUM_EDIT_CAPABILITIES} from '@product/lib/chart-editor-core/capabilities';
-import {trackQualifiedNoteId} from '@product/lib/chart-editor-core/scope';
-import {computeChartElements} from '@product/components/chart-editor/highway/useChartElements';
+} from '@musiccharts/core/preview/highway/stage';
+import type {OverlayState} from '@musiccharts/core/preview/highway/SceneOverlays';
+import type {SceneReconciler} from '@musiccharts/core/preview/highway/SceneReconciler';
+import {reconcilerKeyFor} from '@musiccharts/core/preview/highway/reconcilerKey';
+import {DEFAULT_VOCALS_PART} from '@musiccharts/core/chart-edit';
+import type {TimedTempo} from '@musiccharts/core/drum-transcription/chart-types';
+import {DRUM_EDIT_CAPABILITIES} from '@musiccharts/core/chart-editor-core/capabilities';
+import {trackQualifiedNoteId} from '@musiccharts/core/chart-editor-core/scope';
+import {computeChartElements} from '@musiccharts/core/components/chart-editor/highway/useChartElements';
 import type {TrackRef} from './editing';
 import type {Karaoke} from './karaokeReplay';
 

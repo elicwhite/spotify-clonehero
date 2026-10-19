@@ -12,7 +12,7 @@
  * straight to the app's renderer.
  */
 import type {ChartDocument, File as ChartFile} from '@eliwhite/scan-chart';
-import {readChartForEditing} from '@product/lib/chart-edit';
+import {readChartForEditing} from '@musiccharts/core/chart-edit';
 import {fetchFile, loadJson, useLoaded} from '../load';
 
 export interface ChartFolder {

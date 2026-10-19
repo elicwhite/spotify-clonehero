@@ -13,7 +13,7 @@
  *   short side is 1080. Multiply by `useFormat().unit` for the
  *   composition's own size.
  */
-import {OG_COLORS, OG_LANES} from '@product/lib/og/tokens';
+import {OG_COLORS, OG_LANES} from '@musiccharts/core/og/tokens';
 import {SAFE_MARGIN} from '../format/format';
 import type {SpringConfig} from '../motion/spring';
 
