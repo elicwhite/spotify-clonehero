@@ -64,7 +64,10 @@ import eighthNote from '@/public/assets/svgs/eighth-note.svg';
 import tripletNote from '@/public/assets/svgs/triplet-note.svg';
 import {getChartDelayMs} from '@musiccharts/core/chart-utils/chartDelay';
 import {useAutoScroll} from '@musiccharts/core/sheet-follow/useAutoScroll';
-import {AUTO_SCROLL_ENABLED, AutoScrollSetting} from './AutoScrollSetting';
+import {
+  AUTO_SCROLL_ENABLED,
+  AutoScrollSetting,
+} from '@musiccharts/core/components/auto-scroll/AutoScrollSetting';
 import {toast} from '@musiccharts/core/components/ui/toast';
 import {createClient} from '@musiccharts/core/supabase/client';
 import {unfavoriteSongByHash} from '@musiccharts/core/supabase/accountActions';

@@ -1,7 +1,7 @@
-import {Button} from '@musiccharts/core/components/ui/button';
-import {Switch} from '@musiccharts/core/components/ui/switch';
-import type {AutoScrollState} from '@musiccharts/core/sheet-follow/useAutoScroll';
-import {cn} from '@musiccharts/core/utils';
+import {Button} from '../ui/button';
+import {Switch} from '../ui/switch';
+import type {AutoScrollState} from '../../sheet-follow/useAutoScroll';
+import {cn} from '../../utils';
 
 /**
  * Auto scroll is unfinished, and development-only.
@@ -11,7 +11,7 @@ import {cn} from '@musiccharts/core/utils';
  * the band is playing has no measured margin, and every number comes from files
  * recorded with ffmpeg rather than through the browser, which captures the same
  * room about 14 dB hotter. It also opens the microphone, which nothing else on
- * this page does.
+ * the pages that show it does.
  *
  * Callers must gate the follower on this too, not just the switch. The setting
  * is persisted, so hiding the control alone would leave anyone who turned it on
