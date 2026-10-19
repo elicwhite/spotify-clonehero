@@ -189,6 +189,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
     // The album art slot and the export passthroughs: this fixture package
     // carries neither, which is the shape most projects have.
     readAlbumArt: jest.fn(async () => null),
+    readVideoFile: jest.fn(async () => null),
     writeAlbumArt: jest.fn(async () => {}),
     loadPassthroughAssets: jest.fn(async () => []),
     deleteProject: jest.fn(async () => {}),

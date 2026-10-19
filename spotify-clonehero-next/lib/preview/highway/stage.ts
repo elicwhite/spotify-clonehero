@@ -616,8 +616,11 @@ export function setupStage(
   scene.fog = new THREE.Fog(0x000000, 2.0, 2.5);
 
   const dpr = config.pixelRatio ?? Math.min(window.devicePixelRatio || 1, 2);
+  // The canvas clears to transparent, so the host decides what shows behind
+  // the highways: a black backdrop, or the chart's video background.
   const renderer = new THREE.WebGLRenderer({
     antialias: dpr < 2, // skip antialias on high-DPI screens where it's unnecessary
+    alpha: true,
   });
   renderer.setPixelRatio(dpr);
   renderer.localClippingEnabled = true;

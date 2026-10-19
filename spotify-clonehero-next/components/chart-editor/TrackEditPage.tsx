@@ -980,6 +980,28 @@ function TrackEditEditor({
     [albumArt, handleAlbumArtChange],
   );
 
+  // The package's video background, streamed from its OPFS file through an
+  // object URL rather than read into memory: videos run to hundreds of MB.
+  const [backgroundVideoUrl, setBackgroundVideoUrl] = useState<string>();
+
+  useEffect(() => {
+    let cancelled = false;
+    let url: string | undefined;
+    void store
+      .readVideoFile(projectId)
+      .then(file => {
+        if (cancelled || !file) return;
+        url = URL.createObjectURL(file);
+        setBackgroundVideoUrl(url);
+      })
+      .catch(err => console.warn('Could not read the video background:', err));
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+      setBackgroundVideoUrl(undefined);
+    };
+  }, [projectId, store]);
+
   // Everything the package shipped that isn't the chart or its audio —
   // album art, video, background art — passed through to the export
   // untouched. Without this an export silently drops them.
@@ -1282,6 +1304,7 @@ function TrackEditEditor({
         getAudioSources={getAudioSources}
         getExtraAssets={getExtraAssets}
         albumArt={albumArtSlot}
+        backgroundVideoUrl={backgroundVideoUrl}
         chartAssist={chartAssist}
         stemSeparation={stemSeparation}
         stemsMixer={{

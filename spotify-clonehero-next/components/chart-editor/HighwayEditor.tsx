@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from 'react';
 import {Loader2} from 'lucide-react';
 import {useChartEditorContext} from './ChartEditorContext';
@@ -50,6 +51,11 @@ interface HighwayEditorProps {
    * didn't get a lane, a single-track one doesn't.
    */
   stackedPianoRoll?: boolean | undefined;
+  /**
+   * Drawn behind the highways, inside a black backdrop: the stage's canvas
+   * is transparent, so this shows around and between the lanes.
+   */
+  background?: ReactNode | undefined;
 }
 
 /**
@@ -99,6 +105,7 @@ export default function HighwayEditor({
   audioChannels = 2,
   durationSeconds,
   stackedPianoRoll = false,
+  background,
 }: HighwayEditorProps) {
   const {state, dispatch, capabilities} = useChartEditorContext();
   const {executeCommand} = useExecuteCommand();
@@ -327,6 +334,7 @@ export default function HighwayEditor({
         'relative h-full w-full overflow-hidden bg-[var(--ed-surface)]',
         className,
       )}>
+      <div className="absolute inset-0 bg-black">{background}</div>
       <div ref={canvasHostRef} className="absolute inset-0" />
 
       {/* Waveform mode draws the song itself, so it has nothing to show until

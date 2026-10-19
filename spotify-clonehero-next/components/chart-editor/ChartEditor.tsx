@@ -16,6 +16,7 @@ import type {AudioSource, AssetFile} from './ExportDialog';
 
 import EditorHeaderRow from './EditorHeaderRow';
 import HighwayEditor from './HighwayEditor';
+import BackgroundVideo from './BackgroundVideo';
 import TransportControls from './TransportControls';
 import ExportDialog from './ExportDialog';
 import {selectReportedOrigin} from '@/lib/chart-editor-core';
@@ -31,6 +32,7 @@ import {useChartEditorContext} from './ChartEditorContext';
 import {useEditorDensity} from './hooks/useEditorDensity';
 import {useLoopRegionSync} from './hooks/useLoopRegionSync';
 import type {AudioSamples} from './audioSamples';
+import {getAudioAnchor} from '@/lib/chart-edit';
 
 type ParsedChart = ReturnType<typeof parseChartFile>;
 
@@ -157,6 +159,10 @@ export interface ChartEditorProps {
    * and how to store a change. Omitted by a host with nowhere to keep the
    * bytes, which hides the field. */
   albumArt?: AlbumArtSlot | undefined;
+  /** An object URL for the chart's video background. When set, the video
+   *  plays behind the highways in step with playback, offset by the chart's
+   *  `video_start_time`. */
+  backgroundVideoUrl?: string | undefined;
   /** Preselects the export dialog's package format (e.g. to match an
    * existing chart package's original format). */
   defaultExportFormat?: 'zip' | 'sng' | undefined;
@@ -266,6 +272,7 @@ export default function ChartEditor({
   getAudioSources,
   getExtraAssets,
   albumArt,
+  backgroundVideoUrl,
   defaultExportFormat,
   sourceChartFormat,
   toolsApplied,
@@ -450,6 +457,24 @@ export default function ChartEditor({
             audioChannels={audioChannels}
             durationSeconds={durationSeconds}
             stackedPianoRoll={stackedPianoRoll && hasMultipleStackedTracks}
+            background={
+              backgroundVideoUrl && (
+                <BackgroundVideo
+                  key={backgroundVideoUrl}
+                  src={backgroundVideoUrl}
+                  audioManager={audioManager}
+                  videoStartSeconds={
+                    (chart.metadata.video_start_time ?? 0) / 1000
+                  }
+                  audioLeadSeconds={
+                    (state.chartDoc
+                      ? (getAudioAnchor(state.chartDoc)?.ms ?? 0)
+                      : 0) / 1000
+                  }
+                  songDurationSeconds={durationSeconds}
+                />
+              )
+            }
           />
         </div>
       </section>

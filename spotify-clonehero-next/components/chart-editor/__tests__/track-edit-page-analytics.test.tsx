@@ -65,6 +65,7 @@ jest.mock('../../../lib/project-storage/opfsProjectStore', () => ({
     writeEditedChart: jest.fn(async () => {}),
     updateProject: jest.fn(async () => ({})),
     readAlbumArt: jest.fn(async () => null),
+    readVideoFile: jest.fn(async () => null),
     writeAlbumArt: jest.fn(async () => {}),
     loadPassthroughAssets: jest.fn(async () => []),
     deleteProject: jest.fn(async () => {}),

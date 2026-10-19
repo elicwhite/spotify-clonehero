@@ -18,6 +18,7 @@
 
 import {writeFile, readJsonFile} from '@/lib/fileSystemHelpers';
 import {isAlbumArtFileName} from '@/lib/album-art';
+import {getExtension, hasVideoName} from '@/lib/src-shared/utils';
 import type {SourceFormat} from '@/lib/chart-files/chart-package';
 import {
   CHART_FILE_BASENAMES,
@@ -715,6 +716,31 @@ export function createOpfsProjectStore(
   }
 
   /**
+   * The project's video background, or null when it ships none.
+   *
+   * Returned as the OPFS `File` itself, not its bytes: a video can be
+   * hundreds of megabytes, and an object URL over the disk-backed file lets
+   * the `<video>` element stream it. The file name follows scan-chart's
+   * `video.*` rule; when a package carries more than one, a `.webm` wins, as
+   * it does for scan-chart.
+   */
+  async function readVideoFile(projectId: string): Promise<File | null> {
+    const dir = await getProjectDir(projectId);
+    const videos = (await readManifest(dir)).filter(
+      e => e.storedIn === 'root' && hasVideoName(e.fileName),
+    );
+    const entry =
+      videos.find(e => getExtension(e.fileName) === 'webm') ?? videos[0];
+    if (!entry) return null;
+    try {
+      const handle = await dir.getFileHandle(entry.fileName);
+      return await handle.getFile();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Replace the project's album art, or remove it when `art` is null.
    *
    * Every file name scan-chart reads as album art is dropped first, so a
@@ -765,6 +791,7 @@ export function createOpfsProjectStore(
     loadAudioFiles,
     loadPassthroughAssets,
     readAlbumArt,
+    readVideoFile,
     writeAlbumArt,
   };
 }
