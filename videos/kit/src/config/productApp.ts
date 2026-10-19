@@ -32,8 +32,8 @@ const KIT_ROOT = path.resolve(
   '../..',
 );
 
-/** Where the app sits relative to the kit: videos/kit -> ../../spotify-clonehero-next. */
-const DEFAULT_APP_ROOT = path.resolve(KIT_ROOT, '../../spotify-clonehero-next');
+/** Where the app sits relative to the kit: videos/kit -> ../../apps/site. */
+const DEFAULT_APP_ROOT = path.resolve(KIT_ROOT, '../../apps/site');
 
 /** The module a film states its options in, beside its remotion.config.ts. */
 export const PRODUCT_APP_CONFIG = 'productApp.config.ts';

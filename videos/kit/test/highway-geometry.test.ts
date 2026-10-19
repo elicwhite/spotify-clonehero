@@ -12,7 +12,7 @@ import {noteTypes} from '@eliwhite/scan-chart';
 import {
   HIGHWAY_CAMERA,
   strikelineInCameraSpace,
-} from '../../../spotify-clonehero-next/lib/preview/highway/cameraFit';
+} from '../../../apps/site/lib/preview/highway/cameraFit';
 import {STRIKELINE_Y} from '../src/highway/floor';
 
 const {

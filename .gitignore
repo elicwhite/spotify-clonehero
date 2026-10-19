@@ -1,15 +1,15 @@
 secrets.env
 .env.local
 .vscode
-spotify-clonehero-next/raw_db_files
+apps/site/raw_db_files
 # Build outputs of `pnpm update:db`. The dump clients actually load is
 # published to R2 by .github/workflows/update-chart-db.yml.
-spotify-clonehero-next/public/data/charts.json
-spotify-clonehero-next/public/data/metadata.json
+apps/site/public/data/charts.json
+apps/site/public/data/metadata.json
 /.pnpm-store
 /.tmpx
-spotify-clonehero-next/ga-service-account.json
-/spotify-clonehero-next/.pnpm-store
+apps/site/ga-service-account.json
+/apps/site/.pnpm-store
 
 # The Vercel CLI runs from here and writes its project link.
 .vercel

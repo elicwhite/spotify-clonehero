@@ -17,7 +17,7 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "@product/lib/og/*": ["../spotify-clonehero-next/lib/og/*"]
+      "@product/lib/og/*": ["../apps/site/lib/og/*"]
     }
   }
 }

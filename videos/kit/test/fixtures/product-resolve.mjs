@@ -20,7 +20,7 @@ import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const KIT = fileURLToPath(new URL('../../', import.meta.url));
-const APP = path.resolve(KIT, '../../spotify-clonehero-next');
+const APP = path.resolve(KIT, '../../apps/site');
 const APP_URL = pathToFileURL(`${APP}${path.sep}`).href;
 const KIT_PACKAGE_URL = pathToFileURL(path.join(KIT, 'package.json')).href;
 const kitRequire = createRequire(KIT_PACKAGE_URL);

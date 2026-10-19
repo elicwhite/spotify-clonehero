@@ -58,7 +58,7 @@ const serveUrl = await bundle({
 
 `appRoot` is relative to the film; by default it is the app next to the
 videos workspace, found from the kit's own location (`videos/kit` →
-`../../spotify-clonehero-next`).
+`../../apps/site`).
 
 What the override does:
 

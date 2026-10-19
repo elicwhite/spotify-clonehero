@@ -15,7 +15,7 @@ import {describe, it} from 'node:test';
 import ts from 'typescript';
 
 const KIT = path.resolve(import.meta.dirname, '..');
-const APP = path.resolve(KIT, '../../spotify-clonehero-next');
+const APP = path.resolve(KIT, '../../apps/site');
 const DTS = path.join(KIT, 'src/highway/product-modules.d.ts');
 const CHECK = path.join(KIT, 'test/product-modules.check.ts');
 

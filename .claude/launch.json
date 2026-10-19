@@ -4,7 +4,7 @@
     {
       "name": "tempo-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "spotify-clonehero-next", "dev"],
+      "runtimeArgs": ["--dir", "apps/site", "dev"],
       "port": 3000
     }
   ]

@@ -3,7 +3,7 @@ packages:
   - gallery
   - films/*
 
-# Same supply-chain policy as spotify-clonehero-next/pnpm-workspace.yaml:
+# Same supply-chain policy as the root pnpm-workspace.yaml:
 # never install a version published less than 7 days ago (10080 minutes),
 # and only let the native packages that need it run install scripts.
 minimumReleaseAge: 10080

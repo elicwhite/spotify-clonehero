@@ -19,7 +19,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'spotify-clonehero-next/lib/chorusChartDb/chartDbAssets.ts'
+      - 'apps/site/lib/chorusChartDb/chartDbAssets.ts'
   schedule:
     # Daily incremental: only what changed since the published dump.
     - cron: '0 8 * * *'
@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 330
     defaults:
       run:
-        working-directory: spotify-clonehero-next
+        working-directory: apps/site
 
     steps:
       - uses: actions/checkout@v4

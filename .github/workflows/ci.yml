@@ -30,7 +30,7 @@ concurrency:
 
 defaults:
   run:
-    working-directory: spotify-clonehero-next
+    working-directory: apps/site
 
 jobs:
   test:
@@ -67,10 +67,10 @@ jobs:
       - name: Restore jest transform cache
         uses: actions/cache@v6
         with:
-          path: spotify-clonehero-next/.next/cache/jest
-          key: jest-${{ runner.os }}-${{ hashFiles('spotify-clonehero-next/pnpm-lock.yaml') }}-${{ github.sha }}
+          path: apps/site/.next/cache/jest
+          key: jest-${{ runner.os }}-${{ hashFiles('apps/site/pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: |
-            jest-${{ runner.os }}-${{ hashFiles('spotify-clonehero-next/pnpm-lock.yaml') }}-
+            jest-${{ runner.os }}-${{ hashFiles('apps/site/pnpm-lock.yaml') }}-
             jest-${{ runner.os }}-
 
       - name: Run tests
@@ -172,7 +172,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           expected="$(grep -oE 'CHART_DB_DATA_VERSION = [0-9]+' \
-            spotify-clonehero-next/lib/chorusChartDb/chartDbAssets.ts \
+            apps/site/lib/chorusChartDb/chartDbAssets.ts \
             | grep -oE '[0-9]+$')"
           if [ -z "$expected" ]; then
             echo "::error::Could not read CHART_DB_DATA_VERSION"
@@ -220,7 +220,7 @@ jobs:
       # The deploy waits for the build, so a broken build still fails this job.
       #
       # The CLI is run from the repository root, not from
-      # spotify-clonehero-next: the project's Root Directory setting comes from
+      # apps/site: the project's Root Directory setting comes from
       # the project itself and the CLI applies it. Running from inside the app
       # directory would apply it twice.
       #
