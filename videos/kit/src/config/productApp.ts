@@ -3,15 +3,16 @@
  *
  * A film draws the real highway with the app's three.js renderer and reads
  * app modules, so its bundle must:
- * - resolve `@/...` (the app's own imports) and `@product/...` (the film's
- *   imports of app code) to the app's source root;
- * - compile app sources with the app's TypeScript semantics: the app leaves
+ * - resolve `@/...` (the app's own imports) to the app's source root, and
+ *   `@product/lib/...` and `@product/components/...` (the film's imports of
+ *   product code) to core's source (packages/core/src);
+ * - compile app and core sources with the app's TypeScript semantics: the app leaves
  *   `useDefineForClassFields` off, while the kit's ES2022 target turns it
  *   on, and the difference changes what declared-only class fields do;
  * - keep one copy of each library the app, the kit and the film share
  *   (the highway's asset hooks need a single THREE);
- * - find bare imports from app files even where the app has no
- *   node_modules of its own (a worktree), through the film's and the kit's.
+ * - find bare imports from app and core files even where they have no
+ *   node_modules of their own (a worktree), through the film's and the kit's.
  *
  * A film states where its app is in ONE module, `productApp.config.ts`
  * beside its remotion.config.ts. The config passes it to
@@ -35,6 +36,9 @@ const KIT_ROOT = path.resolve(
 /** Where the app sits relative to the kit: videos/kit -> ../../apps/site. */
 const DEFAULT_APP_ROOT = path.resolve(KIT_ROOT, '../../apps/site');
 
+/** Core's source, shared by every app: videos/kit -> ../../packages/core/src. */
+const CORE_ROOT = path.resolve(KIT_ROOT, '../../packages/core/src');
+
 /** The module a film states its options in, beside its remotion.config.ts. */
 export const PRODUCT_APP_CONFIG = 'productApp.config.ts';
 
@@ -52,6 +56,8 @@ export interface ProductAppOptions {
 
 export interface ProductAppPaths {
   appRoot: string;
+  /** Core's source folder, where `@product/lib` and `@product/components` point. */
+  coreRoot: string;
   kitRoot: string;
   filmRoot: string;
   /** The film's own public/, the folder Remotion serves. */
@@ -86,6 +92,7 @@ export const productAppPaths = (
   }
   return {
     appRoot,
+    coreRoot: CORE_ROOT,
     kitRoot: KIT_ROOT,
     filmRoot: film,
     publicDir: path.join(film, 'public'),
@@ -120,7 +127,12 @@ export const productAppWebpack = (
   options: ProductAppOptions = {},
 ): WebpackOverrideFn => {
   // Resolve now: Remotion runs the override later, from another directory.
-  const {appRoot, kitRoot, filmRoot: film} = productAppPaths(filmRoot, options);
+  const {
+    appRoot,
+    coreRoot,
+    kitRoot,
+    filmRoot: film,
+  } = productAppPaths(filmRoot, options);
   const roots = [film, kitRoot];
   const singles: Record<string, string> = {};
   for (const name of SINGLE_COPY) {
@@ -161,9 +173,9 @@ export const productAppWebpack = (
         ...config.module,
         rules: [
           ...rules.map(rule =>
-            rule === tsRule ? {...tsRule, exclude: appRoot} : rule,
+            rule === tsRule ? {...tsRule, exclude: [appRoot, coreRoot]} : rule,
           ),
-          {test: /\.tsx?$/, include: appRoot, use: appUse},
+          {test: /\.tsx?$/, include: [appRoot, coreRoot], use: appUse},
         ],
       },
       resolve: {
@@ -171,6 +183,8 @@ export const productAppWebpack = (
         alias: {
           ...config.resolve?.alias,
           '@': appRoot,
+          '@product/lib': coreRoot,
+          '@product/components': path.join(coreRoot, 'components'),
           '@product': appRoot,
           ...singles,
         },

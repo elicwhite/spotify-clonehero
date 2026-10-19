@@ -1,17 +1,19 @@
 /**
- * Types for the app modules the kit imports through the `@product` alias
- * (withProductApp maps it to the app's source root). This is the one copy:
- * a film that needs more of one of these modules adds it here, because a
- * second `declare module` for the same name would clash with this one.
+ * Types for the product modules the kit imports through the `@product` alias
+ * (withProductApp maps `@product/lib/*` and `@product/components/*` to
+ * packages/core/src). This is the one copy: a film that needs more of one of
+ * these modules adds it here, because a second `declare module` for the same
+ * name would clash with this one.
  *
- * Webpack bundles the app's real sources; these declarations describe only
- * the slice of their API the kit calls, so the kit type-checks without
- * compiling the app's files under its stricter settings. Each block names the
- * file it mirrors. kit/test/highway-product-modules.test.ts checks every
- * block against the app's own types.
+ * Webpack bundles the real sources; these declarations describe only the
+ * slice of their API the kit calls, so the kit type-checks without compiling
+ * core's files under its stricter settings. Each block names the file it
+ * mirrors (CORE is packages/core/src).
+ * kit/test/highway-product-modules.test.ts checks every block against core's
+ * own types.
  */
 
-// APP/lib/preview/highway/stage.ts
+// CORE/preview/highway/stage.ts
 declare module '@product/lib/preview/highway/stage' {
   import type {RefObject} from 'react';
   import type {parseChartFile} from '@eliwhite/scan-chart';
@@ -21,7 +23,7 @@ declare module '@product/lib/preview/highway/stage' {
   import type {OverlayState} from '@product/lib/preview/highway/SceneOverlays';
   import type {HighwayMode} from '@product/lib/preview/highway/HighwayScene';
 
-  /** APP/lib/preview/chorus-chart-processing.ts `ParsedChart`. */
+  /** CORE/preview/chorus-chart-processing.ts `ParsedChart`. */
   type StageChart = ReturnType<typeof parseChartFile>;
 
   export interface StageConfig {
@@ -92,12 +94,12 @@ declare module '@product/lib/preview/highway/stage' {
   ): HighwayStage;
 }
 
-// APP/lib/preview/highway/HighwayScene.ts
+// CORE/preview/highway/HighwayScene.ts
 declare module '@product/lib/preview/highway/HighwayScene' {
   export type HighwayMode = 'classic' | 'waveform';
 }
 
-// APP/lib/preview/highway/SceneOverlays.ts
+// CORE/preview/highway/SceneOverlays.ts
 declare module '@product/lib/preview/highway/SceneOverlays' {
   export interface OverlayState {
     cursorTick: number;
@@ -109,7 +111,7 @@ declare module '@product/lib/preview/highway/SceneOverlays' {
   }
 }
 
-// APP/lib/preview/highway/layout.ts
+// CORE/preview/highway/layout.ts
 declare module '@product/lib/preview/highway/layout' {
   export interface HighwayRect {
     x: number;
@@ -130,12 +132,12 @@ declare module '@product/lib/preview/highway/layout' {
   }): StageLayout;
 }
 
-// APP/lib/preview/highway/cameraFit.ts
+// CORE/preview/highway/cameraFit.ts
 declare module '@product/lib/preview/highway/cameraFit' {
   export const STRIKELINE_WORLD_Y: number;
 }
 
-// APP/lib/preview/highway/highwayCamera.ts
+// CORE/preview/highway/highwayCamera.ts
 declare module '@product/lib/preview/highway/highwayCamera' {
   import type {PerspectiveCamera} from 'three';
   export function createHighwayCamera(worldX?: number): PerspectiveCamera;
@@ -146,25 +148,25 @@ declare module '@product/lib/preview/highway/highwayCamera' {
   ): void;
 }
 
-// APP/lib/preview/highway/NoteRenderer.ts
+// CORE/preview/highway/NoteRenderer.ts
 declare module '@product/lib/preview/highway/NoteRenderer' {
   /** How far up a gem sprite's height its anchor (the note's point) sits: 0 is its bottom edge. */
   export const GEM_ANCHOR_Y: number;
 }
 
-// APP/lib/preview/highway/types.ts
+// CORE/preview/highway/types.ts
 declare module '@product/lib/preview/highway/types' {
   /** A gem sprite's height, in world units. */
   export const SCALE: number;
 }
 
-// APP/lib/preview/highway/LyricsOverlay.ts
+// CORE/preview/highway/LyricsOverlay.ts
 declare module '@product/lib/preview/highway/LyricsOverlay' {
   /** The height of the karaoke band across the top of the stage's canvas, CSS px. */
   export const CANVAS_CSS_HEIGHT: number;
 }
 
-// APP/lib/preview/highway/SceneReconciler.ts
+// CORE/preview/highway/SceneReconciler.ts
 declare module '@product/lib/preview/highway/SceneReconciler' {
   /** What `computeChartElements` gives and `setElements` takes; the kit passes it through. */
   export interface ChartElement {
@@ -179,12 +181,12 @@ declare module '@product/lib/preview/highway/SceneReconciler' {
   }
 }
 
-// APP/lib/preview/highway/reconcilerKey.ts
+// CORE/preview/highway/reconcilerKey.ts
 declare module '@product/lib/preview/highway/reconcilerKey' {
   export function reconcilerKeyFor(kind: 'note', id: string): string;
 }
 
-// APP/lib/chart-edit/index.ts
+// CORE/chart-edit/index.ts
 declare module '@product/lib/chart-edit' {
   import type {
     ChartDocument,
@@ -223,7 +225,7 @@ declare module '@product/lib/chart-edit' {
   export const DEFAULT_VOCALS_PART: string;
 }
 
-// APP/lib/chart-edit/instruments/index.ts
+// CORE/chart-edit/instruments/index.ts
 declare module '@product/lib/chart-edit/instruments' {
   import type {NoteType} from '@eliwhite/scan-chart';
   export interface LaneDefinition {
@@ -240,7 +242,7 @@ declare module '@product/lib/chart-edit/instruments' {
   export const guitarSchema: InstrumentSchema;
 }
 
-// APP/lib/drum-transcription/chart-types.ts
+// CORE/drum-transcription/chart-types.ts
 declare module '@product/lib/drum-transcription/chart-types' {
   export interface TimedTempo {
     tick: number;
@@ -249,7 +251,7 @@ declare module '@product/lib/drum-transcription/chart-types' {
   }
 }
 
-// APP/lib/drum-transcription/timing.ts
+// CORE/drum-transcription/timing.ts
 declare module '@product/lib/drum-transcription/timing' {
   import type {TimedTempo} from '@product/lib/drum-transcription/chart-types';
   export function buildTimedTempos(
@@ -258,8 +260,8 @@ declare module '@product/lib/drum-transcription/timing' {
   ): TimedTempo[];
 }
 
-// APP/components/chart-editor/capabilities.ts
-declare module '@product/components/chart-editor/capabilities' {
+// CORE/chart-editor-core/capabilities.ts
+declare module '@product/lib/chart-editor-core/capabilities' {
   export interface EditorCapabilities {
     showDrumLanes: boolean;
   }
@@ -267,7 +269,7 @@ declare module '@product/components/chart-editor/capabilities' {
   export const DRUM_EDIT_CAPABILITIES: EditorCapabilities;
 }
 
-// APP/components/chart-editor/trackLabels.ts
+// CORE/components/chart-editor/trackLabels.ts
 declare module '@product/components/chart-editor/trackLabels' {
   import type {Difficulty} from '@eliwhite/scan-chart';
   /** The highway pane chip's text, e.g. instrument and difficulty joined by a middle dot. */
@@ -277,8 +279,8 @@ declare module '@product/components/chart-editor/trackLabels' {
   }): string;
 }
 
-// APP/components/chart-editor/scope.ts
-declare module '@product/components/chart-editor/scope' {
+// CORE/chart-editor-core/scope.ts
+declare module '@product/lib/chart-editor-core/scope' {
   import type {TrackKey} from '@product/lib/chart-edit';
   export type EditorScope =
     | {kind: 'global'}
@@ -291,12 +293,12 @@ declare module '@product/components/chart-editor/scope' {
   ): string;
 }
 
-// APP/components/chart-editor/highway/useChartElements.ts
+// CORE/components/chart-editor/highway/useChartElements.ts
 declare module '@product/components/chart-editor/highway/useChartElements' {
   import type {ParsedChart} from '@eliwhite/scan-chart';
   import type {ChartElement} from '@product/lib/preview/highway/SceneReconciler';
-  import type {EditorCapabilities} from '@product/components/chart-editor/capabilities';
-  import type {EditorScope} from '@product/components/chart-editor/scope';
+  import type {EditorCapabilities} from '@product/lib/chart-editor-core/capabilities';
+  import type {EditorScope} from '@product/lib/chart-editor-core/scope';
   import type {TimedTempo} from '@product/lib/drum-transcription/chart-types';
 
   /** A live note drag: selected notes follow the cursor before the move commits. */
@@ -318,8 +320,8 @@ declare module '@product/components/chart-editor/highway/useChartElements' {
   }): ChartElement[];
 }
 
-// APP/components/chart-editor/commands.ts
-declare module '@product/components/chart-editor/commands' {
+// CORE/chart-editor-core/commands.ts
+declare module '@product/lib/chart-editor-core/commands' {
   import type {ChartDocument, NoteType} from '@eliwhite/scan-chart';
   import type {TrackKey} from '@product/lib/chart-edit';
   import type {InstrumentSchema} from '@product/lib/chart-edit/instruments';

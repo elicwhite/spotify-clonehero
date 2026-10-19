@@ -1,12 +1,13 @@
 /**
- * Resolution for tests that load kit code built on the app. Importing this
- * module registers it: the `@product/...` alias maps to the app's source
- * root, as withProductApp maps it for webpack, and the app's own `@/...`
- * alias to the same root. Package imports inside the app's files resolve to
- * the kit's packages (three, scan-chart), so the app needs no node_modules
- * of its own. The hook is synchronous (`registerHooks`), so it also covers
- * the app's files, which tsx (`--import tsx`) compiles and loads as
- * CommonJS: their packages load as the kit's CommonJS builds.
+ * Resolution for tests that load kit code built on the product. Importing
+ * this module registers it: `@product/lib/...` and `@product/components/...`
+ * map to core's source (packages/core/src), as withProductApp maps them for
+ * webpack, and the app's own `@/...` alias to the app's source root. Package
+ * imports inside the app's and core's files resolve to the kit's packages
+ * (three, scan-chart), so they need no node_modules of their own. The hook is
+ * synchronous (`registerHooks`), so it also covers those files, which tsx
+ * (`--import tsx`) compiles and loads as CommonJS: their packages load as the
+ * kit's CommonJS builds.
  *
  * Import it before the code, and that code dynamically (static imports are
  * resolved before any module runs):
@@ -21,21 +22,30 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const KIT = fileURLToPath(new URL('../../', import.meta.url));
 const APP = path.resolve(KIT, '../../apps/site');
+const CORE = path.resolve(KIT, '../../packages/core/src');
 const APP_URL = pathToFileURL(`${APP}${path.sep}`).href;
+const CORE_URL = pathToFileURL(`${CORE}${path.sep}`).href;
 const KIT_PACKAGE_URL = pathToFileURL(path.join(KIT, 'package.json')).href;
 const kitRequire = createRequire(KIT_PACKAGE_URL);
 
-const ALIASES = ['@product/', '@/'];
+/** Each alias prefix and the source folder it maps to. */
+const ALIASES = [
+  ['@product/lib/', CORE],
+  ['@product/components/', path.join(CORE, 'components')],
+  ['@/', APP],
+];
 
-/** The app source file an aliased specifier names, or null. */
+/** The source file an aliased specifier names, or null. */
 const appSource = specifier => {
-  const alias = ALIASES.find(prefix => specifier.startsWith(prefix));
+  const alias = ALIASES.find(([prefix]) => specifier.startsWith(prefix));
   if (!alias) return null;
-  const base = path.join(APP, specifier.slice(alias.length));
+  const [prefix, root] = alias;
+  const base = path.join(root, specifier.slice(prefix.length));
   const file = [`${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')].find(
     candidate => fs.existsSync(candidate),
   );
-  if (!file) throw new Error(`[product-resolve] no app file for ${specifier}`);
+  if (!file)
+    throw new Error(`[product-resolve] no source file for ${specifier}`);
   return pathToFileURL(file).href;
 };
 
@@ -45,7 +55,11 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const source = appSource(specifier);
     if (source) return nextResolve(source, context);
-    if (!isPackage(specifier) || !context.parentURL?.startsWith(APP_URL))
+    const parent = context.parentURL ?? '';
+    if (
+      !isPackage(specifier) ||
+      !(parent.startsWith(APP_URL) || parent.startsWith(CORE_URL))
+    )
       return nextResolve(specifier, context);
     // CommonJS resolution looks from the requiring file whatever the context
     // says, so a require is resolved here; an import follows `parentURL`.

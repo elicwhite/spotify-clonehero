@@ -12,7 +12,7 @@ import {noteTypes} from '@eliwhite/scan-chart';
 import {
   HIGHWAY_CAMERA,
   strikelineInCameraSpace,
-} from '../../../apps/site/lib/preview/highway/cameraFit';
+} from '../../../packages/core/src/preview/highway/cameraFit';
 import {STRIKELINE_Y} from '../src/highway/floor';
 
 const {

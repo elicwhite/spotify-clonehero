@@ -19,7 +19,7 @@ import {
 import type {StageLayout} from '@product/lib/preview/highway/layout';
 import {findTrack} from '@product/lib/chart-edit';
 import {buildTimedTempos} from '@product/lib/drum-transcription/timing';
-import {trackKeyId} from '@product/components/chart-editor/scope';
+import {trackKeyId} from '@product/lib/chart-editor-core/scope';
 import {
   drawReplayed,
   type Karaoke,

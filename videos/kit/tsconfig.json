@@ -6,7 +6,7 @@
     // exports them (test/package-exports.test.ts keeps the two equal), so the
     // template cannot typecheck an import a film cannot resolve.
     "paths": {
-      "@product/lib/og/*": ["../../apps/site/lib/og/*"],
+      "@product/lib/og/*": ["../../packages/core/src/og/*"],
       "@musiccharts/video-kit/brand": ["./src/brand/index.ts"],
       "@musiccharts/video-kit/brand/endCardTiming": [
         "./src/brand/endCardTiming.ts"

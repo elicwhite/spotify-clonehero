@@ -15,7 +15,7 @@ import {describe, it} from 'node:test';
 import ts from 'typescript';
 
 const KIT = path.resolve(import.meta.dirname, '..');
-const APP = path.resolve(KIT, '../../apps/site');
+const CORE = path.resolve(KIT, '../../packages/core/src');
 const DTS = path.join(KIT, 'src/highway/product-modules.d.ts');
 const CHECK = path.join(KIT, 'test/product-modules.check.ts');
 
@@ -102,9 +102,12 @@ const declaredExports = (): Declared[] => {
   return out;
 };
 
-/** The app file a `@product/...` module mirrors. */
+/** The core file a `@product/lib/...` or `@product/components/...` module mirrors. */
 const appFile = (module: string): string => {
-  const base = path.join(APP, module.slice('@product/'.length));
+  const base = path.join(
+    CORE,
+    module.slice('@product/'.length).replace(/^lib\//, ''),
+  );
   const found = [`${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')].find(
     f => fs.existsSync(f),
   );
@@ -169,7 +172,6 @@ const compile = (text: string) => {
     lib: ['lib.es2023.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
     baseUrl: '/',
     paths: {
-      '@/*': [`${APP}/*`],
       three: [kitPackage('@types', 'three')],
       'three/*': [kitPackage('@types', 'three', '*')],
       '@eliwhite/scan-chart': [kitPackage('@eliwhite', 'scan-chart')],

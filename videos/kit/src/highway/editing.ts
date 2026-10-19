@@ -10,7 +10,7 @@ import {
   DeleteNotesCommand,
   MoveEntitiesCommand,
   SetNoteLengthCommand,
-} from '@product/components/chart-editor/commands';
+} from '@product/lib/chart-editor-core/commands';
 import {
   findTrack,
   listNotes,

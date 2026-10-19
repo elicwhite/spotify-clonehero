@@ -62,14 +62,15 @@ videos workspace, found from the kit's own location (`videos/kit` →
 
 What the override does:
 
-- aliases `@` and `@product` to the app root;
+- aliases `@` and `@product` to the app root, and `@product/lib` and
+  `@product/components` to core's source (`packages/core/src`);
 - aliases `react-dom`, `three` and `@eliwhite/scan-chart` to one real copy
   (the film's, else the kit's); React and Remotion are already pinned by
   Remotion's own config;
 - adds the film's and the kit's `node_modules` as fallbacks for bare
-  imports from app files;
-- compiles `.ts`/`.tsx` under the app root with `useDefineForClassFields:
-false`.
+  imports from app and core files;
+- compiles `.ts`/`.tsx` under the app root and core's source with
+  `useDefineForClassFields: false`.
 
 ## Rules
 

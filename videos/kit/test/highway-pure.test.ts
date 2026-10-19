@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 import {noteTypes, parseChartAndIni} from '@eliwhite/scan-chart';
-import {STRIKELINE_WORLD_Y} from '../../../apps/site/lib/preview/highway/cameraFit';
+import {STRIKELINE_WORLD_Y} from '../../../packages/core/src/preview/highway/cameraFit';
 import {
   FLOOR_FAR_Y,
   floorCorners,
