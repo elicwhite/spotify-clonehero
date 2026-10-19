@@ -103,6 +103,10 @@ export function useAutoScroll({
   songKey: string;
 }): AutoScrollState & {
   getChartTimeSec: () => number | null;
+  /** Tells the follower where the band is in chart time. The page moves
+   *  there at once and the follower tracks on from it. Does nothing until
+   *  the follower is running. */
+  seekChartTimeSec: (chartTimeSec: number) => void;
   /** Null until the follower is running. */
   saveRecording: (() => void) | null;
 } {
@@ -117,6 +121,7 @@ export function useAutoScroll({
     speed: number;
   } | null>(null);
   const [saveRecording, setSaveRecording] = useState<(() => void) | null>(null);
+  const sendSeekRef = useRef<((refTimeSec: number) => void) | null>(null);
 
   const getChartTimeSec = useCallback(() => {
     const anchor = anchorRef.current;
@@ -128,6 +133,22 @@ export function useAutoScroll({
     // and the sheet is drawn in chart time.
     return refTimeSec - chartDelaySec;
   }, [chartDelaySec]);
+
+  const seekChartTimeSec = useCallback(
+    (chartTimeSec: number) => {
+      const refTimeSec = chartTimeSec + chartDelaySec - LATENCY_LEAD_SEC;
+      const anchor = anchorRef.current;
+      // Not following yet, or the band is quiet: there is no place to move.
+      if (!anchor || !sendSeekRef.current) return;
+      anchorRef.current = {
+        refTimeSec,
+        receivedAtMs: performance.now(),
+        speed: anchor.speed,
+      };
+      sendSeekRef.current(refTimeSec);
+    },
+    [chartDelaySec],
+  );
 
   useEffect(() => {
     // Switching off is reported by deriving the returned state below rather
@@ -141,6 +162,9 @@ export function useAutoScroll({
     let worker: Worker | null = null;
     let context: AudioContext | null = null;
     let stream: MediaStream | null = null;
+    // Positions the worker sent before it heard of a seek are from the place
+    // the page just left, and would move it back.
+    let seeksUnanswered = 0;
 
     const fail = (message: string) => {
       if (cancelled) return;
@@ -203,7 +227,11 @@ export function useAutoScroll({
           );
           return;
         }
-        if (message.type !== 'position') return;
+        if (message.type === 'seeked') {
+          seeksUnanswered--;
+          return;
+        }
+        if (message.type !== 'position' || seeksUnanswered > 0) return;
         if (!message.playing) {
           anchorRef.current = null;
           setState(prev => ({...prev, status: 'listening', confidence: 0}));
@@ -228,6 +256,10 @@ export function useAutoScroll({
       };
       const send = (message: FollowWorkerRequest, transfer?: Transferable[]) =>
         worker?.postMessage(message, transfer ?? []);
+      sendSeekRef.current = refTimeSec => {
+        seeksUnanswered++;
+        send({type: 'seek', refTimeSec});
+      };
       send(
         {
           type: 'reference',
@@ -288,6 +320,7 @@ export function useAutoScroll({
     return () => {
       cancelled = true;
       anchorRef.current = null;
+      sendSeekRef.current = null;
       setSaveRecording(null);
       worker?.terminate();
       stream?.getTracks().forEach(track => track.stop());
@@ -298,6 +331,7 @@ export function useAutoScroll({
   return {
     ...(enabled ? state : OFF_STATE),
     getChartTimeSec,
+    seekChartTimeSec,
     saveRecording: enabled ? saveRecording : null,
   };
 }

@@ -35,6 +35,8 @@ export type FollowWorkerRequest =
   | {type: 'reference'; pcm: Float32Array; rememberedSpeed?: number | undefined}
   | {type: 'audio'; pcm: Float32Array}
   | {type: 'save-recording'}
+  /** Someone says where the band is, in reference seconds. */
+  | {type: 'seek'; refTimeSec: number}
   | {type: 'reset'};
 
 export type FollowWorkerResponse =
@@ -51,6 +53,9 @@ export type FollowWorkerResponse =
       wallClockSec: number;
     }
   | {type: 'error'; message: string}
+  /** The answer to a seek, after which every position is from the new place.
+   *  Positions sent before it are from the old one. */
+  | {type: 'seeked'}
   | {
       type: 'position';
       phase: 'idle' | 'bootstrapping' | 'tracking';
@@ -119,7 +124,7 @@ function handleAudio(pcm: Float32Array) {
     captureStartSamples = streamSamples - pcm.length;
     follower.beginSong(streamSec - event.startedSecondsAgo);
   } else if (event.justStopped) {
-    follower.reset();
+    follower.stop(streamSec);
     stream.reset();
     post({
       type: 'position',
@@ -176,6 +181,10 @@ self.onmessage = (event: MessageEvent<FollowWorkerRequest>) => {
         break;
       case 'audio':
         handleAudio(message.pcm);
+        break;
+      case 'seek':
+        follower?.seek(message.refTimeSec);
+        post({type: 'seeked'});
         break;
       case 'save-recording': {
         const pcm = new Float32Array(recordedSamples);

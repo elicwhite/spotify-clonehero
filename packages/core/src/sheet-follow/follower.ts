@@ -71,6 +71,32 @@ export interface FollowerOptions {
    *  75% of the time on screen with a 38-second outage to 100% with none, and
    *  moved nothing else. */
   rememberedSpeed?: number | undefined;
+  /** Seconds between whole-song searches for the band's place, which find the
+   *  band when the estimate is somewhere else entirely: auto-scroll turned on
+   *  after the song started, or a recording with an intro the band skips.
+   *  Tracking cannot recover from these, because it only looks
+   *  `searchRadiusSec` either side of where it already is. */
+  relocateEverySec: number;
+  /** Places each whole-song search keeps. */
+  relocatePeaks: number;
+  /** Searches in a row that must agree before the estimate moves. One search
+   *  is not enough: from a 20s window the best place is the true one only
+   *  about half the time, and the wrong winners are a few places in the song
+   *  that match everything. But the true place is almost always among the
+   *  best three, and it is the one that moves on as the band plays. */
+  relocateChain: number;
+  /** How far a place may be from where the previous search's place, moved on
+   *  at the band's possible speeds, says it should be. */
+  relocateToleranceSec: number;
+  /** How far below the best place's score a place at the estimate may be and
+   *  still keep it. A part that comes back later in the song, a bass line or
+   *  a chorus, is nearly always among the best three, so being among them is
+   *  not enough to hold a wrong estimate there. Below 0.03 it starts to move
+   *  estimates that were right. */
+  relocateSupportScore: number;
+  /** A song that starts this soon after a stop is the same song going on:
+   *  the band went quiet for a few bars, as in a drop-out. */
+  resumeWithinSec: number;
 }
 
 export const DEFAULT_FOLLOWER_OPTIONS: FollowerOptions = {
@@ -84,6 +110,12 @@ export const DEFAULT_FOLLOWER_OPTIONS: FollowerOptions = {
   maxCorrectionSec: 1,
   positionGain: 0.3,
   speedIntegralGain: 0.8,
+  relocateEverySec: 5,
+  relocatePeaks: 3,
+  relocateChain: 3,
+  relocateToleranceSec: 1.5,
+  relocateSupportScore: 0.05,
+  resumeWithinSec: 20,
 };
 
 export interface MatchResult {
@@ -120,21 +152,22 @@ function dot12(a: Float32Array, ai: number, b: Float32Array, bi: number) {
   return s;
 }
 
-/**
- * Searches (reference position, speed) for the placement of the observation
- * window that best matches the reference. Pure, so the whole tracking rule can
- * be tested without audio hardware.
- */
-export function matchWindow(query: MatchQuery): MatchResult | null {
+interface ScoredPlacement {
+  frame: number;
+  speed: number;
+  score: number;
+}
+
+/** Scores every (reference end frame, speed) placement the query allows. */
+function scorePlacements(query: MatchQuery): ScoredPlacement[] {
   const {
     reference,
     referenceFrameCount,
     observation,
     observationCount,
     speeds,
-    rivalExclusionSec,
   } = query;
-  if (observationCount === 0 || referenceFrameCount === 0) return null;
+  if (observationCount === 0 || referenceFrameCount === 0) return [];
 
   const stride = query.stride ?? 2;
   const loFrame = Math.max(0, Math.round(query.refEndLoSec * CHROMA_FPS));
@@ -142,9 +175,8 @@ export function matchWindow(query: MatchQuery): MatchResult | null {
     referenceFrameCount - 1,
     Math.round(query.refEndHiSec * CHROMA_FPS),
   );
-  if (hiFrame < loFrame) return null;
 
-  const scored: {frame: number; speed: number; score: number}[] = [];
+  const scored: ScoredPlacement[] = [];
   for (const speed of speeds) {
     for (let endFrame = loFrame; endFrame <= hiFrame; endFrame++) {
       let sum = 0;
@@ -167,7 +199,18 @@ export function matchWindow(query: MatchQuery): MatchResult | null {
       scored.push({frame: endFrame, speed, score: sum / counted});
     }
   }
+  return scored;
+}
+
+/**
+ * Searches (reference position, speed) for the placement of the observation
+ * window that best matches the reference. Pure, so the whole tracking rule can
+ * be tested without audio hardware.
+ */
+export function matchWindow(query: MatchQuery): MatchResult | null {
+  const scored = scorePlacements(query);
   if (scored.length === 0) return null;
+  const {rivalExclusionSec} = query;
 
   let best = scored[0];
   for (const c of scored) if (c.score > best.score) best = c;
@@ -185,6 +228,76 @@ export function matchWindow(query: MatchQuery): MatchResult | null {
     score: best.score,
     margin: rival === -Infinity ? best.score : best.score - rival,
   };
+}
+
+/** A place in the reference where the observation window matches well. */
+export interface Peak {
+  /** Reference time, in seconds, of the newest observation frame. */
+  refEndSec: number;
+  speed: number;
+  score: number;
+}
+
+/**
+ * The `count` best-matching places for the observation window, each at least
+ * `separationSec` from the others, best first. In a song that repeats, the
+ * true place is often not the best one but is nearly always among the best
+ * three.
+ */
+export function topPeaks(
+  query: MatchQuery,
+  count: number,
+  separationSec: number,
+): Peak[] {
+  const best = new Map<number, ScoredPlacement>();
+  for (const c of scorePlacements(query)) {
+    const held = best.get(c.frame);
+    if (!held || c.score > held.score) best.set(c.frame, c);
+  }
+  const byScore = [...best.values()].sort((a, b) => b.score - a.score);
+  const separation = separationSec * CHROMA_FPS;
+  const peaks: ScoredPlacement[] = [];
+  for (const c of byScore) {
+    if (peaks.some(p => Math.abs(p.frame - c.frame) < separation)) continue;
+    peaks.push(c);
+    if (peaks.length === count) break;
+  }
+  return peaks.map(p => ({
+    refEndSec: p.frame / CHROMA_FPS,
+    speed: p.speed,
+    score: p.score,
+  }));
+}
+
+/**
+ * Each frame less the mean of `frames`, scaled to unit length. A room and its
+ * microphone colour every frame of the band the same way, and a song has a
+ * sound of its own in every frame; with both removed, a frame keeps only what
+ * changes as the song goes on. The best place a whole-song search found was
+ * the true one about twice as often with centred frames.
+ */
+export function centreChroma(
+  frames: Float32Array,
+  count: number,
+): Float32Array {
+  const mean = new Float32Array(CHROMA_BINS);
+  for (let i = 0; i < count; i++) {
+    for (let b = 0; b < CHROMA_BINS; b++) {
+      mean[b] += frames[i * CHROMA_BINS + b] / count;
+    }
+  }
+  const out = new Float32Array(count * CHROMA_BINS);
+  for (let i = 0; i < count; i++) {
+    let norm = 0;
+    for (let b = 0; b < CHROMA_BINS; b++) {
+      const v = frames[i * CHROMA_BINS + b] - mean[b];
+      out[i * CHROMA_BINS + b] = v;
+      norm += v * v;
+    }
+    norm = Math.sqrt(norm) || 1;
+    for (let b = 0; b < CHROMA_BINS; b++) out[i * CHROMA_BINS + b] /= norm;
+  }
+  return out;
 }
 
 /** Speeds to try while tracking: small refinements around the current estimate. */
@@ -249,6 +362,7 @@ export class ScoreFollower {
   #opts: FollowerOptions;
   #reference: Float32Array;
   #referenceFrameCount: number;
+  #centredReference: Float32Array;
 
   #window: Float32Array;
   #windowCapacity: number;
@@ -261,6 +375,13 @@ export class ScoreFollower {
   #songStartStreamSec = 0;
   #speed = 1;
   #confidence = 0;
+  /** The latest whole-song searches, oldest first. */
+  #searches: {streamSec: number; peaks: Peak[]}[] = [];
+  /** Whole-song searches in a row that found no place near the estimate. */
+  #unsupported = 0;
+  /** Where the band was when it last went quiet, or null. */
+  #stopped: {streamSec: number; refTimeSec: number; speed: number} | null =
+    null;
 
   constructor(
     reference: Float32Array,
@@ -270,6 +391,7 @@ export class ScoreFollower {
     this.#opts = {...DEFAULT_FOLLOWER_OPTIONS, ...options};
     this.#reference = reference;
     this.#referenceFrameCount = referenceFrameCount;
+    this.#centredReference = centreChroma(reference, referenceFrameCount);
     this.#windowCapacity = Math.round(this.#opts.windowSec * CHROMA_FPS);
     this.#window = new Float32Array(this.#windowCapacity * CHROMA_BINS);
   }
@@ -285,21 +407,64 @@ export class ScoreFollower {
     this.#refTimeSec = 0;
     this.#speed = 1;
     this.#confidence = 0;
+    this.#searches = [];
+    this.#unsupported = 0;
+    this.#stopped = null;
   }
 
-  /** Declares that a song just started, at the top. Songs start at the
-   *  beginning in practice, and assuming it removes a global search that was
-   *  measured not to work. */
+  /** Declares that the band went quiet. A song that starts again within
+   *  `resumeWithinSec` goes on from here. A stop before the follower found
+   *  its place is a false start, a count-in or a tuning check, and the next
+   *  start is at the top. */
+  stop(streamSec: number) {
+    const stopped =
+      this.#phase !== 'tracking'
+        ? null
+        : {
+            streamSec,
+            refTimeSec: this.refTimeAt(streamSec),
+            speed: this.#speed,
+          };
+    this.reset();
+    this.#stopped = stopped;
+  }
+
+  /** Declares where the band is, from someone who can see it: the estimate
+   *  moves there and tracking goes on from it. Ignored when no song is
+   *  playing. */
+  seek(refTimeSec: number) {
+    if (this.#phase === 'idle') return;
+    this.#phase = 'tracking';
+    this.#refTimeSec = refTimeSec;
+    this.#anchorStreamSec = this.#lastFrameStreamSec;
+    this.#confidence = 0;
+    this.#searches = [];
+    this.#unsupported = 0;
+  }
+
+  /** Declares that a song just started: at the top, or where the band was
+   *  when it went quiet less than `resumeWithinSec` ago. Songs start at the
+   *  beginning in practice, and `#relocate` finds the band when one does
+   *  not. */
   beginSong(streamSec: number) {
-    this.#count = 0;
-    this.#phase = 'bootstrapping';
-    this.#refTimeSec = 0;
+    const stopped = this.#stopped;
+    this.reset();
     this.#anchorStreamSec = streamSec;
     this.#songStartStreamSec = streamSec;
+    if (
+      stopped &&
+      streamSec - stopped.streamSec <= this.#opts.resumeWithinSec
+    ) {
+      this.#phase = 'tracking';
+      this.#speed = stopped.speed;
+      this.#refTimeSec =
+        stopped.refTimeSec + (streamSec - stopped.streamSec) * stopped.speed;
+      return;
+    }
+    this.#phase = 'bootstrapping';
     // A band covering a song plays near the record's tempo, so that is the
     // starting guess when this song has not been played before.
     this.#speed = this.#opts.rememberedSpeed || 1.0;
-    this.#confidence = 0;
   }
 
   pushFrame(chroma: Float32Array, streamSec: number) {
@@ -317,7 +482,9 @@ export class ScoreFollower {
   /** Reference position at a given stream time, dead-reckoned from the last
    *  accepted match. */
   refTimeAt(streamSec: number): number {
-    return this.#refTimeSec + (streamSec - this.#anchorStreamSec) * this.#speed;
+    const sec =
+      this.#refTimeSec + (streamSec - this.#anchorStreamSec) * this.#speed;
+    return Math.min(sec, this.#referenceFrameCount / CHROMA_FPS);
   }
 
   snapshot(streamSec: number): FollowSnapshot {
@@ -345,7 +512,10 @@ export class ScoreFollower {
     // search every half second instead lets each pass move the estimate by the
     // whole search radius and then re-anchor to it, which walks the follower
     // out of the song within a few seconds.
-    if (bootstrapping && this.#count < this.#windowCapacity) return null;
+    if (bootstrapping && this.#count < this.#windowCapacity) {
+      this.#relocate();
+      return null;
+    }
 
     const predicted = this.refTimeAt(this.#lastFrameStreamSec);
     // The cold start searches around the coasted prediction, exactly like
@@ -358,10 +528,10 @@ export class ScoreFollower {
     // estimate that had coasted to within half a second of the truth with one
     // ten seconds out. Coasting from the top at a plausible speed is a good
     // estimate — measured band speeds span 1.07 to 1.27 — so the cold start's
-    // real job is to pin the speed, not to find the song. Finding the song from
-    // scratch is not on the table anyway: a whole-song search from a 20s window
-    // lands within 10s of the truth about one time in ten, and lengthening the
-    // window to 90s does not improve it.
+    // real job is to pin the speed, not to find the song. One whole-song search
+    // from a 20s window is not good enough to find it: its best place is the
+    // true one only about half the time. `#relocate` finds the song when the
+    // top is wrong, from several searches that agree.
     const radius = bootstrapping
       ? this.#opts.bootstrapRadiusSec
       : this.#opts.searchRadiusSec;
@@ -381,7 +551,12 @@ export class ScoreFollower {
       rivalExclusionSec: this.#opts.rivalExclusionSec,
       stride: bootstrapping ? 4 : 2,
     });
-    if (!match) return null;
+    if (!match) {
+      // Nothing to match is itself a finding when the estimate is off the end
+      // of the song, and only the whole-song search can bring it back.
+      this.#relocate();
+      return null;
+    }
 
     const trust = Math.max(
       0,
@@ -421,6 +596,100 @@ export class ScoreFollower {
       this.#opts.minSpeed,
       Math.min(this.#opts.maxSpeed, this.#speed + rateCorrection),
     );
+    this.#relocate();
     return match;
+  }
+
+  /**
+   * Every `relocateEverySec`, searches the whole song. Moves the estimate to
+   * a place only when that place has moved on with the band through
+   * `relocateChain` searches in a row, and none of the last `relocateChain`
+   * searches found a place at the estimate that scored near the best. A
+   * chorus that matches another chorus moves on just like the true one, so a
+   * chain alone is not enough; the estimate must also have lost its support.
+   */
+  #relocate() {
+    const now = this.#lastFrameStreamSec;
+    const last = this.#searches.at(-1);
+    if (last && now - last.streamSec < this.#opts.relocateEverySec) return;
+    const query: MatchQuery = {
+      reference: this.#centredReference,
+      referenceFrameCount: this.#referenceFrameCount,
+      observation: centreChroma(this.#window, this.#count),
+      observationCount: this.#count,
+      // The whole window is song, so a place whose window would start before
+      // the song is not a place the band can be.
+      refEndLoSec: (this.#count / CHROMA_FPS) * this.#opts.minSpeed,
+      refEndHiSec: this.#referenceFrameCount / CHROMA_FPS,
+      speeds: bootstrapSpeeds(this.#opts),
+      rivalExclusionSec: this.#opts.rivalExclusionSec,
+      stride: 4,
+    };
+    const peaks = topPeaks(
+      query,
+      this.#opts.relocatePeaks,
+      this.#opts.windowSec / 4,
+    );
+    // A song shorter than the window has no place for it.
+    if (peaks.length === 0) return;
+    this.#searches.push({streamSec: now, peaks});
+    if (this.#searches.length > this.#opts.relocateChain)
+      this.#searches.shift();
+    if (this.#searches.length < this.#opts.relocateChain) return;
+
+    const predicted = this.refTimeAt(now);
+    // Tracking trims the estimate between searches, so it may be twice the
+    // chain's tolerance from the place that supports it.
+    const tolerance = this.#opts.relocateToleranceSec;
+    const supportFloor = peaks[0].score - this.#opts.relocateSupportScore;
+    if (
+      peaks.some(
+        p =>
+          Math.abs(p.refEndSec - predicted) <= 2 * tolerance &&
+          p.score >= supportFloor,
+      )
+    ) {
+      this.#unsupported = 0;
+      return;
+    }
+    this.#unsupported++;
+    if (this.#unsupported < this.#opts.relocateChain) return;
+    for (const peak of peaks) {
+      const first = this.#chainStart(peak);
+      if (first == null) continue;
+      this.#refTimeSec = peak.refEndSec;
+      this.#anchorStreamSec = now;
+      this.#speed = Math.max(
+        this.#opts.minSpeed,
+        Math.min(
+          this.#opts.maxSpeed,
+          (peak.refEndSec - first.refEndSec) /
+            (now - this.#searches[0].streamSec),
+        ),
+      );
+      this.#confidence = 0;
+      this.#unsupported = 0;
+      this.#phase = 'tracking';
+      return;
+    }
+  }
+
+  /** The place in the oldest search that `peak` moved on from, through a
+   *  place in each search between, or null when there is no such chain. */
+  #chainStart(peak: Peak): Peak | null {
+    const {minSpeed, maxSpeed, relocateToleranceSec} = this.#opts;
+    let at = peak;
+    for (let k = this.#searches.length - 2; k >= 0; k--) {
+      const dt = this.#searches[k + 1].streamSec - this.#searches[k].streamSec;
+      const lo = dt * minSpeed - relocateToleranceSec;
+      const hi = dt * maxSpeed + relocateToleranceSec;
+      const from = this.#searches[k].peaks.find(p => {
+        const moved = at.refEndSec - p.refEndSec;
+        return moved >= lo && moved <= hi;
+      });
+      if (!from) return null;
+      at = from;
+    }
+    return at;
   }
 }

@@ -22,6 +22,11 @@ import type {TrackPcm} from './audioManager';
  */
 export const CLICK_TRACK_NAME = 'click';
 
+/** The click on the first beat of a measure, and on every other beat. */
+const ACCENT_CLICK = {frequency: 1000, volume: 1.0} as const;
+const BEAT_CLICK = {frequency: 700, volume: 0.6} as const;
+const CLICK_DURATION_SEC = 0.05;
+
 export interface TempoMapEntry {
   tick: number;
   beatsPerMinute: number;
@@ -223,14 +228,10 @@ export async function generateBeatClickTrackSamples(
   chartDelayMs: number = 0,
 ): Promise<TrackPcm> {
   const sampleRate = 8000;
-  const clickDurationSec = 0.05;
   const totalSamples = Math.max(1, Math.ceil((sampleRate * durationMs) / 1000));
   const samples = new Float32Array(totalSamples);
 
-  const [accentSample, normalSample] = await Promise.all([
-    generateClickSample(1000, clickDurationSec, sampleRate, 1.0),
-    generateClickSample(700, clickDurationSec, sampleRate, 0.6),
-  ]);
+  const [accentSample, normalSample] = await beatClickSamples(sampleRate);
 
   const events = buildBeatClickEvents({
     tempos: chart.tempos,
@@ -246,6 +247,43 @@ export async function generateBeatClickTrackSamples(
   }
 
   return {samples, sampleRate};
+}
+
+/** The accented and plain beat clicks, at `sampleRate`. */
+function beatClickSamples(sampleRate: number) {
+  return Promise.all(
+    [ACCENT_CLICK, BEAT_CLICK].map(click =>
+      generateClickSample(
+        click.frequency,
+        CLICK_DURATION_SEC,
+        sampleRate,
+        click.volume,
+      ),
+    ),
+  );
+}
+
+/**
+ * One bar of a steady click at `bpm`, its first beat accented, for a
+ * metronome that loops it. Each beat is a whole number of samples, which
+ * keeps the tempo within a hundredth of a percent.
+ */
+export async function renderClickBar(
+  bpm: number,
+  beatsPerBar: number,
+  sampleRate: number,
+): Promise<Float32Array<ArrayBuffer>> {
+  const beatSamples = Math.round((sampleRate * 60) / bpm);
+  const bar = new Float32Array(beatSamples * beatsPerBar);
+  const [accentSample, normalSample] = await beatClickSamples(sampleRate);
+  for (let beat = 0; beat < beatsPerBar; beat++) {
+    mixSamples(
+      bar,
+      beat === 0 ? accentSample : normalSample,
+      beat * beatSamples,
+    );
+  }
+  return bar;
 }
 
 /**

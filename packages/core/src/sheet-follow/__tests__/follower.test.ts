@@ -12,7 +12,9 @@ import {
   DEFAULT_FOLLOWER_OPTIONS,
   ScoreFollower,
   bootstrapSpeeds,
+  centreChroma,
   matchWindow,
+  topPeaks,
   trackingSpeeds,
 } from '../follower';
 import {isReferenceStem} from '../reference';
@@ -105,6 +107,25 @@ describe('chroma', () => {
   });
 });
 
+/** A reference with a pair of pitches every `sectionSec`, so no two sections
+ *  match and a whole-song search can only find one place. */
+function longReference(sectionSec: number, sections: number) {
+  const pitches = [
+    261.6, 293.7, 329.6, 349.2, 392.0, 440.0, 493.9, 523.3, 587.3, 659.3, 698.5,
+    784.0,
+  ];
+  const perSection = Math.round(sectionSec * CHROMA_SAMPLE_RATE);
+  const audio = new Float32Array(perSection * sections);
+  for (let s = 0; s < sections; s++) {
+    const low = tone(pitches[s % 12] / 2, perSection);
+    const high = tone(pitches[(s * 5 + Math.floor(s / 12)) % 12], perSection);
+    for (let i = 0; i < perSection; i++) {
+      audio[s * perSection + i] = low[i] + 0.5 * high[i];
+    }
+  }
+  return audio;
+}
+
 describe('matchWindow', () => {
   const reference = chromagram(distinctReference(4, 10));
 
@@ -178,6 +199,68 @@ describe('matchWindow', () => {
         rivalExclusionSec: 2,
       }),
     ).toBeNull();
+  });
+});
+
+describe('topPeaks', () => {
+  it('finds each place a repeated part came from, best first', () => {
+    const half = distinctReference(4, 3);
+    const looped = new Float32Array(half.length * 2);
+    looped.set(half, 0);
+    looped.set(half, half.length);
+    const repeating = chromagram(looped);
+
+    const count = Math.round(6 * CHROMA_FPS);
+    const startFrame = Math.round(2 * CHROMA_FPS);
+    const peaks = topPeaks(
+      {
+        reference: repeating.frames,
+        referenceFrameCount: repeating.frameCount,
+        observation: repeating.frames.slice(
+          startFrame * CHROMA_BINS,
+          (startFrame + count) * CHROMA_BINS,
+        ),
+        observationCount: count,
+        refEndLoSec: 0,
+        refEndHiSec: 24,
+        speeds: [1],
+        rivalExclusionSec: 2,
+        stride: 1,
+      },
+      2,
+      4,
+    );
+
+    expect(peaks).toHaveLength(2);
+    expect(peaks[0].score).toBeGreaterThanOrEqual(peaks[1].score);
+    const ends = peaks.map(p => p.refEndSec).sort((a, b) => a - b);
+    expect(ends[0]).toBeCloseTo(8, 0);
+    expect(ends[1]).toBeCloseTo(20, 0);
+  });
+});
+
+describe('centreChroma', () => {
+  it('takes away what every frame has in common', () => {
+    const frames = new Float32Array([
+      1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    const centred = centreChroma(frames, 2);
+    // Pitch class 0 is in both frames, so it is no longer in either.
+    expect(centred[0]).toBeCloseTo(0, 6);
+    expect(centred[CHROMA_BINS]).toBeCloseTo(0, 6);
+    for (let t = 0; t < 2; t++) {
+      let norm = 0;
+      for (let k = 0; k < CHROMA_BINS; k++) {
+        norm += centred[t * CHROMA_BINS + k] ** 2;
+      }
+      expect(Math.sqrt(norm)).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('leaves a window with no change as zeros', () => {
+    const frame = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+    const centred = centreChroma(new Float32Array([...frame, ...frame]), 2);
+    expect(Array.from(centred).every(v => v === 0)).toBe(true);
   });
 });
 
@@ -258,6 +341,160 @@ describe('ScoreFollower', () => {
     const {error, phase} = replay(1.0);
     expect(phase).toBe('tracking');
     expect(Math.abs(error)).toBeLessThan(3);
+  });
+
+  /** Feeds the follower the reference's own frames for stream seconds
+   *  `fromSec` to `toSec`, with the band at `refAtFromSec` at `fromSec` and
+   *  playing at `speed`. Returns where the band is at `toSec`. */
+  function play(
+    follower: ScoreFollower,
+    reference: ReturnType<typeof chromagram>,
+    {
+      fromSec,
+      toSec,
+      refAtFromSec,
+      speed,
+    }: {fromSec: number; toSec: number; refAtFromSec: number; speed: number},
+  ) {
+    let truth = refAtFromSec;
+    for (let i = 0; i < (toSec - fromSec) * CHROMA_FPS; i++) {
+      truth = refAtFromSec + (i / CHROMA_FPS) * speed;
+      const refFrame = Math.min(
+        reference.frameCount - 1,
+        Math.round(truth * CHROMA_FPS),
+      );
+      follower.pushFrame(
+        reference.frames.slice(
+          refFrame * CHROMA_BINS,
+          (refFrame + 1) * CHROMA_BINS,
+        ),
+        fromSec + i / CHROMA_FPS,
+      );
+      if (i % 5 === 0) follower.update();
+    }
+    return truth;
+  }
+
+  it('finds the band when the song started before it was listening', () => {
+    const reference = chromagram(longReference(4, 30));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.beginSong(0);
+    const truth = play(follower, reference, {
+      fromSec: 0,
+      toSec: 60,
+      refAtFromSec: 40,
+      speed: 1.1,
+    });
+    expect(follower.phase).toBe('tracking');
+    expect(
+      Math.abs(follower.snapshot(60 - 1 / CHROMA_FPS).refTimeSec - truth),
+    ).toBeLessThan(2);
+  });
+
+  it('tracks on from a place it is told the band is at', () => {
+    const reference = chromagram(longReference(4, 30));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.beginSong(0);
+    // The band plays the top of the song, and the follower is told, wrongly,
+    // that it is 40 s in. It has no way to know that, and goes where it is told.
+    play(follower, reference, {
+      fromSec: 0,
+      toSec: 25,
+      refAtFromSec: 0,
+      speed: 1,
+    });
+    follower.seek(40);
+    expect(follower.snapshot(25 - 1 / CHROMA_FPS).refTimeSec).toBeCloseTo(
+      40,
+      3,
+    );
+    // Told the truth, with the band at 60 s, it tracks on from there.
+    play(follower, reference, {
+      fromSec: 25,
+      toSec: 55,
+      refAtFromSec: 60,
+      speed: 1,
+    });
+    const after = play(follower, reference, {
+      fromSec: 55,
+      toSec: 85,
+      refAtFromSec: 60,
+      speed: 1,
+    });
+    expect(
+      Math.abs(follower.snapshot(85 - 1 / CHROMA_FPS).refTimeSec - after),
+    ).toBeLessThan(2);
+  });
+
+  it('never puts the band past the end of the recording', () => {
+    const reference = chromagram(longReference(4, 10));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.beginSong(0);
+    play(follower, reference, {
+      fromSec: 0,
+      toSec: 5,
+      refAtFromSec: 0,
+      speed: 1,
+    });
+    follower.seek(35);
+    expect(follower.snapshot(500).refTimeSec).toBeLessThanOrEqual(
+      reference.frameCount / CHROMA_FPS,
+    );
+  });
+
+  it('ignores a seek while no song is playing', () => {
+    const reference = chromagram(longReference(4, 30));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.seek(40);
+    expect(follower.phase).toBe('idle');
+  });
+
+  it('goes on from where the band was after a short stop', () => {
+    const reference = chromagram(longReference(4, 20));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.beginSong(0);
+    play(follower, reference, {
+      fromSec: 0,
+      toSec: 30,
+      refAtFromSec: 0,
+      speed: 1,
+    });
+    follower.stop(30);
+    follower.beginSong(36);
+    expect(follower.phase).toBe('tracking');
+    expect(follower.snapshot(36).refTimeSec).toBeCloseTo(36, 0);
+  });
+
+  it('starts at the top after a long stop', () => {
+    const reference = chromagram(longReference(4, 20));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.beginSong(0);
+    play(follower, reference, {
+      fromSec: 0,
+      toSec: 30,
+      refAtFromSec: 0,
+      speed: 1,
+    });
+    follower.stop(30);
+    follower.beginSong(30 + DEFAULT_FOLLOWER_OPTIONS.resumeWithinSec + 1);
+    expect(follower.phase).toBe('bootstrapping');
+    expect(follower.snapshot(51).refTimeSec).toBe(0);
+  });
+
+  it('starts at the top after a false start', () => {
+    const reference = chromagram(longReference(4, 20));
+    const follower = new ScoreFollower(reference.frames, reference.frameCount);
+    follower.beginSong(0);
+    play(follower, reference, {
+      fromSec: 0,
+      toSec: 3,
+      refAtFromSec: 0,
+      speed: 1,
+    });
+    follower.stop(3);
+    follower.beginSong(5);
+    expect(follower.phase).toBe('bootstrapping');
+    expect(follower.snapshot(5).refTimeSec).toBe(0);
   });
 
   it('starts idle and reports nothing until a song begins', () => {
