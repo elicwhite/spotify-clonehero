@@ -22,8 +22,8 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {writeChartFolder} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import TrackEditPage from '../TrackEditPage';
-import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
+import TrackEditPage from '@/components/chart-editor/TrackEditPage';
+import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 
 class FakeResizeObserver {
   observe() {}
@@ -34,15 +34,18 @@ class FakeResizeObserver {
   FakeResizeObserver;
 (globalThis as unknown as {Blob: unknown}).Blob = require('buffer').Blob;
 
-jest.mock('../HighwayEditor', () => ({
+jest.mock('../../../components/chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
 }));
-jest.mock('../piano-roll/PianoRollTimeline', () => ({
-  __esModule: true,
-  default: () => <div data-testid="piano-roll-stub" />,
-}));
-jest.mock('../TransportControls', () => ({
+jest.mock(
+  '../../../components/chart-editor/piano-roll/PianoRollTimeline',
+  () => ({
+    __esModule: true,
+    default: () => <div data-testid="piano-roll-stub" />,
+  }),
+);
+jest.mock('../../../components/chart-editor/TransportControls', () => ({
   __esModule: true,
   default: () => <div data-testid="transport-controls-stub" />,
 }));

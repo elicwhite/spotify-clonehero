@@ -24,8 +24,8 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {writeChartFolder} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import TrackEditPage from '../TrackEditPage';
-import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
+import TrackEditPage from '@/components/chart-editor/TrackEditPage';
+import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 
 const trackMock = jest.fn();
 jest.mock('../../../lib/analytics/track', () => ({
@@ -108,7 +108,7 @@ jest.mock('next/navigation', () => ({
 
 /** The chart a "Load a Chart" drop hands over. Replaced per test. */
 let nextLoaded: {fileName: string; data: Uint8Array}[] = [];
-jest.mock('../../chart-picker/ChartDropZone', () => ({
+jest.mock('../../../components/chart-picker/ChartDropZone', () => ({
   __esModule: true,
   default: ({onLoaded, disabled}: any) => (
     <button
@@ -124,7 +124,7 @@ jest.mock('../../chart-picker/ChartDropZone', () => ({
     </button>
   ),
 }));
-jest.mock('../../project-list/AudioDropZone', () => ({
+jest.mock('../../../components/project-list/AudioDropZone', () => ({
   __esModule: true,
   default: ({onDropped, disabled}: any) => (
     <button
@@ -140,7 +140,7 @@ jest.mock('../../project-list/AudioDropZone', () => ({
     </button>
   ),
 }));
-jest.mock('../../project-list/ProjectList', () => ({
+jest.mock('../../../components/project-list/ProjectList', () => ({
   __esModule: true,
   default: () => <div />,
 }));

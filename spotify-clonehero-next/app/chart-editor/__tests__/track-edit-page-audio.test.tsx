@@ -41,9 +41,9 @@ import type {AssistTaskDef} from '@/lib/assist/tasks/types';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {decodeAtRate} from '@/lib/audio-pipeline/decode-audio';
 import {interleaveAudioBufferYielding} from '@/lib/drum-transcription/audio/decoder';
-import type {AudioSamples} from '../audioSamples';
-import TrackEditPage from '../TrackEditPage';
-import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
+import type {AudioSamples} from '@/components/chart-editor/audioSamples';
+import TrackEditPage from '@/components/chart-editor/TrackEditPage';
+import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 import type {AssistRunContext} from '@/components/assist/useAssistRunner';
 
 /** Any run context will do for these tests: they assert on run lifecycle,
@@ -82,7 +82,7 @@ class FakeResizeObserver {
 // the host handed them so the wiring is assertable without a canvas.
 type WaveProp = AudioSamples | undefined;
 const highwayProps: {audioData?: WaveProp} = {};
-jest.mock('../HighwayEditor', () => ({
+jest.mock('../../../components/chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: (props: {audioData?: WaveProp}) => {
     highwayProps.audioData = props.audioData;
@@ -93,18 +93,21 @@ const pianoRollProps: {
   lyricsWaveData?: WaveProp;
   lyricsWaveChannels?: number | undefined;
 } = {};
-jest.mock('../piano-roll/PianoRollTimeline', () => ({
-  __esModule: true,
-  default: (props: {
-    lyricsWaveData?: WaveProp;
-    lyricsWaveChannels?: number;
-  }) => {
-    pianoRollProps.lyricsWaveData = props.lyricsWaveData;
-    pianoRollProps.lyricsWaveChannels = props.lyricsWaveChannels;
-    return <div data-testid="piano-roll-stub" />;
-  },
-}));
-jest.mock('../TransportControls', () => ({
+jest.mock(
+  '../../../components/chart-editor/piano-roll/PianoRollTimeline',
+  () => ({
+    __esModule: true,
+    default: (props: {
+      lyricsWaveData?: WaveProp;
+      lyricsWaveChannels?: number;
+    }) => {
+      pianoRollProps.lyricsWaveData = props.lyricsWaveData;
+      pianoRollProps.lyricsWaveChannels = props.lyricsWaveChannels;
+      return <div data-testid="piano-roll-stub" />;
+    },
+  }),
+);
+jest.mock('../../../components/chart-editor/TransportControls', () => ({
   __esModule: true,
   default: () => <div data-testid="transport-controls-stub" />,
 }));

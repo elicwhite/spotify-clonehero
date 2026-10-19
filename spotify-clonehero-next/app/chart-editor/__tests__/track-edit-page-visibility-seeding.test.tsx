@@ -26,9 +26,9 @@ import {TooltipProvider} from '@/components/ui/tooltip';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import TrackEditPage from '../TrackEditPage';
-import {useChartEditorContext} from '../ChartEditorContext';
-import {CONFIG as CHART_EDITOR_CONFIG} from '../../../app/chart-editor/ChartEditorClient';
+import TrackEditPage from '@/components/chart-editor/TrackEditPage';
+import {useChartEditorContext} from '@/components/chart-editor/ChartEditorContext';
+import {CONFIG as CHART_EDITOR_CONFIG} from '../ChartEditorClient';
 
 // jsdom has no ResizeObserver; the sidebar's Stems mixer (Radix Slider)
 // needs one on every mount, same as stems-mixer.test.tsx.
@@ -43,15 +43,18 @@ class FakeResizeObserver {
 // ---------------------------------------------------------------------------
 // Heavy/canvas children — same stubs as chart-editor-layout.test.tsx.
 // ---------------------------------------------------------------------------
-jest.mock('../HighwayEditor', () => ({
+jest.mock('../../../components/chart-editor/HighwayEditor', () => ({
   __esModule: true,
   default: () => <div data-testid="highway-editor-stub" />,
 }));
-jest.mock('../piano-roll/PianoRollTimeline', () => ({
-  __esModule: true,
-  default: () => <div data-testid="piano-roll-stub" />,
-}));
-jest.mock('../TransportControls', () => ({
+jest.mock(
+  '../../../components/chart-editor/piano-roll/PianoRollTimeline',
+  () => ({
+    __esModule: true,
+    default: () => <div data-testid="piano-roll-stub" />,
+  }),
+);
+jest.mock('../../../components/chart-editor/TransportControls', () => ({
   __esModule: true,
   default: () => <div data-testid="transport-controls-stub" />,
 }));
