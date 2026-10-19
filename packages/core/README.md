@@ -13,9 +13,14 @@ ships TypeScript source and has no build step.
 - Include `../../packages/core/types/**/*.d.ts` in the tsconfig. Those files
   declare the browser globals core relies on (`Window` extras, `navigator`
   extras, `ImageDecoder`, React attributes).
-- Add `../../packages/core/src/**/*.{ts,tsx}` to the Tailwind `content`.
+- Add `../../packages/core/src/**/*.{ts,tsx}` to the Tailwind `content`, and
+  `presets: [require('@musiccharts/core/styles/tailwind-preset.js')]` for the
+  shared theme. Start `globals.css` with
+  `@import '@musiccharts/core/styles/theme.css';` for the theme tokens.
 - Import by subpath: `import {setupStage} from '@musiccharts/core/preview/highway'`.
 - For Jest, map `^@musiccharts/core/(.*)$` to `<core>/src/$1`.
+
+`pnpm new-app <name>` does all of this: see `apps/_template/README.md`.
 
 Inside core, import with relative paths. The `@/` alias points at the app, so
 ESLint forbids it here. Core does not import any app.

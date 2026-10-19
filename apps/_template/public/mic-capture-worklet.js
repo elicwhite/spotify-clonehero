@@ -1,0 +1,1 @@
+../../site/public/mic-capture-worklet.js

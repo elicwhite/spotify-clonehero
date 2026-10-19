@@ -1,5 +1,7 @@
 packages:
   - apps/*
+  # The scaffold that `pnpm new-app` copies. It is not an app of its own.
+  - '!apps/_template'
   - packages/*
   - videos/kit
   - videos/gallery
