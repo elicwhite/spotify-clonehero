@@ -49,7 +49,7 @@ import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import type {AssistRunnerControls} from '@/components/assist/useAssistRunner';
 import ChartMatrixCell from './ChartMatrixCell';
 import InstrumentIcon from '../InstrumentIcon';
-import {trackKeyId} from '../scope';
+import {trackKeyId} from '@/lib/chart-editor-core/scope';
 import {
   DIFFICULTY_COLUMNS,
   INSTRUMENT_LABEL,

@@ -21,9 +21,9 @@ import {
   DeleteTempoMarkersCommand,
   noteId,
   type EditCommand,
-} from '../../commands';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+} from '@/lib/chart-editor-core/commands';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {buildDeleteSelectionCommands} from '../deleteSelection';
 
 const DRUMS_KEY: TrackKey = {instrument: 'drums', difficulty: 'expert'};

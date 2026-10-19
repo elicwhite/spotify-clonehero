@@ -25,7 +25,7 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '../ChartEditorContext';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 
 jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
   ensureProjectStemFingerprint: jest.fn(async () => 'persisted-fingerprint'),

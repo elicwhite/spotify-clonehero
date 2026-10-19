@@ -9,9 +9,12 @@
  */
 
 import {snapTickToGrid} from '@/lib/chart-edit';
-import {MoveEntitiesCommand} from '../../commands';
-import {entityContextFromScope} from '../../scope';
-import {makeFixtureDoc, normalizeDoc} from '../../__tests__/fixtures';
+import {MoveEntitiesCommand} from '@/lib/chart-editor-core/commands';
+import {entityContextFromScope} from '@/lib/chart-editor-core/scope';
+import {
+  makeFixtureDoc,
+  normalizeDoc,
+} from '@/lib/chart-editor-core/__tests__/fixtures';
 
 describe('section drag', () => {
   it('issues MoveEntitiesCommand("section", [id], tickDelta, 0)', () => {

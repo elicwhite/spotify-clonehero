@@ -14,14 +14,20 @@
  * which is the strongest form of "identical command."
  */
 
-import {makeFixtureDoc, expectDocsEqual} from '../../__tests__/fixtures';
-import {DEFAULT_DRUMS_EXPERT_SCOPE, entityContextFromScope} from '../../scope';
+import {
+  makeFixtureDoc,
+  expectDocsEqual,
+} from '@/lib/chart-editor-core/__tests__/fixtures';
+import {
+  DEFAULT_DRUMS_EXPERT_SCOPE,
+  entityContextFromScope,
+} from '@/lib/chart-editor-core/scope';
 import {
   AddNoteCommand,
   MoveEntitiesCommand,
   toSchemaNote,
   type EditCommand,
-} from '../../commands';
+} from '@/lib/chart-editor-core/commands';
 import {computeNoteDragDelta} from '../gestures';
 import {selectNotesInRange} from '../marquee';
 import type {DrumNote} from '@/lib/chart-edit';

@@ -10,10 +10,10 @@
 import {noteTypes} from '@eliwhite/scan-chart';
 import {drums4LaneSchema} from '@/lib/chart-edit';
 import {EditorSession} from '@/lib/chart-editor-core';
-import {DRUM_EDIT_CAPABILITIES} from '../../capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../../scope';
-import {noteId, type EditCommand} from '../../commands';
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+import {DRUM_EDIT_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
+import {noteId, type EditCommand} from '@/lib/chart-editor-core/commands';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {
   boxSelectTool,
   eraseTool,

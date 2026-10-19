@@ -14,7 +14,7 @@ import '@testing-library/jest-dom';
 import {fireEvent, render} from '@testing-library/react';
 import TransportControls from '../TransportControls';
 import {ChartEditorProvider} from '../ChartEditorContext';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
 type Section = {name: string; msTime: number};

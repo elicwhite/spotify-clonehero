@@ -23,8 +23,8 @@ import {AudioManager} from '@/lib/preview/audioManager';
 import {applyIniDelay, getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
 
-import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
-import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
+import SheetMusic from '@/lib/sheet-music/SheetMusic';
+import CloneHeroRenderer from '@/lib/preview/CloneHeroRenderer';
 
 // ---------------------------------------------------------------------------
 // Types & helpers

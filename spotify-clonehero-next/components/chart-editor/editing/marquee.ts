@@ -23,7 +23,7 @@ import type {
 import {typeToLane, drums4LaneSchema} from '@/lib/chart-edit';
 import {phraseEndId, phraseStartId} from '@/lib/chart-edit/helpers/phrases';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {noteId} from '../commands';
+import {noteId} from '@/lib/chart-editor-core/commands';
 
 /**
  * Half the drawn size of a note glyph: milliseconds across, lane rows down

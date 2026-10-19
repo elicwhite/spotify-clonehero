@@ -1,7 +1,7 @@
 /**
  * Tick <-> millisecond conversion utilities.
  *
- * msToTick is the inverse of tickToMs from app/sheet-music/[slug]/chartUtils.ts.
+ * msToTick is the inverse of tickToMs in lib/chart-utils/tickToMs.ts.
  * buildTimedTempos pre-computes msTime for each tempo event (same algorithm
  * scan-chart uses in getTimedTempos).
  */

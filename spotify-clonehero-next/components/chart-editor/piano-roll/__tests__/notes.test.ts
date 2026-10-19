@@ -1,4 +1,4 @@
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {
   noteId,
   addNote,

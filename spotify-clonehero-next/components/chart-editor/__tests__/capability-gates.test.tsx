@@ -36,8 +36,11 @@ import {
   PREVIEW_CAPABILITIES,
   TEMPO_CAPABILITIES,
   type EditorCapabilities,
-} from '../capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE, DEFAULT_VOCALS_SCOPE} from '../scope';
+} from '@/lib/chart-editor-core/capabilities';
+import {
+  DEFAULT_DRUMS_EXPERT_SCOPE,
+  DEFAULT_VOCALS_SCOPE,
+} from '@/lib/chart-editor-core/scope';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
 // jsdom has no ResizeObserver; Radix's Slider (one per Stems mixer row)

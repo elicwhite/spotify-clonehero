@@ -1,4 +1,4 @@
-import {SYLLABLES} from '@/app/add-lyrics/landing/syllableAlignModel';
+import {SYLLABLES} from '@/lib/landing/syllableAlignModel';
 import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
 import {cn} from '@/lib/utils';
 

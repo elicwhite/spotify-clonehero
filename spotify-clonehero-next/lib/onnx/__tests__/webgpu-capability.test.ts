@@ -12,10 +12,7 @@ import {
   probeWebGpuFp16,
   webGpuFp16Message,
 } from '../webgpu-capability';
-import {
-  blockedControlReason,
-  sharedBlockedNote,
-} from '@/components/onnx/webgpu-block';
+import {blockedControlReason, sharedBlockedNote} from '@/lib/onnx/webgpu-block';
 
 type FakeAdapter = {features: ReadonlySet<string>};
 

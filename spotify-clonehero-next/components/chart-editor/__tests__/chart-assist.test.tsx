@@ -43,14 +43,14 @@ import {
   useChartEditorContext,
 } from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
-import {AddBPMCommand} from '../commands';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {AddBPMCommand} from '@/lib/chart-editor-core/commands';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {
   DRUM_EDIT_CAPABILITIES,
   ADD_LYRICS_CAPABILITIES,
   TEMPO_CAPABILITIES,
   PREVIEW_CAPABILITIES,
-} from '../capabilities';
+} from '@/lib/chart-editor-core/capabilities';
 
 interface CapturedRun {
   ctx: unknown;

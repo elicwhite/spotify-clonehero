@@ -16,14 +16,17 @@
  *     reposition.
  */
 
-import {makeFixtureDoc} from '../../__tests__/fixtures';
-import {DRUM_EDIT_CAPABILITIES, PREVIEW_CAPABILITIES} from '../../capabilities';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
+import {
+  DRUM_EDIT_CAPABILITIES,
+  PREVIEW_CAPABILITIES,
+} from '@/lib/chart-editor-core/capabilities';
 import {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
-} from '../../scope';
+} from '@/lib/chart-editor-core/scope';
 import {computeChartElements} from '../useChartElements';
-import {AddNoteCommand, toSchemaNote} from '../../commands';
+import {AddNoteCommand, toSchemaNote} from '@/lib/chart-editor-core/commands';
 import type {NoteElementData} from '@/lib/preview/highway/NoteRenderer';
 import type {TrackKey} from '@/lib/chart-edit';
 import {drumTypes, noteTypes} from '@eliwhite/scan-chart';

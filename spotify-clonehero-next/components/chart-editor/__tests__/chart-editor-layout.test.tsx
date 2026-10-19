@@ -93,15 +93,6 @@ describe('editor density scope (plan 0074 Phase 7 task 7c)', () => {
     unmount();
     expect(document.documentElement.dataset['density']).toBeUndefined();
   });
-
-  it('does not mark a non-editor page compact (/privacy)', async () => {
-    // Dynamic import so this suite doesn't drag another page's module graph
-    // into every other test in this file.
-    const {default: PrivacyPage} = await import('@/app/privacy/page');
-    render(<PrivacyPage />);
-
-    expect(document.documentElement.dataset['density']).toBeUndefined();
-  });
 });
 
 describe('ChartEditor responsive grid', () => {

@@ -11,8 +11,7 @@
  * own. `runner.ts` and `pipeline/stages.ts` execute
  * for real against the shared project-storage double; only the boundaries
  * that need a GPU or a real decoder are mocked (separation, the tempo
- * pipeline, CRNN audio prep + transcription, audio decoding), plus
- * `EditorApp`, which this suite never reaches.
+ * pipeline, CRNN audio prep + transcription, audio decoding).
  */
 
 import '@testing-library/jest-dom';
@@ -57,11 +56,6 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('next/script', () => ({
-  __esModule: true,
-  default: () => null,
-}));
-
-jest.mock('../components/EditorApp', () => ({
   __esModule: true,
   default: () => null,
 }));

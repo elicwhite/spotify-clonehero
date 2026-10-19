@@ -12,7 +12,7 @@ export const OG_SIZE = {width: 1200, height: 630} as const;
 /**
  * The five Clone Hero drum-lane gem colors, dark theme. OG cards are always
  * dark, so these are the `.landing-lanes` dark values from `app/globals.css`
- * (named in `components/landing/lanes.ts`). Restated here because Satori
+ * (named in `lib/landing/lanes.ts`). Restated here because Satori
  * renders outside the DOM and cannot read CSS custom properties; a Jest test
  * keeps this copy equal to `LANE_FALLBACKS`.
  */

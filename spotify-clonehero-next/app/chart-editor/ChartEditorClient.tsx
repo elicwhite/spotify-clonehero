@@ -1,10 +1,10 @@
 'use client';
 
 import {
-  DEFAULT_GUITAR_EXPERT_SCOPE,
   TrackEditPage,
   type TrackEditPageConfig,
 } from '@/components/chart-editor';
+import {DEFAULT_GUITAR_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import dynamic from 'next/dynamic';
 import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
 
@@ -14,10 +14,9 @@ import OrtRuntimeScript from '@/components/onnx/OrtRuntimeScript';
  * imports the transcription feature itself; loading it lazily here is what
  * keeps that feature's modules out of the chart editor's own bundle.
  */
-const EditorApp = dynamic(
-  () => import('@/app/drum-transcription/components/EditorApp'),
-  {ssr: false},
-);
+const EditorApp = dynamic(() => import('@/components/chart-editor/EditorApp'), {
+  ssr: false,
+});
 
 export const CONFIG: TrackEditPageConfig = {
   route: '/chart-editor',

@@ -12,10 +12,10 @@ import {HotkeysProvider} from '@tanstack/react-hotkeys';
 import {EditorSession, selectActiveSchema} from '@/lib/chart-editor-core';
 import type {ChartEditorContextValue} from '@/lib/chart-editor-core';
 import type {InstrumentSchema} from '@/lib/chart-edit/instruments';
-import type {EditorCapabilities} from './capabilities';
-import {DRUM_EDIT_CAPABILITIES} from './capabilities';
-import type {EditorScope} from './scope';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from './scope';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
+import {DRUM_EDIT_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
+import type {EditorScope} from '@/lib/chart-editor-core/scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 
 // ---------------------------------------------------------------------------
 // Context

@@ -20,8 +20,8 @@ import {SceneReconciler, type ElementRenderer} from '../SceneReconciler';
 import {InteractionManager} from '../InteractionManager';
 import {buildProjectionFor} from '../projection';
 import {drums4LaneSchema} from '@/lib/chart-edit';
-import {makeFixtureDoc} from '@/components/chart-editor/__tests__/fixtures';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 
 const HIGHWAY_SPEED = 1.5;
 const TIMING = [{tick: 0, msTime: 0, beatsPerMinute: 120}];

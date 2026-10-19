@@ -10,7 +10,7 @@ import {trackToElements} from '../trackToElements';
 import type {Track} from '../types';
 import {drums4LaneSchema} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import type {EditorScope} from '@/components/chart-editor/scope';
+import type {EditorScope} from '@/lib/chart-editor-core/scope';
 
 // ---------------------------------------------------------------------------
 // Helpers

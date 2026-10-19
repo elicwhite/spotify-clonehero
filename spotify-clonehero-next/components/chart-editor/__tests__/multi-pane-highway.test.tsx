@@ -34,13 +34,13 @@ import {
   PREVIEW_CAPABILITIES,
   TEMPO_CAPABILITIES,
   type EditorCapabilities,
-} from '../capabilities';
+} from '@/lib/chart-editor-core/capabilities';
 import {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
   DEFAULT_VOCALS_SCOPE,
   type EditorScope,
-} from '../scope';
+} from '@/lib/chart-editor-core/scope';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {AudioManager} from '@/lib/preview/audioManager';

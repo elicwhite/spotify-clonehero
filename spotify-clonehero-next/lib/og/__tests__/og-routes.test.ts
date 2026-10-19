@@ -2,12 +2,12 @@
  * Guardrails for the OG image system (plan 0099 Track A): every route that
  * exports an OG image uses the shared size constant and carries a non-empty
  * alt, and the OG lane palette stays equal to the canonical highway gem
- * colors in `components/landing/lanes.ts`.
+ * colors in `lib/landing/lanes.ts`.
  */
 import fs from 'fs';
 import path from 'path';
 
-import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/components/landing/lanes';
+import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/lib/landing/lanes';
 
 import {CASCADE_SHAPES, GRID, OgReductionCascade} from '../reduction-cascade';
 import {OG_LANES, OG_SIZE} from '../tokens';

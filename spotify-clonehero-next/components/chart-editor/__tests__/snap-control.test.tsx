@@ -23,8 +23,8 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '../ChartEditorContext';
-import {DRUM_EDIT_CAPABILITIES} from '../capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {DRUM_EDIT_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 
 class FakeResizeObserver {
   observe() {}

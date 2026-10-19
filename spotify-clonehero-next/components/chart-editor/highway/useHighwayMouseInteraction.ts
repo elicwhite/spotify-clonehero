@@ -27,14 +27,17 @@ import {
 import type {HitResult, InteractionManager} from '@/lib/preview/highway';
 import type {EntityKind, NoteEvent} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import type {EditCommand} from '../commands';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
 import type {
   ChartEditorAction,
   ChartEditorState,
 } from '@/lib/chart-editor-core';
 import {selectActiveSchema} from '@/lib/chart-editor-core';
-import type {EditorCapabilities} from '../capabilities';
-import {trackKeyFromScope, trackQualifiedNoteId} from '../scope';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
+import {
+  trackKeyFromScope,
+  trackQualifiedNoteId,
+} from '@/lib/chart-editor-core/scope';
 import {
   TOOL_REGISTRY,
   resolveCursorContinuation,

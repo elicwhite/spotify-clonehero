@@ -26,9 +26,9 @@ import {
   useChartEditorContext,
 } from '../ChartEditorContext';
 import {useUndoRedo} from '../hooks/useEditCommands';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import ChartMatrix from '../sidebar/ChartMatrix';
-import {GenerateDifficultiesCommand} from '../commands';
+import {GenerateDifficultiesCommand} from '@/lib/chart-editor-core/commands';
 import {getAssistProvenance} from '@/lib/chart-editor-core';
 import {computeTrackStamp} from '@/lib/chart-editor-core/content-stamps';
 

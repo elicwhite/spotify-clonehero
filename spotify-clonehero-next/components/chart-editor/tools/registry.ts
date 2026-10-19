@@ -16,7 +16,7 @@
 
 import type {ToolMode} from '@/lib/chart-editor-core';
 import {AFFORDANCES} from '../affordances';
-import type {EditorCapabilities} from '../capabilities';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 import {selectMoveTool, boxSelectTool, placeNoteTool, eraseTool} from './tools';
 import type {EditorTool, PointerHitInfo, ToolContext} from './types';
 

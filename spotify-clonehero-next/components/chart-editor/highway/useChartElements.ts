@@ -51,13 +51,13 @@ import {
   isReconciledKind,
   reconcilerKeyFor,
 } from '@/lib/preview/highway/reconcilerKey';
-import type {EditorCapabilities} from '../capabilities';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 import {
   isTrackScope,
   localNoteIdForTrack,
   localNoteIdsForTrack,
   type EditorScope,
-} from '../scope';
+} from '@/lib/chart-editor-core/scope';
 
 /**
  * Live multi-note drag preview. `ids` are the selected notes' entity ids

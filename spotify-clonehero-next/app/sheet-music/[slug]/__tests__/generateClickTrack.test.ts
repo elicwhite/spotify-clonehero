@@ -8,7 +8,7 @@
  * at zero costs nothing, and each voice carries only its own events.
  */
 
-import type {Measure} from '../convertToVexflow';
+import type {Measure} from '@/lib/sheet-music/convertToVexflow';
 import {
   activeClickVoices,
   generateClickEventsFromMeasures,

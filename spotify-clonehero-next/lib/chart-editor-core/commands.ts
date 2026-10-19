@@ -4,7 +4,7 @@
  * All mutations to the chart go through commands. Undo/redo is snapshot
  * replay: the reducer pushes the pre-command `ChartDocument` onto
  * `undoEntries` at dispatch time and `useUndoRedo` reinstalls docs directly
- * (`hooks/useEditCommands.ts`) — commands only ever need `execute()`.
+ * (`components/chart-editor/hooks/useEditCommands.ts`) — commands only ever need `execute()`.
  *
  * Commands are immutable -- execute() returns new state rather than
  * mutating in place. This works naturally with React's reducer pattern, and

@@ -13,7 +13,7 @@ import {Loader2} from 'lucide-react';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useAudioManager} from './AudioServiceContext';
 import {parseTrackKeyId, selectRenderDoc} from '@/lib/chart-editor-core';
-import {scopePaneKey, type EditorScope} from './scope';
+import {scopePaneKey, type EditorScope} from '@/lib/chart-editor-core/scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {buildTimedTempos, msToTick} from '@/lib/drum-transcription/timing';
 import HighwayLane from './highway/HighwayLane';

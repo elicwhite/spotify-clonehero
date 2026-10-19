@@ -4,7 +4,7 @@
  * Kick is always the *last* lane (index 4 in the 4-lane schema, 5 in the
  * 5-lane schema); the strip lanes fill the lanes before it, lowest-first
  * (red, yellow, blue, green, ...). `typeToLane`/`laneToType`
- * (`components/chart-editor/commands.ts`) and every hit-test/drag/marquee
+ * (`lib/chart-editor-core/commands.ts`) and every hit-test/drag/marquee
  * that speaks in "editor lane" numbers derive from this array's order —
  * reordering it is the one and only way to change lane numbering.
  *

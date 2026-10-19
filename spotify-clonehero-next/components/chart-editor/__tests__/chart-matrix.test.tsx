@@ -37,8 +37,11 @@ import {
   PREVIEW_CAPABILITIES,
   TEMPO_CAPABILITIES,
   type EditorCapabilities,
-} from '../capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE, trackKeyId} from '../scope';
+} from '@/lib/chart-editor-core/capabilities';
+import {
+  DEFAULT_DRUMS_EXPERT_SCOPE,
+  trackKeyId,
+} from '@/lib/chart-editor-core/scope';
 import ChartMatrix from '../sidebar/ChartMatrix';
 import {GENERATION_NOT_WIRED_REASON} from '../hooks/useDifficultyGeneration';
 

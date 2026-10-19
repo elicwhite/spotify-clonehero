@@ -76,10 +76,9 @@ async function loadAppModules() {
   const {parseChartFile, defaultIniChartModifiers} = await import(
     '@eliwhite/scan-chart'
   );
-  const convertToVexFlow = (
-    await import('../app/sheet-music/[slug]/convertToVexflow')
-  ).default;
-  const {renderMusic} = await import('../app/sheet-music/[slug]/renderVexflow');
+  const convertToVexFlow = (await import('../lib/sheet-music/convertToVexflow'))
+    .default;
+  const {renderMusic} = await import('../lib/sheet-music/renderVexflow');
   return {
     parseChartFile,
     defaultIniChartModifiers,

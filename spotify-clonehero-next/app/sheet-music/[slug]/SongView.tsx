@@ -37,14 +37,14 @@ import {ChartResponseEncore} from '@/lib/chartSelection';
 import {getBasename} from '@/lib/src-shared/utils';
 import {cn} from '@/lib/utils';
 import {track as trackEvent} from '@/lib/analytics/track';
-import SheetMusic from './SheetMusic';
+import SheetMusic from '@/lib/sheet-music/SheetMusic';
 import {Files, ParsedChart} from '@/lib/preview/chorus-chart-processing';
 import {
   AudioManager,
   PracticeModeConfig,
   type AudioSource,
 } from '@/lib/preview/audioManager';
-import CloneHeroRenderer from './CloneHeroRenderer';
+import CloneHeroRenderer from '@/lib/preview/CloneHeroRenderer';
 import PlaybackBar from './PlaybackBar';
 import {usePlaybackAnalytics} from './usePlaybackAnalytics';
 import {formatTimeMs} from './formatTime';
@@ -53,7 +53,7 @@ import ChartDetailLayout from '@/components/chart-detail/ChartDetailLayout';
 import SongHeader from '@/components/chart-detail/SongHeader';
 import {activeClickVoices, generateClickVoicePcm} from './generateClickTrack';
 import type {ClickVoice, ClickVolumes} from './generateClickTrack';
-import convertToVexFlow from './convertToVexflow';
+import convertToVexFlow from '@/lib/sheet-music/convertToVexflow';
 import debounce from 'debounce';
 import wholeNote from '@/public/assets/svgs/whole-note.svg';
 import quarterNote from '@/public/assets/svgs/quarter-note.svg';
@@ -64,7 +64,7 @@ import {useAutoScroll} from '@/lib/sheet-follow/useAutoScroll';
 import {AUTO_SCROLL_ENABLED, AutoScrollSetting} from './AutoScrollSetting';
 import {toast} from '@/components/ui/toast';
 import {createClient} from '@/lib/supabase/client';
-import {unfavoriteSongByHash} from '../../account/actions';
+import {unfavoriteSongByHash} from '@/lib/supabase/accountActions';
 import {
   saveSongByHash,
   savePracticeSection,

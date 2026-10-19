@@ -20,7 +20,7 @@ import {LandingSection} from '@/components/landing/Section';
 import {StepFlow} from '@/components/landing/StepFlow';
 import {ToolEntrySection} from '@/components/landing/ToolEntrySection';
 
-import {EditPassCanvas} from './EditPassCanvas';
+import {EditPassCanvas} from '@/components/landing/EditPassCanvas';
 import {
   COMPARISON_ROWS,
   DATA_DISCLAIMER,

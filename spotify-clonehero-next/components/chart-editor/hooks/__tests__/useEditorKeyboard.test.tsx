@@ -19,7 +19,7 @@ import {
   useChartEditorContext,
 } from '../../ChartEditorContext';
 import {AudioServiceProvider} from '../../AudioServiceContext';
-import {DEFAULT_GUITAR_EXPERT_SCOPE} from '../../scope';
+import {DEFAULT_GUITAR_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {useEditorKeyboard} from '../useEditorKeyboard';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';

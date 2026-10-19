@@ -21,7 +21,7 @@ import {
   RenameSectionCommand,
   BatchCommand,
   noteId,
-} from '@/components/chart-editor/commands';
+} from '@/lib/chart-editor-core/commands';
 import type {
   ChartDocument,
   DrumNote,

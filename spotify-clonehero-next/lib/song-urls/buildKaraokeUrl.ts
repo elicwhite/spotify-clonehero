@@ -1,4 +1,4 @@
-import {buildSongSlug} from '@/app/songSlug';
+import {buildSongSlug} from '@/lib/song-urls/songSlug';
 
 export function getKaraokeUrl(
   artist: string,

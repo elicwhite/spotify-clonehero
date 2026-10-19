@@ -10,7 +10,7 @@
  * `lib/drum-transcription/pipeline/step-mapping.ts`.
  */
 
-import type {ProcessingStep} from '@/components/processing/StepRow';
+import type {ProcessingStep} from '@/lib/assist/steps';
 
 /** One step in a task's step list, as predicted by `AssistTaskDef.planSteps`. */
 export interface PlannedStep {

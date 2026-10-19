@@ -14,7 +14,7 @@ import {
   PROPOSED_AT,
   SYLLABLES,
   envelope,
-} from './landing/syllableAlignModel';
+} from '@/lib/landing/syllableAlignModel';
 
 export const alt = 'Add synced lyrics to a chart';
 export const size = OG_SIZE;

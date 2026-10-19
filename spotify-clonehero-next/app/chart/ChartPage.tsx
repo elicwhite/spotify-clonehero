@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 
-import {EditPassCanvas} from '@/app/drum-transcription/landing/EditPassCanvas';
+import {EditPassCanvas} from '@/components/landing/EditPassCanvas';
 import {ReductionCascadeCanvas} from '@/components/difficulty-generation/landing/illustrations/ReductionCascadeCanvas';
-import {BeatGridCanvas} from '@/app/tempo/landing/BeatGridCanvas';
+import {BeatGridCanvas} from '@/components/landing/BeatGridCanvas';
 import {FeatureBand} from '@/components/landing/FeatureBand';
 import {LandingFooter} from '@/components/landing/LandingFooter';
 import {LandingHero} from '@/components/landing/LandingHero';

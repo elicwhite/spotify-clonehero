@@ -8,7 +8,7 @@
 import {selectNotesInRange} from '../marquee';
 import type {DrumNote} from '@/lib/chart-edit';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
-import {noteId} from '../../commands';
+import {noteId} from '@/lib/chart-editor-core/commands';
 import {noteTypes} from '@eliwhite/scan-chart';
 
 /** 120 BPM, resolution 480: 1 beat = 500ms, 1 tick ≈ 1.0417ms. */

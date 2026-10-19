@@ -29,7 +29,7 @@ import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 import {isAbortError} from '@/lib/workers/abortable-worker';
 import {selectReportedOrigin} from '@/lib/chart-editor-core';
 import {useWebGpuFp16Block} from '@/components/onnx/useWebGpuFp16';
-import {blockedControlReason} from '@/components/onnx/webgpu-block';
+import {blockedControlReason} from '@/lib/onnx/webgpu-block';
 
 import {useChartEditorContext} from '../ChartEditorContext';
 import type {

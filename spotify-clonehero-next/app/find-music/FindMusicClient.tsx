@@ -7,7 +7,7 @@ import {usePathname} from 'next/navigation';
 import {toast} from 'sonner';
 import type {User} from '@supabase/supabase-js';
 import SupportedBrowserWarning from '../SupportedBrowserWarning';
-import {SPOTIFY_SCOPES} from '@/app/auth/spotifyScopes';
+import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
 import {createClient} from '@/lib/supabase/client';
 import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
 import {useChorusChartDb} from '@/lib/chorusChartDb';
@@ -58,7 +58,7 @@ import {
   saveFindMusicFilters,
 } from './filterPersistence';
 import {getFindMusicSongs, getFindMusicStats, getRadarSongs} from './queries';
-import {LOCAL_DB_RESET_PATH} from '@/app/storage/routes';
+import {LOCAL_DB_RESET_PATH} from '@/lib/storage-routes';
 import {FIND_MUSIC_RECOMMENDATIONS_PATH, findMusicPathForView} from './routes';
 import {
   type FindMusicFilters,

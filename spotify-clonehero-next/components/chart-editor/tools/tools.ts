@@ -22,14 +22,14 @@ import {
   AddNoteCommand,
   DeleteNotesCommand,
   MoveEntitiesCommand,
-} from '../commands';
+} from '@/lib/chart-editor-core/commands';
 import {prospectiveNoteAt} from '../editing/prospectiveNote';
 import {
   entityContextFromScope,
   localNoteIdsForTrack,
   trackKeyFromScope,
   trackQualifiedNoteId,
-} from '../scope';
+} from '@/lib/chart-editor-core/scope';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {AFFORDANCES} from '../affordances';
 import {selectNotesInRange} from '../editing/marquee';

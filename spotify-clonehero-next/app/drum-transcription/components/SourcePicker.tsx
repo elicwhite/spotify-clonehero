@@ -5,7 +5,7 @@ import {ArrowLeft, FolderSearch, Music} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import ChartDropZone from '@/components/chart-picker/ChartDropZone';
 import type {LoadedFiles} from '@/lib/chart-files/chart-package';
-import AudioUploader from './AudioUploader';
+import AudioUploader from '@/components/AudioUploader';
 
 interface SourcePickerProps {
   /** Called when the user selects an audio file for the audio-only path. */

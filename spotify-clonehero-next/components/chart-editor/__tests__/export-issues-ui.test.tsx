@@ -16,7 +16,10 @@ import {noteTypes} from '@eliwhite/scan-chart';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {addDrumNote, addSection, addTempo} from '@/lib/chart-edit';
 import ExportDialog from '../ExportDialog';
-import {makeEmptyDrumDoc, makeFixtureDoc} from './fixtures';
+import {
+  makeEmptyDrumDoc,
+  makeFixtureDoc,
+} from '@/lib/chart-editor-core/__tests__/fixtures';
 
 async function openDialog() {
   fireEvent.click(screen.getByRole('button', {name: /export/i}));

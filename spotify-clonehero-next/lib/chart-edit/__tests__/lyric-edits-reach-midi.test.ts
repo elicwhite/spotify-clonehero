@@ -23,7 +23,7 @@ import {
 import {
   DeleteLyricCommand,
   SetLyricTextCommand,
-} from '@/components/chart-editor/commands';
+} from '@/lib/chart-editor-core/commands';
 
 const RES = 480;
 

@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 // The client you created from the Server-Side Auth instructions
 import {createClient} from '@/lib/supabase/server';
-import storeSpotifyToken from '@/app/api/spotify/store-tokens/storeSpotifyToken';
+import storeSpotifyToken from '@/lib/spotify-server/storeSpotifyToken';
 import {safeNextPath} from '@/lib/safe-next-path';
 
 export async function GET(request: Request) {

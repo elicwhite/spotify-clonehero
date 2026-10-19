@@ -1,4 +1,4 @@
-import {Measure} from './convertToVexflow';
+import {Measure} from '@/lib/sheet-music/convertToVexflow';
 import {generateClickSample, mixSamples} from '@/lib/preview/clickTrack';
 import type {TrackPcm} from '@/lib/preview/audioManager';
 

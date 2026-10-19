@@ -12,7 +12,7 @@ import {
 } from '@eliwhite/scan-chart';
 import {assembleChartFiles} from '@/lib/chart-export';
 import {summarizeScanIssues} from '../ExportDialog';
-import {makeFixtureDoc} from './fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 
 /** Builds a `ScannedChart`-shaped fixture from just the three issue
  * channels `summarizeScanIssues` reads — the rest of `ScannedChart` /

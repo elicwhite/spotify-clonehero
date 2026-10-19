@@ -2,7 +2,7 @@
  * Schema-driven note adapter (plan 0037 Task 4).
  *
  * The single source of the lane/flag math the note-family commands
- * (`components/chart-editor/commands.ts`'s `AddNoteCommand`,
+ * (`lib/chart-editor-core/commands.ts`'s `AddNoteCommand`,
  * `DeleteNotesCommand`, `ToggleFlagCommand`, `ToggleKickCommand`) and the
  * `'note'` `EntityKindHandler` (`entities/index.ts`) both drive. Everything
  * here is parameterized by an `InstrumentSchema` and operates directly on

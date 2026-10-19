@@ -8,7 +8,7 @@
  * the rest of the editor. One store instance holds at most one active run.
  */
 
-import type {ProcessingStep} from '@/components/processing/StepRow';
+import type {ProcessingStep} from '@/lib/assist/steps';
 import type {AssistTaskKey} from './tasks/types';
 
 export type AssistRunStatus =

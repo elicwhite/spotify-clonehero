@@ -9,24 +9,24 @@ Check here before writing a helper. Most "I just need a small function for
 this" needs are already solved, and a second implementation is how the codebase
 grows two of everything.
 
-| Need                                                                                                   | Location                                                                                                |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart`                                                                                  |
-| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper                      | `lib/chart-edit/`                                                                                       |
-| SNG parsing                                                                                            | `parse-sng`                                                                                             |
-| Tick → ms conversion                                                                                   | `lib/chart-utils/tickToMs.ts` → `tickToMs()`                                                            |
-| Drum note → VexFlow notation                                                                           | `app/sheet-music/[slug]/convertToVexflow.ts`                                                            |
-| OPFS file read/write                                                                                   | `lib/fileSystemHelpers.ts`                                                                              |
-| Audio playback (primary)                                                                               | `lib/preview/audioManager.ts`                                                                           |
-| Highway 3D renderer                                                                                    | `lib/preview/highway/` (`setupRenderer`, `setupStage`) + `app/sheet-music/[slug]/CloneHeroRenderer.tsx` |
-| Sheet music notation                                                                                   | `app/sheet-music/[slug]/SheetMusic.tsx`                                                                 |
-| INI parsing                                                                                            | `lib/ini-parser.ts`                                                                                     |
-| UI components                                                                                          | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, …)                                      |
-| Landing / marketing page structure                                                                     | `components/landing/` — load the **`landing-pages`** skill                                              |
-| Open Graph images (frame, palette, type scale)                                                         | `lib/og/` — load the **`og-images`** skill                                                              |
-| Page header + outer gutter                                                                             | `components/SiteChrome.tsx` → `ROUTE_CHROME` — load the **`design-system`** skill                       |
-| CSS class merging                                                                                      | `lib/utils.ts` → `cn()`                                                                                 |
-| Toasts                                                                                                 | `sonner` (configured in root layout)                                                                    |
+| Need                                                                                                   | Location                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Chart parsing + writing, types (`NoteEvent`, `noteTypes`, `noteFlags`, `ChartDocument`, `ParsedChart`) | `@eliwhite/scan-chart`                                                                       |
+| Chart edit helpers (`addDrumNote`, `addSection`, `addTempo`), `readChart` wrapper                      | `lib/chart-edit/`                                                                            |
+| SNG parsing                                                                                            | `parse-sng`                                                                                  |
+| Tick → ms conversion                                                                                   | `lib/chart-utils/tickToMs.ts` → `tickToMs()`                                                 |
+| Drum note → VexFlow notation                                                                           | `lib/sheet-music/convertToVexflow.ts`                                                        |
+| OPFS file read/write                                                                                   | `lib/fileSystemHelpers.ts`                                                                   |
+| Audio playback (primary)                                                                               | `lib/preview/audioManager.ts`                                                                |
+| Highway 3D renderer                                                                                    | `lib/preview/highway/` (`setupRenderer`, `setupStage`) + `lib/preview/CloneHeroRenderer.tsx` |
+| Sheet music notation                                                                                   | `lib/sheet-music/SheetMusic.tsx`                                                             |
+| INI parsing                                                                                            | `lib/ini-parser.ts`                                                                          |
+| UI components                                                                                          | `components/ui/` (shadcn: Button, Dialog, Card, Select, Slider, …)                           |
+| Landing / marketing page structure                                                                     | `components/landing/` — load the **`landing-pages`** skill                                   |
+| Open Graph images (frame, palette, type scale)                                                         | `lib/og/` — load the **`og-images`** skill                                                   |
+| Page header + outer gutter                                                                             | `components/SiteChrome.tsx` → `ROUTE_CHROME` — load the **`design-system`** skill            |
+| CSS class merging                                                                                      | `lib/utils.ts` → `cn()`                                                                      |
+| Toasts                                                                                                 | `sonner` (configured in root layout)                                                         |
 
 ## When something exists but is in the wrong place
 

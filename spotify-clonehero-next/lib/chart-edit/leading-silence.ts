@@ -694,7 +694,7 @@ function cloneTrack(track: ParsedChart['trackData'][number]) {
 
 /** Deep-clone every array `applyLeadingSilence` mutates (event `msTime`
  * bumps, then `swapSynctrack`/`nudgeNoteCollisions`/`retimeChart`), mirroring
- * `cloneDocForRetime` in `components/chart-editor/commands.ts`. */
+ * `cloneDocForRetime` in `lib/chart-editor-core/commands.ts`. */
 function cloneDocForLeadingSilence(doc: ChartDocument): ChartDocument {
   const chart = doc.parsedChart;
   return {

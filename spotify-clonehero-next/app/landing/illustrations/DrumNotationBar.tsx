@@ -1,4 +1,4 @@
-import {LANE_VARS} from '@/components/landing/lanes';
+import {LANE_VARS} from '@/lib/landing/lanes';
 
 /**
  * One bar of drum notation, drawn the way `/sheet-music` draws it: percussion
@@ -6,7 +6,7 @@ import {LANE_VARS} from '@/components/landing/lanes';
  * cymbals and oval heads for drums, and the crash on the first ledger line
  * above the staff.
  *
- * Staff positions follow `app/sheet-music/[slug]/renderVexflow.ts`: hi-hat
+ * Staff positions follow `lib/sheet-music/renderVexflow.ts`: hi-hat
  * above the top line, snare in the third space, kick in the first space. Note
  * colors are the same lane colors that renderer assigns, read here from the
  * `.landing-lanes` custom properties so the bar tracks the theme.

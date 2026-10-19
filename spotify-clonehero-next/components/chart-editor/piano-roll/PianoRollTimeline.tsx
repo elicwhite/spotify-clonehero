@@ -128,7 +128,7 @@ import {
   trackQualifiedNoteId,
   trackKeyFromScope,
   trackScope,
-} from '../scope';
+} from '@/lib/chart-editor-core/scope';
 import {availableTrackKeys} from '@/lib/chart-editor-core/trackInventory';
 import {toast} from 'sonner';
 import {useExecuteCommand} from '../hooks/useEditCommands';
@@ -162,7 +162,7 @@ import {
   DeleteSectionCommand,
   RenameSectionCommand,
   type EditCommand,
-} from '../commands';
+} from '@/lib/chart-editor-core/commands';
 import {
   computeNoteDragDelta,
   exceedsDragThreshold,

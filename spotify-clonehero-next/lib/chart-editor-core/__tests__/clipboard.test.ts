@@ -15,7 +15,7 @@ import {
   toClipboardLyrics,
   toClipboardNotes,
 } from '../clipboard';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 
 const RESOLUTION = 192;
 

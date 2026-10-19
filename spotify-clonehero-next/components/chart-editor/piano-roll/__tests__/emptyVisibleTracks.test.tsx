@@ -18,7 +18,7 @@ import {
 } from '../../ChartEditorContext';
 import {retimeChart} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import type {AudioManager} from '@/lib/preview/audioManager';
 
 beforeAll(() => {

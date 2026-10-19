@@ -42,7 +42,7 @@ import {
   ToggleFlagCommand,
   type EditCommand,
   type FretTechnique,
-} from '../commands';
+} from '@/lib/chart-editor-core/commands';
 import {techniqueForFlags, type PianoRollNote} from './notes';
 
 /**

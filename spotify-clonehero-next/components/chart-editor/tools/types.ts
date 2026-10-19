@@ -16,12 +16,12 @@
  */
 
 import type {EntityKind, InstrumentSchema, NoteEvent} from '@/lib/chart-edit';
-import type {EditCommand} from '../commands';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
 import type {
   ChartEditorAction,
   ChartEditorState,
 } from '@/lib/chart-editor-core';
-import type {EditorCapabilities} from '../capabilities';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 import type {HitResult} from '@/lib/preview/highway';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 

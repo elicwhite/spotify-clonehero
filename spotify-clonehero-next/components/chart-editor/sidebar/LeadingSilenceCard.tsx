@@ -24,8 +24,8 @@ import type {AddLeadingSilenceResult} from '@/lib/assist/tasks/add-leading-silen
 import type {ChartDocument} from '@/lib/chart-edit';
 
 import {useShiftAudioAheadReader} from '../AudioServiceContext';
-import type {EditCommand} from '../commands';
-import {AddLeadingSilenceCommand} from '../commands';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import {AddLeadingSilenceCommand} from '@/lib/chart-editor-core/commands';
 import {CardAction, CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
 

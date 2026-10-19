@@ -16,7 +16,7 @@ import {
   localNoteIdsForTrack,
   trackKeyFromScope,
   trackQualifiedNoteId,
-} from './scope';
+} from '@/lib/chart-editor-core/scope';
 import type {EntityRef} from '@/lib/chart-edit';
 import {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';
 import {
@@ -26,7 +26,7 @@ import {
   ToggleFlagCommand,
   toSchemaNote,
   type FlagName,
-} from './commands';
+} from '@/lib/chart-editor-core/commands';
 import {
   listNotes,
   typeToLane,

@@ -20,7 +20,7 @@ browser; there is no application backend beyond Supabase auth.
 | Charts          | `@eliwhite/scan-chart` (parse + write `.chart`/`.mid`), `parse-sng` (parse `.sng`); edit helpers in `lib/chart-edit/`                       |
 | 3D preview      | THREE.js highway renderer — `lib/preview/highway/`                                                                                          |
 | Audio           | `AudioManager` (`lib/preview/audioManager.ts`) — Web Audio API, multiple stems, speed control                                               |
-| Notation        | VexFlow (`app/sheet-music/[slug]/SheetMusic.tsx`)                                                                                           |
+| Notation        | VexFlow (`lib/sheet-music/SheetMusic.tsx`)                                                                                                  |
 | Testing         | Jest                                                                                                                                        |
 | Auth            | Supabase                                                                                                                                    |
 

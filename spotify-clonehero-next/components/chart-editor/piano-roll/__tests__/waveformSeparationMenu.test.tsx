@@ -24,7 +24,7 @@ import {
   ChartEditorProvider,
   useChartEditorContext,
 } from '../../ChartEditorContext';
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import type {StemSeparationHostProps} from '../../stemSeparation';
 
 const PANEL_HEIGHT = 200;

@@ -17,8 +17,8 @@ import {
   PlaceDownbeatCommand,
   MoveTempoMarkerCommand,
   type TempoGlueMode,
-} from '../../commands';
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+} from '@/lib/chart-editor-core/commands';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {buildBeatGrid} from '../scene';
 import {clampMarkerMs, hitTempoMarker, nearestBeatTick} from '../tempoHitTest';
 import {msToX, type PianoRollView} from '../viewMath';

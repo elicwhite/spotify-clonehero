@@ -37,7 +37,10 @@ import {
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import {localNoteIdsForTrack, trackKeyFromScope} from '../../scope';
+import {
+  localNoteIdsForTrack,
+  trackKeyFromScope,
+} from '@/lib/chart-editor-core/scope';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {
   STACKED_GUTTER_W,

@@ -22,8 +22,8 @@ import {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
   trackQualifiedNoteId,
-} from '../scope';
-import {noteId} from '../commands';
+} from '@/lib/chart-editor-core/scope';
+import {noteId} from '@/lib/chart-editor-core/commands';
 import NoteInspector from '../NoteInspector';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import {addNote, addDrumNote, guitarSchema} from '@/lib/chart-edit';

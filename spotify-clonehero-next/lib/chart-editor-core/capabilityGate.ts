@@ -1,5 +1,5 @@
-import type {EditCommand} from '@/components/chart-editor/commands';
-import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 
 /**
  * Dispatch-path capability gate (plan 0037 Task 3). A command is allowed

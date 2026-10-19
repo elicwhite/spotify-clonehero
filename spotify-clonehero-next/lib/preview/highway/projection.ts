@@ -17,8 +17,8 @@
 
 import type {ParsedChart} from '../chorus-chart-processing';
 import type {ChartDocument} from '@/lib/chart-edit';
-import type {EditorScope} from '@/components/chart-editor/scope';
-import {resolveScopeTrack} from '@/components/chart-editor/scope';
+import type {EditorScope} from '@/lib/chart-editor-core/scope';
+import {resolveScopeTrack} from '@/lib/chart-editor-core/scope';
 import type {InstrumentSchema, LaneDefinition} from '@/lib/chart-edit';
 import type {ChartElement} from './SceneReconciler';
 import {trackToElements} from './trackToElements';

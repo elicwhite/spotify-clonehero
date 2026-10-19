@@ -39,7 +39,7 @@ import {
   DeleteLowerDifficultiesCommand,
   DeleteTrackCommand,
   type EditCommand,
-} from '../commands';
+} from '@/lib/chart-editor-core/commands';
 import {useExecuteCommand} from '../hooks/useEditCommands';
 import {INSTRUMENT_LABEL, trackLabel} from '../trackLabels';
 

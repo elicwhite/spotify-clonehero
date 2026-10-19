@@ -6,7 +6,7 @@ import type {
 import {findTrack} from '@/lib/chart-edit';
 import type {InstrumentSchema} from '@/lib/chart-edit/instruments';
 import {schemaForTrack} from '@/lib/chart-edit/instruments';
-import {isTrackScope} from '@/components/chart-editor/scope';
+import {isTrackScope} from '@/lib/chart-editor-core/scope';
 import type {ChartEditorState} from './state';
 import {EMPTY_STAMP, getAssistProvenance, isStampStale} from './content-stamps';
 import type {TempoDerivedFeature} from './content-stamps';

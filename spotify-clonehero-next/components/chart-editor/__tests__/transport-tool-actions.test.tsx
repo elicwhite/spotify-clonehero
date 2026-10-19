@@ -26,8 +26,8 @@ import {
   DRUM_EDIT_CAPABILITIES,
   PREVIEW_CAPABILITIES,
   type EditorCapabilities,
-} from '../capabilities';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+} from '@/lib/chart-editor-core/capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {fakeAudioManager} from './fakeAudioManager';
 
 /** Surfaces `state.activeTool` so a click on a tool button is observable. */

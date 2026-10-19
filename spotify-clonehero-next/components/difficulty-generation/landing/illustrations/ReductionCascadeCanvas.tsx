@@ -2,7 +2,7 @@
 
 import {useEffect, useRef} from 'react';
 
-import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/components/landing/lanes';
+import {LANE_FALLBACKS, LANE_PROPERTIES} from '@/lib/landing/lanes';
 import {heroCanvasFrameClass} from '@/components/landing/heroCanvasFrame';
 
 import type {DifficultyGenerationInstrument} from '../../DifficultyGenerationFlow';

@@ -103,7 +103,8 @@ interface EditorAppProps {
 }
 
 /**
- * Top-level editor layout for drum-transcription.
+ * Top-level editor layout for a drum-transcription project, hosted by
+ * /chart-editor.
  *
  * Loads chart + audio from OPFS, creates AudioManager, and renders the
  * shared ChartEditor shell, including the sidebar's Stems mixer wiring
@@ -387,7 +388,7 @@ export default function EditorApp({
 
         // 3b. Re-attach assist provenance (plan 0074 Design C). `.chart`/
         // `.mid` have nowhere to carry it, so the project's OPFS metadata is
-        // the persistence layer for this page — mirrored on every autosave
+        // the persistence layer for these projects — mirrored on every autosave
         // the same way `audioAnchor` is. A project transcribed before this
         // field existed gets a stamp seeded from the chart as loaded: its
         // drums really were transcribed against the grid it ships with, so

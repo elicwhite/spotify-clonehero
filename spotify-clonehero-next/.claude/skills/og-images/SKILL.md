@@ -115,7 +115,7 @@ because Satori renders outside the DOM and cannot read CSS custom properties.
 OG cards are always dark, so the dark block is the one that governs.
 
 A test parses the stylesheet and pins both `OG_LANES` and
-`components/landing/lanes.ts`'s `LANE_FALLBACKS` to it. **Change the colors in
+`lib/landing/lanes.ts`'s `LANE_FALLBACKS` to it. **Change the colors in
 `globals.css` and the test tells you which copies to update** — do not edit the
 constants alone.
 

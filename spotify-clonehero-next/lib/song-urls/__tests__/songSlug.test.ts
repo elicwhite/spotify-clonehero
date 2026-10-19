@@ -1,12 +1,12 @@
 import {normalizeRepeatedSlashes} from 'next/dist/shared/lib/utils';
 
-import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
-import {getKaraokeUrl} from '@/app/karaoke/buildKaraokeUrl';
+import {getSheetMusicUrl} from '@/lib/song-urls/buildSheetMusicUrl';
+import {getKaraokeUrl} from '@/lib/song-urls/buildKaraokeUrl';
 import {
   buildSongSlug,
   findSongSlugInSegments,
   getMd5FromSlug,
-} from '@/app/songSlug';
+} from '@/lib/song-urls/songSlug';
 
 const ORIGIN = 'https://musiccharts.tools';
 const MD5 = '0123456789abcdef0123456789abcdef';

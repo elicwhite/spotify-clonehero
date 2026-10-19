@@ -34,7 +34,7 @@ import {
 } from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
-import {makeFixtureDoc} from '../../__tests__/fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {buildTimedTempos, tickToMs} from '@/lib/drum-transcription/timing';
 import type {AudioManager} from '@/lib/preview/audioManager';
 

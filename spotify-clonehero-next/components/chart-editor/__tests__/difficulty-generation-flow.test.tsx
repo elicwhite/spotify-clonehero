@@ -40,10 +40,16 @@ import {
   useChartEditorContext,
 } from '../ChartEditorContext';
 import {useExecuteCommand, useUndoRedo} from '../hooks/useEditCommands';
-import {AddNoteCommand, GenerateDifficultiesCommand} from '../commands';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
-import {DRUM_EDIT_CAPABILITIES} from '../capabilities';
-import {emptyTrackData, makeFixtureDoc} from './fixtures';
+import {
+  AddNoteCommand,
+  GenerateDifficultiesCommand,
+} from '@/lib/chart-editor-core/commands';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
+import {DRUM_EDIT_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
+import {
+  emptyTrackData,
+  makeFixtureDoc,
+} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {computeTrackStamp} from '@/lib/chart-editor-core/content-stamps';
 
 interface CapturedRun {

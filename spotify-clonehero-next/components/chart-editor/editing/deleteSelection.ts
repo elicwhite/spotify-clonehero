@@ -34,7 +34,7 @@ import {
   RemoveTimeSignatureCommand,
   type EditCommand,
   type TempoGlueMode,
-} from '../commands';
+} from '@/lib/chart-editor-core/commands';
 
 export interface DeleteSelectionInputs {
   state: ChartEditorState;

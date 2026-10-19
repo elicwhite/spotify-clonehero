@@ -12,7 +12,7 @@ import {useSearchParams} from 'next/navigation';
 import {cn} from '@/lib/utils';
 import {Icons} from '@/components/icons';
 import SpotifyIcon from '@/components/SpotifyIcon';
-import {SPOTIFY_SCOPES} from '../spotifyScopes';
+import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
 
 export function LoginForm({
   className,

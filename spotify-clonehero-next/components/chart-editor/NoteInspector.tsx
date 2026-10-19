@@ -9,14 +9,17 @@ import {
   selectActiveTrack,
   selectActiveSchema,
 } from '@/lib/chart-editor-core';
-import {trackKeyFromScope, trackQualifiedNoteId} from './scope';
+import {
+  trackKeyFromScope,
+  trackQualifiedNoteId,
+} from '@/lib/chart-editor-core/scope';
 import {useExecuteCommand} from './hooks/useEditCommands';
 import {
   ToggleFlagCommand,
   ToggleKickCommand,
   DeleteNotesCommand,
   noteId,
-} from './commands';
+} from '@/lib/chart-editor-core/commands';
 import {
   drums4LaneSchema,
   listNotes,

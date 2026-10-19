@@ -24,7 +24,8 @@ import {
 } from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/lib/utils';
-import StepRow, {type ProcessingStep} from '@/components/processing/StepRow';
+import StepRow from '@/components/processing/StepRow';
+import type {ProcessingStep} from '@/lib/assist/steps';
 
 export interface ProcessingViewProps {
   /** Card title, e.g. "Adding lyrics to your chart". */

@@ -39,10 +39,10 @@ import {render, screen, waitFor, fireEvent} from '@testing-library/react';
 import {noteTypes} from '@eliwhite/scan-chart';
 import {ChartEditorProvider} from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
-import {makeEmptyDrumDoc} from './fixtures';
+import {makeEmptyDrumDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 
 // ---------------------------------------------------------------------------
 // Fixture chart bytes: the project's stored chart carries 3 notes, and the
@@ -269,7 +269,7 @@ jest.mock('../../../lib/drum-transcription/ml/transcriber', () => ({
   },
 }));
 
-import EditorApp from '@/app/drum-transcription/components/EditorApp';
+import EditorApp from '@/components/chart-editor/EditorApp';
 import {getProject} from '@/lib/drum-transcription/storage/opfs';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 import {separateStems} from '@/lib/audio-pipeline/separate-stems';

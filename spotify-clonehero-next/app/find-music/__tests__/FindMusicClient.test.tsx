@@ -280,7 +280,7 @@ jest.mock('../FindMusicTable', () => ({
 
 import FindMusicClient from '../FindMusicClient';
 import {LocalDbUnavailableError} from '../../../lib/local-db/errors';
-import {LOCAL_DB_RESET_PATH} from '../../storage/routes';
+import {LOCAL_DB_RESET_PATH} from '@/lib/storage-routes';
 import {
   CHORUS_UNAVAILABLE_MESSAGE,
   ChorusUnavailableError,

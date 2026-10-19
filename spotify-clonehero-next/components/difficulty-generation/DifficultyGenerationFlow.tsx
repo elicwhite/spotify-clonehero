@@ -54,8 +54,8 @@ import {difficultyGenerationBlockMessage} from '@/components/chart-editor/diffic
 import {
   DEFAULT_DRUMS_EXPERT_SCOPE,
   DEFAULT_GUITAR_EXPERT_SCOPE,
-} from '@/components/chart-editor/scope';
-import {GenerateDifficultiesCommand} from '@/components/chart-editor/commands';
+} from '@/lib/chart-editor-core/scope';
+import {GenerateDifficultiesCommand} from '@/lib/chart-editor-core/commands';
 import {INSTRUMENT_LABEL} from '@/components/chart-editor/trackLabels';
 import {computeTrackStamp} from '@/lib/chart-editor-core';
 import {buildDifficultyGenerationInput} from '@/lib/assist/difficulty-input';

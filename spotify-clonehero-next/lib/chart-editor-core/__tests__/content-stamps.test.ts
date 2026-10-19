@@ -4,7 +4,7 @@
 
 import {noteTypes} from '@eliwhite/scan-chart';
 import {addDrumNote, addTempo} from '@/lib/chart-edit';
-import {makeFixtureDoc} from '@/components/chart-editor/__tests__/fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 import {
   carryAssistProvenance,
   computeAllTrackStamps,

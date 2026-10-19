@@ -22,7 +22,7 @@ import {
   probeWebGpuFp16,
   type WebGpuFp16Status,
 } from '@/lib/onnx/webgpu-capability';
-import type {WebGpuBlock} from './webgpu-block';
+import type {WebGpuBlock} from '@/lib/onnx/webgpu-block';
 
 export function useWebGpuFp16(): WebGpuFp16Status | null {
   const [status, setStatus] = useState<WebGpuFp16Status | null>(null);

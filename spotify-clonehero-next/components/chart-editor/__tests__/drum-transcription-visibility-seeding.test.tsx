@@ -22,7 +22,7 @@ import {
   useChartEditorContext,
 } from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '../scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {addDrumNote, writeChartFolder} from '@/lib/chart-edit';
 import type {ChartDocument} from '@/lib/chart-edit';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
@@ -135,7 +135,7 @@ jest.mock('../../../lib/drum-transcription/ml/roformer-separation', () => ({
   ensureProjectStemFingerprint: jest.fn(async () => 'fp-1'),
 }));
 
-import EditorApp from '@/app/drum-transcription/components/EditorApp';
+import EditorApp from '@/components/chart-editor/EditorApp';
 import {AssistRunnerProvider} from '@/components/assist/AssistRunnerProvider';
 
 /** Reads visibility/scope straight off context, mounted as a sibling of

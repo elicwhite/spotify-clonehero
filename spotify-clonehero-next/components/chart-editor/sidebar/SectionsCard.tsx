@@ -30,8 +30,8 @@ import {getAssistProvenance} from '@/lib/chart-editor-core';
 import type {ChartDocument} from '@/lib/chart-edit';
 
 import {useChartEditorContext} from '../ChartEditorContext';
-import type {EditCommand} from '../commands';
-import {ReplaceSectionsCommand} from '../commands';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import {ReplaceSectionsCommand} from '@/lib/chart-editor-core/commands';
 import {CardAction, CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
 

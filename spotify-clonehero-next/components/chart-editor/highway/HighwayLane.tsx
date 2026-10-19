@@ -64,15 +64,19 @@ import type {HighwayStage} from '@/lib/preview/highway';
 import type {HighwayRect} from '@/lib/preview/highway/layout';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import type {ChartDocument} from '@/lib/chart-edit';
-import type {EditCommand} from '../commands';
-import type {EditorCapabilities} from '../capabilities';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 import {getSelectedIds} from '@/lib/chart-editor-core';
 import {useChartElements} from './useChartElements';
 import {useHighwaySync} from './useHighwaySync';
 import {useHighwayMouseInteraction} from './useHighwayMouseInteraction';
 import {useStageHighway} from './useStageHighway';
 import {parseChartFile} from '@eliwhite/scan-chart';
-import {scopePaneKey, trackKeyFromScope, type EditorScope} from '../scope';
+import {
+  scopePaneKey,
+  trackKeyFromScope,
+  type EditorScope,
+} from '@/lib/chart-editor-core/scope';
 import {trackLabel} from '../trackLabels';
 import type {AudioSamples} from '../audioSamples';
 

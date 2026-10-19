@@ -2,7 +2,7 @@
 
 import {useCallback} from 'react';
 import {useChartEditorContext} from '../ChartEditorContext';
-import type {EditCommand} from '../commands';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
 
 /**
  * Hook that provides a function to execute an EditCommand.

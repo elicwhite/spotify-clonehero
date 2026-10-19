@@ -18,7 +18,7 @@ import {LandingSection} from '@/components/landing/Section';
 import {StepFlow} from '@/components/landing/StepFlow';
 import {ToolEntrySection} from '@/components/landing/ToolEntrySection';
 
-import {BeatGridCanvas} from './BeatGridCanvas';
+import {BeatGridCanvas} from '@/components/landing/BeatGridCanvas';
 import {TEMPO_COMPARISON_DISCLAIMER, TEMPO_COMPARISON_ROWS} from './metrics';
 
 const STEPS: {Icon: LucideIcon; label: string; desc: string}[] = [

@@ -10,8 +10,8 @@ import {
 } from '@/lib/preview/audioManager';
 import {getChartDelayMs} from '@/lib/chart-utils/chartDelay';
 import type {ChartResponseEncore} from '@/lib/chartSelection';
-import CloneHeroRenderer from '@/app/sheet-music/[slug]/CloneHeroRenderer';
-import SheetMusic from '@/app/sheet-music/[slug]/SheetMusic';
+import CloneHeroRenderer from '@/lib/preview/CloneHeroRenderer';
+import SheetMusic from '@/lib/sheet-music/SheetMusic';
 import {
   buildPracticeChart,
   fillNotesToBeatOffsets,

@@ -36,10 +36,10 @@ import {
   LOWER_TRACK_DIFFICULTIES,
   type SupportedTrackInstrument,
 } from '@/lib/chart-editor-core';
-import {trackKeyId} from '../scope';
+import {trackKeyId} from '@/lib/chart-editor-core/scope';
 import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
-import {DeleteLowerDifficultiesCommand} from '../commands';
+import {DeleteLowerDifficultiesCommand} from '@/lib/chart-editor-core/commands';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {ConnectedAssistRunCard} from '@/components/assist/AssistRunCard';
 import {useDifficultyGeneration} from '../hooks/useDifficultyGeneration';

@@ -11,42 +11,6 @@ export {
   type AudioServiceContextValue,
 } from './AudioServiceContext';
 
-// Headless editor core (reducer, history, selection — @/lib/chart-editor-core)
-export {
-  getSelectedIds,
-  isAnythingSelected,
-  selectActiveTrack,
-  type ChartEditorState,
-  type ChartEditorAction,
-  type ChartEditorContextValue,
-  type PendingTempoCandidate,
-  type ToolMode,
-} from '@/lib/chart-editor-core';
-
-// Editor scope (replaces hardcoded expert-drums lookups)
-export {
-  DEFAULT_DRUMS_EXPERT_SCOPE,
-  DEFAULT_GUITAR_EXPERT_SCOPE,
-  DEFAULT_VOCALS_SCOPE,
-  describeScope,
-  entityContextFromScope,
-  isTrackScope,
-  isVocalsScope,
-  resolveScopeTrack,
-  trackKeyFromScope,
-  trackScope,
-  type EditorScope,
-  type TrackKey,
-} from './scope';
-
-// Capabilities
-export {
-  DRUM_EDIT_CAPABILITIES,
-  ADD_LYRICS_CAPABILITIES,
-  PREVIEW_CAPABILITIES,
-  type EditorCapabilities,
-} from './capabilities';
-
 // Shell component
 export {default as ChartEditor} from './ChartEditor';
 export type {ChartEditorProps} from './ChartEditor';
@@ -65,32 +29,6 @@ export {default as LoopControls} from './LoopControls';
 export {default as NoteInspector} from './NoteInspector';
 export {default as ExportDialog} from './ExportDialog';
 export type {AudioSource} from './ExportDialog';
-
-// Commands
-export {
-  AddTrackCommand,
-  AddNoteCommand,
-  DeleteNotesCommand,
-  MoveEntitiesCommand,
-  ToggleFlagCommand,
-  ToggleKickCommand,
-  AddBPMCommand,
-  AddTimeSignatureCommand,
-  MoveTempoMarkerCommand,
-  AddTempoMarkerCommand,
-  DeleteTempoMarkerCommand,
-  RephaseDownbeatsCommand,
-  PlaceDownbeatCommand,
-  MoveTimeSignatureCommand,
-  RemoveTimeSignatureCommand,
-  RepredictTempoCommand,
-  CommitTempoCandidateCommand,
-  BatchCommand,
-  noteId,
-  type EditCommand,
-  type FlagName,
-  type TempoGlueMode,
-} from './commands';
 
 // Hooks
 export {useExecuteCommand, useUndoRedo} from './hooks/useEditCommands';

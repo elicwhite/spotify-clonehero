@@ -12,7 +12,7 @@ import {
   preFilterInstruments,
 } from '@/components/ChartInstruments';
 import {EncoreResponse} from '@/lib/search-encore';
-import {getKaraokeUrl} from './buildKaraokeUrl';
+import {getKaraokeUrl} from '@/lib/song-urls/buildKaraokeUrl';
 import {searchKaraoke} from './searchKaraoke';
 
 export default function Search({

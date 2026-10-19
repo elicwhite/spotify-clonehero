@@ -23,7 +23,7 @@ import {
   localNoteIdsForTrack,
   trackKeyFromScope,
   trackQualifiedNoteId,
-} from '../scope';
+} from '@/lib/chart-editor-core/scope';
 import {useExecuteCommand, useUndoRedo} from './useEditCommands';
 import {buildDeleteSelectionCommands} from '../editing/deleteSelection';
 import {
@@ -38,7 +38,7 @@ import {
   translateSchemaNote,
   type EditCommand,
   type SchemaNote,
-} from '../commands';
+} from '@/lib/chart-editor-core/commands';
 import {
   findTrack,
   lyricId,

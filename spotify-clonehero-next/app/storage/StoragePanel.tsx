@@ -40,7 +40,7 @@ import {attachStorageContext} from '@/lib/sentry/storage-context';
 import {formatBytes} from '@/lib/sng/file-utils';
 
 import {ChartExportDialog} from './ChartExportDialog';
-import {LOCAL_DB_ANCHOR} from './routes';
+import {LOCAL_DB_ANCHOR} from '@/lib/storage-routes';
 import {StorageGroup, StorageRow} from './StorageRow';
 import {UsageBar, type UsageSegment} from './UsageBar';
 

@@ -1,8 +1,8 @@
 /**
  * The data behind the /add-lyrics syllable-alignment picture, shared by the
- * animated hero canvas (`SyllableAlignCanvas.tsx`), the route's social
- * card (`app/add-lyrics/opengraph-image.tsx`), which draws the canvas's
- * settled frame, and the /chart page's syllable strip
+ * animated hero canvas (`app/add-lyrics/landing/SyllableAlignCanvas.tsx`),
+ * the /add-lyrics route's social card (`app/add-lyrics/opengraph-image.tsx`),
+ * which draws the canvas's settled frame, and the /chart page's syllable strip
  * (`app/chart/illustrations/LyricSyllables.tsx`). One source, so an edited
  * syllable time changes all three.
  *

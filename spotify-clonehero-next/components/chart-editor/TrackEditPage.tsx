@@ -64,7 +64,7 @@ import {
   scopePaneKey,
   trackKeyId,
   type EditorScope,
-} from './scope';
+} from '@/lib/chart-editor-core/scope';
 import ChartEditor from './ChartEditor';
 import type {AlbumArtFile} from '@/lib/album-art';
 import type {AudioSource} from './ExportDialog';

@@ -28,9 +28,9 @@ import {Plus} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from '../hooks/useEditCommands';
-import {AddTrackCommand} from '../commands';
-import {trackKeyId} from '../scope';
-import type {TrackKey} from '../scope';
+import {AddTrackCommand} from '@/lib/chart-editor-core/commands';
+import {trackKeyId} from '@/lib/chart-editor-core/scope';
+import type {TrackKey} from '@/lib/chart-editor-core/scope';
 import {
   getAssistProvenance,
   selectDifficultyStale,

@@ -15,7 +15,10 @@ import {
 import {Star, Music, LogOut, Trash2} from 'lucide-react';
 import {createClient} from '@/lib/supabase/client';
 import {getAuthCallbackUrl} from '@/lib/supabase/auth-callback-url';
-import {unfavoriteSongByHash} from './actions';
+import {
+  deleteCurrentUser,
+  unfavoriteSongByHash,
+} from '@/lib/supabase/accountActions';
 import SpotifyIcon from '@/components/SpotifyIcon';
 import {
   AlertDialog,
@@ -28,9 +31,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import {deleteCurrentUser} from './actions';
-import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
-import {SPOTIFY_SCOPES} from '../auth/spotifyScopes';
+import {getSheetMusicUrl} from '@/lib/song-urls/buildSheetMusicUrl';
+import {SPOTIFY_SCOPES} from '@/lib/spotify-sdk/spotifyScopes';
 
 type SavedSong = {
   hash: string;

@@ -8,17 +8,17 @@ import type {
 import type {
   EditCommand,
   TempoGlueMode,
-} from '@/components/chart-editor/commands';
+} from '@/lib/chart-editor-core/commands';
 import type {TrackKeyId} from './trackInventory';
-import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
 import type {HighwayMode} from '@/lib/preview/highway';
 import type {LoopRegion} from '@/lib/preview/loopRegion';
-import type {EditorScope} from '@/components/chart-editor/scope';
+import type {EditorScope} from '@/lib/chart-editor-core/scope';
 import type {EditorClipboard} from './clipboard';
 import {EMPTY_STAMP, type AssistProvenance} from './content-stamps';
 import type {ProjectOrigin} from '@/lib/project-storage/types';
 import type {TrackKey} from '@/lib/chart-edit';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 
 /**
  * The highway's pointer modes. Tempo and time-signature editing is not among

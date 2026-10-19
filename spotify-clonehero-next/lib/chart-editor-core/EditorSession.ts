@@ -2,8 +2,8 @@ import {chartEditorReducer} from './reducer';
 import type {ChartEditorAction, ChartEditorState} from './state';
 import {initialState} from './state';
 import {isCommandAllowed} from './capabilityGate';
-import type {EditorCapabilities} from '@/components/chart-editor/capabilities';
-import {DRUM_EDIT_CAPABILITIES} from '@/components/chart-editor/capabilities';
+import type {EditorCapabilities} from '@/lib/chart-editor-core/capabilities';
+import {DRUM_EDIT_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
 
 /**
  * Headless, React-free editor store. Holds the reducer state and notifies

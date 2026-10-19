@@ -17,7 +17,7 @@
  *    grid. That is a plain `retimeChart` (a strict subset of this module's
  *    job) and lives in the tempo helpers / commands, not here.
  *
- * The commands in `components/chart-editor/commands.ts` read the glue mode at
+ * The commands in `lib/chart-editor-core/commands.ts` read the glue mode at
  * dispatch and pick the op; this module provides the KEEP-MS primitive and the
  * pure helpers (`synctrackFromChart`, `nudgeNoteCollisions`) both ops build on.
  */

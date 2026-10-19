@@ -16,7 +16,7 @@ import {
   DRUM_EDIT_CAPABILITIES,
   PREVIEW_CAPABILITIES,
   TEMPO_CAPABILITIES,
-} from '@/components/chart-editor/capabilities';
+} from '@/lib/chart-editor-core/capabilities';
 import {
   AddNoteCommand,
   toSchemaNote,
@@ -25,9 +25,9 @@ import {
   MoveTempoMarkerCommand,
   AddTimeSignatureCommand,
   BatchCommand,
-} from '@/components/chart-editor/commands';
-import {makeFixtureDoc} from '@/components/chart-editor/__tests__/fixtures';
-import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/components/chart-editor/scope';
+} from '@/lib/chart-editor-core/commands';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import {noteTypes} from '@eliwhite/scan-chart';
 
 const noteCmd = () =>

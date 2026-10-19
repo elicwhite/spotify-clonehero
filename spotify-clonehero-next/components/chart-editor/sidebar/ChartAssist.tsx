@@ -45,7 +45,7 @@ import {
 } from '@/lib/chart-editor-core';
 import {findTrack} from '@/lib/chart-edit';
 import {useOptionalAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
-import {trackKeyId} from '../scope';
+import {trackKeyId} from '@/lib/chart-editor-core/scope';
 import LearnMoreModal from './LearnMoreModal';
 import SectionHeading, {SIDEBAR_SECTION_CLASS} from './SectionHeading';
 import {LEARN_COPY, type LearnKey} from './learn-copy';

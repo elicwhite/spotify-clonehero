@@ -35,11 +35,11 @@ import {
 } from '../ChartEditorContext';
 import {AudioServiceProvider} from '../AudioServiceContext';
 import HighwayEditor from '../HighwayEditor';
-import {ADD_LYRICS_CAPABILITIES} from '../capabilities';
+import {ADD_LYRICS_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
 import {emptyTrackData} from '@/lib/chart-edit/__tests__/test-utils';
 import type {ChartDocument} from '@/lib/chart-edit';
 import type {AudioManager} from '@/lib/preview/audioManager';
-import type {EditorScope} from '../scope';
+import type {EditorScope} from '@/lib/chart-editor-core/scope';
 import {setupStage} from '@/lib/preview/highway';
 import {
   createFakeStage as mockCreateFakeStage,

@@ -14,15 +14,15 @@ import {useAssistTaskRun} from '../hooks/useAssistTaskRun';
 import {generateTempoMapTask} from '@/lib/assist/tasks/generate-tempo-map';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
 
-import type {EditCommand} from '../commands';
-import {ReplaceTempoMapCommand} from '../commands';
+import type {EditCommand} from '@/lib/chart-editor-core/commands';
+import {ReplaceTempoMapCommand} from '@/lib/chart-editor-core/commands';
 import {CardAction, CardShell} from './CardShell';
 import type {LearnKey} from './learn-copy';
 import {
   blockedControlReason,
   sharedBlockedNote,
   type WebGpuBlock,
-} from '@/components/onnx/webgpu-block';
+} from '@/lib/onnx/webgpu-block';
 
 export interface TempoMapCardProps {
   runner: AssistRunnerControls;

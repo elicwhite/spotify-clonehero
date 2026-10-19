@@ -33,8 +33,8 @@ import {toast} from 'sonner';
 
 import {useChartEditorContext} from '../ChartEditorContext';
 import {useExecuteCommand} from './useEditCommands';
-import {GenerateDifficultiesCommand} from '../commands';
-import {trackKeyId} from '../scope';
+import {GenerateDifficultiesCommand} from '@/lib/chart-editor-core/commands';
+import {trackKeyId} from '@/lib/chart-editor-core/scope';
 import {INSTRUMENT_LABEL} from '../trackLabels';
 import {difficultyGenerationBlockMessage} from '../difficultyGenerationMessages';
 import {

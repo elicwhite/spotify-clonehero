@@ -1,7 +1,7 @@
 /**
  * The difficulty-generation contracts that more than one layer has to agree
  * on (plan 0074 Design D), in a module with no worker or client code so a
- * test — or `components/chart-editor/commands.ts` — can import them without
+ * test — or `lib/chart-editor-core/commands.ts` — can import them without
  * pulling in the worker's `self`-scoped code or the client's worker-spawning
  * code:
  *

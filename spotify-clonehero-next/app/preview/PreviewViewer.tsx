@@ -13,12 +13,12 @@ import {
 } from '@/lib/preview/waveformMix';
 import {
   ChartEditorProvider,
-  PREVIEW_CAPABILITIES,
-  DEFAULT_DRUMS_EXPERT_SCOPE,
   useChartEditorContext,
   AudioServiceProvider,
   useAudioServiceContext,
 } from '@/components/chart-editor';
+import {PREVIEW_CAPABILITIES} from '@/lib/chart-editor-core/capabilities';
+import {DEFAULT_DRUMS_EXPERT_SCOPE} from '@/lib/chart-editor-core/scope';
 import ChartEditor from '@/components/chart-editor/ChartEditor';
 import {audioSamples} from '@/components/chart-editor/audioSamples';
 import {NO_TOOLS_APPLIED} from '@/components/chart-editor/hooks/useToolsApplied';

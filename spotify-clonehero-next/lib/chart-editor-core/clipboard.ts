@@ -20,8 +20,8 @@
  *    different tempo.
  */
 
-import type {SchemaNote} from '@/components/chart-editor/commands';
-import type {EditorScope} from '@/components/chart-editor/scope';
+import type {SchemaNote} from '@/lib/chart-editor-core/commands';
+import type {EditorScope} from '@/lib/chart-editor-core/scope';
 import type {TimedTempo} from '@/lib/drum-transcription/chart-types';
 import {snapTickToGrid} from '@/lib/chart-edit';
 import {msToTick, tickToMs} from '@/lib/drum-transcription/timing';

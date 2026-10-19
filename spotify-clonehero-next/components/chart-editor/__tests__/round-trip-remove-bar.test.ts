@@ -12,7 +12,7 @@
  * whole bar, with no error.
  */
 
-import {AddLeadingSilenceCommand} from '../commands';
+import {AddLeadingSilenceCommand} from '@/lib/chart-editor-core/commands';
 import {planExportAudio} from '../hooks/projectAudio';
 import {
   applyDocSidecars,
@@ -23,7 +23,7 @@ import {
   setAudioAnchor,
   type ChartDocument,
 } from '@/lib/chart-edit';
-import {makeFixtureDoc} from './fixtures';
+import {makeFixtureDoc} from '@/lib/chart-editor-core/__tests__/fixtures';
 
 const SAMPLE_RATE = 48000;
 

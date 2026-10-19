@@ -19,7 +19,7 @@ import {
   preFilterInstruments,
 } from '@/components/ChartInstruments';
 import {EncoreResponse, searchEncore} from '@/lib/search-encore';
-import {getSheetMusicUrl} from '@/app/buildSheetMusicUrl';
+import {getSheetMusicUrl} from '@/lib/song-urls/buildSheetMusicUrl';
 
 // const DifficultyBadge = ({
 //   instrument,

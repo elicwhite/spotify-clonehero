@@ -28,7 +28,10 @@ import {
 import ConnectedProcessingView from '@/components/assist/ConnectedProcessingView';
 import {useChartEditorContext} from './ChartEditorContext';
 import {useExecuteCommand} from './hooks/useEditCommands';
-import {ReplaceLyricsCommand, hasExistingLyrics} from './commands';
+import {
+  ReplaceLyricsCommand,
+  hasExistingLyrics,
+} from '@/lib/chart-editor-core/commands';
 import {useAssistRunnerContext} from '@/components/assist/AssistRunnerProvider';
 import {addLyricsTask} from '@/lib/assist/tasks/add-lyrics';
 import type {LoadAssistAudio} from '@/lib/assist/tasks/types';
