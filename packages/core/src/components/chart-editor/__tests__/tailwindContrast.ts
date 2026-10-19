@@ -26,6 +26,21 @@ const tailwindConfig = require(
   path.join(SITE_ROOT, 'tailwind.config.js'),
 ) as Config;
 
+const THEME_IMPORT = "@import '@musiccharts/core/styles/theme.css';";
+const THEME_CSS = path.resolve(__dirname, '../../../styles/theme.css');
+
+/**
+ * The text of `globals.css` with its theme import written in place. PostCSS
+ * alone does not follow `@import`, and the theme tokens live in that file.
+ */
+export function readGlobalsCss(): string {
+  const css = fs.readFileSync(GLOBALS_CSS, 'utf8');
+  if (!css.includes(THEME_IMPORT)) {
+    throw new Error('globals.css no longer imports the shared theme');
+  }
+  return css.replace(THEME_IMPORT, fs.readFileSync(THEME_CSS, 'utf8'));
+}
+
 export type Rgb = [number, number, number];
 
 /** WCAG 2.1 relative luminance. */
@@ -85,7 +100,7 @@ export async function compile(classNames: string[]): Promise<postcss.Root> {
       ...tailwindConfig,
       content: [{raw: classNames.join(' '), extension: 'html'}],
     }),
-  ]).process(fs.readFileSync(GLOBALS_CSS, 'utf8'), {from: GLOBALS_CSS});
+  ]).process(readGlobalsCss(), {from: GLOBALS_CSS});
   return result.root;
 }
 

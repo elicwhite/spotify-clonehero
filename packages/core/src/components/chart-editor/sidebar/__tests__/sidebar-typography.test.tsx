@@ -19,7 +19,6 @@
  */
 
 import path from 'node:path';
-import fs from 'node:fs';
 
 import {render, screen} from '@testing-library/react';
 import postcss from 'postcss';
@@ -28,6 +27,7 @@ import type {Config} from 'tailwindcss';
 import {Clock} from 'lucide-react';
 
 import {Button} from '../../../ui/button';
+import {readGlobalsCss} from '../../__tests__/tailwindContrast';
 import SectionHeading from '../SectionHeading';
 import {CardAction} from '../CardShell';
 
@@ -49,7 +49,7 @@ async function compile(classNames: string[]): Promise<postcss.Root> {
       ...tailwindConfig,
       content: [{raw: classNames.join(' '), extension: 'html'}],
     }),
-  ]).process(fs.readFileSync(GLOBALS_CSS, 'utf8'), {from: GLOBALS_CSS});
+  ]).process(readGlobalsCss(), {from: GLOBALS_CSS});
   return result.root;
 }
 
