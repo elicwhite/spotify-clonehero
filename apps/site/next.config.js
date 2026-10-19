@@ -1,4 +1,7 @@
 const path = require('path');
+const {
+  crossOriginIsolationHeaders,
+} = require('@musiccharts/core/next/headers.js');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
 
@@ -80,22 +83,7 @@ const nextConfig = {
     ];
   },
   async headers() {
-    // https://nextjs.org/docs/13/app/building-your-application/routing/middleware#setting-headers
-    // https://sqlocal.dev/guide/setup#cross-origin-isolation
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'credentialless',
-          },
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
-          },
-        ],
-      },
+    return crossOriginIsolationHeaders([
       // MusicKit's authorization popup requires a non-isolated opener.
       // This later, exact route rule overrides the site-wide isolation policy.
       {
@@ -108,25 +96,7 @@ const nextConfig = {
           },
         ],
       },
-      // Specific headers for WASM files
-      {
-        source: '/_next/static/media/:path*',
-        headers: [
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
-          },
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
-          },
-          {
-            key: 'Cross-Origin-Resource-Policy',
-            value: 'cross-origin',
-          },
-        ],
-      },
-    ];
+    ]);
   },
 };
 

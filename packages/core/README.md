@@ -42,4 +42,5 @@ or R2 and need nothing from the app.
 
 The pages that use SQLocal or SharedArrayBuffer also need the cross-origin
 isolation headers (`Cross-Origin-Embedder-Policy: credentialless` and
-`Cross-Origin-Opener-Policy: same-origin`) from the app's `next.config.js`.
+`Cross-Origin-Opener-Policy: same-origin`) from the app's `next.config.js`. Core ships them:
+`crossOriginIsolationHeaders()` in `@musiccharts/core/next/headers.js`.
