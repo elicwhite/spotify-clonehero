@@ -168,7 +168,9 @@ overrides:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/site:
     dependencies:
       '@eliwhite/parse-sng':
         specifier: 4.0.3-eliwhite.0

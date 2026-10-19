@@ -13,3 +13,5 @@ apps/site/ga-service-account.json
 
 # The Vercel CLI runs from here and writes its project link.
 .vercel
+
+node_modules

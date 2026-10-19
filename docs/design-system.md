@@ -4,7 +4,7 @@ type: concept
 scope: Structural components, tokens, and layout rules for Music Charts Tools
 sources:
   - docs/design-system-audit.md (plan 0099 Phase 0)
-  - spotify-clonehero-next/plans/in-progress/0099-design-system-convergence.md
+  - apps/site/plans/in-progress/0099-design-system-convergence.md
 created: 2026-08-10
 updated: 2026-08-19
 ---
@@ -209,4 +209,4 @@ not have.
 | What may this page say? | `docs/landing-page-style-guide.md` |
 | Which component do I reach for? | this document |
 | Why does page X differ from page Y? | `docs/design-system-audit.md` |
-| What does the codebase already provide? | `spotify-clonehero-next/CLAUDE.md`, "Existing Utilities" |
+| What does the codebase already provide? | `CLAUDE.md`, "Existing Utilities" |

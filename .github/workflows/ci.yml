@@ -68,9 +68,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: apps/site/.next/cache/jest
-          key: jest-${{ runner.os }}-${{ hashFiles('apps/site/pnpm-lock.yaml') }}-${{ github.sha }}
+          key: jest-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: |
-            jest-${{ runner.os }}-${{ hashFiles('apps/site/pnpm-lock.yaml') }}-
+            jest-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             jest-${{ runner.os }}-
 
       - name: Run tests

@@ -1,19 +1,10 @@
 {
-  "name": "spotify-clonehero",
-  "version": "1.0.0",
-  "main": "index.js",
-  "type": "module",
-  "license": "MIT",
-  "dependencies": {
-    "csv-parse": "^5.5.0",
-    "csv-stringify": "^6.4.4",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "levenshtein-edit-distance": "^3.0.1",
-    "open": "^9.1.0",
-    "spotify-web-api-node": "^5.0.2"
-  },
-  "devDependencies": {
-    "prettier": "^3.0.3"
+  "name": "music-charts",
+  "private": true,
+  "packageManager": "pnpm@12.4.2",
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "pnpm -r --if-present lint"
   }
 }

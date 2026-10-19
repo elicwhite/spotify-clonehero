@@ -2,7 +2,7 @@
 
 **To:** the owner of the tempo-map generator (`~/projects/drum-to-chart`
 `autoresearch-tempo/train.py` `beats_to_synctrack`, and its TypeScript port
-`spotify-clonehero-next/lib/tempo-map/converter.ts`)
+`apps/site/lib/tempo-map/converter.ts`)
 **From:** the chart editor's leading-silence feature (plan 0124)
 **Status:** request for comment, then implementation
 **Date:** 2026-08-24

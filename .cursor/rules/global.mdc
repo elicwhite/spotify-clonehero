@@ -1,10 +1,10 @@
 ---
-description: spotify-clonehero-next project rules
+description: music-charts project rules
 alwaysApply: false
 ---
 +++
 # Overview
-This repository hosts a Next.js **App Router** application located in `spotify-clonehero-next/`.  The codebase uses **TypeScript**, **React Server Components**, **Shadcn UI (Radix + Tailwind)** and absolute imports via the `@` alias.  These rules document the project's implicit conventions so that Cursor can generate code that feels native.
+This repository hosts a Next.js **App Router** application located in `apps/site/`.  The codebase uses **TypeScript**, **React Server Components**, **Shadcn UI (Radix + Tailwind)** and absolute imports via the `@` alias.  These rules document the project's implicit conventions so that Cursor can generate code that feels native.
 
 ---
 ## General principles

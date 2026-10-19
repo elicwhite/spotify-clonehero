@@ -6,7 +6,7 @@ that make the obvious approach lie to you.
 
 ## Trap 1: don't diff against a stale baseline
 
-`plans/assets/0099-baseline/` holds screenshots captured by **resizing the
+`apps/site/plans/assets/0099-baseline/` holds screenshots captured by **resizing the
 browser window**, where macOS overlay scrollbars leave the layout viewport at
 full width. `emulate`'s viewport override instead reserves ~15 CSS px for a
 classic scrollbar.

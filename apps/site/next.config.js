@@ -1,14 +1,18 @@
 const path = require('path');
 
+const workspaceRoot = path.resolve(__dirname, '../..');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Auto-memoize components/hooks via the React Compiler (babel-plugin-react-
   // compiler). Next applies it only to files with JSX/hooks via an SWC pre-pass.
   reactCompiler: true,
-  // Pin Turbopack workspace root to this directory (parent has its own lockfile)
+  // The pnpm workspace root holds node_modules and the lockfile, so Turbopack
+  // and the output file tracer both start there.
   turbopack: {
-    root: path.resolve(__dirname),
+    root: workspaceRoot,
   },
+  outputFileTracingRoot: workspaceRoot,
   // Externalize server-side bundling for browser-only packages. Next 16's
   // Client Component SSR otherwise tries to statically analyze their code:
   //   - onnxruntime-web uses browser-only APIs

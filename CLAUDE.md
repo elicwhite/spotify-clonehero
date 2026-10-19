@@ -1,16 +1,20 @@
-# Music Charts Tools (spotify-clonehero-next)
+# Music Charts Tools (apps/site)
 
 Always talk in ASD-STE100 Simplified Technical English.
+
+This repo is a pnpm workspace. The site is `apps/site/`. Paths in this file,
+in the skills, and in the plans are relative to `apps/site/` unless they start
+with another root folder (`videos/`, `docs/`, `.claude/`).
 
 Next.js 16 app of browser-based Clone Hero chart tools. Everything runs
 client-side; there is no application backend beyond Supabase auth.
 
 ```bash
-pnpm install
-pnpm dev          # dev server
-pnpm test         # Jest
-pnpm typecheck    # tsgo
-pnpm lint         # ESLint + Prettier
+pnpm install                  # from the repo root: installs every package
+pnpm --dir apps/site dev      # dev server
+pnpm test                     # Jest (root script runs each package's test)
+pnpm typecheck                # tsgo
+pnpm lint                     # ESLint + Prettier
 ```
 
 ## Repo-wide gotchas
@@ -30,8 +34,8 @@ that span many files, or anything that needs design decisions written down.
 Small bug fixes and contained changes go straight to a commit, with the reasoning
 in the commit message.
 
-For work that does need a plan, follow the workflow in `plans/`. Find or create
-a plan in `plans/todo/` before writing code, claim it by moving it to
+For work that does need a plan, follow the workflow in `apps/site/plans/`. Find or create
+a plan in `apps/site/plans/todo/` before writing code, claim it by moving it to
 `in-progress/` (one at a time), and move it to `completed/` when done. The
 `claim-plan` and `complete-plan` skills run those steps.
 

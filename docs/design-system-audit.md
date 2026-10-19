@@ -195,7 +195,7 @@ every "loser" below gets updated rather than preserved.
 
 ## Screenshot baseline
 
-Captured into `spotify-clonehero-next/plans/assets/0099-baseline/` before any
+Captured into `apps/site/plans/assets/0099-baseline/` before any
 code change; every later phase re-shoots the same matrix and diffs.
 
 Matrix per page: 390 / 900 / 1512 px × light / dark. Additional states:

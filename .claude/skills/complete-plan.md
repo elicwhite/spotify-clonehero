@@ -10,7 +10,7 @@ Finalize the current in-progress plan with verification and a clean commit.
 
 ## Steps
 
-1. **Identify the plan** — Find the plan file in `plans/in-progress/`. If none exists, stop and report that there's no plan in progress.
+1. **Identify the plan** — Find the plan file in `apps/site/plans/in-progress/`. If none exists, stop and report that there's no plan in progress.
 
 2. **Run tests** — Execute `yarn test` and verify all tests pass. If any tests fail, fix them before proceeding. Do not skip failing tests.
 
@@ -25,6 +25,6 @@ Finalize the current in-progress plan with verification and a clean commit.
    - All test cases described in the plan have been implemented
    - All integration points mentioned work correctly
 
-7. **Move the plan** — `mv plans/in-progress/{plan-file} plans/completed/{plan-file}`
+7. **Move the plan** — `mv apps/site/plans/in-progress/{plan-file} apps/site/plans/completed/{plan-file}`
 
 8. **Create the commit** — Stage all relevant files and create a commit. The commit message should reference the plan number and briefly describe what was built. Include the plan file move in the commit.
