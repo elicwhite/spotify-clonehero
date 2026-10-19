@@ -10,6 +10,9 @@ ships TypeScript source and has no build step.
 - Add `transpilePackages: ['@musiccharts/core']` to `next.config.js`.
 - Add a tsconfig path: `"@musiccharts/core/*": ["../../packages/core/src/*"]`,
   and include `../../packages/core/src` so the type check covers it.
+- Include `../../packages/core/types/**/*.d.ts` in the tsconfig. Those files
+  declare the browser globals core relies on (`Window` extras, `navigator`
+  extras, `ImageDecoder`, React attributes).
 - Add `../../packages/core/src/**/*.{ts,tsx}` to the Tailwind `content`.
 - Import by subpath: `import {setupStage} from '@musiccharts/core/preview/highway'`.
 - For Jest, map `^@musiccharts/core/(.*)$` to `<core>/src/$1`.

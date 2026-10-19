@@ -35,6 +35,7 @@
     "**/*.tsx",
     "../../packages/core/src/**/*.ts",
     "../../packages/core/src/**/*.tsx",
+    "../../packages/core/types/**/*.d.ts",
     "../../packages/core/src/chorusChartDb",
     "../../packages/core/src/fill-detector/**/*",
     "next-env.d.ts",
