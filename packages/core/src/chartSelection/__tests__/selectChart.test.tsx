@@ -358,3 +358,23 @@ test('pick a newer chart over a second', () => {
   expect(chart).toBe(chart2);
   expect(reasons).toEqual(['Chart from same charter is newer']);
 });
+
+test('select Harmonix when Harmonix and Neversoft both beat the first chart', () => {
+  const {chart, reasons} = selectChart([
+    createChartFixture({
+      charter: 'rando',
+      diff_guitar: -1,
+    }),
+    createChartFixture({
+      charter: 'Neversoft',
+    }),
+    createChartFixture({
+      charter: 'Harmonix',
+    }),
+  ]);
+  expect(chart!.charter).toBe('Harmonix');
+  expect(reasons).toEqual([
+    'Better chart is from Harmonix',
+    'Better chart is from official game',
+  ]);
+});

@@ -61,7 +61,7 @@ export function selectChart<T extends ChartInfo>(
     };
   }
 
-  let chartsInConsideration = charts.slice(1);
+  const chartsInConsideration = charts.slice(1);
 
   for (const rankingGroup of rankingGroups) {
     const recommendedChart = charts[0];
@@ -91,7 +91,11 @@ export function selectChart<T extends ChartInfo>(
         reasons: reasonsPerChart.get(chartsWithReasons[0])!,
       };
     } else if (chartsWithReasons.length > 1) {
-      chartsInConsideration = chartsWithReasons;
+      // Every one of these beats the first chart, so the answer is among
+      // them. The later groups only compare against the first chart, so they
+      // cannot choose between these; ranking these against each other can.
+      const {chart} = selectChart(chartsWithReasons, rankingGroups);
+      return {chart, reasons: reasonsPerChart.get(chart)!};
     } else {
       const chart = chartsInConsideration[0];
       const reasons: string[] = [];
