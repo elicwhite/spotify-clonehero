@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@12.4.2",
   "scripts": {
+    "prepare": "git config core.hooksPath scripts/public-guard/hooks || true",
     "new-app": "node scripts/new-app.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
