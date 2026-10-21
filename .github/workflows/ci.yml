@@ -124,6 +124,32 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+  # A commit that changes a public path must not carry a private name. The
+  # guard files exist only in the private repo, so the public repo skips this.
+  guard:
+    name: Public guard
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository != 'elicwhite/spotify-clonehero'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The guard reads the history of the PR, so it needs the whole of it.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Check the commits of the PR
+        working-directory: .
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/public-guard/guard.mjs range "$BASE_SHA..$HEAD_SHA"
+
   deploy:
     name: Deploy to production
     needs: [test, lint, typecheck]
