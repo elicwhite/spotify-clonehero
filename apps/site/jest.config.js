@@ -26,6 +26,9 @@ function buildTransformIgnorePatterns() {
 // Providing the path to your Next.js app which will enable loading next.config.js and .env files
 const createJestConfig = nextJest({dir: './'});
 
+/** True when this checkout is itself an agent worktree under `.claude/`. */
+const IN_WORKTREE = __dirname.includes('/.claude/worktrees/');
+
 // Any custom config you want to pass to Jest
 const customJestConfig = {
   // Jest defaults its transform cache to a temp dir, which Vercel does not
@@ -55,8 +58,17 @@ const customJestConfig = {
   ],
   // Never scan sibling agent worktrees under `.claude/worktrees/` — they hold
   // in-flight copies of the repo with their own (possibly failing) suites.
-  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/.claude/'],
-  coveragePathIgnorePatterns: ['/node_modules/', '/.claude/'],
+  //
+  // Unless this checkout is one. A worktree lives under `.claude/`, so the
+  // same rule that hides a sibling from the main checkout hides a worktree
+  // from itself, and its suites silently never run. A worktree has no
+  // worktrees of its own, so inside one the rule has nothing left to do.
+  testPathIgnorePatterns: IN_WORKTREE
+    ? ['/node_modules/', '/.next/']
+    : ['/node_modules/', '/.next/', '/.claude/'],
+  coveragePathIgnorePatterns: IN_WORKTREE
+    ? ['/node_modules/']
+    : ['/node_modules/', '/.claude/'],
   // ESM-only deps must be transformed through SWC like our own code.
   transformIgnorePatterns: buildTransformIgnorePatterns(),
 };
@@ -70,7 +82,7 @@ module.exports = async () => {
   config.transformIgnorePatterns = buildTransformIgnorePatterns();
   // next/jest prepends its own defaults; make sure sibling `.claude` worktrees
   // stay ignored after that merge.
-  if (!config.testPathIgnorePatterns?.includes('/.claude/')) {
+  if (!IN_WORKTREE && !config.testPathIgnorePatterns?.includes('/.claude/')) {
     config.testPathIgnorePatterns = [
       ...(config.testPathIgnorePatterns ?? []),
       '/.claude/',
