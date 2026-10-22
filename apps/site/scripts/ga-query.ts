@@ -53,7 +53,8 @@ function requireEnv(name: string): string {
     throw new Error(
       `Missing ${name}. Set GA_PROPERTY_ID (the numeric GA4 property id, not ` +
         'the G- measurement id) and GOOGLE_APPLICATION_CREDENTIALS (path to the ' +
-        'service-account JSON key) in the 1Password environment, then run via ' +
+        'service-account JSON key; in a cloud environment, put the key itself ' +
+        'in GA_SERVICE_ACCOUNT_JSON) in the 1Password environment, then run via ' +
         '`pnpm ga`. 1Password serves .env as a pipe only while the app is ' +
         'serving that environment — if this keeps failing, check that it is.',
     );
@@ -485,10 +486,28 @@ const REPORTS: Record<string, Report> = {
   },
 };
 
+/**
+ * The service-account key comes from one of two places. GA_SERVICE_ACCOUNT_JSON
+ * holds the key itself, for a Claude Code cloud environment, where a key file
+ * on disk would stay in the environment's cache. Otherwise
+ * GOOGLE_APPLICATION_CREDENTIALS is the path to the key file, which the client
+ * reads by itself.
+ */
+function createClient(): BetaAnalyticsDataClient {
+  const json = process.env['GA_SERVICE_ACCOUNT_JSON'];
+  if (!json) {
+    requireEnv('GOOGLE_APPLICATION_CREDENTIALS');
+    return new BetaAnalyticsDataClient();
+  }
+  const key = JSON.parse(json) as {client_email: string; private_key: string};
+  return new BetaAnalyticsDataClient({
+    credentials: {client_email: key.client_email, private_key: key.private_key},
+  });
+}
+
 async function main(): Promise<void> {
   loadEnvFiles();
-  requireEnv('GOOGLE_APPLICATION_CREDENTIALS');
-  const client = new BetaAnalyticsDataClient();
+  const client = createClient();
   const command = positionalArgs()[0];
 
   if (command === 'meta') {
