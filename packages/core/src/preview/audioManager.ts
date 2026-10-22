@@ -425,7 +425,7 @@ export class AudioManager {
 
     const currentTime = this.#context.currentTime;
     const songLength = this.#duration;
-    const offset: number = time ?? songLength * percent!;
+    const offset: number = Math.max(0, time ?? songLength * percent!);
     this.#noteSeek(offset);
     this.#trackOffset = offset;
     this.#startedAt = currentTime;
@@ -738,7 +738,11 @@ export class AudioManager {
    *   and rebuilds source nodes so a subsequent resume() plays from the
    *   new position. The AudioContext is NOT resumed here.
    */
-  async seekTo(timeSec: number) {
+  async seekTo(requestedSec: number) {
+    // A chart-relative seek before the chart's audio starts (negative chart
+    // delay, or a click left of time zero) maps to a negative audio time,
+    // which AudioBufferSourceNode.start rejects.
+    const timeSec = Math.max(0, requestedSec);
     this.#heldAt = null;
 
     if (this.isPlaying) {

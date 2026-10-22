@@ -54,6 +54,20 @@ describe('AudioManager.seekTo', () => {
     expect(am.currentTime).toBeCloseTo(0.5, 5);
   });
 
+  test('negative target clamps to zero instead of throwing', async () => {
+    const am = await makeAudioManager();
+    am.setChartDelay(-2);
+
+    await am.seekToChartTime(0);
+    expect(am.currentTime).toBe(0);
+
+    await am.seekTo(-5);
+    expect(am.currentTime).toBe(0);
+
+    await am.play({time: -3});
+    expect(am.currentTime).toBeCloseTo(0, 1);
+  });
+
   test('playing: seekTo keeps playing (delegates to play)', async () => {
     const am = await makeAudioManager();
     await am.play({time: 1});
